@@ -33,6 +33,8 @@ spec:
         {{- include "hangar.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: api
     spec:
+      securityContext:
+        fsGroup: 101
       containers:
         - name: hangar-api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
