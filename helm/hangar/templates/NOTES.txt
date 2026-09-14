@@ -8,10 +8,11 @@ Check certificate issuance with:
   kubectl get certificate -n {{ .Release.Namespace }}
 {{- end }}
 
-Per-organization subdomains (e.g. acme.{{ .Values.ingress.host }}) need a wildcard TLS
-certificate, which needs a DNS-01 ClusterIssuer — not set up yet, since this cluster's
-existing issuers are all HTTP-01. Only {{ .Values.ingress.host }} itself (the public
-organization) is reachable over HTTPS until that's added.
+Every organization subdomain (e.g. acme.{{ .Values.ingress.host }}) is covered by a wildcard
+TLS certificate issued via DNS-01, through the ClusterIssuer named
+{{ .Values.ingress.clusterIssuer }}. That issuer is created and owned by the separate
+cm-webhook-ovh Helm release (see helm/cert-manager-webhook-ovh/README.md) — this chart only
+references it by name, it does not create it.
 
 Log in with:
   username: {{ .Values.hangar.bootstrapAdminUsername }}
