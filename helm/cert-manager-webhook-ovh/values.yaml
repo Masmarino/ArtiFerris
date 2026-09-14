@@ -1,0 +1,24 @@
+groupName: acme.hangar.skolln.com
+
+certManager:
+  namespace: cert-manager
+  serviceAccountName: cert-manager
+
+issuers:
+  - name: hangar-dns01-issuer
+    create: true
+    kind: ClusterIssuer
+    acmeServerUrl: https://acme-v02.api.letsencrypt.org/directory
+    email: contact@skolln.com
+    ovhEndpointName: ovh-eu
+    ovhAuthenticationMethod: application
+    ovhAuthenticationRef:
+      applicationKeyRef:
+        name: ovh-dns01-credentials
+        key: applicationKey
+      applicationSecretRef:
+        name: ovh-dns01-credentials
+        key: applicationSecret
+      applicationConsumerKeyRef:
+        name: ovh-dns01-credentials
+        key: applicationConsumerKey
