@@ -46,7 +46,7 @@ describe('MfaSettings', () => {
     expect(req.request.method).toBe('POST')
     req.flush({
       secret: 'JBSWY3DPEHPK3PXP',
-      otpauth_url: 'otpauth://totp/Hangar:florian?secret=JBSWY3DPEHPK3PXP&issuer=Hangar',
+      otpauth_url: 'otpauth://totp/Bunker:florian?secret=JBSWY3DPEHPK3PXP&issuer=Bunker',
     })
     fixture.detectChanges()
 

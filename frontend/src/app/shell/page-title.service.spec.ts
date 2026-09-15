@@ -10,7 +10,7 @@ describe('PageTitleService', () => {
     service.title.set('Utilisateurs')
     TestBed.flushEffects()
 
-    expect(title.getTitle()).toBe('Utilisateurs · Hangar')
+    expect(title.getTitle()).toBe('Utilisateurs · Bunker')
   })
 
   it('falls back to the app name when the page title is empty', () => {
@@ -20,6 +20,6 @@ describe('PageTitleService', () => {
     service.title.set('')
     TestBed.flushEffects()
 
-    expect(title.getTitle()).toBe('Hangar · Artifact Repository')
+    expect(title.getTitle()).toBe('Bunker · Artifact Repository')
   })
 })

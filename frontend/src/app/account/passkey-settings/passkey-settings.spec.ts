@@ -77,7 +77,7 @@ describe('PasskeySettings', () => {
       challenge_id: 'challenge-1',
       public_key: {
         challenge: 'AQID',
-        rp: { id: 'x', name: 'Hangar' },
+        rp: { id: 'x', name: 'Bunker' },
         user: { id: 'AQID', name: 'florian', displayName: 'florian' },
         pubKeyCredParams: [],
       },

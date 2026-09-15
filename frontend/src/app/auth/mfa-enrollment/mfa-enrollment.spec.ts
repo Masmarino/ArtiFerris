@@ -71,7 +71,7 @@ describe('MfaEnrollmentPage', () => {
     authServiceSpy.startTotpSetup.mockReturnValue(
       of({
         secret: 'JBSWY3DPEHPK3PXP',
-        otpauth_url: 'otpauth://totp/Hangar:florian?secret=JBSWY3DPEHPK3PXP&issuer=Hangar',
+        otpauth_url: 'otpauth://totp/Bunker:florian?secret=JBSWY3DPEHPK3PXP&issuer=Bunker',
       }),
     )
     component.chooseTotpSetup()
@@ -109,7 +109,7 @@ describe('MfaEnrollmentPage', () => {
         challenge_id: 'challenge-1',
         public_key: {
           challenge: 'AQID',
-          rp: { id: 'x', name: 'Hangar' },
+          rp: { id: 'x', name: 'Bunker' },
           user: { id: 'AQID', name: 'florian', displayName: 'florian' },
           pubKeyCredParams: [],
         },

@@ -55,7 +55,7 @@ describe('createPasskeyCredential', () => {
 
     const result = (await createPasskeyCredential({
       challenge: SAMPLE_BASE64URL,
-      rp: { id: 'hangar.example.com', name: 'Hangar' },
+      rp: { id: 'hangar.example.com', name: 'Bunker' },
       user: { id: SAMPLE_BASE64URL, name: 'florian', displayName: 'florian' },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
       excludeCredentials: [{ type: 'public-key', id: SAMPLE_BASE64URL }],

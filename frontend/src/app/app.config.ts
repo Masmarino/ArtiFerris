@@ -18,13 +18,13 @@ import { meProviders } from './shell/infrastructure/me.providers'
 import { versionProviders } from './shell/infrastructure/version.providers'
 import { organizationsProviders } from './admin/infrastructure/organizations.providers'
 import { organizationMembersProviders } from './admin/infrastructure/organization-members.providers'
-import { provideHangarIcons } from './shared/register-icons'
+import { provideBunkerIcons } from './shared/register-icons'
 registerLocaleData(localeFr)
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideZonelessChangeDetection(),
-    provideHangarIcons(),
+    provideBunkerIcons(),
     provideRouter(routes),
     provideHttpClient(withInterceptors([authInterceptor])),
     {

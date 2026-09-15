@@ -93,7 +93,7 @@ describe('SmtpSettingsAdmin', () => {
       port: 587,
       username: 'hangar@example.com',
       password: 's3cret',
-      from_name: 'Hangar',
+      from_name: 'Bunker',
       from_address: 'hangar@example.com',
       security: 'start_tls',
     })
@@ -114,7 +114,7 @@ describe('SmtpSettingsAdmin', () => {
       host: 'smtp.example.com',
       port: 587,
       username: 'hangar@example.com',
-      from_name: 'Hangar',
+      from_name: 'Bunker',
       from_address: 'hangar@example.com',
       security: 'start_tls',
       password_set: true,
@@ -180,7 +180,7 @@ describe('SmtpSettingsAdmin', () => {
       host: 'smtp.example.com',
       port: 587,
       username: 'hangar@example.com',
-      from_name: 'Hangar',
+      from_name: 'Bunker',
       from_address: 'hangar@example.com',
       security: 'start_tls',
       password_set: true,
@@ -207,7 +207,7 @@ describe('SmtpSettingsAdmin', () => {
       host: 'smtp.example.com',
       port: 587,
       username: 'hangar@example.com',
-      from_name: 'Hangar',
+      from_name: 'Bunker',
       from_address: 'hangar@example.com',
       security: 'start_tls',
       password_set: true,
@@ -251,7 +251,7 @@ describe('SmtpSettingsAdmin', () => {
     fixture.detectChanges()
 
     expect(fixture.componentInstance.host()).toBe('')
-    expect(fixture.componentInstance.fromName()).toBe('Hangar')
+    expect(fixture.componentInstance.fromName()).toBe('Bunker')
     expect(fixture.componentInstance.passwordSet()).toBe(false)
   })
 

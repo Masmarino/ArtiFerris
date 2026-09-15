@@ -1,7 +1,7 @@
 // Tokens (palette, semantic, utility) come from Gabarit.
 @use '@masmarino/gabarit/tokens' as *;
 
-// Stays here, specific to Hangar: the font declaration — the library ships no @font-face since the asset path belongs to the application.
+// Stays here, specific to Bunker: the font declaration — the library ships no @font-face since the asset path belongs to the application.
 @font-face {
   font-family: 'Inter';
   font-style: normal;
