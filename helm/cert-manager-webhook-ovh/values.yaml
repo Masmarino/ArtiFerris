@@ -1,11 +1,11 @@
-groupName: acme.hangar.skolln.com
+groupName: acme.bunker.skolln.com
 
 certManager:
   namespace: cert-manager
   serviceAccountName: cert-manager
 
 issuers:
-  - name: hangar-dns01-issuer
+  - name: bunker-dns01-issuer
     create: true
     kind: ClusterIssuer
     acmeServerUrl: https://acme-v02.api.letsencrypt.org/directory
