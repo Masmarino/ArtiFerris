@@ -3,7 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ .Release.Name }}-postgres-data
   labels:
-    {{- include "hangar.labels" . | nindent 4 }}
+    {{- include "bunker.labels" . | nindent 4 }}
 spec:
   accessModes: ["ReadWriteOnce"]
   {{- if .Values.postgres.storage.storageClassName }}
@@ -18,19 +18,19 @@ kind: Deployment
 metadata:
   name: {{ .Release.Name }}-postgres
   labels:
-    {{- include "hangar.labels" . | nindent 4 }}
+    {{- include "bunker.labels" . | nindent 4 }}
 spec:
   replicas: 1
   strategy:
     type: Recreate # single ReadWriteOnce volume — a rolling update would deadlock on the second pod
   selector:
     matchLabels:
-      {{- include "hangar.selectorLabels" . | nindent 6 }}
+      {{- include "bunker.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: postgres
   template:
     metadata:
       labels:
-        {{- include "hangar.selectorLabels" . | nindent 8 }}
+        {{- include "bunker.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: postgres
     spec:
       containers:
@@ -38,9 +38,9 @@ spec:
           image: {{ .Values.postgres.image }}
           env:
             - name: POSTGRES_USER
-              value: hangar
+              value: bunker
             - name: POSTGRES_DB
-              value: hangar
+              value: bunker
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -53,7 +53,7 @@ spec:
               mountPath: /var/lib/postgresql
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "hangar"]
+              command: ["pg_isready", "-U", "bunker"]
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 10
@@ -69,10 +69,10 @@ kind: Service
 metadata:
   name: {{ .Release.Name }}-postgres
   labels:
-    {{- include "hangar.labels" . | nindent 4 }}
+    {{- include "bunker.labels" . | nindent 4 }}
 spec:
   selector:
-    {{- include "hangar.selectorLabels" . | nindent 4 }}
+    {{- include "bunker.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
   ports:
     - port: 5432

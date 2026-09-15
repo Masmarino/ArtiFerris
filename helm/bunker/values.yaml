@@ -24,9 +24,9 @@ ingress:
   enabled: true
   host: hangar.skolln.com
   wildcardHost: "*.hangar.skolln.com"
-  clusterIssuer: hangar-dns01-issuer
+  clusterIssuer: bunker-dns01-issuer
 
-hangar:
+bunker:
   baseDomain: hangar.skolln.com
   bootstrapAdminUsername: admin
   rustLog: info
