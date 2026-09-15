@@ -209,15 +209,15 @@ async fn sso_config(State(state): State<AppState>, resolved_org: ResolvedOrganiz
     Ok(Json(SsoConfigResponse { provider_type, registration_enabled: resolved_org.0.is_public && settings.registration_enabled }))
 }
 
-/// Matches `localhost`, `*.localhost`, and `localhost:<port>` — including this repo's `hangar.localhost` dev domain — but not lookalikes like `localhost.evil.com`.
+/// Matches `localhost`, `*.localhost`, and `localhost:<port>` — including this repo's `bunker.localhost` dev domain — but not lookalikes like `localhost.evil.com`.
 fn is_local_dev_domain(domain: &str) -> bool {
     domain == "localhost" || domain.ends_with(".localhost") || domain.starts_with("localhost:")
 }
 
 /// This organization's own origin — never derived from a caller-supplied header, so a non-public org never gets sent back to the wrong one.
 fn organization_origin(state: &AppState, resolved_org: &ResolvedOrganization) -> String {
-    let host = if resolved_org.0.is_public { state.hangar_base_domain.clone() } else { format!("{}.{}", resolved_org.0.slug.as_str(), state.hangar_base_domain) };
-    format!("{}://{}", if is_local_dev_domain(&state.hangar_base_domain) { "http" } else { "https" }, host)
+    let host = if resolved_org.0.is_public { state.bunker_base_domain.clone() } else { format!("{}.{}", resolved_org.0.slug.as_str(), state.bunker_base_domain) };
+    format!("{}://{}", if is_local_dev_domain(&state.bunker_base_domain) { "http" } else { "https" }, host)
 }
 
 /// Must match the `redirect_uri`/`callback_url` registered with the identity provider exactly.
@@ -226,14 +226,14 @@ fn oidc_callback_url(state: &AppState, resolved_org: &ResolvedOrganization) -> S
 }
 
 /// Unprefixed name, for plain-HTTP local dev only — `__Host-` cookies require `Secure`, which browsers drop over `http://`.
-const OIDC_BINDING_COOKIE: &str = "hangar_oidc_binding";
+const OIDC_BINDING_COOKIE: &str = "bunker_oidc_binding";
 /// `__Host-` prefixed everywhere else — a browser-enforced guarantee this cookie can't be shadowed by a sibling subdomain.
-const OIDC_BINDING_COOKIE_HOST_PREFIXED: &str = "__Host-hangar_oidc_binding";
+const OIDC_BINDING_COOKIE_HOST_PREFIXED: &str = "__Host-bunker_oidc_binding";
 /// Matches `STATE_TOKEN_TTL_MINUTES` in `OpenidConnectAuthAdapter` — no point outliving the token it's bound to.
 const OIDC_BINDING_COOKIE_MAX_AGE_SECONDS: i64 = 10 * 60;
 
 fn oidc_binding_cookie_name(state: &AppState) -> &'static str {
-    if is_local_dev_domain(&state.hangar_base_domain) { OIDC_BINDING_COOKIE } else { OIDC_BINDING_COOKIE_HOST_PREFIXED }
+    if is_local_dev_domain(&state.bunker_base_domain) { OIDC_BINDING_COOKIE } else { OIDC_BINDING_COOKIE_HOST_PREFIXED }
 }
 
 // Parses a raw Set-Cookie string rather than using Cookie::build, which needs a time::Duration
@@ -241,11 +241,11 @@ fn oidc_binding_cookie_name(state: &AppState) -> &'static str {
 // needs to send this on the cross-site redirect the identity provider sends it through.
 fn oidc_binding_cookie(state: &AppState, value: &str) -> Option<axum_extra::extract::cookie::Cookie<'static>> {
     let name = oidc_binding_cookie_name(state);
-    let secure = if is_local_dev_domain(&state.hangar_base_domain) { "" } else { "; Secure" };
+    let secure = if is_local_dev_domain(&state.bunker_base_domain) { "" } else { "; Secure" };
     axum_extra::extract::cookie::Cookie::parse(format!("{name}={value}; Path=/; Max-Age={OIDC_BINDING_COOKIE_MAX_AGE_SECONDS}; HttpOnly; SameSite=Lax{secure}")).ok()
 }
 
-/// Unauthenticated — redirects the browser to the identity provider to start the OIDC flow, 400 if none is configured. Also sets `hangar_oidc_binding`, a login-CSRF binding secret (RFC 6749 §10.12) tying the callback to this same browser.
+/// Unauthenticated — redirects the browser to the identity provider to start the OIDC flow, 400 if none is configured. Also sets `bunker_oidc_binding`, a login-CSRF binding secret (RFC 6749 §10.12) tying the callback to this same browser.
 async fn sso_oidc_login(
     State(state): State<AppState>,
     resolved_org: ResolvedOrganization,
@@ -325,7 +325,7 @@ async fn sso_oidc_callback(
     let cleared = jar.remove(
         axum_extra::extract::cookie::Cookie::build((oidc_binding_cookie_name(&state), ""))
             .path("/")
-            .secure(!is_local_dev_domain(&state.hangar_base_domain))
+            .secure(!is_local_dev_domain(&state.bunker_base_domain))
             .build(),
     );
 
@@ -666,7 +666,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: bunker_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            hangar_base_domain: "hangar.localhost".to_string(),
+            bunker_base_domain: "bunker.localhost".to_string(),
         }
     }
 
@@ -1426,7 +1426,7 @@ mod tests {
         let app = build_router(state);
 
         let mut request = Request::builder().uri("/api/auth/sso/config").body(Body::empty()).unwrap();
-        request.headers_mut().insert("host", "acme.hangar.localhost".parse().unwrap());
+        request.headers_mut().insert("host", "acme.bunker.localhost".parse().unwrap());
         let response = app.oneshot(request).await.unwrap();
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -1497,7 +1497,7 @@ mod tests {
         let app = build_router(state);
 
         let mut request = register_request("florian", "florian@example.com", "sup3r-s3cret!");
-        request.headers_mut().insert("host", "acme.hangar.localhost".parse().unwrap());
+        request.headers_mut().insert("host", "acme.bunker.localhost".parse().unwrap());
         let response = app.oneshot(request).await.unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
@@ -2038,7 +2038,7 @@ mod tests {
                 organization_id,
                 &bunker_domain::sso::IdentityProviderConfig::Oidc(bunker_domain::sso::OidcConfig {
                     issuer_url: "https://accounts.example.com".to_string(),
-                    client_id: "hangar".to_string(),
+                    client_id: "bunker".to_string(),
                     client_secret: "s3cret!".to_string(),
                 }),
             )
@@ -2106,7 +2106,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/api/auth/sso/oidc/callback?code=abc&state=not-a-real-token")
-                    .header("cookie", "hangar_oidc_binding=some-binding-secret")
+                    .header("cookie", "bunker_oidc_binding=some-binding-secret")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -2177,11 +2177,11 @@ mod tests {
         response.headers().get(name).unwrap().to_str().unwrap().to_string()
     }
 
-    /// The value of the `hangar_oidc_binding` cookie the login response set, as a browser would echo it back.
+    /// The value of the `bunker_oidc_binding` cookie the login response set, as a browser would echo it back.
     fn binding_cookie_value(response: &axum::response::Response) -> String {
         let set_cookie = header_value(response, "set-cookie");
-        assert!(set_cookie.starts_with("hangar_oidc_binding="), "got: {set_cookie}");
-        set_cookie.split(';').next().unwrap().trim_start_matches("hangar_oidc_binding=").to_string()
+        assert!(set_cookie.starts_with("bunker_oidc_binding="), "got: {set_cookie}");
+        set_cookie.split(';').next().unwrap().trim_start_matches("bunker_oidc_binding=").to_string()
     }
 
     /// The `state` query parameter of the identity-provider URL the login response redirected to.
@@ -2203,7 +2203,7 @@ mod tests {
             .unwrap();
         request.headers_mut().insert("host", host.parse().unwrap());
         if let Some(cookie) = cookie {
-            request.headers_mut().insert("cookie", format!("hangar_oidc_binding={cookie}").parse().unwrap());
+            request.headers_mut().insert("cookie", format!("bunker_oidc_binding={cookie}").parse().unwrap());
         }
         request
     }
@@ -2215,7 +2215,7 @@ mod tests {
         seed_oidc_config(&state, public_org.id).await;
         let app = build_router(state);
 
-        let response = app.oneshot(oidc_login_request("hangar.localhost")).await.unwrap();
+        let response = app.oneshot(oidc_login_request("bunker.localhost")).await.unwrap();
 
         let set_cookie = header_value(&response, "set-cookie");
         assert!(set_cookie.contains("HttpOnly"), "got: {set_cookie}");
@@ -2232,14 +2232,14 @@ mod tests {
         seed_oidc_config(&state, acme_id).await;
         let app = build_router(state);
 
-        let login = app.clone().oneshot(oidc_login_request("acme.hangar.localhost")).await.unwrap();
+        let login = app.clone().oneshot(oidc_login_request("acme.bunker.localhost")).await.unwrap();
         let cookie = binding_cookie_value(&login);
         let state_token = state_token_from_login(&login);
 
-        let response = app.oneshot(oidc_callback_request("acme.hangar.localhost", &state_token, Some(&cookie))).await.unwrap();
+        let response = app.oneshot(oidc_callback_request("acme.bunker.localhost", &state_token, Some(&cookie))).await.unwrap();
 
         let location = header_value(&response, "location");
-        assert!(location.starts_with("http://acme.hangar.localhost/login#token="), "got: {location}");
+        assert!(location.starts_with("http://acme.bunker.localhost/login#token="), "got: {location}");
         assert!(!location.starts_with(&test_config().public_url), "the callback must not land on the global public_url, got: {location}");
     }
 
@@ -2251,25 +2251,25 @@ mod tests {
         let app = build_router(state);
 
         // The attacker's login attempt — its callback URL is what gets handed to the victim.
-        let login_a = app.clone().oneshot(oidc_login_request("hangar.localhost")).await.unwrap();
+        let login_a = app.clone().oneshot(oidc_login_request("bunker.localhost")).await.unwrap();
         let cookie_a = binding_cookie_value(&login_a);
         let state_a = state_token_from_login(&login_a);
 
         // The victim's own browser, with its own binding cookie.
-        let login_b = app.clone().oneshot(oidc_login_request("hangar.localhost")).await.unwrap();
+        let login_b = app.clone().oneshot(oidc_login_request("bunker.localhost")).await.unwrap();
         let cookie_b = binding_cookie_value(&login_b);
         assert_ne!(cookie_a, cookie_b, "each login attempt must mint a fresh binding secret");
 
-        let with_the_wrong_cookie = app.clone().oneshot(oidc_callback_request("hangar.localhost", &state_a, Some(&cookie_b))).await.unwrap();
+        let with_the_wrong_cookie = app.clone().oneshot(oidc_callback_request("bunker.localhost", &state_a, Some(&cookie_b))).await.unwrap();
         assert_eq!(with_the_wrong_cookie.status(), axum::http::StatusCode::UNAUTHORIZED);
 
-        let with_no_cookie = app.clone().oneshot(oidc_callback_request("hangar.localhost", &state_a, None)).await.unwrap();
+        let with_no_cookie = app.clone().oneshot(oidc_callback_request("bunker.localhost", &state_a, None)).await.unwrap();
         assert_eq!(with_no_cookie.status(), axum::http::StatusCode::UNAUTHORIZED);
 
         // ...and the browser that actually started attempt A still completes it.
-        let with_the_right_cookie = app.oneshot(oidc_callback_request("hangar.localhost", &state_a, Some(&cookie_a))).await.unwrap();
+        let with_the_right_cookie = app.oneshot(oidc_callback_request("bunker.localhost", &state_a, Some(&cookie_a))).await.unwrap();
         let location = header_value(&with_the_right_cookie, "location");
-        assert!(location.starts_with("http://hangar.localhost/login#token="), "got: {location}");
+        assert!(location.starts_with("http://bunker.localhost/login#token="), "got: {location}");
     }
 
     #[sqlx::test(migrations = "../bunker-infrastructure/migrations")]
@@ -2279,16 +2279,16 @@ mod tests {
         seed_oidc_config(&state, public_org.id).await;
         let app = build_router(state);
 
-        let login = app.clone().oneshot(oidc_login_request("hangar.localhost")).await.unwrap();
+        let login = app.clone().oneshot(oidc_login_request("bunker.localhost")).await.unwrap();
         let cookie = binding_cookie_value(&login);
 
         let response = app
-            .oneshot(oidc_callback_request("hangar.localhost", &state_token_from_login(&login), Some(&cookie)))
+            .oneshot(oidc_callback_request("bunker.localhost", &state_token_from_login(&login), Some(&cookie)))
             .await
             .unwrap();
 
         let set_cookie = header_value(&response, "set-cookie");
-        assert!(set_cookie.starts_with("hangar_oidc_binding="), "got: {set_cookie}");
+        assert!(set_cookie.starts_with("bunker_oidc_binding="), "got: {set_cookie}");
         assert!(set_cookie.contains("Max-Age=0"), "the binding cookie must be cleared after a single use, got: {set_cookie}");
         assert!(set_cookie.contains("Path=/"), "the removal must match the path the cookie was set with, got: {set_cookie}");
     }
@@ -2302,11 +2302,11 @@ mod tests {
         seed_oidc_config(&state, other_id).await;
         let app = build_router(state);
 
-        let login = app.clone().oneshot(oidc_login_request("acme.hangar.localhost")).await.unwrap();
+        let login = app.clone().oneshot(oidc_login_request("acme.bunker.localhost")).await.unwrap();
         let cookie = binding_cookie_value(&login);
         let state_token = state_token_from_login(&login);
 
-        let response = app.oneshot(oidc_callback_request("globex.hangar.localhost", &state_token, Some(&cookie))).await.unwrap();
+        let response = app.oneshot(oidc_callback_request("globex.bunker.localhost", &state_token, Some(&cookie))).await.unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
     }

@@ -370,7 +370,7 @@ describe('AppShell', () => {
     const auth = TestBed.inject(AuthService)
     const router = TestBed.inject(Router)
     const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
-    sessionStorage.setItem('hangar_token', 'a-valid-jwt')
+    sessionStorage.setItem('bunker_token', 'a-valid-jwt')
     auth.token.set('a-valid-jwt')
 
     const fixture = TestBed.createComponent(AppShell)
@@ -380,7 +380,7 @@ describe('AppShell', () => {
     fixture.componentInstance.logout()
 
     expect(auth.token()).toBeNull()
-    expect(sessionStorage.getItem('hangar_token')).toBeNull()
+    expect(sessionStorage.getItem('bunker_token')).toBeNull()
     expect(navigate).toHaveBeenCalledWith('/login')
   })
 
@@ -631,7 +631,7 @@ describe('AppShell', () => {
     const auth = TestBed.inject(AuthService)
     const router = TestBed.inject(Router)
     const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
-    sessionStorage.setItem('hangar_token', 'a-valid-jwt')
+    sessionStorage.setItem('bunker_token', 'a-valid-jwt')
     auth.token.set('a-valid-jwt')
 
     const fixture = TestBed.createComponent(AppShell)

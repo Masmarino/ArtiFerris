@@ -82,7 +82,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: bunker_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            hangar_base_domain: "hangar.localhost".to_string(),
+            bunker_base_domain: "bunker.localhost".to_string(),
         }
     }
 

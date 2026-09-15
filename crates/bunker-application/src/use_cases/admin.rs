@@ -433,7 +433,7 @@ pub struct ImportConfigurationUseCase {
     email: Arc<dyn bunker_domain::email::EmailPort>,
     organizations: Arc<dyn OrganizationRepositoryPort>,
     /// No trailing slash. See `crate::use_cases::invitation::organization_origin`.
-    hangar_base_domain: String,
+    bunker_base_domain: String,
 }
 
 impl ImportConfigurationUseCase {
@@ -451,9 +451,9 @@ impl ImportConfigurationUseCase {
         invitations: Arc<dyn bunker_domain::invitation::UserInvitationPort>,
         email: Arc<dyn bunker_domain::email::EmailPort>,
         organizations: Arc<dyn OrganizationRepositoryPort>,
-        hangar_base_domain: String,
+        bunker_base_domain: String,
     ) -> Self {
-        Self { users, hasher, create_repository, set_quota, set_retention, add_group_member, grant_permission, update_settings, repositories, invitations, email, organizations, hangar_base_domain }
+        Self { users, hasher, create_repository, set_quota, set_retention, add_group_member, grant_permission, update_settings, repositories, invitations, email, organizations, bunker_base_domain }
     }
 
     pub async fn execute(&self, import: ConfigurationImport, actor_id: Uuid) -> Result<ImportReport, ApplicationError> {
@@ -472,7 +472,7 @@ impl ImportConfigurationUseCase {
             .map(|u| u.organization_id)
             .ok_or(ApplicationError::ActingAdminNotFound)?;
         let restore_organization = crate::use_cases::invitation::require_organization(self.organizations.as_ref(), restore_organization_id).await?;
-        let activation_origin = crate::use_cases::invitation::organization_origin(&self.hangar_base_domain, &restore_organization);
+        let activation_origin = crate::use_cases::invitation::organization_origin(&self.bunker_base_domain, &restore_organization);
 
         let mut report = ImportReport::default();
 
@@ -1506,7 +1506,7 @@ mod tests {
         assert_eq!(export.users.iter().find(|u| u.username == "admin").unwrap().email, Some("admin@example.com".to_string()));
     }
 
-    const TEST_BASE_DOMAIN: &str = "hangar.example.com";
+    const TEST_BASE_DOMAIN: &str = "bunker.example.com";
 
     /// One public org per distinct organization_id already on `users` — tests needing a non-public restore org build their own `FakeOrganizations` instead.
     fn public_orgs_for(users: &FakeUsers) -> Arc<FakeOrganizations> {
@@ -1680,7 +1680,7 @@ mod tests {
 
         assert_eq!(report.invited, vec!["admin".to_string()], "got failures: {:?}", report.failed);
         let sent = email.sent.lock().unwrap();
-        assert!(sent[0].3.contains("https://acme.hangar.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
+        assert!(sent[0].3.contains("https://acme.bunker.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
     }
 
     #[tokio::test]

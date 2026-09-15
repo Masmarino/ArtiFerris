@@ -214,7 +214,7 @@ impl DockerScopeRequest {
     }
 
     /// The repository is the first path segment; the rest is the image name.
-    pub fn hangar_repository_name(&self) -> &str {
+    pub fn bunker_repository_name(&self) -> &str {
         self.name.split('/').next().unwrap_or(&self.name)
     }
 }

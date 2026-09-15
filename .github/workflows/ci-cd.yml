@@ -301,7 +301,7 @@ jobs:
         env:
           KUBECONFIG: ${{ runner.temp }}/kubeconfig.yaml
         run: |
-          helm upgrade --install hangar ./helm/hangar \
+          helm upgrade --install hangar ./helm/bunker \
             --namespace hangar --create-namespace \
             --set image.repository="${{ env.DOCKER_IMAGE }}" \
             --set image.tag="${{ needs.build-and-push.outputs.image_tag }}" \

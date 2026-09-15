@@ -151,7 +151,7 @@ export class SecurityLog {
     const csv = toCsv(this.rows(), this.columns)
     downloadBlob(
       new Blob([csv], { type: 'text/csv;charset=utf-8' }),
-      `hangar-security-${new Date().toISOString().slice(0, 10)}.csv`,
+      `bunker-security-${new Date().toISOString().slice(0, 10)}.csv`,
     )
   }
 

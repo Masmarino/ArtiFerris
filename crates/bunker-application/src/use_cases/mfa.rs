@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::error::ApplicationError;
 
-const ISSUER: &str = "Hangar";
+const ISSUER: &str = "Bunker";
 const BACKUP_CODE_COUNT: usize = 10;
 
 fn generate_secret_base32() -> String {

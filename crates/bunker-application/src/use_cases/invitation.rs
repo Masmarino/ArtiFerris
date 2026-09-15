@@ -12,11 +12,11 @@ use uuid::Uuid;
 
 use crate::error::ApplicationError;
 
-/// `https://<slug>.<hangar_base_domain>` (or the bare base domain for the public org) — the origin an invited/imported user's own org is served from.
+/// `https://<slug>.<bunker_base_domain>` (or the bare base domain for the public org) — the origin an invited/imported user's own org is served from.
 /// Mirrors `organization_origin` in `bunker-api`'s `routes/auth.rs`, kept in sync by hand since bunker-application can't depend on bunker-api.
-pub(crate) fn organization_origin(hangar_base_domain: &str, organization: &Organization) -> String {
-    let host = if organization.is_public { hangar_base_domain.to_string() } else { format!("{}.{}", organization.slug.as_str(), hangar_base_domain) };
-    format!("{}://{}", if hangar_base_domain.starts_with("localhost") { "http" } else { "https" }, host)
+pub(crate) fn organization_origin(bunker_base_domain: &str, organization: &Organization) -> String {
+    let host = if organization.is_public { bunker_base_domain.to_string() } else { format!("{}.{}", organization.slug.as_str(), bunker_base_domain) };
+    format!("{}://{}", if bunker_base_domain.starts_with("localhost") { "http" } else { "https" }, host)
 }
 
 pub(crate) async fn require_organization(organizations: &dyn OrganizationRepositoryPort, organization_id: Uuid) -> Result<Organization, ApplicationError> {
@@ -60,7 +60,7 @@ pub struct InviteUserUseCase {
     email: Arc<dyn EmailPort>,
     organizations: Arc<dyn OrganizationRepositoryPort>,
     /// No trailing slash. The base domain organization subdomains are resolved against — see `organization_origin` above.
-    hangar_base_domain: String,
+    bunker_base_domain: String,
 }
 
 impl InviteUserUseCase {
@@ -70,9 +70,9 @@ impl InviteUserUseCase {
         hasher: Arc<dyn PasswordHasherPort>,
         email: Arc<dyn EmailPort>,
         organizations: Arc<dyn OrganizationRepositoryPort>,
-        hangar_base_domain: String,
+        bunker_base_domain: String,
     ) -> Self {
-        Self { users, invitations, hasher, email, organizations, hangar_base_domain }
+        Self { users, invitations, hasher, email, organizations, bunker_base_domain }
     }
 
     /// `organization_id` is normally the acting admin's own org, but a super-admin inviting an org's first local admin can pass any organization.
@@ -101,7 +101,7 @@ impl InviteUserUseCase {
 
         // After persisting the user, not before — if the org lookup ever fails, the account still exists and can be reached via ResendInvitationUseCase.
         let organization = require_organization(self.organizations.as_ref(), organization_id).await?;
-        let origin = organization_origin(&self.hangar_base_domain, &organization);
+        let origin = organization_origin(&self.bunker_base_domain, &organization);
 
         // A delivery failure shouldn't fail account creation — retry via ResendInvitationUseCase.
         let activation_url = format!("{origin}/activate?token={token}");
@@ -119,7 +119,7 @@ pub struct ResendInvitationUseCase {
     invitations: Arc<dyn UserInvitationPort>,
     email: Arc<dyn EmailPort>,
     organizations: Arc<dyn OrganizationRepositoryPort>,
-    hangar_base_domain: String,
+    bunker_base_domain: String,
 }
 
 impl ResendInvitationUseCase {
@@ -128,9 +128,9 @@ impl ResendInvitationUseCase {
         invitations: Arc<dyn UserInvitationPort>,
         email: Arc<dyn EmailPort>,
         organizations: Arc<dyn OrganizationRepositoryPort>,
-        hangar_base_domain: String,
+        bunker_base_domain: String,
     ) -> Self {
-        Self { users, invitations, email, organizations, hangar_base_domain }
+        Self { users, invitations, email, organizations, bunker_base_domain }
     }
 
     /// An already-activated account has no invitation row left, so this also returns `InvitationNotFound` for it, same as for an unknown user id.
@@ -148,7 +148,7 @@ impl ResendInvitationUseCase {
 
         // The user's own organization, not whatever the acting admin resolved against.
         let organization = require_organization(self.organizations.as_ref(), user.organization_id).await?;
-        let origin = organization_origin(&self.hangar_base_domain, &organization);
+        let origin = organization_origin(&self.bunker_base_domain, &organization);
         let activation_url = format!("{origin}/activate?token={token}");
         let content = crate::email_templates::account_created(user.username.as_str(), &activation_url);
         self.email.send(user.organization_id, email, &content.subject, &content.text, &content.html).await?;
@@ -191,7 +191,7 @@ mod tests {
 
     use super::*;
 
-    const TEST_BASE_DOMAIN: &str = "hangar.example.com";
+    const TEST_BASE_DOMAIN: &str = "bunker.example.com";
 
     struct FakeUsers {
         users: Mutex<HashMap<Uuid, User>>,
@@ -373,7 +373,7 @@ mod tests {
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].0, organization_id);
         assert_eq!(sent[0].1, "florian@example.com");
-        assert!(sent[0].3.contains("https://hangar.example.com/activate?token="));
+        assert!(sent[0].3.contains("https://bunker.example.com/activate?token="));
     }
 
     #[tokio::test]
@@ -405,7 +405,7 @@ mod tests {
         use_case.execute(organization_id, false, "florian", "florian@example.com", false).await.unwrap();
 
         let sent = email.sent.lock().unwrap();
-        assert!(sent[0].3.contains("https://acme.hangar.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
+        assert!(sent[0].3.contains("https://acme.bunker.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
     }
 
     #[tokio::test]
@@ -543,7 +543,7 @@ mod tests {
         resend.execute(id).await.unwrap();
 
         let sent = email.sent.lock().unwrap();
-        assert!(sent[1].3.contains("https://acme.hangar.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[1].3);
+        assert!(sent[1].3.contains("https://acme.bunker.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[1].3);
     }
 
     #[sqlx::test(migrations = "../bunker-infrastructure/migrations")]

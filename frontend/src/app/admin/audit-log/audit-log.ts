@@ -111,7 +111,7 @@ export class AuditLog {
     const csv = toCsv(rows, this.csvColumns)
     downloadBlob(
       new Blob([csv], { type: 'text/csv;charset=utf-8' }),
-      `hangar-audit-${new Date().toISOString().slice(0, 10)}.csv`,
+      `bunker-audit-${new Date().toISOString().slice(0, 10)}.csv`,
     )
   }
 }

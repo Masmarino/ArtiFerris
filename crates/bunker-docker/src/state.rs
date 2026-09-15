@@ -20,7 +20,7 @@ pub struct DockerState {
     pub permissions: Arc<dyn PermissionQueryPort>,
     pub organizations: Arc<dyn OrganizationRepositoryPort>,
     /// Base domain `ResolvedOrganization` strips off the `Host` header to find the subdomain label.
-    pub hangar_base_domain: String,
+    pub bunker_base_domain: String,
     pub token_issuer: Arc<dyn DockerTokenIssuerPort>,
     pub token_realm: String,
     pub token_service: String,

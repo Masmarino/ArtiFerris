@@ -14,7 +14,7 @@ pub struct Config {
     /// Postgres pool size, override with `DB_MAX_CONNECTIONS`.
     pub db_max_connections: u32,
     /// The base domain subdomains are resolved against. Mandatory (`BUNKER_BASE_DOMAIN`), no fallback — a misconfigured deployment must fail loudly at startup.
-    pub hangar_base_domain: String,
+    pub bunker_base_domain: String,
 }
 
 impl Config {
@@ -41,7 +41,7 @@ impl Config {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(bunker_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS),
             // Lowercased to match ResolvedOrganization's own lowercasing of the Host header.
-            hangar_base_domain: std::env::var("BUNKER_BASE_DOMAIN").expect("BUNKER_BASE_DOMAIN must be set").to_ascii_lowercase(),
+            bunker_base_domain: std::env::var("BUNKER_BASE_DOMAIN").expect("BUNKER_BASE_DOMAIN must be set").to_ascii_lowercase(),
         }
     }
 }

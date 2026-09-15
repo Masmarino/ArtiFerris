@@ -88,10 +88,10 @@ mod tests {
         SmtpSettings {
             host: "smtp.example.com".to_string(),
             port: 587,
-            username: "hangar@example.com".to_string(),
+            username: "bunker@example.com".to_string(),
             password: "s3cret!".to_string(),
-            from_name: "Hangar".to_string(),
-            from_address: "hangar@example.com".to_string(),
+            from_name: "Bunker".to_string(),
+            from_address: "bunker@example.com".to_string(),
             security: SmtpSecurity::StartTls,
         }
     }

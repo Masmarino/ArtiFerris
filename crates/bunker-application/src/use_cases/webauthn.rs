@@ -246,17 +246,17 @@ impl DeletePasskeyUseCase {
 
 /// Built from `BUNKER_BASE_DOMAIN`, not `PUBLIC_URL` — `rp_id` needs the shared base domain for `allow_subdomains(true)` to validate every org's subdomain against one client instance.
 /// The port still has to come from somewhere, though, so a non-default one is taken from `public_url` instead of silently defaulting to 80/443.
-fn rp_origin_url(hangar_base_domain: &str, public_url: &str) -> Result<Url, String> {
-    let scheme = if hangar_base_domain.starts_with("localhost") { "http" } else { "https" };
+fn rp_origin_url(bunker_base_domain: &str, public_url: &str) -> Result<Url, String> {
+    let scheme = if bunker_base_domain.starts_with("localhost") { "http" } else { "https" };
     let port_suffix = Url::parse(public_url).ok().and_then(|u| u.port()).map(|p| format!(":{p}")).unwrap_or_default();
-    Url::parse(&format!("{scheme}://{hangar_base_domain}{port_suffix}")).map_err(|e| format!("BUNKER_BASE_DOMAIN ({hangar_base_domain}) is not usable as a URL: {e}"))
+    Url::parse(&format!("{scheme}://{bunker_base_domain}{port_suffix}")).map_err(|e| format!("BUNKER_BASE_DOMAIN ({bunker_base_domain}) is not usable as a URL: {e}"))
 }
 
 /// Returns `Err` instead of panicking on an unusable `BUNKER_BASE_DOMAIN`.
-pub fn build_webauthn_client(hangar_base_domain: &str, rp_name: &str, public_url: &str) -> Result<Webauthn, String> {
-    let rp_origin = rp_origin_url(hangar_base_domain, public_url)?;
-    WebauthnBuilder::new(hangar_base_domain, &rp_origin)
-        .map_err(|e| format!("BUNKER_BASE_DOMAIN ({hangar_base_domain}) is not usable as a WebAuthn relying party: {e}"))?
+pub fn build_webauthn_client(bunker_base_domain: &str, rp_name: &str, public_url: &str) -> Result<Webauthn, String> {
+    let rp_origin = rp_origin_url(bunker_base_domain, public_url)?;
+    WebauthnBuilder::new(bunker_base_domain, &rp_origin)
+        .map_err(|e| format!("BUNKER_BASE_DOMAIN ({bunker_base_domain}) is not usable as a WebAuthn relying party: {e}"))?
         .rp_name(rp_name)
         .allow_subdomains(true)
         .build()
@@ -405,7 +405,7 @@ mod tests {
     }
 
     fn test_webauthn() -> Arc<Option<Webauthn>> {
-        Arc::new(Some(build_webauthn_client("hangar.example.com", "Hangar", "https://hangar.example.com").unwrap()))
+        Arc::new(Some(build_webauthn_client("bunker.example.com", "Bunker", "https://bunker.example.com").unwrap()))
     }
 
     /// Deserializes cleanly but is cryptographically meaningless — good enough for tests that only need `finish_*` to reach (and fail) the crypto check.
@@ -443,11 +443,11 @@ mod tests {
 
     #[test]
     fn build_webauthn_client_rejects_an_ip_literal_base_domain() {
-        let err = build_webauthn_client("0.0.0.0", "Hangar", "http://0.0.0.0:8080").unwrap_err();
+        let err = build_webauthn_client("0.0.0.0", "Bunker", "http://0.0.0.0:8080").unwrap_err();
         assert!(!err.is_empty());
     }
 
-    /// Guards a real bug: a bare `scheme://hangar_base_domain` silently assumes the scheme's
+    /// Guards a real bug: a bare `scheme://bunker_base_domain` silently assumes the scheme's
     /// default port, breaking every passkey ceremony served on a non-default one (this
     /// project's own `docker-compose.yml` exposes 8080).
     #[test]
@@ -456,11 +456,11 @@ mod tests {
         assert_eq!(origin.as_str(), "http://localhost:8080/");
     }
 
-    /// A real PUBLIC_URL is typically just `https://hangar.example.com`, no port since 443 is the default — the RP origin must match exactly, no spurious `:443`.
+    /// A real PUBLIC_URL is typically just `https://bunker.example.com`, no port since 443 is the default — the RP origin must match exactly, no spurious `:443`.
     #[test]
     fn rp_origin_omits_the_port_when_public_url_uses_the_schemes_default_port() {
-        let origin = rp_origin_url("hangar.example.com", "https://hangar.example.com").unwrap();
-        assert_eq!(origin.as_str(), "https://hangar.example.com/");
+        let origin = rp_origin_url("bunker.example.com", "https://bunker.example.com").unwrap();
+        assert_eq!(origin.as_str(), "https://bunker.example.com/");
     }
 
     /// PUBLIC_URL missing or unparsable must not prevent the server from starting — falls back to no port suffix.
@@ -479,7 +479,7 @@ mod tests {
 
         let (_challenge_id, ccr) = use_case.execute(Uuid::new_v4(), "florian").await.unwrap();
 
-        assert_eq!(ccr.public_key.rp.id, "hangar.example.com");
+        assert_eq!(ccr.public_key.rp.id, "bunker.example.com");
     }
 
     #[tokio::test]

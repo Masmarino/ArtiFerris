@@ -63,7 +63,7 @@ async fn get_tarball(
         .map_err(npm_error_response)?
         .ok_or_else(|| (StatusCode::NOT_FOUND, Json(json!({ "error": "tarball not found" }))))?;
 
-    // A published version's tarball never changes (npm rejects republishing), so a reverse proxy/CDN can serve repeat installs without hitting Hangar again.
+    // A published version's tarball never changes (npm rejects republishing), so a reverse proxy/CDN can serve repeat installs without hitting Bunker again.
     Ok((
         [("content-type", "application/octet-stream"), ("cache-control", "public, max-age=31536000, immutable")],
         Body::from_stream(stream),
@@ -155,7 +155,7 @@ mod tests {
             permissions: permissions.clone(),
             api_tokens: api_tokens.clone(),
             organizations: organizations.clone(),
-            hangar_base_domain: "hangar.localhost".to_string(),
+            bunker_base_domain: "bunker.localhost".to_string(),
             publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), events.clone())),
             metadata: Arc::new(bunker_application::use_cases::npm_metadata::GetNpmPackageMetadataUseCase::new(
                 npm_packages.clone(),
@@ -267,7 +267,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/{repo_name}/acme-widget"))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-plaintext-token")
                     .body(Body::empty())
                     .unwrap(),
@@ -322,7 +322,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/repo-{repo_id}/some-package"))
-                    .header("host", "other.hangar.localhost")
+                    .header("host", "other.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer plaintext-token")
                     .body(Body::empty())
                     .unwrap(),
@@ -391,7 +391,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/{repo_name}/acme-widget"))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-owns-this-package")
                     .body(Body::empty())
                     .unwrap(),
@@ -405,7 +405,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/{repo_name}/acme-widget"))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer plaintext-token")
                     .body(Body::empty())
                     .unwrap(),
@@ -459,7 +459,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/{repo_name}/acme-widget/-/acme-widget-1.0.0.tgz"))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-plaintext-token")
                     .body(Body::empty())
                     .unwrap(),

@@ -208,14 +208,14 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: bunker_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            hangar_base_domain: "hangar.localhost".to_string(),
+            bunker_base_domain: "bunker.localhost".to_string(),
         }
     }
 
     /// An IP-literal `BUNKER_BASE_DOMAIN` is not a valid WebAuthn relying-party id — the
-    /// webauthn client (built from `hangar_base_domain`, not `public_url`) fails to construct.
+    /// webauthn client (built from `bunker_base_domain`, not `public_url`) fails to construct.
     fn ip_literal_base_domain_config() -> Config {
-        Config { hangar_base_domain: "0.0.0.0".to_string(), ..test_config() }
+        Config { bunker_base_domain: "0.0.0.0".to_string(), ..test_config() }
     }
 
     #[sqlx::test(migrations = "../bunker-infrastructure/migrations")]

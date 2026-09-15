@@ -85,7 +85,7 @@ pub struct AppState {
     pub oidc_auth: Arc<dyn OidcAuthPort>,
     pub provision_sso_user: Arc<ProvisionSsoUserUseCase>,
     /// Base domain `ResolvedOrganization` strips off the `Host` header to find the subdomain label.
-    pub hangar_base_domain: String,
+    pub bunker_base_domain: String,
     /// The SPA's public URL — used to build the final browser redirect after an OIDC callback.
     pub public_url: String,
     pub api_tokens: Arc<dyn ApiTokenRepositoryPort>,
@@ -233,7 +233,7 @@ impl AppState {
         let mfa_pending_token_issuer: Arc<dyn TokenIssuerPort> = Arc::new(JwtMfaPendingTokenIssuer::new(config.jwt_secret.clone()));
         let webauthn_credentials: Arc<dyn bunker_domain::webauthn::WebauthnCredentialPort> = Arc::new(PostgresWebauthnCredentialRepository::new(pool.clone()));
         // Degrades to "passkeys disabled" rather than refusing to start the server.
-        let webauthn_client = Arc::new(match build_webauthn_client(&config.hangar_base_domain, "Hangar", &config.public_url) {
+        let webauthn_client = Arc::new(match build_webauthn_client(&config.bunker_base_domain, "Bunker", &config.public_url) {
             Ok(client) => Some(client),
             Err(e) => {
                 tracing::warn!("passkeys disabled: {e}. Set BUNKER_BASE_DOMAIN to this deployment's real base domain to enable them.");
@@ -274,7 +274,7 @@ impl AppState {
             user_invitations.clone(),
             email_sender.clone(),
             organizations.clone(),
-            config.hangar_base_domain.clone(),
+            config.bunker_base_domain.clone(),
         ));
 
         Self {
@@ -286,7 +286,7 @@ impl AppState {
             ldap_auth: ldap_auth.clone(),
             oidc_auth: oidc_auth.clone(),
             provision_sso_user: Arc::new(ProvisionSsoUserUseCase::new(users_repo.clone(), hasher.clone(), token_issuer.clone(), system_settings.clone())),
-            hangar_base_domain: config.hangar_base_domain.clone(),
+            bunker_base_domain: config.bunker_base_domain.clone(),
             public_url: config.public_url.clone(),
             api_tokens: api_tokens.clone(),
             storage: storage.clone(),
@@ -373,7 +373,7 @@ impl AppState {
             clear_branding_logo: Arc::new(ClearBrandingLogoUseCase::new(branding.clone())),
             set_branding_favicon: Arc::new(SetBrandingFaviconUseCase::new(branding.clone())),
             clear_branding_favicon: Arc::new(ClearBrandingFaviconUseCase::new(branding)),
-            // Scoped to hangar_base_domain, not public_url — the invitation must link to
+            // Scoped to bunker_base_domain, not public_url — the invitation must link to
             // the invitee's own organization's subdomain.
             invite_user: Arc::new(InviteUserUseCase::new(
                 users_repo.clone(),
@@ -381,9 +381,9 @@ impl AppState {
                 hasher.clone(),
                 email_sender.clone(),
                 organizations.clone(),
-                config.hangar_base_domain.clone(),
+                config.bunker_base_domain.clone(),
             )),
-            resend_invitation: Arc::new(ResendInvitationUseCase::new(users_repo.clone(), user_invitations.clone(), email_sender.clone(), organizations.clone(), config.hangar_base_domain.clone())),
+            resend_invitation: Arc::new(ResendInvitationUseCase::new(users_repo.clone(), user_invitations.clone(), email_sender.clone(), organizations.clone(), config.bunker_base_domain.clone())),
             activate_account: Arc::new(ActivateAccountUseCase::new(users_repo.clone(), user_invitations.clone(), hasher.clone())),
             user_invitations,
             totp_credentials: totp_credentials.clone(),

@@ -30,7 +30,7 @@ impl IssueDockerAccessTokenUseCase {
         Self { api_tokens, users, repositories, permissions, token_issuer }
     }
 
-    /// `password` is the caller's Hangar API token — the Basic-auth username is never checked.
+    /// `password` is the caller's Bunker API token — the Basic-auth username is never checked.
     /// `organization_id` is the registry subdomain requested against, not necessarily the user's own.
     pub async fn execute(&self, organization_id: Uuid, password: &str, scope: Option<&str>) -> Result<String, ApplicationError> {
         let hash = hash_api_token(password);
@@ -51,7 +51,7 @@ impl IssueDockerAccessTokenUseCase {
 
     /// Never errors for an under-authorized request — mirrors real Docker registries by returning a reduced scope instead, without revealing whether a missing repository exists.
     async fn authorize(&self, organization_id: Uuid, user: &User, requested: &DockerScopeRequest) -> Result<DockerGrantedScope, ApplicationError> {
-        let repository = self.repositories.find_by_org_and_name(organization_id, requested.hangar_repository_name()).await?;
+        let repository = self.repositories.find_by_org_and_name(organization_id, requested.bunker_repository_name()).await?;
 
         let (actions, granted_repository_id) = match &repository {
             None => (vec![], None),

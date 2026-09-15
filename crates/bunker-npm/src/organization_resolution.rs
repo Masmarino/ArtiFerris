@@ -23,7 +23,7 @@ impl FromRequestParts<NpmState> for ResolvedOrganization {
         let host_without_port = host.split(':').next().unwrap_or(host).to_ascii_lowercase();
 
         let label = host_without_port
-            .strip_suffix(&format!(".{}", state.hangar_base_domain))
+            .strip_suffix(&format!(".{}", state.bunker_base_domain))
             .unwrap_or("");
 
         let org = if label.is_empty() || label == "www" {
@@ -97,7 +97,7 @@ mod tests {
             permissions: permissions.clone(),
             api_tokens: api_tokens.clone(),
             organizations: organizations.clone(),
-            hangar_base_domain: "hangar.localhost".to_string(),
+            bunker_base_domain: "bunker.localhost".to_string(),
             publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), events.clone())),
             metadata: Arc::new(GetNpmPackageMetadataUseCase::new(npm_packages.clone(), repositories.clone(), remote_registry.clone())),
             download: Arc::new(DownloadNpmTarballUseCase::new(npm_packages.clone(), storage.clone(), remote_registry.clone(), repositories.clone())),
@@ -147,7 +147,7 @@ mod tests {
     async fn a_plain_base_domain_host_resolves_to_the_public_organization(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
-        let response = resolve(state, "hangar.localhost").await;
+        let response = resolve(state, "bunker.localhost").await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(body, "public".as_bytes());
@@ -157,7 +157,7 @@ mod tests {
     async fn a_www_host_label_resolves_to_the_public_organization(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
-        let response = resolve(state, "www.hangar.localhost").await;
+        let response = resolve(state, "www.bunker.localhost").await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(body, "public".as_bytes());
@@ -168,7 +168,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
         create_org(&state, "acme").await;
-        let response = resolve(state, "acme.hangar.localhost").await;
+        let response = resolve(state, "acme.bunker.localhost").await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(body, "acme".as_bytes());
@@ -178,7 +178,7 @@ mod tests {
     async fn a_port_suffix_on_the_host_header_is_stripped(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
-        let response = resolve(state, "hangar.localhost:8080").await;
+        let response = resolve(state, "bunker.localhost:8080").await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(body, "public".as_bytes());
@@ -189,7 +189,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
         create_org(&state, "acme").await;
-        let response = resolve(state, "acme.hangar.localhost:8080").await;
+        let response = resolve(state, "acme.bunker.localhost:8080").await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(body, "acme".as_bytes());
@@ -200,7 +200,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
         create_org(&state, "acme").await;
-        let response = resolve(state, "ACME.HANGAR.LOCALHOST").await;
+        let response = resolve(state, "ACME.BUNKER.LOCALHOST").await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(body, "acme".as_bytes());
@@ -210,7 +210,7 @@ mod tests {
     async fn an_unknown_organization_slug_is_not_found(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
-        let response = resolve(state, "nope.hangar.localhost").await;
+        let response = resolve(state, "nope.bunker.localhost").await;
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
@@ -221,7 +221,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
         create_org(&state, "acme").await;
-        let response = resolve(state, "evilacme.hangar.localhost").await;
+        let response = resolve(state, "evilacme.bunker.localhost").await;
         assert_eq!(
             response.status(),
             StatusCode::NOT_FOUND,
@@ -230,14 +230,14 @@ mod tests {
     }
 
     /// Guards against matching the base domain's first occurrence instead of anchoring to
-    /// the end of the host — a spoofed `acme.hangar.localhost.evil.com` must fall back to
+    /// the end of the host — a spoofed `acme.bunker.localhost.evil.com` must fall back to
     /// public, not resolve to acme.
     #[sqlx::test(migrations = "../bunker-infrastructure/migrations")]
     async fn a_host_where_the_base_domain_appears_as_a_substring_but_not_as_the_final_label_does_not_match(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
         create_org(&state, "acme").await;
-        let response = resolve(state, "acme.hangar.localhost.evil.com").await;
+        let response = resolve(state, "acme.bunker.localhost.evil.com").await;
         assert_eq!(response.status(), StatusCode::OK, "must not error, but also must not be treated as acme");
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(

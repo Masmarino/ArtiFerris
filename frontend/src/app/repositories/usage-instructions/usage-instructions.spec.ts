@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router'
 import { UsageInstructions } from './usage-instructions'
 import { RepositorySummary } from '../domain/repository.entity'
 
-const FAKE_LOCATION = { origin: 'http://hangar.test:8080', host: 'hangar.test:8080' }
+const FAKE_LOCATION = { origin: 'http://bunker.test:8080', host: 'bunker.test:8080' }
 const FAKE_DOCUMENT = {
   location: FAKE_LOCATION,
   createElement: (tag: string) => document.createElement(tag),
@@ -45,19 +45,19 @@ describe('UsageInstructions', () => {
     const text = render(repo({ name: 'my-images', format: 'docker', repo_type: 'hosted' }))
       .nativeElement.textContent
 
-    expect(text).toContain('docker login hangar.test:8080')
+    expect(text).toContain('docker login bunker.test:8080')
     expect(text).toContain('--password-stdin')
     expect(text).toContain('docker tag')
-    expect(text).toContain('docker push hangar.test:8080/my-images/')
-    expect(text).toContain('docker pull hangar.test:8080/my-images/')
+    expect(text).toContain('docker push bunker.test:8080/my-images/')
+    expect(text).toContain('docker pull bunker.test:8080/my-images/')
   })
 
   it('shows docker login and pull only for a proxy docker repository, never push', () => {
     const text = render(repo({ name: 'docker-hub-proxy', format: 'docker', repo_type: 'proxy' }))
       .nativeElement.textContent
 
-    expect(text).toContain('docker login hangar.test:8080')
-    expect(text).toContain('docker pull hangar.test:8080/docker-hub-proxy/')
+    expect(text).toContain('docker login bunker.test:8080')
+    expect(text).toContain('docker pull bunker.test:8080/docker-hub-proxy/')
     expect(text).not.toContain('docker push')
     expect(text).not.toContain('docker tag')
   })
@@ -66,8 +66,8 @@ describe('UsageInstructions', () => {
     const text = render(repo({ name: 'my-packages', format: 'npm', repo_type: 'hosted' }))
       .nativeElement.textContent
 
-    expect(text).toContain('registry=http://hangar.test:8080/npm/my-packages/')
-    expect(text).toContain('//hangar.test:8080/npm/my-packages/:_authToken=<votre-token>')
+    expect(text).toContain('registry=http://bunker.test:8080/npm/my-packages/')
+    expect(text).toContain('//bunker.test:8080/npm/my-packages/:_authToken=<votre-token>')
     expect(text).toContain('npm publish')
     expect(text).toContain('npm install')
   })
@@ -76,7 +76,7 @@ describe('UsageInstructions', () => {
     const text = render(repo({ name: 'aggregated', format: 'npm', repo_type: 'group' }))
       .nativeElement.textContent
 
-    expect(text).toContain('registry=http://hangar.test:8080/npm/aggregated/')
+    expect(text).toContain('registry=http://bunker.test:8080/npm/aggregated/')
     expect(text).toContain('npm install')
     expect(text).not.toContain('npm publish')
   })

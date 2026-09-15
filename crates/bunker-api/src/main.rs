@@ -191,7 +191,7 @@ fn build_npm_state(state: &AppState) -> bunker_npm::NpmState {
         permissions: state.permissions.clone(),
         api_tokens: state.api_tokens.clone(),
         organizations: state.organizations.clone(),
-        hangar_base_domain: state.hangar_base_domain.clone(),
+        bunker_base_domain: state.bunker_base_domain.clone(),
         publish: Arc::new(bunker_application::use_cases::npm_publish::PublishNpmPackageUseCase::new(
             state.npm_packages.clone(),
             state.storage.clone(),
@@ -245,10 +245,10 @@ fn build_docker_state(state: &AppState, jwt_secret: &str, token_realm: &str) -> 
         repositories: state.repositories.clone(),
         permissions: state.permissions.clone(),
         organizations: state.organizations.clone(),
-        hangar_base_domain: state.hangar_base_domain.clone(),
+        bunker_base_domain: state.bunker_base_domain.clone(),
         token_issuer: token_issuer.clone(),
         token_realm: token_realm.to_string(),
-        token_service: "hangar".to_string(),
+        token_service: "bunker".to_string(),
         issue_access_token: Arc::new(bunker_application::use_cases::docker_access_token::IssueDockerAccessTokenUseCase::new(
             state.api_tokens.clone(),
             state.users.clone(),
@@ -350,7 +350,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: bunker_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            hangar_base_domain: "hangar.localhost".to_string(),
+            bunker_base_domain: "bunker.localhost".to_string(),
         }
     }
 
@@ -425,20 +425,20 @@ mod tests {
 
     #[sqlx::test]
     async fn a_configured_origin_replaces_the_permissive_wildcard(pool: sqlx::PgPool) {
-        let app = router_with(pool, &test_config(), Some("https://hangar.example".to_string()));
+        let app = router_with(pool, &test_config(), Some("https://bunker.example".to_string()));
 
-        let response = app.oneshot(healthz_from("https://hangar.example")).await.unwrap();
+        let response = app.oneshot(healthz_from("https://bunker.example")).await.unwrap();
 
-        assert_eq!(response.headers().get("access-control-allow-origin").unwrap(), "https://hangar.example");
+        assert_eq!(response.headers().get("access-control-allow-origin").unwrap(), "https://bunker.example");
     }
 
     #[sqlx::test]
     async fn a_configured_origin_is_not_echoed_back_to_other_origins(pool: sqlx::PgPool) {
-        let app = router_with(pool, &test_config(), Some("https://hangar.example".to_string()));
+        let app = router_with(pool, &test_config(), Some("https://bunker.example".to_string()));
 
         let response = app.oneshot(healthz_from("https://evil.example")).await.unwrap();
 
-        assert_eq!(response.headers().get("access-control-allow-origin").unwrap(), "https://hangar.example");
+        assert_eq!(response.headers().get("access-control-allow-origin").unwrap(), "https://bunker.example");
     }
 
     #[sqlx::test]
@@ -473,7 +473,7 @@ mod tests {
     #[sqlx::test]
     async fn hsts_is_absent_when_public_url_is_plain_http(pool: sqlx::PgPool) {
         let config = test_config();
-        let app = build_router_with_cors(AppState::build(pool, &config), None, config.jwt_secret.clone(), config.docker_token_realm.clone(), "http://hangar.example".to_string());
+        let app = build_router_with_cors(AppState::build(pool, &config), None, config.jwt_secret.clone(), config.docker_token_realm.clone(), "http://bunker.example".to_string());
 
         let response = app.oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap()).await.unwrap();
 
@@ -483,7 +483,7 @@ mod tests {
     #[sqlx::test]
     async fn hsts_is_present_when_public_url_is_https(pool: sqlx::PgPool) {
         let config = test_config();
-        let app = build_router_with_cors(AppState::build(pool, &config), None, config.jwt_secret.clone(), config.docker_token_realm.clone(), "https://hangar.example".to_string());
+        let app = build_router_with_cors(AppState::build(pool, &config), None, config.jwt_secret.clone(), config.docker_token_realm.clone(), "https://bunker.example".to_string());
 
         let response = app.oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap()).await.unwrap();
 

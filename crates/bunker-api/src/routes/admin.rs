@@ -476,7 +476,7 @@ struct ConfigurationExportResponse {
 async fn export_configuration(State(state): State<AppState>, user: AuthUser) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
     let export = state.export_configuration.execute().await.map_err(|e| application_error_response("failed to export configuration", e))?;
-    let filename = format!("hangar-config-{}.json", export.exported_at.format("%Y-%m-%d"));
+    let filename = format!("bunker-config-{}.json", export.exported_at.format("%Y-%m-%d"));
     let response = ConfigurationExportResponse {
         exported_at: export.exported_at,
         users: export
@@ -595,7 +595,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: bunker_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            hangar_base_domain: "hangar.localhost".to_string(),
+            bunker_base_domain: "bunker.localhost".to_string(),
         }
     }
 
@@ -812,7 +812,7 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri("/npm/acme-repo/widget")
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header("authorization", format!("Bearer {raw_token}"))
                     .header("content-type", "application/json")
                     .body(Body::from(publish_body.to_string()))
@@ -1711,7 +1711,7 @@ mod tests {
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {admin_token}"))
                     .body(Body::from(
-                        r#"{"host":"smtp.example.com","port":587,"username":"hangar@example.com","password":"s3cret","from_name":"Hangar","from_address":"hangar@example.com","security":"start_tls"}"#,
+                        r#"{"host":"smtp.example.com","port":587,"username":"bunker@example.com","password":"s3cret","from_name":"Bunker","from_address":"bunker@example.com","security":"start_tls"}"#,
                     ))
                     .unwrap(),
             )
@@ -1727,7 +1727,7 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let settings: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(settings["host"], "smtp.example.com");
-        assert_eq!(settings["from_name"], "Hangar");
+        assert_eq!(settings["from_name"], "Bunker");
         assert_eq!(settings["password_set"], true);
         assert!(settings.get("password").is_none(), "the password must never be echoed back over HTTP");
     }
@@ -1746,7 +1746,7 @@ mod tests {
                     .uri("/api/admin/settings/smtp")
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {admin_token}"))
-                    .body(Body::from(r#"{"host":"smtp.example.com","port":587,"username":"hangar@example.com","from_name":"Hangar","from_address":"hangar@example.com","security":"start_tls"}"#))
+                    .body(Body::from(r#"{"host":"smtp.example.com","port":587,"username":"bunker@example.com","from_name":"Bunker","from_address":"bunker@example.com","security":"start_tls"}"#))
                     .unwrap(),
             )
             .await
@@ -1769,7 +1769,7 @@ mod tests {
                     .uri("/api/admin/settings/smtp")
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {token}"))
-                    .body(Body::from(r#"{"host":"smtp.example.com","port":587,"username":"hangar@example.com","password":"s3cret","from_name":"Hangar","from_address":"hangar@example.com","security":"start_tls"}"#))
+                    .body(Body::from(r#"{"host":"smtp.example.com","port":587,"username":"bunker@example.com","password":"s3cret","from_name":"Bunker","from_address":"bunker@example.com","security":"start_tls"}"#))
                     .unwrap(),
             )
             .await
@@ -1959,7 +1959,7 @@ mod tests {
                     .header("authorization", format!("Bearer {org_admin_token}"))
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        serde_json::json!({ "host": "smtp.acme.example", "port": 587, "username": "hangar@acme.example", "password": "s3cret!", "from_name": "Acme", "from_address": "hangar@acme.example", "security": "start_tls" })
+                        serde_json::json!({ "host": "smtp.acme.example", "port": 587, "username": "bunker@acme.example", "password": "s3cret!", "from_name": "Acme", "from_address": "bunker@acme.example", "security": "start_tls" })
                             .to_string(),
                     ))
                     .unwrap(),
@@ -1995,7 +1995,7 @@ mod tests {
                     .header("authorization", format!("Bearer {token}"))
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        serde_json::json!({ "host": "smtp.acme.example", "port": 587, "username": "hangar@acme.example", "password": "s3cret!", "from_name": "Acme", "from_address": "hangar@acme.example", "security": "start_tls" })
+                        serde_json::json!({ "host": "smtp.acme.example", "port": 587, "username": "bunker@acme.example", "password": "s3cret!", "from_name": "Acme", "from_address": "bunker@acme.example", "security": "start_tls" })
                             .to_string(),
                     ))
                     .unwrap(),
@@ -2103,7 +2103,7 @@ mod tests {
 
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         let content_disposition = response.headers().get(axum::http::header::CONTENT_DISPOSITION).unwrap().to_str().unwrap().to_string();
-        assert!(content_disposition.starts_with("attachment; filename=\"hangar-config-"), "got {content_disposition}");
+        assert!(content_disposition.starts_with("attachment; filename=\"bunker-config-"), "got {content_disposition}");
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 

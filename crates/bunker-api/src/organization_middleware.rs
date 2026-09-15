@@ -25,7 +25,7 @@ impl FromRequestParts<AppState> for ResolvedOrganization {
         let host_without_port = host.split(':').next().unwrap_or(host).to_ascii_lowercase();
 
         let label = host_without_port
-            .strip_suffix(&format!(".{}", state.hangar_base_domain))
+            .strip_suffix(&format!(".{}", state.bunker_base_domain))
             .unwrap_or("");
 
         let org = if label.is_empty() || label == "www" {
@@ -74,7 +74,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: bunker_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            hangar_base_domain: "hangar.localhost".to_string(),
+            bunker_base_domain: "bunker.localhost".to_string(),
         }
     }
 
@@ -93,7 +93,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "hangar.localhost")
+                    .header("host", "bunker.localhost")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -114,7 +114,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "www.hangar.localhost")
+                    .header("host", "www.bunker.localhost")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -142,7 +142,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -163,7 +163,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "nope.hangar.localhost")
+                    .header("host", "nope.bunker.localhost")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -180,7 +180,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "hangar.localhost:8080")
+                    .header("host", "bunker.localhost:8080")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -211,7 +211,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "ACME.HANGAR.LOCALHOST")
+                    .header("host", "ACME.BUNKER.LOCALHOST")
                     .body(Body::empty())
                     .unwrap(),
             )

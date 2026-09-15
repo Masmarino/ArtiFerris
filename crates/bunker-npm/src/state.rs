@@ -24,7 +24,7 @@ pub struct NpmState {
     pub api_tokens: Arc<dyn ApiTokenRepositoryPort>,
     pub organizations: Arc<dyn OrganizationRepositoryPort>,
     /// Base domain `ResolvedOrganization` strips off the `Host` header to find the subdomain label.
-    pub hangar_base_domain: String,
+    pub bunker_base_domain: String,
     pub publish: Arc<PublishNpmPackageUseCase>,
     pub metadata: Arc<GetNpmPackageMetadataUseCase>,
     pub download: Arc<DownloadNpmTarballUseCase>,

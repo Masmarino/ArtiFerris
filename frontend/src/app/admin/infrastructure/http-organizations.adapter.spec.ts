@@ -44,7 +44,7 @@ describe('HttpOrganizationsAdapter', () => {
     const { adapter, httpMock } = setup()
     const config = {
       issuer_url: 'https://accounts.example.com',
-      client_id: 'hangar',
+      client_id: 'bunker',
       client_secret: 's3cret!',
     }
     adapter.setOidcIdentityProvider('org-1', config).subscribe()

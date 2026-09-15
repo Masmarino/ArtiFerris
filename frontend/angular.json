@@ -7,7 +7,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "hangar-web": {
+    "bunker-web": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -73,10 +73,10 @@
           },
           "configurations": {
             "production": {
-              "buildTarget": "hangar-web:build:production"
+              "buildTarget": "bunker-web:build:production"
             },
             "development": {
-              "buildTarget": "hangar-web:build:development"
+              "buildTarget": "bunker-web:build:development"
             }
           },
           "defaultConfiguration": "development"

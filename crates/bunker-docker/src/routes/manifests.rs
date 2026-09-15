@@ -659,7 +659,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri(format!("/{repo_name}/myimage/blobs/uploads/?digest={}", config_digest.as_str()))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
                     .body(Body::from(config_bytes.to_vec()))
                     .unwrap(),
@@ -675,7 +675,7 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri(format!("/{repo_name}/myimage/manifests/latest"))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
                     .header(axum::http::header::CONTENT_TYPE, "application/vnd.docker.distribution.manifest.v2+json")
                     .body(Body::from(body.clone()))
@@ -690,7 +690,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/{repo_name}/myimage/manifests/latest"))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -744,7 +744,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/repo-{repo_id}/myimage/manifests/latest"))
-                    .header("host", "other.hangar.localhost")
+                    .header("host", "other.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -802,7 +802,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri(format!("/{repo_name}/myimage/blobs/uploads/?digest={}", config_digest.as_str()))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {acme_token}"))
                     .body(Body::from(config_bytes.to_vec()))
                     .unwrap(),
@@ -817,7 +817,7 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri(format!("/{repo_name}/myimage/manifests/latest"))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {acme_token}"))
                     .header(axum::http::header::CONTENT_TYPE, "application/vnd.docker.distribution.manifest.v2+json")
                     .body(Body::from(manifest_bytes.clone()))
@@ -834,7 +834,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/{repo_name}/myimage/manifests/latest"))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {acme_token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -851,7 +851,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/{repo_name}/myimage/manifests/latest"))
-                    .header("host", "acme.hangar.localhost")
+                    .header("host", "acme.bunker.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {other_token}"))
                     .body(Body::empty())
                     .unwrap(),

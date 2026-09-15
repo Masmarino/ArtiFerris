@@ -212,8 +212,8 @@ mod tests {
 
     #[test]
     fn accepts_a_scoped_package_name() {
-        let name = NpmPackageName::parse("@hangar/cli").unwrap();
-        assert_eq!(name.as_str(), "@hangar/cli");
+        let name = NpmPackageName::parse("@bunker/cli").unwrap();
+        assert_eq!(name.as_str(), "@bunker/cli");
     }
 
     #[test]
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn rejects_a_scope_without_a_slash() {
-        assert!(NpmPackageName::parse("@hangar").is_err());
+        assert!(NpmPackageName::parse("@bunker").is_err());
     }
 
     #[test]
