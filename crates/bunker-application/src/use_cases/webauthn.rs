@@ -244,19 +244,19 @@ impl DeletePasskeyUseCase {
     }
 }
 
-/// Built from `HANGAR_BASE_DOMAIN`, not `PUBLIC_URL` — `rp_id` needs the shared base domain for `allow_subdomains(true)` to validate every org's subdomain against one client instance.
+/// Built from `BUNKER_BASE_DOMAIN`, not `PUBLIC_URL` — `rp_id` needs the shared base domain for `allow_subdomains(true)` to validate every org's subdomain against one client instance.
 /// The port still has to come from somewhere, though, so a non-default one is taken from `public_url` instead of silently defaulting to 80/443.
 fn rp_origin_url(hangar_base_domain: &str, public_url: &str) -> Result<Url, String> {
     let scheme = if hangar_base_domain.starts_with("localhost") { "http" } else { "https" };
     let port_suffix = Url::parse(public_url).ok().and_then(|u| u.port()).map(|p| format!(":{p}")).unwrap_or_default();
-    Url::parse(&format!("{scheme}://{hangar_base_domain}{port_suffix}")).map_err(|e| format!("HANGAR_BASE_DOMAIN ({hangar_base_domain}) is not usable as a URL: {e}"))
+    Url::parse(&format!("{scheme}://{hangar_base_domain}{port_suffix}")).map_err(|e| format!("BUNKER_BASE_DOMAIN ({hangar_base_domain}) is not usable as a URL: {e}"))
 }
 
-/// Returns `Err` instead of panicking on an unusable `HANGAR_BASE_DOMAIN`.
+/// Returns `Err` instead of panicking on an unusable `BUNKER_BASE_DOMAIN`.
 pub fn build_webauthn_client(hangar_base_domain: &str, rp_name: &str, public_url: &str) -> Result<Webauthn, String> {
     let rp_origin = rp_origin_url(hangar_base_domain, public_url)?;
     WebauthnBuilder::new(hangar_base_domain, &rp_origin)
-        .map_err(|e| format!("HANGAR_BASE_DOMAIN ({hangar_base_domain}) is not usable as a WebAuthn relying party: {e}"))?
+        .map_err(|e| format!("BUNKER_BASE_DOMAIN ({hangar_base_domain}) is not usable as a WebAuthn relying party: {e}"))?
         .rp_name(rp_name)
         .allow_subdomains(true)
         .build()

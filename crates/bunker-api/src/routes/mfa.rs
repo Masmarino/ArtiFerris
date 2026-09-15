@@ -212,7 +212,7 @@ mod tests {
         }
     }
 
-    /// An IP-literal `HANGAR_BASE_DOMAIN` is not a valid WebAuthn relying-party id — the
+    /// An IP-literal `BUNKER_BASE_DOMAIN` is not a valid WebAuthn relying-party id — the
     /// webauthn client (built from `hangar_base_domain`, not `public_url`) fails to construct.
     fn ip_literal_base_domain_config() -> Config {
         Config { hangar_base_domain: "0.0.0.0".to_string(), ..test_config() }
