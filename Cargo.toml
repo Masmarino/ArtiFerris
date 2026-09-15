@@ -1,12 +1,12 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/hangar-domain",
-    "crates/hangar-application",
-    "crates/hangar-infrastructure",
-    "crates/hangar-api",
-    "crates/hangar-npm",
-    "crates/hangar-docker",
+    "crates/bunker-domain",
+    "crates/bunker-application",
+    "crates/bunker-infrastructure",
+    "crates/bunker-api",
+    "crates/bunker-npm",
+    "crates/bunker-docker",
 ]
 
 [workspace.package]
