@@ -1,5 +1,5 @@
 image:
-  repository: masmarino/hangar
+  repository: masmarino/bunker
   tag: latest
   pullPolicy: IfNotPresent
 
