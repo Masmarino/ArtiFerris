@@ -36,7 +36,6 @@ spec:
                   name: http
   tls:
     - hosts:
-        - {{ .Values.ingress.host }}
         - {{ .Values.ingress.wildcardHost | quote }}
       secretName: {{ .Release.Name }}-tls
 {{- end }}

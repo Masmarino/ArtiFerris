@@ -28,7 +28,7 @@ impl FromRequestParts<AppState> for ResolvedOrganization {
             .strip_suffix(&format!(".{}", state.artiferris_base_domain))
             .unwrap_or("");
 
-        let org = if label.is_empty() || label == "www" {
+        let org = if label.is_empty() || label == "www" || label == "app" {
             state
                 .organizations
                 .find_public()
@@ -115,6 +115,23 @@ mod tests {
                 Request::builder()
                     .uri("/")
                     .header("host", "www.artiferris.localhost")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_app_host_label_resolves_to_the_public_organization(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("host", "app.artiferris.localhost")
                     .body(Body::empty())
                     .unwrap(),
             )

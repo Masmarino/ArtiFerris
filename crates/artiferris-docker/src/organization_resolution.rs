@@ -26,7 +26,7 @@ impl FromRequestParts<DockerState> for ResolvedOrganization {
             .strip_suffix(&format!(".{}", state.artiferris_base_domain))
             .unwrap_or("");
 
-        let org = if label.is_empty() || label == "www" {
+        let org = if label.is_empty() || label == "www" || label == "app" {
             state
                 .organizations
                 .find_public()
@@ -100,6 +100,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
         let response = resolve(state, "www.artiferris.localhost").await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(body, "public".as_bytes());
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_app_host_label_resolves_to_the_public_organization(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool, dir.path()).await;
+        let response = resolve(state, "app.artiferris.localhost").await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(body, "public".as_bytes());
