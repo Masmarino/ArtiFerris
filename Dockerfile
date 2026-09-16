@@ -36,7 +36,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY .sqlx ./.sqlx
 
-RUN cargo build --release -p bunker-api --locked
+RUN cargo build --release -p artiferris-api --locked
 
 FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS runtime
 
@@ -56,20 +56,20 @@ RUN apk upgrade --no-cache \
     && rm "/tmp/${TRIVY_TARBALL}" /tmp/trivy_checksums.txt \
     && apk del curl
 
-COPY --from=backend-build /app/target/release/bunker-api ./bunker-api
-COPY --from=frontend-build /app/frontend/dist/bunker-web/browser ./static
+COPY --from=backend-build /app/target/release/artiferris-api ./artiferris-api
+COPY --from=frontend-build /app/frontend/dist/artiferris-web/browser ./static
 
 ENV STATIC_DIR=/app/static
 
 EXPOSE 8080
 
-RUN addgroup -S bunker && adduser -S -G bunker -h /app -H bunker \
+RUN addgroup -S artiferris && adduser -S -G artiferris -h /app -H artiferris \
     && mkdir -p /data \
-    && chown -R bunker:bunker /app /data
+    && chown -R artiferris:artiferris /app /data
 
-USER bunker
+USER artiferris
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
 
-CMD ["./bunker-api"]
+CMD ["./artiferris-api"]

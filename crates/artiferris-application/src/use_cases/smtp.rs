@@ -106,8 +106,8 @@ impl SendTestEmailUseCase {
     }
 
     pub async fn execute(&self, organization_id: uuid::Uuid, to: &str) -> Result<(), ApplicationError> {
-        let message = "This is a test email from Bunker. If you received it, your SMTP settings are working correctly.";
-        self.email.send(organization_id, to, "Bunker SMTP test", message, &format!("<p>{message}</p>")).await?;
+        let message = "This is a test email from ArtiFerris. If you received it, your SMTP settings are working correctly.";
+        self.email.send(organization_id, to, "ArtiFerris SMTP test", message, &format!("<p>{message}</p>")).await?;
         Ok(())
     }
 }
@@ -152,10 +152,10 @@ mod tests {
         UpdateSmtpSettingsInput {
             host: "smtp.example.com".to_string(),
             port: 587,
-            username: "bunker@example.com".to_string(),
+            username: "artiferris@example.com".to_string(),
             password: Some("s3cret".to_string()),
-            from_name: "Bunker".to_string(),
-            from_address: "bunker@example.com".to_string(),
+            from_name: "ArtiFerris".to_string(),
+            from_address: "artiferris@example.com".to_string(),
             security: SmtpSecurity::StartTls,
         }
     }

@@ -405,7 +405,7 @@ mod tests {
     }
 
     fn test_webauthn() -> Arc<Option<Webauthn>> {
-        Arc::new(Some(build_webauthn_client("bunker.example.com", "Bunker", "https://bunker.example.com").unwrap()))
+        Arc::new(Some(build_webauthn_client("artiferris.example.com", "ArtiFerris", "https://artiferris.example.com").unwrap()))
     }
 
     /// Deserializes cleanly but is cryptographically meaningless — good enough for tests that only need `finish_*` to reach (and fail) the crypto check.
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn build_webauthn_client_rejects_an_ip_literal_base_domain() {
-        let err = build_webauthn_client("0.0.0.0", "Bunker", "http://0.0.0.0:8080").unwrap_err();
+        let err = build_webauthn_client("0.0.0.0", "ArtiFerris", "http://0.0.0.0:8080").unwrap_err();
         assert!(!err.is_empty());
     }
 
@@ -456,11 +456,11 @@ mod tests {
         assert_eq!(origin.as_str(), "http://localhost:8080/");
     }
 
-    /// A real PUBLIC_URL is typically just `https://bunker.example.com`, no port since 443 is the default — the RP origin must match exactly, no spurious `:443`.
+    /// A real PUBLIC_URL is typically just `https://artiferris.example.com`, no port since 443 is the default — the RP origin must match exactly, no spurious `:443`.
     #[test]
     fn rp_origin_omits_the_port_when_public_url_uses_the_schemes_default_port() {
-        let origin = rp_origin_url("bunker.example.com", "https://bunker.example.com").unwrap();
-        assert_eq!(origin.as_str(), "https://bunker.example.com/");
+        let origin = rp_origin_url("artiferris.example.com", "https://artiferris.example.com").unwrap();
+        assert_eq!(origin.as_str(), "https://artiferris.example.com/");
     }
 
     /// PUBLIC_URL missing or unparsable must not prevent the server from starting — falls back to no port suffix.
@@ -479,7 +479,7 @@ mod tests {
 
         let (_challenge_id, ccr) = use_case.execute(Uuid::new_v4(), "florian").await.unwrap();
 
-        assert_eq!(ccr.public_key.rp.id, "bunker.example.com");
+        assert_eq!(ccr.public_key.rp.id, "artiferris.example.com");
     }
 
     #[tokio::test]

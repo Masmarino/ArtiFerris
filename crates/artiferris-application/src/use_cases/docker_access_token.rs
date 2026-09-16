@@ -30,7 +30,7 @@ impl IssueDockerAccessTokenUseCase {
         Self { api_tokens, users, repositories, permissions, token_issuer }
     }
 
-    /// `password` is the caller's Bunker API token — the Basic-auth username is never checked.
+    /// `password` is the caller's ArtiFerris API token — the Basic-auth username is never checked.
     /// `organization_id` is the registry subdomain requested against, not necessarily the user's own.
     pub async fn execute(&self, organization_id: Uuid, password: &str, scope: Option<&str>) -> Result<String, ApplicationError> {
         let hash = hash_api_token(password);

@@ -141,10 +141,10 @@ mod tests {
         artiferris_domain::email::SmtpSettings {
             host: "smtp.example.com".to_string(),
             port: 587,
-            username: "bunker@example.com".to_string(),
+            username: "artiferris@example.com".to_string(),
             password: "s3cret".to_string(),
-            from_name: "Bunker".to_string(),
-            from_address: "bunker@example.com".to_string(),
+            from_name: "ArtiFerris".to_string(),
+            from_address: "artiferris@example.com".to_string(),
             security: SmtpSecurity::StartTls,
         }
     }
@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn an_invalid_from_address_is_rejected() {
-        let result = build_message("not-an-email", "Bunker", "to@example.com", "subject", "text", "<p>html</p>", None);
+        let result = build_message("not-an-email", "ArtiFerris", "to@example.com", "subject", "text", "<p>html</p>", None);
 
         let err = result.unwrap_err();
         assert!(format!("{err}").contains("configured SMTP from-address is not a valid mailbox"), "got {err:?}");
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn an_invalid_recipient_address_is_rejected() {
-        let result = build_message("from@example.com", "Bunker", "not-an-email", "subject", "text", "<p>html</p>", None);
+        let result = build_message("from@example.com", "ArtiFerris", "not-an-email", "subject", "text", "<p>html</p>", None);
 
         let err = result.unwrap_err();
         assert!(format!("{err}").contains("recipient address is not a valid mailbox"), "got {err:?}");
@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn an_invalid_stored_logo_content_type_is_rejected() {
         let html_body = format!("<img src=\"cid:{LOGO_CID}\">");
-        let result = build_message("from@example.com", "Bunker", "to@example.com", "subject", "text", &html_body, Some((vec![1, 2, 3], "not/a/valid/content-type".to_string())));
+        let result = build_message("from@example.com", "ArtiFerris", "to@example.com", "subject", "text", &html_body, Some((vec![1, 2, 3], "not/a/valid/content-type".to_string())));
 
         let err = result.unwrap_err();
         assert!(format!("{err}").contains("stored logo content type is invalid"), "got {err:?}");
@@ -222,7 +222,7 @@ mod tests {
     #[test]
     fn the_logo_is_attached_when_the_html_references_its_cid() {
         let html_body = format!("<img src=\"cid:{LOGO_CID}\">");
-        let message = build_message("from@example.com", "Bunker", "to@example.com", "subject", "text", &html_body, Some((b"logo-bytes".to_vec(), "image/png".to_string()))).unwrap();
+        let message = build_message("from@example.com", "ArtiFerris", "to@example.com", "subject", "text", &html_body, Some((b"logo-bytes".to_vec(), "image/png".to_string()))).unwrap();
 
         let formatted = String::from_utf8_lossy(&message.formatted()).to_string();
         assert!(formatted.contains("image/png"), "expected the logo's content type in the message, got:\n{formatted}");
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn the_logo_is_not_attached_when_the_html_does_not_reference_its_cid() {
         let html_body = "<p>no logo here</p>".to_string();
-        let message = build_message("from@example.com", "Bunker", "to@example.com", "subject", "text", &html_body, Some((b"logo-bytes".to_vec(), "image/png".to_string()))).unwrap();
+        let message = build_message("from@example.com", "ArtiFerris", "to@example.com", "subject", "text", &html_body, Some((b"logo-bytes".to_vec(), "image/png".to_string()))).unwrap();
 
         let formatted = String::from_utf8_lossy(&message.formatted()).to_string();
         assert!(!formatted.contains("image/png"), "expected no logo content type in the message, got:\n{formatted}");

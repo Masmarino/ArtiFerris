@@ -99,7 +99,7 @@ mod tests {
             permissions: permissions.clone(),
             api_tokens: api_tokens.clone(),
             organizations: organizations.clone(),
-            artiferris_base_domain: "bunker.localhost".to_string(),
+            artiferris_base_domain: "artiferris.localhost".to_string(),
             publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), events.clone())),
             metadata: Arc::new(GetNpmPackageMetadataUseCase::new(npm_packages.clone(), repositories.clone(), remote_registry.clone())),
             download: Arc::new(DownloadNpmTarballUseCase::new(npm_packages.clone(), storage.clone(), remote_registry.clone(), repositories.clone())),

@@ -276,7 +276,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            artiferris_base_domain: "bunker.localhost".to_string(),
+            artiferris_base_domain: "artiferris.localhost".to_string(),
         }
     }
 
@@ -554,7 +554,7 @@ mod tests {
                     .uri(format!("/api/organizations/{}/identity-provider", public_org.id))
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {token}"))
-                    .body(Body::from(r#"{"type":"oidc","issuer_url":"https://accounts.example.com","client_id":"bunker","client_secret":"s3cret!"}"#))
+                    .body(Body::from(r#"{"type":"oidc","issuer_url":"https://accounts.example.com","client_id":"artiferris","client_secret":"s3cret!"}"#))
                     .unwrap(),
             )
             .await
@@ -608,7 +608,7 @@ mod tests {
                     .uri(format!("/api/organizations/{}/identity-provider", public_org.id))
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {token}"))
-                    .body(Body::from(r#"{"type":"oidc","issuer_url":"https://accounts.example.com","client_id":"bunker","client_secret":"s3cret!"}"#))
+                    .body(Body::from(r#"{"type":"oidc","issuer_url":"https://accounts.example.com","client_id":"artiferris","client_secret":"s3cret!"}"#))
                     .unwrap(),
             )
             .await
@@ -633,7 +633,7 @@ mod tests {
                     .uri(format!("/api/organizations/{}/identity-provider", public_org.id))
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {token}"))
-                    .body(Body::from(r#"{"type":"oidc","issuer_url":"https://accounts.example.com","client_id":"bunker"}"#))
+                    .body(Body::from(r#"{"type":"oidc","issuer_url":"https://accounts.example.com","client_id":"artiferris"}"#))
                     .unwrap(),
             )
             .await

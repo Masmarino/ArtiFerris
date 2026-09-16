@@ -74,7 +74,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            artiferris_base_domain: "bunker.localhost".to_string(),
+            artiferris_base_domain: "artiferris.localhost".to_string(),
         }
     }
 
@@ -93,7 +93,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "bunker.localhost")
+                    .header("host", "artiferris.localhost")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -114,7 +114,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "www.bunker.localhost")
+                    .header("host", "www.artiferris.localhost")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -142,7 +142,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -163,7 +163,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "nope.bunker.localhost")
+                    .header("host", "nope.artiferris.localhost")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -180,7 +180,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "bunker.localhost:8080")
+                    .header("host", "artiferris.localhost:8080")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -211,7 +211,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/")
-                    .header("host", "ACME.BUNKER.LOCALHOST")
+                    .header("host", "ACME.ARTIFERRIS.LOCALHOST")
                     .body(Body::empty())
                     .unwrap(),
             )

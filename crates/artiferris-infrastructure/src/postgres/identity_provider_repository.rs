@@ -232,7 +232,7 @@ mod tests {
     fn sample_oidc() -> IdentityProviderConfig {
         IdentityProviderConfig::Oidc(OidcConfig {
             issuer_url: "https://accounts.example.com".to_string(),
-            client_id: "bunker".to_string(),
+            client_id: "artiferris".to_string(),
             client_secret: "s3cret!".to_string(),
         })
     }

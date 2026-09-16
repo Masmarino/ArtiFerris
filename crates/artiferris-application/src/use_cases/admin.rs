@@ -1506,7 +1506,7 @@ mod tests {
         assert_eq!(export.users.iter().find(|u| u.username == "admin").unwrap().email, Some("admin@example.com".to_string()));
     }
 
-    const TEST_BASE_DOMAIN: &str = "bunker.example.com";
+    const TEST_BASE_DOMAIN: &str = "artiferris.example.com";
 
     /// One public org per distinct organization_id already on `users` — tests needing a non-public restore org build their own `FakeOrganizations` instead.
     fn public_orgs_for(users: &FakeUsers) -> Arc<FakeOrganizations> {
@@ -1680,7 +1680,7 @@ mod tests {
 
         assert_eq!(report.invited, vec!["admin".to_string()], "got failures: {:?}", report.failed);
         let sent = email.sent.lock().unwrap();
-        assert!(sent[0].3.contains("https://acme.bunker.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
+        assert!(sent[0].3.contains("https://acme.artiferris.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
     }
 
     #[tokio::test]

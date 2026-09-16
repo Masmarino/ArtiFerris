@@ -1026,7 +1026,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            artiferris_base_domain: "bunker.localhost".to_string(),
+            artiferris_base_domain: "artiferris.localhost".to_string(),
         }
     }
 
@@ -1104,7 +1104,7 @@ mod tests {
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {token}"))
                     // organization_id doesn't override the domain for a non-super-admin.
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .body(Body::from(r#"{"name":"escape-attempt","format":"npm","repo_type":"hosted","remote_url":null}"#))
                     .unwrap(),
             )
@@ -2270,7 +2270,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/api/repositories/{repo_id}"))
-                    .header("host", "other.bunker.localhost")
+                    .header("host", "other.artiferris.localhost")
                     .header("authorization", format!("Bearer {other_token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -2300,7 +2300,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/api/repositories/{repo_id}"))
-                    .header("host", "other.bunker.localhost")
+                    .header("host", "other.artiferris.localhost")
                     .header("authorization", format!("Bearer {super_admin_token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -2330,7 +2330,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri(format!("/api/repositories/{repo_id}/group-members"))
-                    .header("host", "other.bunker.localhost")
+                    .header("host", "other.artiferris.localhost")
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {other_token}"))
                     .body(Body::from(format!(r#"{{"member_repository_id":"{}","position":0}}"#, Uuid::new_v4())))
@@ -2409,7 +2409,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/api/repositories/{repo_id}/packages/npm/left-pad"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header("authorization", format!("Bearer {admin_token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -2423,7 +2423,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/api/repositories/{repo_id}/packages/npm/left-pad"))
-                    .header("host", "other.bunker.localhost")
+                    .header("host", "other.artiferris.localhost")
                     .header("authorization", format!("Bearer {other_token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -2453,7 +2453,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/api/repositories")
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header("authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -2486,7 +2486,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/api/repositories")
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header("authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),

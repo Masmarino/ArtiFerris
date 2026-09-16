@@ -1,11 +1,11 @@
-groupName: acme.bunker.skolln.com
+groupName: acme.artiferris.skolln.com
 
 certManager:
   namespace: cert-manager
   serviceAccountName: cert-manager
 
 issuers:
-  - name: bunker-dns01-issuer
+  - name: artiferris-dns01-issuer
     create: true
     kind: ClusterIssuer
     acmeServerUrl: https://acme-v02.api.letsencrypt.org/directory

@@ -4,30 +4,30 @@ services:
     image: postgres:18-alpine3.24
     restart: unless-stopped
     environment:
-      POSTGRES_USER: bunker
+      POSTGRES_USER: artiferris
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-      POSTGRES_DB: bunker
+      POSTGRES_DB: artiferris
     volumes:
       # postgres:18+ images manage their own version-specific subdirectory
       # under a single top-level mount — mounting at the old .../data path
       # instead makes the entrypoint refuse to start (it can no longer tell
       # whether that path holds real data from a pre-18 image or is just an
       # empty legacy mount). See https://github.com/docker-library/postgres/pull/1259.
-      - bunker-postgres-data:/var/lib/postgresql
+      - artiferris-postgres-data:/var/lib/postgresql
     ports:
       # Bound to loopback only — exposed so a locally-run backend (`cargo run`,
       # e.g. via scripts/dev.sh for frontend hot-reload) can connect from the
-      # host. bunker-api itself reaches this container over the compose
+      # host. artiferris-api itself reaches this container over the compose
       # network and doesn't need it. Never publish this on all interfaces:
       # Postgres has no other network-level access control of its own here.
       - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bunker"]
+      test: ["CMD-SHELL", "pg_isready -U artiferris"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  bunker-api:
+  artiferris-api:
     build: .
     restart: unless-stopped
     depends_on:
@@ -43,8 +43,8 @@ services:
         limits:
           memory: ${ARTIFERRIS_API_MEMORY_LIMIT:-4g}
     environment:
-      DATABASE_URL: postgres://bunker:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/bunker
-      # Defaults to 10 (see bunker-infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS).
+      DATABASE_URL: postgres://artiferris:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/artiferris
+      # Defaults to 10 (see artiferris-infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS).
       # Size against expected concurrent users, not left as a guess — each held connection
       # is one in-flight request that would otherwise queue on `acquire_timeout` (10s).
       DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-10}
@@ -74,11 +74,11 @@ services:
     volumes:
       # The image runs as a non-root user. Docker only sets that user's
       # ownership on this volume the first time it's created (empty). If
-      # you're upgrading from an image that ran as root and bunker-api
+      # you're upgrading from an image that ran as root and artiferris-api
       # can't write to /data after upgrading, fix ownership once with:
-      #   docker compose run --rm --user root bunker-api chown -R bunker:bunker /data
-      - bunker-storage:/data
+      #   docker compose run --rm --user root artiferris-api chown -R artiferris:artiferris /data
+      - artiferris-storage:/data
 
 volumes:
-  bunker-postgres-data:
-  bunker-storage:
+  artiferris-postgres-data:
+  artiferris-storage:

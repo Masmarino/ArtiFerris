@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "bunker-frontend",
+      "name": "artiferris-frontend",
       "runtimeExecutable": "sh",
       "runtimeArgs": ["-c", "cd frontend && npx ng serve --proxy-config proxy.conf.json --port 4200"],
       "port": 4200

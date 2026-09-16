@@ -24,7 +24,7 @@ env:
   # keep in sync with rust-toolchain.toml — that's the real source of truth
   RUST_VERSION: "1.98.1"
   NODE_VERSION: "26"
-  DOCKER_IMAGE: masmarino/bunker
+  DOCKER_IMAGE: masmarino/artiferris
 
 jobs:
   # ── Build & test ────────────────────────────────────────────────────────

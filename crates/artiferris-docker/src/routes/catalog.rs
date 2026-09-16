@@ -165,7 +165,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri(format!("/{acme_repo_name}/myimage/blobs/uploads/?digest={}", config_digest.as_str()))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {acme_push_token}"))
                     .body(Body::from(config_bytes.to_vec()))
                     .unwrap(),
@@ -179,7 +179,7 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri(format!("/{acme_repo_name}/myimage/manifests/latest"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {acme_push_token}"))
                     .header(axum::http::header::CONTENT_TYPE, "application/vnd.docker.distribution.manifest.v2+json")
                     .body(Body::from(
@@ -206,7 +206,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/_catalog")
-                    .header("host", "other.bunker.localhost")
+                    .header("host", "other.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {catalog_token}"))
                     .body(Body::empty())
                     .unwrap(),

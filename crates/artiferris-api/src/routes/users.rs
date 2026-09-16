@@ -317,7 +317,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            artiferris_base_domain: "bunker.localhost".to_string(),
+            artiferris_base_domain: "artiferris.localhost".to_string(),
         }
     }
 
@@ -1079,7 +1079,7 @@ mod tests {
                     .method("POST")
                     .uri("/api/users")
                     .header("content-type", "application/json")
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header("authorization", format!("Bearer {admin_token}"))
                     .body(Body::from(r#"{"username":"acme-admin","email":"acme-admin@example.com","is_super_admin":false,"is_organization_admin":true}"#))
                     .unwrap(),

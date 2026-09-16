@@ -127,7 +127,7 @@ mod tests {
             permissions: permissions.clone(),
             api_tokens: api_tokens.clone(),
             organizations: organizations.clone(),
-            artiferris_base_domain: "bunker.localhost".to_string(),
+            artiferris_base_domain: "artiferris.localhost".to_string(),
             publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), events.clone())),
             metadata: Arc::new(GetNpmPackageMetadataUseCase::new(npm_packages.clone(), repositories.clone(), remote_registry.clone())),
             download: Arc::new(DownloadNpmTarballUseCase::new(npm_packages.clone(), storage.clone(), remote_registry.clone(), repositories.clone())),
@@ -228,7 +228,7 @@ mod tests {
         let request = Request::builder()
             .method("PUT")
             .uri(format!("/{repo_name}/-/package/widget/dist-tags/{tag}"))
-            .header("host", "acme.bunker.localhost")
+            .header("host", "acme.artiferris.localhost")
             .header(axum::http::header::AUTHORIZATION, format!("Bearer {bearer}"))
             .body(Body::from(raw_body.to_string()))
             .unwrap();
@@ -294,7 +294,7 @@ mod tests {
                 Request::builder()
                     .method("GET")
                     .uri(format!("/{repo_name}/-/package/widget/dist-tags"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-token")
                     .body(Body::empty())
                     .unwrap(),
@@ -322,7 +322,7 @@ mod tests {
                 Request::builder()
                     .method("DELETE")
                     .uri(format!("/{repo_name}/-/package/widget/dist-tags/beta"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-token")
                     .body(Body::empty())
                     .unwrap(),

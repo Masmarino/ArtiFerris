@@ -105,7 +105,7 @@ mod tests {
     fn identity_provider_config_wraps_an_oidc_config_by_value() {
         let config = IdentityProviderConfig::Oidc(OidcConfig {
             issuer_url: "https://accounts.example.com".to_string(),
-            client_id: "bunker".to_string(),
+            client_id: "artiferris".to_string(),
             client_secret: "s3cret!".to_string(),
         });
         let IdentityProviderConfig::Oidc(inner) = config else { panic!("expected Oidc variant") };

@@ -595,7 +595,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            artiferris_base_domain: "bunker.localhost".to_string(),
+            artiferris_base_domain: "artiferris.localhost".to_string(),
         }
     }
 
@@ -812,7 +812,7 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri("/npm/acme-repo/widget")
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header("authorization", format!("Bearer {raw_token}"))
                     .header("content-type", "application/json")
                     .body(Body::from(publish_body.to_string()))
@@ -1711,7 +1711,7 @@ mod tests {
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {admin_token}"))
                     .body(Body::from(
-                        r#"{"host":"smtp.example.com","port":587,"username":"bunker@example.com","password":"s3cret","from_name":"Bunker","from_address":"bunker@example.com","security":"start_tls"}"#,
+                        r#"{"host":"smtp.example.com","port":587,"username":"artiferris@example.com","password":"s3cret","from_name":"ArtiFerris","from_address":"artiferris@example.com","security":"start_tls"}"#,
                     ))
                     .unwrap(),
             )
@@ -1727,7 +1727,7 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let settings: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(settings["host"], "smtp.example.com");
-        assert_eq!(settings["from_name"], "Bunker");
+        assert_eq!(settings["from_name"], "ArtiFerris");
         assert_eq!(settings["password_set"], true);
         assert!(settings.get("password").is_none(), "the password must never be echoed back over HTTP");
     }
@@ -1746,7 +1746,7 @@ mod tests {
                     .uri("/api/admin/settings/smtp")
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {admin_token}"))
-                    .body(Body::from(r#"{"host":"smtp.example.com","port":587,"username":"bunker@example.com","from_name":"Bunker","from_address":"bunker@example.com","security":"start_tls"}"#))
+                    .body(Body::from(r#"{"host":"smtp.example.com","port":587,"username":"artiferris@example.com","from_name":"ArtiFerris","from_address":"artiferris@example.com","security":"start_tls"}"#))
                     .unwrap(),
             )
             .await
@@ -1769,7 +1769,7 @@ mod tests {
                     .uri("/api/admin/settings/smtp")
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {token}"))
-                    .body(Body::from(r#"{"host":"smtp.example.com","port":587,"username":"bunker@example.com","password":"s3cret","from_name":"Bunker","from_address":"bunker@example.com","security":"start_tls"}"#))
+                    .body(Body::from(r#"{"host":"smtp.example.com","port":587,"username":"artiferris@example.com","password":"s3cret","from_name":"ArtiFerris","from_address":"artiferris@example.com","security":"start_tls"}"#))
                     .unwrap(),
             )
             .await
@@ -1959,7 +1959,7 @@ mod tests {
                     .header("authorization", format!("Bearer {org_admin_token}"))
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        serde_json::json!({ "host": "smtp.acme.example", "port": 587, "username": "bunker@acme.example", "password": "s3cret!", "from_name": "Acme", "from_address": "bunker@acme.example", "security": "start_tls" })
+                        serde_json::json!({ "host": "smtp.acme.example", "port": 587, "username": "artiferris@acme.example", "password": "s3cret!", "from_name": "Acme", "from_address": "artiferris@acme.example", "security": "start_tls" })
                             .to_string(),
                     ))
                     .unwrap(),
@@ -1995,7 +1995,7 @@ mod tests {
                     .header("authorization", format!("Bearer {token}"))
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        serde_json::json!({ "host": "smtp.acme.example", "port": 587, "username": "bunker@acme.example", "password": "s3cret!", "from_name": "Acme", "from_address": "bunker@acme.example", "security": "start_tls" })
+                        serde_json::json!({ "host": "smtp.acme.example", "port": 587, "username": "artiferris@acme.example", "password": "s3cret!", "from_name": "Acme", "from_address": "artiferris@acme.example", "security": "start_tls" })
                             .to_string(),
                     ))
                     .unwrap(),

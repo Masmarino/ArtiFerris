@@ -162,7 +162,7 @@ mod tests {
             permissions: permissions.clone(),
             api_tokens: api_tokens.clone(),
             organizations: organizations.clone(),
-            artiferris_base_domain: "bunker.localhost".to_string(),
+            artiferris_base_domain: "artiferris.localhost".to_string(),
             publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), events.clone())),
             metadata: Arc::new(GetNpmPackageMetadataUseCase::new(npm_packages.clone(), repositories.clone(), remote_registry.clone())),
             download: Arc::new(DownloadNpmTarballUseCase::new(npm_packages.clone(), storage.clone(), remote_registry.clone(), repositories.clone())),
@@ -268,7 +268,7 @@ mod tests {
                 Request::builder()
                     .method("DELETE")
                     .uri(format!("/{repo_name}/widget/-rev/1"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-token")
                     .body(Body::empty())
                     .unwrap(),
@@ -293,7 +293,7 @@ mod tests {
                 Request::builder()
                     .method("DELETE")
                     .uri(format!("/{repo_name}/widget/-/widget-1.0.0.tgz/-rev/1"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-token")
                     .body(Body::empty())
                     .unwrap(),
@@ -325,7 +325,7 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri(format!("/{repo_name}/widget/-rev/1"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-token")
                     .header(axum::http::header::CONTENT_TYPE, "application/json")
                     .body(Body::from(doc.to_string()))
@@ -357,7 +357,7 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri(format!("/{repo_name}/widget/-rev/1"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-token")
                     .header(axum::http::header::CONTENT_TYPE, "application/json")
                     .body(Body::from(doc.to_string()))
@@ -387,7 +387,7 @@ mod tests {
             Request::builder()
                 .method("PUT")
                 .uri(format!("/{repo_name}/widget/-rev/{rev}"))
-                .header("host", "acme.bunker.localhost")
+                .header("host", "acme.artiferris.localhost")
                 .header(axum::http::header::AUTHORIZATION, "Bearer acme-token")
                 .header(axum::http::header::CONTENT_TYPE, "application/json")
                 .body(Body::from(doc.to_string()))
@@ -416,7 +416,7 @@ mod tests {
                 Request::builder()
                     .method("DELETE")
                     .uri(format!("/{repo_name}/widget/-/widget-9.9.9.tgz/-rev/1"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-token")
                     .body(Body::empty())
                     .unwrap(),
@@ -445,7 +445,7 @@ mod tests {
                 Request::builder()
                     .method("DELETE")
                     .uri(format!("/{repo_name}/widget/-rev/1"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer acme-token")
                     .body(Body::empty())
                     .unwrap(),
@@ -470,7 +470,7 @@ mod tests {
                 Request::builder()
                     .method("DELETE")
                     .uri(format!("/{repo_name}/widget/-rev/1"))
-                    .header("host", "acme.bunker.localhost")
+                    .header("host", "acme.artiferris.localhost")
                     .header(axum::http::header::AUTHORIZATION, "Bearer other-token")
                     .body(Body::empty())
                     .unwrap(),

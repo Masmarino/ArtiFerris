@@ -209,7 +209,7 @@ async fn sso_config(State(state): State<AppState>, resolved_org: ResolvedOrganiz
     Ok(Json(SsoConfigResponse { provider_type, registration_enabled: resolved_org.0.is_public && settings.registration_enabled }))
 }
 
-/// Matches `localhost`, `*.localhost`, and `localhost:<port>` — including this repo's `bunker.localhost` dev domain — but not lookalikes like `localhost.evil.com`.
+/// Matches `localhost`, `*.localhost`, and `localhost:<port>` — including this repo's `artiferris.localhost` dev domain — but not lookalikes like `localhost.evil.com`.
 fn is_local_dev_domain(domain: &str) -> bool {
     domain == "localhost" || domain.ends_with(".localhost") || domain.starts_with("localhost:")
 }
@@ -666,7 +666,7 @@ mod tests {
             docker_token_realm: "http://localhost/v2/token".to_string(),
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
-            artiferris_base_domain: "bunker.localhost".to_string(),
+            artiferris_base_domain: "artiferris.localhost".to_string(),
         }
     }
 
@@ -1426,7 +1426,7 @@ mod tests {
         let app = build_router(state);
 
         let mut request = Request::builder().uri("/api/auth/sso/config").body(Body::empty()).unwrap();
-        request.headers_mut().insert("host", "acme.bunker.localhost".parse().unwrap());
+        request.headers_mut().insert("host", "acme.artiferris.localhost".parse().unwrap());
         let response = app.oneshot(request).await.unwrap();
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -1497,7 +1497,7 @@ mod tests {
         let app = build_router(state);
 
         let mut request = register_request("florian", "florian@example.com", "sup3r-s3cret!");
-        request.headers_mut().insert("host", "acme.bunker.localhost".parse().unwrap());
+        request.headers_mut().insert("host", "acme.artiferris.localhost".parse().unwrap());
         let response = app.oneshot(request).await.unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
@@ -2038,7 +2038,7 @@ mod tests {
                 organization_id,
                 &artiferris_domain::sso::IdentityProviderConfig::Oidc(artiferris_domain::sso::OidcConfig {
                     issuer_url: "https://accounts.example.com".to_string(),
-                    client_id: "bunker".to_string(),
+                    client_id: "artiferris".to_string(),
                     client_secret: "s3cret!".to_string(),
                 }),
             )
@@ -2215,7 +2215,7 @@ mod tests {
         seed_oidc_config(&state, public_org.id).await;
         let app = build_router(state);
 
-        let response = app.oneshot(oidc_login_request("bunker.localhost")).await.unwrap();
+        let response = app.oneshot(oidc_login_request("artiferris.localhost")).await.unwrap();
 
         let set_cookie = header_value(&response, "set-cookie");
         assert!(set_cookie.contains("HttpOnly"), "got: {set_cookie}");
@@ -2232,14 +2232,14 @@ mod tests {
         seed_oidc_config(&state, acme_id).await;
         let app = build_router(state);
 
-        let login = app.clone().oneshot(oidc_login_request("acme.bunker.localhost")).await.unwrap();
+        let login = app.clone().oneshot(oidc_login_request("acme.artiferris.localhost")).await.unwrap();
         let cookie = binding_cookie_value(&login);
         let state_token = state_token_from_login(&login);
 
-        let response = app.oneshot(oidc_callback_request("acme.bunker.localhost", &state_token, Some(&cookie))).await.unwrap();
+        let response = app.oneshot(oidc_callback_request("acme.artiferris.localhost", &state_token, Some(&cookie))).await.unwrap();
 
         let location = header_value(&response, "location");
-        assert!(location.starts_with("http://acme.bunker.localhost/login#token="), "got: {location}");
+        assert!(location.starts_with("http://acme.artiferris.localhost/login#token="), "got: {location}");
         assert!(!location.starts_with(&test_config().public_url), "the callback must not land on the global public_url, got: {location}");
     }
 
@@ -2251,25 +2251,25 @@ mod tests {
         let app = build_router(state);
 
         // The attacker's login attempt — its callback URL is what gets handed to the victim.
-        let login_a = app.clone().oneshot(oidc_login_request("bunker.localhost")).await.unwrap();
+        let login_a = app.clone().oneshot(oidc_login_request("artiferris.localhost")).await.unwrap();
         let cookie_a = binding_cookie_value(&login_a);
         let state_a = state_token_from_login(&login_a);
 
         // The victim's own browser, with its own binding cookie.
-        let login_b = app.clone().oneshot(oidc_login_request("bunker.localhost")).await.unwrap();
+        let login_b = app.clone().oneshot(oidc_login_request("artiferris.localhost")).await.unwrap();
         let cookie_b = binding_cookie_value(&login_b);
         assert_ne!(cookie_a, cookie_b, "each login attempt must mint a fresh binding secret");
 
-        let with_the_wrong_cookie = app.clone().oneshot(oidc_callback_request("bunker.localhost", &state_a, Some(&cookie_b))).await.unwrap();
+        let with_the_wrong_cookie = app.clone().oneshot(oidc_callback_request("artiferris.localhost", &state_a, Some(&cookie_b))).await.unwrap();
         assert_eq!(with_the_wrong_cookie.status(), axum::http::StatusCode::UNAUTHORIZED);
 
-        let with_no_cookie = app.clone().oneshot(oidc_callback_request("bunker.localhost", &state_a, None)).await.unwrap();
+        let with_no_cookie = app.clone().oneshot(oidc_callback_request("artiferris.localhost", &state_a, None)).await.unwrap();
         assert_eq!(with_no_cookie.status(), axum::http::StatusCode::UNAUTHORIZED);
 
         // ...and the browser that actually started attempt A still completes it.
-        let with_the_right_cookie = app.oneshot(oidc_callback_request("bunker.localhost", &state_a, Some(&cookie_a))).await.unwrap();
+        let with_the_right_cookie = app.oneshot(oidc_callback_request("artiferris.localhost", &state_a, Some(&cookie_a))).await.unwrap();
         let location = header_value(&with_the_right_cookie, "location");
-        assert!(location.starts_with("http://bunker.localhost/login#token="), "got: {location}");
+        assert!(location.starts_with("http://artiferris.localhost/login#token="), "got: {location}");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -2279,11 +2279,11 @@ mod tests {
         seed_oidc_config(&state, public_org.id).await;
         let app = build_router(state);
 
-        let login = app.clone().oneshot(oidc_login_request("bunker.localhost")).await.unwrap();
+        let login = app.clone().oneshot(oidc_login_request("artiferris.localhost")).await.unwrap();
         let cookie = binding_cookie_value(&login);
 
         let response = app
-            .oneshot(oidc_callback_request("bunker.localhost", &state_token_from_login(&login), Some(&cookie)))
+            .oneshot(oidc_callback_request("artiferris.localhost", &state_token_from_login(&login), Some(&cookie)))
             .await
             .unwrap();
 
@@ -2302,11 +2302,11 @@ mod tests {
         seed_oidc_config(&state, other_id).await;
         let app = build_router(state);
 
-        let login = app.clone().oneshot(oidc_login_request("acme.bunker.localhost")).await.unwrap();
+        let login = app.clone().oneshot(oidc_login_request("acme.artiferris.localhost")).await.unwrap();
         let cookie = binding_cookie_value(&login);
         let state_token = state_token_from_login(&login);
 
-        let response = app.oneshot(oidc_callback_request("globex.bunker.localhost", &state_token, Some(&cookie))).await.unwrap();
+        let response = app.oneshot(oidc_callback_request("globex.artiferris.localhost", &state_token, Some(&cookie))).await.unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
     }

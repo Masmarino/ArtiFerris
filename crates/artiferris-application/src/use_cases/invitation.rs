@@ -191,7 +191,7 @@ mod tests {
 
     use super::*;
 
-    const TEST_BASE_DOMAIN: &str = "bunker.example.com";
+    const TEST_BASE_DOMAIN: &str = "artiferris.example.com";
 
     struct FakeUsers {
         users: Mutex<HashMap<Uuid, User>>,
@@ -373,7 +373,7 @@ mod tests {
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].0, organization_id);
         assert_eq!(sent[0].1, "florian@example.com");
-        assert!(sent[0].3.contains("https://bunker.example.com/activate?token="));
+        assert!(sent[0].3.contains("https://artiferris.example.com/activate?token="));
     }
 
     #[tokio::test]
@@ -405,7 +405,7 @@ mod tests {
         use_case.execute(organization_id, false, "florian", "florian@example.com", false).await.unwrap();
 
         let sent = email.sent.lock().unwrap();
-        assert!(sent[0].3.contains("https://acme.bunker.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
+        assert!(sent[0].3.contains("https://acme.artiferris.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
     }
 
     #[tokio::test]
@@ -543,7 +543,7 @@ mod tests {
         resend.execute(id).await.unwrap();
 
         let sent = email.sent.lock().unwrap();
-        assert!(sent[1].3.contains("https://acme.bunker.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[1].3);
+        assert!(sent[1].3.contains("https://acme.artiferris.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[1].3);
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

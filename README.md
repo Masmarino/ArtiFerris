@@ -1,15 +1,15 @@
 *[Read this in English](README.en.md)*
 
-# Bunker
+# ArtiFerris
 
 Gestionnaire d'artefacts auto-hébergé — un registre npm et un registre
 Docker/OCI derrière une seule console d'administration, un seul système
 d'authentification, et un seul jeu de contrôles de gouvernance (quotas,
 rétention, RBAC, audit).
 
-Backend Rust en architecture hexagonale/DDD (`bunker-domain` →
-`bunker-application` → `bunker-infrastructure`/`bunker-api`, plus les
-crates adaptateurs de protocole `bunker-npm` et `bunker-docker`), avec un
+Backend Rust en architecture hexagonale/DDD (`artiferris-domain` →
+`artiferris-application` → `artiferris-infrastructure`/`artiferris-api`, plus les
+crates adaptateurs de protocole `artiferris-npm` et `artiferris-docker`), avec un
 frontend Angular 22 servi par le même binaire.
 
 ## Sommaire
@@ -48,7 +48,7 @@ frontend Angular 22 servi par le même binaire.
   à chaque push, plus relance manuelle
 
 **Multi-tenant**
-- Organisations résolues par sous-domaine (`acme.bunker.example` route vers
+- Organisations résolues par sous-domaine (`acme.artiferris.example` route vers
   l'organisation `acme`), chacune avec ses propres dépôts, utilisateurs et
   marque
 - Admins d'organisation aux droits scopés à leur seule organisation ; un
@@ -89,12 +89,12 @@ Hexagonale/DDD, les dépendances pointent vers l'intérieur :
 
 | Crate | Rôle |
 |---|---|
-| `bunker-domain` | Entités, objets de valeur, ports (traits) — aucune dépendance vers un framework ou une I/O |
-| `bunker-application` | Cas d'usage, orchestrant la logique métier via les ports |
-| `bunker-infrastructure` | Implémentations des ports : Postgres, stockage fichier, SMTP, Trivy, Argon2, JWT |
-| `bunker-api` | Serveur HTTP Axum, handlers/DTO des routes, assemble tout, sert le frontend compilé |
-| `bunker-npm` | Adaptateur du protocole de registre npm (son propre jeu de routes, monté dans `bunker-api`) |
-| `bunker-docker` | Adaptateur du protocole de registre Docker/OCI (même principe) |
+| `artiferris-domain` | Entités, objets de valeur, ports (traits) — aucune dépendance vers un framework ou une I/O |
+| `artiferris-application` | Cas d'usage, orchestrant la logique métier via les ports |
+| `artiferris-infrastructure` | Implémentations des ports : Postgres, stockage fichier, SMTP, Trivy, Argon2, JWT |
+| `artiferris-api` | Serveur HTTP Axum, handlers/DTO des routes, assemble tout, sert le frontend compilé |
+| `artiferris-npm` | Adaptateur du protocole de registre npm (son propre jeu de routes, monté dans `artiferris-api`) |
+| `artiferris-docker` | Adaptateur du protocole de registre Docker/OCI (même principe) |
 
 Les dépôts (`PackageRepository`) et les permissions sont en event-sourcing ;
 le reste de l'état (utilisateurs, paramètres, journal d'audit, métriques)
@@ -116,10 +116,10 @@ cp .env.example .env   # renseigner POSTGRES_PASSWORD / JWT_SECRET
 ```
 
 Ceci démarre Postgres via `docker-compose`, applique les migrations, puis
-lance le backend (`cargo run -p bunker-api`, port 8081) et le frontend
+lance le backend (`cargo run -p artiferris-api`, port 8081) et le frontend
 (`ng serve`, port 4200, hot reload) en parallèle. `scripts/dev.sh` fixe
-`BUNKER_BOOTSTRAP_ADMIN_USERNAME=admin` /
-`BUNKER_BOOTSTRAP_ADMIN_PASSWORD=admin123`, donc vous pouvez vous connecter
+`ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME=admin` /
+`ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD=admin123`, donc vous pouvez vous connecter
 immédiatement.
 
 Lancer les tests :
@@ -133,16 +133,16 @@ npm test --prefix frontend              # frontend
 
 ### Docker Compose
 
-Un déploiement mono-nœud (Bunker + Postgres) tient en une commande :
+Un déploiement mono-nœud (ArtiFerris + Postgres) tient en une commande :
 
 ```bash
-cp .env.example .env   # renseigner POSTGRES_PASSWORD, JWT_SECRET, BUNKER_BOOTSTRAP_ADMIN_*
+cp .env.example .env   # renseigner POSTGRES_PASSWORD, JWT_SECRET, ARTIFERRIS_BOOTSTRAP_ADMIN_*
 docker compose up -d --build
 ```
 
 Voir la [référence de configuration](#référence-de-configuration)
 ci-dessous pour chaque variable câblée par `docker-compose.yml`, et en
-particulier `BUNKER_DOCKER_TOKEN_REALM` — le protocole Docker ne
+particulier `ARTIFERRIS_DOCKER_TOKEN_REALM` — le protocole Docker ne
 fonctionnera pour aucun client extérieur au conteneur tant que cette
 variable ne pointe pas vers une URL réellement joignable par le CLI
 `docker`.
@@ -151,27 +151,27 @@ variable ne pointe pas vers une URL réellement joignable par le CLI
 
 ## Référence de configuration
 
-Chaque variable lue par `bunker-api` depuis son environnement.
+Chaque variable lue par `artiferris-api` depuis son environnement.
 `docker-compose.yml` câble déjà celles nécessaires à un déploiement
 mono-nœud ; ce tableau fait référence pour un déploiement conteneur nu ou
 pour surcharger les valeurs par défaut.
 
 | Variable | Obligatoire | Défaut | Description |
 |---|---|---|---|
-| `DATABASE_URL` | **Oui** | — | Chaîne de connexion Postgres, ex. `postgres://user:pass@host:5432/bunker`. |
+| `DATABASE_URL` | **Oui** | — | Chaîne de connexion Postgres, ex. `postgres://user:pass@host:5432/artiferris`. |
 | `JWT_SECRET` | **Oui** | — | Signe les tokens de session et les tokens d'accès au registre Docker. Doit être long, aléatoire, secret. Le faire tourner invalide toutes les sessions et tous les `docker login`. |
-| `BUNKER_BASE_DOMAIN` | **Oui** | — | Domaine de base par rapport auquel les organisations sont résolues en sous-domaines (ex. `bunker.example` pour que `acme.bunker.example` résolve l'organisation `acme`). Aucun fallback : un déploiement mal configuré doit échouer au démarrage plutôt que de router silencieusement tous les sous-domaines vers l'organisation publique. |
+| `ARTIFERRIS_BASE_DOMAIN` | **Oui** | — | Domaine de base par rapport auquel les organisations sont résolues en sous-domaines (ex. `artiferris.example` pour que `acme.artiferris.example` résolve l'organisation `acme`). Aucun fallback : un déploiement mal configuré doit échouer au démarrage plutôt que de router silencieusement tous les sous-domaines vers l'organisation publique. |
 | `STORAGE_ROOT` | Non | `./data` | Chemin du système de fichiers où sont stockés les tarballs npm et les blobs Docker. Doit être un volume persistant dans tout déploiement réel. |
 | `BIND_ADDR` | Non | `0.0.0.0:8080` | Adresse/port sur lequel le serveur HTTP écoute. |
 | `STATIC_DIR` | Non | `./static` | Chemin des assets frontend compilés servis pour les routes non-API. Pertinent uniquement si vous n'utilisez pas l'image Docker fournie. |
-| `RUST_LOG` | Non | — (aucun log sans elle) | Filtre `tracing_subscriber`, ex. `info` ou `bunker_api=debug,info`. Sans elle, le conteneur ne log quasiment rien. |
+| `RUST_LOG` | Non | — (aucun log sans elle) | Filtre `tracing_subscriber`, ex. `info` ou `artiferris_api=debug,info`. Sans elle, le conteneur ne log quasiment rien. |
 | `CORS_ALLOWED_ORIGIN` | Non | permissif (toute origine) | Restreint le CORS à une seule origine. À laisser vide en dev local (`ng serve` sur un port différent du backend) ou quand le frontend est servi depuis la même origine que l'API (configuration par défaut de l'image fournie). |
-| `BUNKER_DOCKER_TOKEN_REALM` | En pratique oui, pour Docker | dérivée de `BIND_ADDR` (`http://0.0.0.0:8080/v2/token` — injoignable depuis l'extérieur du conteneur) | URL absolue du endpoint `/v2/token` de ce déploiement, intégrée dans chaque challenge `WWW-Authenticate`. Le CLI Docker résout dessus les requêtes de token pour `login`/`push`/`pull` — une mauvaise valeur casse tout le flux d'authentification Docker pour les clients réels. Doit être en `https://` pour tout hôte non-localhost (Docker refuse le `http://` simple sinon). |
+| `ARTIFERRIS_DOCKER_TOKEN_REALM` | En pratique oui, pour Docker | dérivée de `BIND_ADDR` (`http://0.0.0.0:8080/v2/token` — injoignable depuis l'extérieur du conteneur) | URL absolue du endpoint `/v2/token` de ce déploiement, intégrée dans chaque challenge `WWW-Authenticate`. Le CLI Docker résout dessus les requêtes de token pour `login`/`push`/`pull` — une mauvaise valeur casse tout le flux d'authentification Docker pour les clients réels. Doit être en `https://` pour tout hôte non-localhost (Docker refuse le `http://` simple sinon). |
 | `PUBLIC_URL` | En pratique oui, dès qu'on utilise les invitations | dérivée de `BIND_ADDR` (même souci de non-joignabilité) | URL de base sur laquelle sont construits les liens d'invitation de compte. Doit être joignable depuis le client mail du destinataire. |
-| `BUNKER_BOOTSTRAP_ADMIN_USERNAME` | Non | — | Nom d'utilisateur du compte créé automatiquement **uniquement si la table `users` est vide**. Peut rester défini au fil des redémarrages/mises à jour. |
-| `BUNKER_BOOTSTRAP_ADMIN_PASSWORD` | Non, mais il faut *un* moyen d'obtenir un premier admin | — | Mot de passe de ce même compte bootstrap. Doit faire ≥ 8 caractères — une valeur plus courte échoue silencieusement (loggé, non fatal) et laisse le déploiement sans admin. |
+| `ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME` | Non | — | Nom d'utilisateur du compte créé automatiquement **uniquement si la table `users` est vide**. Peut rester défini au fil des redémarrages/mises à jour. |
+| `ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD` | Non, mais il faut *un* moyen d'obtenir un premier admin | — | Mot de passe de ce même compte bootstrap. Doit faire ≥ 8 caractères — une valeur plus courte échoue silencieusement (loggé, non fatal) et laisse le déploiement sans admin. |
 
-`BUNKER_DOCKER_TOKEN_REALM` et `PUBLIC_URL` retombent tous deux sur une
+`ARTIFERRIS_DOCKER_TOKEN_REALM` et `PUBLIC_URL` retombent tous deux sur une
 URL devinée à partir de `BIND_ADDR`, ce qui n'est correct que pour un
 déploiement exposé directement, sans reverse proxy ni terminaison TLS —
 à définir explicitement dans tous les autres cas.
@@ -207,13 +207,13 @@ plutôt que d'ouvrir une issue publique.
 
 ## Comparaison avec les alternatives
 
-Bunker n'est pas la seule option pour héberger un registre npm et/ou
+ArtiFerris n'est pas la seule option pour héberger un registre npm et/ou
 Docker. Voici où il se situe face à trois références du secteur — sur le
 périmètre fonctionnel et le coût de licence, pas sur des chiffres de
 performance : aucun benchmark comparatif n'a été mené entre ces quatre
 outils, et il serait malhonnête d'en inventer.
 
-| | **Bunker** | Nexus Repository (Community Edition) | Harbor | JFrog Artifactory |
+| | **ArtiFerris** | Nexus Repository (Community Edition) | Harbor | JFrog Artifactory |
 |---|---|---|---|---|
 | npm | ✅ | ✅ | ❌ | Payant (Pro) uniquement |
 | Docker / OCI | ✅ | ✅ | ✅ | Payant (Pro) uniquement |
@@ -229,7 +229,7 @@ outils, et il serait malhonnête d'en inventer.
 (chiffres sourcés, pas de licence publique pour la plupart de ces
 produits — voir les notes) :
 
-- **Bunker** — gratuit, aucune licence.
+- **ArtiFerris** — gratuit, aucune licence.
 - **Harbor** — gratuit, Apache 2.0, projet CNCF, aucune offre payante.
 - **Nexus Repository Community Edition** — gratuit pour npm, Docker,
   Maven, PyPI et une quinzaine d'autres formats. La version Pro (SSO,
@@ -239,7 +239,7 @@ produits — voir les notes) :
   complète[^nexus-pricing].
 - **JFrog Artifactory** — la version open-source (Apache 2.0) ne couvre
   que l'écosystème Java (Maven/Gradle/Ivy) : ni Docker ni npm. Pour les
-  deux formats que Bunker couvre nativement et gratuitement, il faut la
+  deux formats que ArtiFerris couvre nativement et gratuitement, il faut la
   version Pro X, dont le tarif self-hosted annoncé démarre à
   27 000 $/an pour un serveur[^jfrog-pricing], et grimpe largement
   au-delà en configuration entreprise.
@@ -250,7 +250,7 @@ produits — voir les notes) :
 **Configuration matérielle recommandée** (chiffres tirés de la
 documentation officielle de chaque produit, pas d'un test comparatif) :
 
-| | **Bunker**[^bunker-bench] | Nexus Repository (Community Edition) | Harbor | JFrog Artifactory (Pro X, self-hosted) |
+| | **ArtiFerris**[^artiferris-bench] | Nexus Repository (Community Edition) | Harbor | JFrog Artifactory (Pro X, self-hosted) |
 |---|---|---|---|---|
 | CPU minimum | 0,5 cœur | 2 cœurs (profil « Small »)[^nexus-sysreq] | 2 cœurs[^harbor-prereqs] | 4 cœurs, jusqu'à 20 clients actifs[^jfrog-sizing] |
 | CPU recommandé | 1 cœur | 4 à 8 cœurs selon le profil[^nexus-sysreq] | 4 cœurs[^harbor-prereqs] | 6 à 8 cœurs, jusqu'à 200 clients actifs[^jfrog-sizing] |
@@ -260,7 +260,7 @@ documentation officielle de chaque produit, pas d'un test comparatif) :
 | Base de données | PostgreSQL, obligatoire | H2 embarqué en évaluation, PostgreSQL recommandé en production[^nexus-sysreq] | PostgreSQL embarqué dans le bundle d'installation | PostgreSQL externe, obligatoire en production[^jfrog-sysreq] |
 | Runtime | Binaire Rust natif, sans JVM | JVM, Java 21 requis[^nexus-sysreq] | Go, plusieurs conteneurs, pas de JVM | JVM, JDK 21 embarqué[^jfrog-sysreq] |
 
-[^bunker-bench]: Mesuré, pas documenté : conteneur `bunker-api` limité via
+[^artiferris-bench]: Mesuré, pas documenté : conteneur `artiferris-api` limité via
     `docker run --cpus`/`--memory` (cgroup v2), face à 15-20 clients
     simulés (npm install/publish + docker pull/push, majoritairement en
     lecture) pendant 2-3 minutes. RAM et CPU lus directement dans
@@ -282,12 +282,12 @@ documentation officielle de chaque produit, pas d'un test comparatif) :
 ### Passage à l'échelle
 
 Toujours mesuré, pas documenté : le tableau ci-dessus vient d'une charge
-modeste (15-20 clients). Pour voir comment Bunker encaisse davantage de
+modeste (15-20 clients). Pour voir comment ArtiFerris encaisse davantage de
 concurrence, même conteneur (4 cœurs / 2 Go), mais cette fois piloté par
 un générateur de charge HTTP asynchrone (Python/aiohttp) plutôt que de
 vrais processus CLI npm/docker par client — ça permet de monter à 100 et
 200 clients simultanés sans multiplier les processus lourds côté machine
-de test[^bunker-scale] :
+de test[^artiferris-scale] :
 
 | Clients simultanés | Débit | Échecs | p95 (npm install) | CPU moyen | RAM (pic) |
 |---|---|---|---|---|---|
@@ -295,7 +295,7 @@ de test[^bunker-scale] :
 | 100 | ~476 req/s | 0 | 360 ms | 108 % | 568 Mo |
 | 200 | ~268 req/s | 0 | 1 781 ms | 81 % | 527 Mo |
 
-Zéro échec applicatif à chaque palier, y compris à 200 clients : Bunker
+Zéro échec applicatif à chaque palier, y compris à 200 clients : ArtiFerris
 ralentit sous forte charge mais ne casse pas. Point moins flatteur, dit
 tel quel : le débit **baisse** entre 100 et 200 clients (476 → 268 req/s)
 alors que le CPU utilisé baisse aussi (108 % → 81 %) — signe d'un goulot
@@ -321,7 +321,7 @@ RAM fiable demanderait un client de charge avec un débit plafonné
 (requêtes/seconde réaliste plutôt que « à fond »), ce qui n'a pas été
 fait.
 
-[^bunker-scale]: Générateur de charge : `aiohttp` en Python, appels HTTP
+[^artiferris-scale]: Générateur de charge : `aiohttp` en Python, appels HTTP
     directs sur les mêmes endpoints qu'un vrai client (métadonnées +
     tarball npm, jeton + manifeste + blob Docker), sans passer par les
     CLI `npm`/`docker`. Mix identique à la note précédente (majoritairement
@@ -330,15 +330,15 @@ fait.
 
 **Ce que ces deux tableaux ne disent pas** : aucune mesure comparative
 n'a été faite face à Nexus, Harbor ou Artifactory — les chiffres ci-dessus
-ne concernent que Bunker. Nexus et Harbor sont par ailleurs des projets
+ne concernent que ArtiFerris. Nexus et Harbor sont par ailleurs des projets
 matures, déployés à grande échelle depuis des années, avec des
-fonctionnalités que Bunker n'a pas encore (voir la
+fonctionnalités que ArtiFerris n'a pas encore (voir la
 [feuille de route](#feuille-de-route)) : SAML, haute disponibilité,
 davantage de formats de paquets.
 
 ## Feuille de route
 
-Bunker est un projet actif, pas un produit figé : quotas, rétention, scan
+ArtiFerris est un projet actif, pas un produit figé : quotas, rétention, scan
 de sécurité intégré (Trivy + npm audit), marque personnalisable et MFA
 obligatoire sont déjà natifs, et la liste ci-dessous est celle des chantiers
 qu'on a vraiment envie de mener ensuite — par ordre de priorité
@@ -348,8 +348,8 @@ approximatif.
 - [ ] SAML — LDAP/Active Directory et OIDC sont déjà supportés, SAML pas
       encore
 - [ ] Davantage de formats de paquets : Maven/Gradle, PyPI, NuGet, Cargo,
-      Go modules, Helm charts, dépôts génériques/raw — `bunker-npm`/
-      `bunker-docker` montrent déjà le patron d'adaptateur à suivre
+      Go modules, Helm charts, dépôts génériques/raw — `artiferris-npm`/
+      `artiferris-docker` montrent déjà le patron d'adaptateur à suivre
 - [ ] Backend de stockage objet (compatible S3) derrière
       `StorageBackendPort`, pour débloquer les déploiements multi-réplicas
       (aujourd'hui : un seul volume fichier, une seule réplique)

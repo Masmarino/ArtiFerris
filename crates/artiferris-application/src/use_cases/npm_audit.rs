@@ -28,7 +28,7 @@ impl AuditNpmPackageUseCase {
     }
 }
 
-/// Unlike `AuditNpmPackageUseCase`, forwards the client's request straight to npm's advisory database rather than looking anything up in Bunker's own storage.
+/// Unlike `AuditNpmPackageUseCase`, forwards the client's request straight to npm's advisory database rather than looking anything up in ArtiFerris's own storage.
 pub struct BulkAuditNpmPackagesUseCase {
     audit: Arc<dyn NpmAuditPort>,
 }

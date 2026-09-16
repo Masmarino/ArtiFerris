@@ -233,7 +233,7 @@ impl AppState {
         let mfa_pending_token_issuer: Arc<dyn TokenIssuerPort> = Arc::new(JwtMfaPendingTokenIssuer::new(config.jwt_secret.clone()));
         let webauthn_credentials: Arc<dyn artiferris_domain::webauthn::WebauthnCredentialPort> = Arc::new(PostgresWebauthnCredentialRepository::new(pool.clone()));
         // Degrades to "passkeys disabled" rather than refusing to start the server.
-        let webauthn_client = Arc::new(match build_webauthn_client(&config.artiferris_base_domain, "Bunker", &config.public_url) {
+        let webauthn_client = Arc::new(match build_webauthn_client(&config.artiferris_base_domain, "ArtiFerris", &config.public_url) {
             Ok(client) => Some(client),
             Err(e) => {
                 tracing::warn!("passkeys disabled: {e}. Set ARTIFERRIS_BASE_DOMAIN to this deployment's real base domain to enable them.");

@@ -240,7 +240,7 @@ mod tests {
         standard = standard.set_email(email.map(|e| EndUserEmail::new(e.to_string()))).set_email_verified(email_verified);
         CoreIdTokenClaims::new(
             IssuerUrl::new("https://accounts.example.com".to_string()).unwrap(),
-            vec![Audience::new("bunker".to_string())],
+            vec![Audience::new("artiferris".to_string())],
             Utc::now() + Duration::minutes(5),
             Utc::now(),
             standard,
@@ -280,10 +280,10 @@ mod tests {
     async fn an_issuer_url_pointing_at_a_private_address_is_rejected_before_discovery() {
         let adapter = OpenidConnectAuthAdapter::new("jwt-secret".to_string());
         // Port 1 on loopback: nothing listens there, so without the guard this would fail with a connection error instead of the SSRF rejection asserted below.
-        let config = OidcConfig { issuer_url: "http://127.0.0.1:1".to_string(), client_id: "bunker".to_string(), client_secret: "s3cret!".to_string() };
+        let config = OidcConfig { issuer_url: "http://127.0.0.1:1".to_string(), client_id: "artiferris".to_string(), client_secret: "s3cret!".to_string() };
 
         let err = adapter
-            .build_redirect(&config, Uuid::new_v4(), "https://acme.bunker.example/api/auth/sso/oidc/callback", TEST_BINDING)
+            .build_redirect(&config, Uuid::new_v4(), "https://acme.artiferris.example/api/auth/sso/oidc/callback", TEST_BINDING)
             .await
             .unwrap_err();
 
@@ -293,10 +293,10 @@ mod tests {
     #[tokio::test]
     async fn an_issuer_url_pointing_at_the_cloud_metadata_endpoint_is_rejected() {
         let adapter = OpenidConnectAuthAdapter::new("jwt-secret".to_string());
-        let config = OidcConfig { issuer_url: "http://169.254.169.254/".to_string(), client_id: "bunker".to_string(), client_secret: "s3cret!".to_string() };
+        let config = OidcConfig { issuer_url: "http://169.254.169.254/".to_string(), client_id: "artiferris".to_string(), client_secret: "s3cret!".to_string() };
 
         let err = adapter
-            .build_redirect(&config, Uuid::new_v4(), "https://acme.bunker.example/api/auth/sso/oidc/callback", TEST_BINDING)
+            .build_redirect(&config, Uuid::new_v4(), "https://acme.artiferris.example/api/auth/sso/oidc/callback", TEST_BINDING)
             .await
             .unwrap_err();
 

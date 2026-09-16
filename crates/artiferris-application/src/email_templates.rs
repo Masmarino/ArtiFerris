@@ -21,7 +21,7 @@ fn shell(preheader: &str, body_html: &str) -> String {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bunker</title>
+    <title>ArtiFerris</title>
   </head>
   <body style="margin:0; padding:0; background-color:#f4f5f7; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
     <span style="display:none; font-size:1px; color:#f4f5f7; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden;">{preheader}</span>
@@ -31,7 +31,7 @@ fn shell(preheader: &str, body_html: &str) -> String {
           <table role="presentation" width="100%" style="max-width:480px; background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.1);" cellpadding="0" cellspacing="0">
             <tr>
               <td style="padding:32px 32px 24px; text-align:center; border-bottom:1px solid #e5e7eb;">
-                <img src="cid:{LOGO_CID}" alt="Bunker" width="220" style="display:block; width:220px; max-width:100%; height:auto; margin:0 auto;" />
+                <img src="cid:{LOGO_CID}" alt="ArtiFerris" width="220" style="display:block; width:220px; max-width:100%; height:auto; margin:0 auto;" />
               </td>
             </tr>
             <tr>
@@ -41,7 +41,7 @@ fn shell(preheader: &str, body_html: &str) -> String {
             </tr>
             <tr>
               <td style="padding:20px 32px; background-color:#f9fafb; text-align:center;">
-                <p style="margin:0; font-size:12px; color:{TEXT_SECONDARY};">Cet email a été envoyé automatiquement par votre instance Bunker.</p>
+                <p style="margin:0; font-size:12px; color:{TEXT_SECONDARY};">Cet email a été envoyé automatiquement par votre instance ArtiFerris.</p>
               </td>
             </tr>
           </table>
@@ -62,7 +62,7 @@ fn button(href: &str, label: &str) -> String {
 pub fn account_created(username: &str, activation_url: &str) -> EmailContent {
     let text = format!(
         "Bonjour {username},\n\n\
-         Un compte Bunker a été créé pour vous. Pour l'activer et choisir votre mot de passe, \
+         Un compte ArtiFerris a été créé pour vous. Pour l'activer et choisir votre mot de passe, \
          cliquez sur le lien suivant dans les 24 heures :\n\n\
          {activation_url}\n\n\
          Passé ce délai, le lien expirera et vous devrez demander à un administrateur de vous \
@@ -70,45 +70,45 @@ pub fn account_created(username: &str, activation_url: &str) -> EmailContent {
     );
     let body_html = format!(
         r#"<p style="margin:0 0 16px;">Bonjour <strong>{username}</strong>,</p>
-<p style="margin:0 0 16px;">Un compte Bunker a été créé pour vous. Pour l'activer et choisir votre mot de passe, cliquez sur le bouton ci-dessous.</p>
+<p style="margin:0 0 16px;">Un compte ArtiFerris a été créé pour vous. Pour l'activer et choisir votre mot de passe, cliquez sur le bouton ci-dessous.</p>
 {button}
 <p style="margin:16px 0 0; font-size:13px; color:{TEXT_SECONDARY};">Ce lien expire dans 24 heures. Passé ce délai, demandez à un administrateur de vous renvoyer une invitation.</p>"#,
         button = button(activation_url, "Activer mon compte"),
     );
-    EmailContent { subject: "Votre compte Bunker".to_string(), text, html: shell("Activez votre compte Bunker", &body_html) }
+    EmailContent { subject: "Votre compte ArtiFerris".to_string(), text, html: shell("Activez votre compte ArtiFerris", &body_html) }
 }
 
 pub fn password_changed(username: &str) -> EmailContent {
     let text = format!(
         "Bonjour {username},\n\n\
-         Le mot de passe de votre compte Bunker vient d'être modifié.\n\n\
+         Le mot de passe de votre compte ArtiFerris vient d'être modifié.\n\n\
          Si vous êtes à l'origine de ce changement, aucune action n'est nécessaire.\n\n\
          Si vous n'êtes pas à l'origine de ce changement, contactez immédiatement un \
-         administrateur de votre instance Bunker."
+         administrateur de votre instance ArtiFerris."
     );
     let body_html = format!(
         r#"<p style="margin:0 0 16px;">Bonjour <strong>{username}</strong>,</p>
-<p style="margin:0 0 16px;">Le mot de passe de votre compte Bunker vient d'être modifié.</p>
+<p style="margin:0 0 16px;">Le mot de passe de votre compte ArtiFerris vient d'être modifié.</p>
 <p style="margin:0 0 16px;">Si vous êtes à l'origine de ce changement, aucune action n'est nécessaire.</p>
-<p style="margin:0; padding:12px 16px; background-color:#fef3c7; border-radius:8px; color:#92400e;">Si vous n'êtes <strong>pas</strong> à l'origine de ce changement, contactez immédiatement un administrateur de votre instance Bunker.</p>"#
+<p style="margin:0; padding:12px 16px; background-color:#fef3c7; border-radius:8px; color:#92400e;">Si vous n'êtes <strong>pas</strong> à l'origine de ce changement, contactez immédiatement un administrateur de votre instance ArtiFerris.</p>"#
     );
-    EmailContent { subject: "Votre mot de passe Bunker a été modifié".to_string(), text, html: shell("Votre mot de passe a été modifié", &body_html) }
+    EmailContent { subject: "Votre mot de passe ArtiFerris a été modifié".to_string(), text, html: shell("Votre mot de passe a été modifié", &body_html) }
 }
 
 pub fn mfa_enrolled(username: &str, method: &str) -> EmailContent {
     let text = format!(
         "Bonjour {username},\n\n\
          Une nouvelle méthode de double authentification vient d'être ajoutée à votre compte \
-         Bunker : {method}.\n\n\
+         ArtiFerris : {method}.\n\n\
          Si vous êtes à l'origine de cet ajout, aucune action n'est nécessaire.\n\n\
          Si vous n'êtes pas à l'origine de cet ajout, contactez immédiatement un administrateur \
-         de votre instance Bunker."
+         de votre instance ArtiFerris."
     );
     let body_html = format!(
         r#"<p style="margin:0 0 16px;">Bonjour <strong>{username}</strong>,</p>
-<p style="margin:0 0 16px;">Une nouvelle méthode de double authentification vient d'être ajoutée à votre compte Bunker : <strong>{method}</strong>.</p>
+<p style="margin:0 0 16px;">Une nouvelle méthode de double authentification vient d'être ajoutée à votre compte ArtiFerris : <strong>{method}</strong>.</p>
 <p style="margin:0 0 16px;">Si vous êtes à l'origine de cet ajout, aucune action n'est nécessaire.</p>
-<p style="margin:0; padding:12px 16px; background-color:#fef3c7; border-radius:8px; color:#92400e;">Si vous n'êtes <strong>pas</strong> à l'origine de cet ajout, contactez immédiatement un administrateur de votre instance Bunker.</p>"#
+<p style="margin:0; padding:12px 16px; background-color:#fef3c7; border-radius:8px; color:#92400e;">Si vous n'êtes <strong>pas</strong> à l'origine de cet ajout, contactez immédiatement un administrateur de votre instance ArtiFerris.</p>"#
     );
     EmailContent { subject: "Nouvelle méthode de double authentification ajoutée".to_string(), text, html: shell("Nouvelle méthode de double authentification", &body_html) }
 }
@@ -119,9 +119,9 @@ mod tests {
 
     #[test]
     fn account_created_includes_the_activation_link_in_both_bodies() {
-        let content = account_created("florian", "https://bunker.example.com/activate?token=abc");
-        assert!(content.text.contains("https://bunker.example.com/activate?token=abc"));
-        assert!(content.html.contains("https://bunker.example.com/activate?token=abc"));
+        let content = account_created("florian", "https://artiferris.example.com/activate?token=abc");
+        assert!(content.text.contains("https://artiferris.example.com/activate?token=abc"));
+        assert!(content.html.contains("https://artiferris.example.com/activate?token=abc"));
         assert!(content.html.contains("florian"));
         assert!(content.html.starts_with("<!doctype html>"));
     }
