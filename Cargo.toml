@@ -1,12 +1,12 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/bunker-domain",
-    "crates/bunker-application",
-    "crates/bunker-infrastructure",
-    "crates/bunker-api",
-    "crates/bunker-npm",
-    "crates/bunker-docker",
+    "crates/artiferris-domain",
+    "crates/artiferris-application",
+    "crates/artiferris-infrastructure",
+    "crates/artiferris-api",
+    "crates/artiferris-npm",
+    "crates/artiferris-docker",
 ]
 
 [workspace.package]
