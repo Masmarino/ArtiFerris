@@ -51,9 +51,9 @@ describe('SmtpSettingsAdmin', () => {
     const { fixture } = render({
       host: 'smtp.example.com',
       port: 587,
-      username: 'bunker@example.com',
+      username: 'artiferris@example.com',
       from_name: 'Acme Corp',
-      from_address: 'bunker@example.com',
+      from_address: 'artiferris@example.com',
       security: 'start_tls',
       password_set: true,
     })
@@ -68,8 +68,8 @@ describe('SmtpSettingsAdmin', () => {
   it('requires a password on first-time configuration', () => {
     const { fixture, httpMock } = render(null)
     fixture.componentInstance.host.set('smtp.example.com')
-    fixture.componentInstance.username.set('bunker@example.com')
-    fixture.componentInstance.fromAddress.set('bunker@example.com')
+    fixture.componentInstance.username.set('artiferris@example.com')
+    fixture.componentInstance.fromAddress.set('artiferris@example.com')
 
     fixture.componentInstance.save()
 
@@ -80,9 +80,9 @@ describe('SmtpSettingsAdmin', () => {
   it('saves valid settings and leaves the password blank afterwards', () => {
     const { fixture, httpMock } = render(null)
     fixture.componentInstance.host.set('smtp.example.com')
-    fixture.componentInstance.username.set('bunker@example.com')
+    fixture.componentInstance.username.set('artiferris@example.com')
     fixture.componentInstance.password.set('s3cret')
-    fixture.componentInstance.fromAddress.set('bunker@example.com')
+    fixture.componentInstance.fromAddress.set('artiferris@example.com')
 
     fixture.componentInstance.save()
 
@@ -91,10 +91,10 @@ describe('SmtpSettingsAdmin', () => {
     expect(req.request.body).toEqual({
       host: 'smtp.example.com',
       port: 587,
-      username: 'bunker@example.com',
+      username: 'artiferris@example.com',
       password: 's3cret',
-      from_name: 'Bunker',
-      from_address: 'bunker@example.com',
+      from_name: 'ArtiFerris',
+      from_address: 'artiferris@example.com',
       security: 'start_tls',
     })
     const toastService = TestBed.inject(ToastService)
@@ -113,9 +113,9 @@ describe('SmtpSettingsAdmin', () => {
     const { fixture, httpMock } = render({
       host: 'smtp.example.com',
       port: 587,
-      username: 'bunker@example.com',
-      from_name: 'Bunker',
-      from_address: 'bunker@example.com',
+      username: 'artiferris@example.com',
+      from_name: 'ArtiFerris',
+      from_address: 'artiferris@example.com',
       security: 'start_tls',
       password_set: true,
     })
@@ -130,7 +130,7 @@ describe('SmtpSettingsAdmin', () => {
   it('rejects a from_address without an @ sign', () => {
     const { fixture, httpMock } = render(null)
     fixture.componentInstance.host.set('smtp.example.com')
-    fixture.componentInstance.username.set('bunker@example.com')
+    fixture.componentInstance.username.set('artiferris@example.com')
     fixture.componentInstance.password.set('s3cret')
     fixture.componentInstance.fromAddress.set('not-an-email')
 
@@ -143,9 +143,9 @@ describe('SmtpSettingsAdmin', () => {
   it('rejects an empty from name', () => {
     const { fixture, httpMock } = render(null)
     fixture.componentInstance.host.set('smtp.example.com')
-    fixture.componentInstance.username.set('bunker@example.com')
+    fixture.componentInstance.username.set('artiferris@example.com')
     fixture.componentInstance.password.set('s3cret')
-    fixture.componentInstance.fromAddress.set('bunker@example.com')
+    fixture.componentInstance.fromAddress.set('artiferris@example.com')
     fixture.componentInstance.fromName.set('  ')
 
     fixture.componentInstance.save()
@@ -157,9 +157,9 @@ describe('SmtpSettingsAdmin', () => {
   it('shows a generic error toast when the save request fails', () => {
     const { fixture, httpMock } = render(null)
     fixture.componentInstance.host.set('smtp.example.com')
-    fixture.componentInstance.username.set('bunker@example.com')
+    fixture.componentInstance.username.set('artiferris@example.com')
     fixture.componentInstance.password.set('s3cret')
-    fixture.componentInstance.fromAddress.set('bunker@example.com')
+    fixture.componentInstance.fromAddress.set('artiferris@example.com')
 
     fixture.componentInstance.save()
 
@@ -179,9 +179,9 @@ describe('SmtpSettingsAdmin', () => {
     const { fixture, httpMock } = render({
       host: 'smtp.example.com',
       port: 587,
-      username: 'bunker@example.com',
-      from_name: 'Bunker',
-      from_address: 'bunker@example.com',
+      username: 'artiferris@example.com',
+      from_name: 'ArtiFerris',
+      from_address: 'artiferris@example.com',
       security: 'start_tls',
       password_set: true,
     })
@@ -206,9 +206,9 @@ describe('SmtpSettingsAdmin', () => {
     const { fixture, httpMock } = render({
       host: 'smtp.example.com',
       port: 587,
-      username: 'bunker@example.com',
-      from_name: 'Bunker',
-      from_address: 'bunker@example.com',
+      username: 'artiferris@example.com',
+      from_name: 'ArtiFerris',
+      from_address: 'artiferris@example.com',
       security: 'start_tls',
       password_set: true,
     })
@@ -251,7 +251,7 @@ describe('SmtpSettingsAdmin', () => {
     fixture.detectChanges()
 
     expect(fixture.componentInstance.host()).toBe('')
-    expect(fixture.componentInstance.fromName()).toBe('Bunker')
+    expect(fixture.componentInstance.fromName()).toBe('ArtiFerris')
     expect(fixture.componentInstance.passwordSet()).toBe(false)
   })
 

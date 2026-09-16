@@ -7,7 +7,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "bunker-web": {
+    "artiferris-web": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -73,10 +73,10 @@
           },
           "configurations": {
             "production": {
-              "buildTarget": "bunker-web:build:production"
+              "buildTarget": "artiferris-web:build:production"
             },
             "development": {
-              "buildTarget": "bunker-web:build:development"
+              "buildTarget": "artiferris-web:build:development"
             }
           },
           "defaultConfiguration": "development"

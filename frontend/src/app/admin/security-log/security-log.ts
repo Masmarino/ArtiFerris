@@ -151,7 +151,7 @@ export class SecurityLog {
     const csv = toCsv(this.rows(), this.columns)
     downloadBlob(
       new Blob([csv], { type: 'text/csv;charset=utf-8' }),
-      `bunker-security-${new Date().toISOString().slice(0, 10)}.csv`,
+      `artiferris-security-${new Date().toISOString().slice(0, 10)}.csv`,
     )
   }
 

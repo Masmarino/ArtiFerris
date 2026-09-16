@@ -216,7 +216,7 @@ describe('BrandingSettingsAdmin', () => {
     const tooltips = fixture.debugElement.queryAll(By.directive(Tooltip))
     const texts = tooltips.map((t) => (t.componentInstance as Tooltip).text())
 
-    expect(texts).toContain('Revient au logo par défaut de Bunker.')
-    expect(texts).toContain('Revient au favicon par défaut de Bunker.')
+    expect(texts).toContain('Revient au logo par défaut de ArtiFerris.')
+    expect(texts).toContain('Revient au favicon par défaut de ArtiFerris.')
   })
 })

@@ -1,8 +1,8 @@
 import { inject, provideAppInitializer } from '@angular/core'
 import { IconRegistry } from '@masmarino/gabarit'
 
-/** Icons specific to Bunker — Gabarit's own components provide their own set already. */
-const BUNKER_ICONS: Record<string, string> = {
+/** Icons specific to ArtiFerris — Gabarit's own components provide their own set already. */
+const ARTIFERRIS_ICONS: Record<string, string> = {
   package: `<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />
 <path d="M12 22V12" />
 <polyline points="3.29 7 12 12 20.71 7" />
@@ -69,7 +69,7 @@ const BUNKER_ICONS: Record<string, string> = {
 <path d="m4 17 6-6-6-6" />`,
 }
 
-export const provideBunkerIcons = () =>
+export const provideArtiferrisIcons = () =>
   provideAppInitializer(() => {
-    inject(IconRegistry).registerAll(BUNKER_ICONS)
+    inject(IconRegistry).registerAll(ARTIFERRIS_ICONS)
   })

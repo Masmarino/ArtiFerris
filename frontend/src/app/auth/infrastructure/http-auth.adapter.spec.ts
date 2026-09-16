@@ -84,7 +84,7 @@ describe('HttpAuthAdapter', () => {
     const req = httpMock.expectOne('/api/auth/mfa/setup/totp/enroll')
     expect(req.request.method).toBe('POST')
     expect(req.request.body).toEqual({ mfa_token: 'mfa-token-123' })
-    req.flush({ secret: 'ABCDEF', otpauth_url: 'otpauth://totp/bunker?secret=ABCDEF' })
+    req.flush({ secret: 'ABCDEF', otpauth_url: 'otpauth://totp/artiferris?secret=ABCDEF' })
     httpMock.verify()
   })
 

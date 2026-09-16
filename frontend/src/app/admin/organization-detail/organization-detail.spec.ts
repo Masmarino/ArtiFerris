@@ -172,7 +172,7 @@ describe('OrganizationDetail', () => {
       of({
         type: 'oidc',
         issuer_url: 'https://accounts.example.com',
-        client_id: 'bunker',
+        client_id: 'artiferris',
         client_secret_set: true,
       }),
     )
@@ -181,7 +181,7 @@ describe('OrganizationDetail', () => {
     expect(component.identityProviderConfigured()).toBe(true)
     expect(component.selectedProviderType()).toBe('oidc')
     expect(component.issuerUrl()).toBe('https://accounts.example.com')
-    expect(component.clientId()).toBe('bunker')
+    expect(component.clientId()).toBe('artiferris')
     expect(component.clientSecretSet()).toBe(true)
   })
 
@@ -190,14 +190,14 @@ describe('OrganizationDetail', () => {
     organizationsServiceSpy.setOidcIdentityProvider.mockReturnValue(of(undefined))
     component.selectedProviderType.set('oidc')
     component.issuerUrl.set('https://accounts.example.com')
-    component.clientId.set('bunker')
+    component.clientId.set('artiferris')
     component.clientSecret.set('s3cret!')
 
     component.save()
 
     expect(organizationsServiceSpy.setOidcIdentityProvider).toHaveBeenCalledWith('org-1', {
       issuer_url: 'https://accounts.example.com',
-      client_id: 'bunker',
+      client_id: 'artiferris',
       client_secret: 's3cret!',
     })
   })
@@ -233,7 +233,7 @@ describe('OrganizationDetail', () => {
     )
     component.selectedProviderType.set('oidc')
     component.issuerUrl.set('https://accounts.example.com')
-    component.clientId.set('bunker')
+    component.clientId.set('artiferris')
     component.clientSecret.set('s3cret!')
 
     const toastService = TestBed.inject(ToastService)

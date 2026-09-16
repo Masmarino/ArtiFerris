@@ -9,7 +9,7 @@ import {
 } from '../domain/auth.types'
 import { AUTH_PORT } from './auth.port'
 
-const TOKEN_STORAGE_KEY = 'bunker_token'
+const TOKEN_STORAGE_KEY = 'artiferris_token'
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {

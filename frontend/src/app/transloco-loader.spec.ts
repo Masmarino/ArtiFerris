@@ -16,9 +16,9 @@ describe('TranslocoHttpLoader', () => {
 
     const req = httpMock.expectOne('/i18n/fr.json')
     expect(req.request.method).toBe('GET')
-    req.flush({ bunker: { title: 'Bunker' } })
+    req.flush({ artiferris: { title: 'ArtiFerris' } })
 
-    expect(translation).toEqual({ bunker: { title: 'Bunker' } })
+    expect(translation).toEqual({ artiferris: { title: 'ArtiFerris' } })
     httpMock.verify()
   })
 

@@ -29,7 +29,7 @@ export class ExportAdmin {
     this.exportService.exportConfiguration().subscribe({
       next: (blob) => {
         this.downloading.set(false)
-        downloadBlob(blob, `bunker-config-${new Date().toISOString().slice(0, 10)}.json`)
+        downloadBlob(blob, `artiferris-config-${new Date().toISOString().slice(0, 10)}.json`)
       },
       error: () => {
         this.downloading.set(false)
