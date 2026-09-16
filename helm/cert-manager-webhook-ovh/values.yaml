@@ -1,4 +1,4 @@
-groupName: acme.artiferris.skolln.com
+groupName: acme.artiferris.pro
 
 certManager:
   namespace: cert-manager

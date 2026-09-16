@@ -22,12 +22,12 @@ storage:
 
 ingress:
   enabled: true
-  host: artiferris.skolln.com
-  wildcardHost: "*.artiferris.skolln.com"
+  host: app.artiferris.pro
+  wildcardHost: "*.artiferris.pro"
   clusterIssuer: artiferris-dns01-issuer
 
 artiferris:
-  baseDomain: artiferris.skolln.com
+  baseDomain: artiferris.pro
   bootstrapAdminUsername: admin
   rustLog: info
   # dockerTokenRealm defaults to https://<ingress.host>/v2/token — see _helpers.tpl

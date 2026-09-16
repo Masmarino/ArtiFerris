@@ -1,9 +1,9 @@
 # cert-manager-webhook-ovh — runbook
 
 Enables DNS-01 challenges against OVH-hosted DNS so cert-manager can issue a
-wildcard certificate for `*.artiferris.skolln.com`. `skolln.com`'s nameservers
-are OVH's (`ns102.ovh.net` / `dns102.ovh.net`), confirmed via `dig NS
-skolln.com`.
+wildcard certificate for `*.artiferris.pro`. `artiferris.pro`'s nameservers
+are OVH's (`ns111.ovh.net` / `dns111.ovh.net`, same provider as `skolln.com`),
+confirmed via `dig NS artiferris.pro`.
 
 This is a **one-time, cluster-wide** setup — once done, every current and
 future ArtiFerris organization subdomain gets HTTPS automatically, no per-org
@@ -55,7 +55,7 @@ kubectl get clusterissuer artiferris-dns01-issuer
 Once the `ClusterIssuer` is `READY: True`, deploy the ArtiFerris chart change
 that switches to the wildcard host and this new issuer (see
 `helm/artiferris/values.yaml` — `ingress.clusterIssuer: artiferris-dns01-issuer`,
-`ingress.wildcardHost: "*.artiferris.skolln.com"`):
+`ingress.host: app.artiferris.pro`, `ingress.wildcardHost: "*.artiferris.pro"`):
 
 ```bash
 helm upgrade --install artiferris ./helm/artiferris --namespace artiferris --create-namespace --set image.tag=<current tag> --wait
@@ -65,8 +65,10 @@ Then confirm the new certificate is issued and covers both names:
 
 ```bash
 kubectl get certificate -n artiferris
-echo | openssl s_client -connect alume.artiferris.skolln.com:443 -servername alume.artiferris.skolln.com 2>/dev/null | openssl x509 -noout -issuer -ext subjectAltName
+echo | openssl s_client -connect alume.artiferris.pro:443 -servername alume.artiferris.pro 2>/dev/null | openssl x509 -noout -issuer -ext subjectAltName
 ```
 
 The issuer should now be Let's Encrypt, not `TRAEFIK DEFAULT CERT`, and the
-SAN list should include `*.artiferris.skolln.com`.
+SAN list should include `app.artiferris.pro` and `*.artiferris.pro` (the
+wildcard covers organization subdomains like `alume.artiferris.pro`, which sit
+directly under the apex rather than under `app.`).
