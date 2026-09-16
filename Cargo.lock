@@ -96,7 +96,7 @@ dependencies = [
 
 [[package]]
 name = "artiferris-api"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "artiferris-application",
  "artiferris-docker",
