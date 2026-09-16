@@ -1,4 +1,15 @@
-<gbt-button text="Nouveau dépôt" (clicked)="showCreateModal.set(true)" />
+<div class="toolbar">
+  <gbt-button text="Nouveau dépôt" (clicked)="showCreateModal.set(true)" />
+  @if (isSuperAdmin()) {
+    <gbt-select
+      label="Organisation"
+      placeholder="Sélectionner…"
+      [options]="organizationOptions()"
+      [ngModel]="selectedOrganizationId()"
+      (ngModelChange)="selectedOrganizationId.set($event)"
+    />
+  }
+</div>
 @if (loading()) {
   <p>Chargement…</p>
 } @else if (error(); as message) {
@@ -9,8 +20,8 @@
     caption="Dépôts"
     emptyMessage="Aucune donnée disponible"
     [clickableRows]="true"
-    [data]="repositories()"
-    [columns]="columns"
+    [data]="filteredRepositories()"
+    [columns]="columns()"
     [trackBy]="rowId"
     (rowClick)="openDetail($event)"
   />

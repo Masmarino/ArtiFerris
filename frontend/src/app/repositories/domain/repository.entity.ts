@@ -17,6 +17,7 @@ export interface RepositorySummary {
   retention_keep_last_n: number | null
   /** The current user's own role on this repository. */
   my_role: RepositoryRole
+  organization_id: string
 }
 
 export interface CreateRepositoryOptions {

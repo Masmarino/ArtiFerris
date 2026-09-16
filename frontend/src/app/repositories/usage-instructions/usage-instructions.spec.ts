@@ -26,6 +26,7 @@ function repo(overrides: Partial<RepositorySummary>): RepositorySummary {
     quota_bytes: null,
     retention_keep_last_n: null,
     my_role: 'admin',
+    organization_id: 'org-1',
     ...overrides,
   }
 }

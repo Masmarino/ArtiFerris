@@ -65,6 +65,8 @@ struct RepositoryResponse {
     retention_keep_last_n: Option<i32>,
     /// `Admin` for a super-admin regardless of any explicit grant. Lets the frontend decide which actions to offer.
     my_role: Role,
+    /// Lets a super-admin's client-side organization filter work, same as the Users list.
+    organization_id: Uuid,
 }
 
 impl RepositoryResponse {
@@ -80,6 +82,7 @@ impl RepositoryResponse {
             quota_bytes: s.quota_bytes,
             retention_keep_last_n: s.retention_keep_last_n,
             my_role,
+            organization_id: s.organization_id,
         }
     }
 }
