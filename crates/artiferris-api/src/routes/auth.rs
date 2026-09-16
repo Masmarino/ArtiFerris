@@ -216,7 +216,7 @@ fn is_local_dev_domain(domain: &str) -> bool {
 
 /// This organization's own origin — never derived from a caller-supplied header, so a non-public org never gets sent back to the wrong one.
 fn organization_origin(state: &AppState, resolved_org: &ResolvedOrganization) -> String {
-    let host = if resolved_org.0.is_public { state.artiferris_base_domain.clone() } else { format!("{}.{}", resolved_org.0.slug.as_str(), state.artiferris_base_domain) };
+    let host = if resolved_org.0.is_public { format!("app.{}", state.artiferris_base_domain) } else { format!("{}.{}", resolved_org.0.slug.as_str(), state.artiferris_base_domain) };
     format!("{}://{}", if is_local_dev_domain(&state.artiferris_base_domain) { "http" } else { "https" }, host)
 }
 
@@ -2269,7 +2269,7 @@ mod tests {
         // ...and the browser that actually started attempt A still completes it.
         let with_the_right_cookie = app.oneshot(oidc_callback_request("artiferris.localhost", &state_a, Some(&cookie_a))).await.unwrap();
         let location = header_value(&with_the_right_cookie, "location");
-        assert!(location.starts_with("http://artiferris.localhost/login#token="), "got: {location}");
+        assert!(location.starts_with("http://app.artiferris.localhost/login#token="), "got: {location}");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

@@ -1645,7 +1645,7 @@ mod tests {
         assert_eq!(settings.settings.lock().unwrap().get(&caller_org_id).unwrap().max_login_attempts, 7);
 
         let sent = email.sent.lock().unwrap();
-        assert!(sent[0].3.contains(&format!("https://{TEST_BASE_DOMAIN}/activate?token=")), "expected the public organization's own origin, got: {}", sent[0].3);
+        assert!(sent[0].3.contains(&format!("https://app.{TEST_BASE_DOMAIN}/activate?token=")), "expected the public organization's own origin, got: {}", sent[0].3);
     }
 
     #[tokio::test]

@@ -12,10 +12,12 @@ use uuid::Uuid;
 
 use crate::error::ApplicationError;
 
-/// `https://<slug>.<artiferris_base_domain>` (or the bare base domain for the public org) — the origin an invited/imported user's own org is served from.
+/// `https://<slug>.<artiferris_base_domain>` (or `https://app.<artiferris_base_domain>` for the
+/// public org — the main app's own reserved host, see `organization_middleware`'s "app" label) —
+/// the origin an invited/imported user's own org is served from.
 /// Mirrors `organization_origin` in `artiferris-api`'s `routes/auth.rs`, kept in sync by hand since artiferris-application can't depend on artiferris-api.
 pub(crate) fn organization_origin(artiferris_base_domain: &str, organization: &Organization) -> String {
-    let host = if organization.is_public { artiferris_base_domain.to_string() } else { format!("{}.{}", organization.slug.as_str(), artiferris_base_domain) };
+    let host = if organization.is_public { format!("app.{}", artiferris_base_domain) } else { format!("{}.{}", organization.slug.as_str(), artiferris_base_domain) };
     format!("{}://{}", if artiferris_base_domain.starts_with("localhost") { "http" } else { "https" }, host)
 }
 
@@ -373,7 +375,7 @@ mod tests {
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].0, organization_id);
         assert_eq!(sent[0].1, "florian@example.com");
-        assert!(sent[0].3.contains("https://artiferris.example.com/activate?token="));
+        assert!(sent[0].3.contains("https://app.artiferris.example.com/activate?token="));
     }
 
     #[tokio::test]
