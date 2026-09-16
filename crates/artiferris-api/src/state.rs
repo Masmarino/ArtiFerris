@@ -236,7 +236,7 @@ impl AppState {
         let webauthn_client = Arc::new(match build_webauthn_client(&config.artiferris_base_domain, "Bunker", &config.public_url) {
             Ok(client) => Some(client),
             Err(e) => {
-                tracing::warn!("passkeys disabled: {e}. Set BUNKER_BASE_DOMAIN to this deployment's real base domain to enable them.");
+                tracing::warn!("passkeys disabled: {e}. Set ARTIFERRIS_BASE_DOMAIN to this deployment's real base domain to enable them.");
                 None
             }
         });

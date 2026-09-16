@@ -41,7 +41,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${BUNKER_API_MEMORY_LIMIT:-4g}
+          memory: ${ARTIFERRIS_API_MEMORY_LIMIT:-4g}
     environment:
       DATABASE_URL: postgres://bunker:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/bunker
       # Defaults to 10 (see bunker-infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS).
@@ -53,7 +53,7 @@ services:
       # TOTP seeds) with their own key instead of falling back to JWT_SECRET — see
       # .env.example. Strongly recommended for a real deployment.
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
-      BUNKER_BASE_DOMAIN: ${BUNKER_BASE_DOMAIN:?BUNKER_BASE_DOMAIN must be set}
+      ARTIFERRIS_BASE_DOMAIN: ${ARTIFERRIS_BASE_DOMAIN:?ARTIFERRIS_BASE_DOMAIN must be set}
       STORAGE_ROOT: /data
       BIND_ADDR: 0.0.0.0:8080
       # tracing_subscriber::fmt::init() honours RUST_LOG; without it the
@@ -62,13 +62,13 @@ services:
       # Optional: only creates an account when the users table is empty — safe to
       # leave set across restarts. Without these, there is no way to create the
       # first admin account through the running application.
-      BUNKER_BOOTSTRAP_ADMIN_USERNAME: ${BUNKER_BOOTSTRAP_ADMIN_USERNAME:-}
-      BUNKER_BOOTSTRAP_ADMIN_PASSWORD: ${BUNKER_BOOTSTRAP_ADMIN_PASSWORD:-}
+      ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME: ${ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME:-}
+      ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD: ${ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD:-}
       # Without this, the Docker CLI's WWW-Authenticate challenge falls back
       # to Config::from_env's default (http://0.0.0.0:8080/v2/token), which
       # a client machine can never resolve — `docker login`/`push`/`pull`
       # against this deployment fail outright. See .env.example.
-      BUNKER_DOCKER_TOKEN_REALM: ${BUNKER_DOCKER_TOKEN_REALM:-}
+      ARTIFERRIS_DOCKER_TOKEN_REALM: ${ARTIFERRIS_DOCKER_TOKEN_REALM:-}
     ports:
       - "8080:8080"
     volumes:

@@ -59,8 +59,8 @@ async fn main() {
 async fn bootstrap_super_admin(state: &AppState) {
     // docker-compose passes unset vars through as an empty string — treat empty as absent.
     let (Some(username), Some(password)) = (
-        std::env::var("BUNKER_BOOTSTRAP_ADMIN_USERNAME").ok().filter(|s| !s.is_empty()),
-        std::env::var("BUNKER_BOOTSTRAP_ADMIN_PASSWORD").ok().filter(|s| !s.is_empty()),
+        std::env::var("ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME").ok().filter(|s| !s.is_empty()),
+        std::env::var("ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD").ok().filter(|s| !s.is_empty()),
     ) else {
         return;
     };

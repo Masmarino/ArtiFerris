@@ -7,13 +7,13 @@ pub struct Config {
     pub bind_addr: String,
     /// `None` restricts CORS to localhost/127.0.0.1/[::1] on any port (see `main::cors_layer`).
     pub cors_allowed_origin: Option<String>,
-    /// Defaults from `bind_addr` — wrong behind a reverse proxy or TLS termination, override with `BUNKER_DOCKER_TOKEN_REALM`.
+    /// Defaults from `bind_addr` — wrong behind a reverse proxy or TLS termination, override with `ARTIFERRIS_DOCKER_TOKEN_REALM`.
     pub docker_token_realm: String,
     /// Base URL invitation links are built against. Defaults from `bind_addr`, override with `PUBLIC_URL` behind a proxy.
     pub public_url: String,
     /// Postgres pool size, override with `DB_MAX_CONNECTIONS`.
     pub db_max_connections: u32,
-    /// The base domain subdomains are resolved against. Mandatory (`BUNKER_BASE_DOMAIN`), no fallback — a misconfigured deployment must fail loudly at startup.
+    /// The base domain subdomains are resolved against. Mandatory (`ARTIFERRIS_BASE_DOMAIN`), no fallback — a misconfigured deployment must fail loudly at startup.
     pub artiferris_base_domain: String,
 }
 
@@ -28,7 +28,7 @@ impl Config {
             bind_addr: std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string()),
             // docker-compose ${VAR:-} passthroughs set an empty string, not unset.
             cors_allowed_origin: std::env::var("CORS_ALLOWED_ORIGIN").ok().filter(|s| !s.is_empty()),
-            docker_token_realm: std::env::var("BUNKER_DOCKER_TOKEN_REALM")
+            docker_token_realm: std::env::var("ARTIFERRIS_DOCKER_TOKEN_REALM")
                 .ok()
                 .filter(|s| !s.is_empty())
                 .unwrap_or_else(|| format!("http://{}/v2/token", std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string()))),
@@ -41,7 +41,7 @@ impl Config {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS),
             // Lowercased to match ResolvedOrganization's own lowercasing of the Host header.
-            artiferris_base_domain: std::env::var("BUNKER_BASE_DOMAIN").expect("BUNKER_BASE_DOMAIN must be set").to_ascii_lowercase(),
+            artiferris_base_domain: std::env::var("ARTIFERRIS_BASE_DOMAIN").expect("ARTIFERRIS_BASE_DOMAIN must be set").to_ascii_lowercase(),
         }
     }
 }
