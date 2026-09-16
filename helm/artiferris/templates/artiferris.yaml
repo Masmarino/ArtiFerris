@@ -3,7 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ .Release.Name }}-storage
   labels:
-    {{- include "bunker.labels" . | nindent 4 }}
+    {{- include "artiferris.labels" . | nindent 4 }}
 spec:
   accessModes: ["ReadWriteOnce"]
   {{- if .Values.storage.storageClassName }}
@@ -18,25 +18,25 @@ kind: Deployment
 metadata:
   name: {{ .Release.Name }}
   labels:
-    {{- include "bunker.labels" . | nindent 4 }}
+    {{- include "artiferris.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   strategy:
     type: Recreate # single ReadWriteOnce volume — a rolling update would deadlock on the second pod
   selector:
     matchLabels:
-      {{- include "bunker.selectorLabels" . | nindent 6 }}
+      {{- include "artiferris.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: api
   template:
     metadata:
       labels:
-        {{- include "bunker.selectorLabels" . | nindent 8 }}
+        {{- include "artiferris.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: api
     spec:
       securityContext:
         fsGroup: 101
       containers:
-        - name: bunker-api
+        - name: artiferris-api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
@@ -55,25 +55,25 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-secrets
                   key: SECRETS_ENCRYPTION_KEY
-            - name: BUNKER_BOOTSTRAP_ADMIN_USERNAME
-              value: {{ .Values.bunker.bootstrapAdminUsername | quote }}
-            - name: BUNKER_BOOTSTRAP_ADMIN_PASSWORD
+            - name: ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME
+              value: {{ .Values.artiferris.bootstrapAdminUsername | quote }}
+            - name: ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Release.Name }}-secrets
-                  key: BUNKER_BOOTSTRAP_ADMIN_PASSWORD
-            - name: BUNKER_BASE_DOMAIN
-              value: {{ .Values.bunker.baseDomain | quote }}
-            - name: BUNKER_DOCKER_TOKEN_REALM
-              value: {{ include "bunker.dockerTokenRealm" . | quote }}
+                  key: ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD
+            - name: ARTIFERRIS_BASE_DOMAIN
+              value: {{ .Values.artiferris.baseDomain | quote }}
+            - name: ARTIFERRIS_DOCKER_TOKEN_REALM
+              value: {{ include "artiferris.dockerTokenRealm" . | quote }}
             - name: PUBLIC_URL
-              value: {{ include "bunker.publicUrl" . | quote }}
+              value: {{ include "artiferris.publicUrl" . | quote }}
             - name: STORAGE_ROOT
               value: /data
             - name: BIND_ADDR
               value: "0.0.0.0:8080"
             - name: RUST_LOG
-              value: {{ .Values.bunker.rustLog | quote }}
+              value: {{ .Values.artiferris.rustLog | quote }}
           ports:
             - containerPort: 8080
           volumeMounts:
@@ -102,10 +102,10 @@ kind: Service
 metadata:
   name: {{ .Release.Name }}
   labels:
-    {{- include "bunker.labels" . | nindent 4 }}
+    {{- include "artiferris.labels" . | nindent 4 }}
 spec:
   selector:
-    {{- include "bunker.selectorLabels" . | nindent 4 }}
+    {{- include "artiferris.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: api
   ports:
     - name: http

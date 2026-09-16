@@ -1,5 +1,5 @@
 image:
-  repository: masmarino/bunker
+  repository: masmarino/artiferris
   tag: latest
   pullPolicy: IfNotPresent
 
@@ -22,12 +22,12 @@ storage:
 
 ingress:
   enabled: true
-  host: bunker.skolln.com
-  wildcardHost: "*.bunker.skolln.com"
-  clusterIssuer: bunker-dns01-issuer
+  host: artiferris.skolln.com
+  wildcardHost: "*.artiferris.skolln.com"
+  clusterIssuer: artiferris-dns01-issuer
 
-bunker:
-  baseDomain: bunker.skolln.com
+artiferris:
+  baseDomain: artiferris.skolln.com
   bootstrapAdminUsername: admin
   rustLog: info
   # dockerTokenRealm defaults to https://<ingress.host>/v2/token — see _helpers.tpl
