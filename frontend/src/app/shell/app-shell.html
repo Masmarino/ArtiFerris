@@ -6,10 +6,20 @@
     skipLabel="Aller au contenu principal"
     openMenuLabel="Ouvrir le menu de navigation"
     closeMenuLabel="Fermer le menu de navigation"
+    collapseLabel="Réduire le menu"
+    expandLabel="Déployer le menu"
+    [collapsed]="navCollapsed()"
+    (collapsedChange)="navCollapsed.set($event)"
   >
-    <img src="/api/branding/logo" alt="ArtiFerris logo" class="app-shell__logo" shell-brand />
+    @if (navCollapsed()) {
+      <!-- Org-brandable logos aren't square, so collapsed mode falls back to ArtiFerris's own
+           icon mark instead of clipping a custom logo down to 64px. -->
+      <img src="/Logo.png" alt="ArtiFerris" class="app-shell__logo app-shell__logo--collapsed" shell-brand />
+    } @else {
+      <img src="/api/branding/logo" alt="ArtiFerris logo" class="app-shell__logo" shell-brand />
+    }
     <ng-container shell-nav>
-      <ul class="app-shell__nav-list">
+      <ul class="app-shell__nav-list" [class.app-shell__nav-list--collapsed]="navCollapsed()">
         @for (item of navItems(); track item.action) {
           @if (item.children) {
             <li class="app-shell__nav-group">
@@ -19,23 +29,29 @@
                   routerLinkActive="app-shell__nav-link--active"
                   [routerLinkActiveOptions]="{ exact: true }"
                   [ariaCurrentWhenActive]="'page'"
+                  [attr.aria-label]="navCollapsed() ? item.text : null"
+                  [title]="navCollapsed() ? item.text : null"
                   class="app-shell__nav-link"
                 >
                   <gbt-icon [name]="item.icon" aria-hidden="true" />
-                  <span>{{ item.text }}</span>
+                  @if (!navCollapsed()) {
+                    <span>{{ item.text }}</span>
+                  }
                 </a>
-                <button
-                  type="button"
-                  class="app-shell__nav-group-toggle"
-                  [class.app-shell__nav-group-toggle--open]="isMenuOpen(item)"
-                  [attr.aria-expanded]="isMenuOpen(item)"
-                  [attr.aria-label]="isMenuOpen(item) ? 'Réduire ' + item.text : 'Déployer ' + item.text"
-                  (click)="toggleMenu(item)"
-                >
-                  <gbt-icon name="chevron-down" aria-hidden="true" />
-                </button>
+                @if (!navCollapsed()) {
+                  <button
+                    type="button"
+                    class="app-shell__nav-group-toggle"
+                    [class.app-shell__nav-group-toggle--open]="isMenuOpen(item)"
+                    [attr.aria-expanded]="isMenuOpen(item)"
+                    [attr.aria-label]="isMenuOpen(item) ? 'Réduire ' + item.text : 'Déployer ' + item.text"
+                    (click)="toggleMenu(item)"
+                  >
+                    <gbt-icon name="chevron-down" aria-hidden="true" />
+                  </button>
+                }
               </div>
-              @if (isMenuOpen(item)) {
+              @if (isMenuOpen(item) && !navCollapsed()) {
                 <ul class="app-shell__nav-submenu">
                   @for (child of item.children; track child.action) {
                     <li>
@@ -59,17 +75,23 @@
                 [routerLink]="item.link"
                 routerLinkActive="app-shell__nav-link--active"
                 [ariaCurrentWhenActive]="'page'"
+                [attr.aria-label]="navCollapsed() ? item.text : null"
+                [title]="navCollapsed() ? item.text : null"
                 class="app-shell__nav-link"
               >
                 <gbt-icon [name]="item.icon" aria-hidden="true" />
-                <span>{{ item.text }}</span>
+                @if (!navCollapsed()) {
+                  <span>{{ item.text }}</span>
+                }
               </a>
             </li>
           }
         }
       </ul>
       @if (version.version(); as versionText) {
-        <div class="app-shell__version">v{{ versionText }}</div>
+        @if (!navCollapsed()) {
+          <div class="app-shell__version">v{{ versionText }}</div>
+        }
       }
     </ng-container>
     <div class="app-shell__header" shell-header>

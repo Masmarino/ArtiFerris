@@ -1,4 +1,8 @@
-@if (repository(); as repo) {
+@if (loadError()) {
+  <gbt-card>
+    <p class="gbt-form-error" role="alert">Échec du chargement du dépôt.</p>
+  </gbt-card>
+} @else if (repository(); as repo) {
   <div class="container">
     <gbt-tabs>
       <gbt-tab label="Aperçu">

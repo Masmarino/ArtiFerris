@@ -1,5 +1,9 @@
 <div class="container">
-  @if (status(); as s) {
+  @if (loadError()) {
+    <gbt-card>
+      <p class="gbt-form-error" role="alert">Échec du chargement de l'état du système.</p>
+    </gbt-card>
+  } @else if (status(); as s) {
     <gbt-card heading="Base de données" icon="database">
       <dl>
         <dt>Statut</dt>

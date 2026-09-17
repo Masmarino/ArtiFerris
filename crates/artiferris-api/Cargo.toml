@@ -1,6 +1,6 @@
 [package]
 name = "artiferris-api"
-version = "0.4.4"
+version = "0.4.7"
 edition.workspace = true
 
 [dependencies]

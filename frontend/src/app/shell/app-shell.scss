@@ -2,6 +2,12 @@
   &__logo {
     height: 60px;
     width: fit-content;
+
+    &--collapsed {
+      height: 2.25rem;
+      width: 2.25rem;
+      object-fit: contain;
+    }
   }
 
   &__nav-list {
@@ -11,6 +17,12 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+
+    // Icon-only rail — no room for the group toggle or submenus, hidden from the template.
+    &--collapsed .app-shell__nav-link {
+      justify-content: center;
+      padding: 0.625rem;
+    }
   }
 
   &__nav-link {

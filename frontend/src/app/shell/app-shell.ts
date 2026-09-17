@@ -78,6 +78,7 @@ export class AppShell implements OnInit {
 
   readonly isLoading = signal(true)
   readonly userMenuOpen = signal(false)
+  readonly navCollapsed = signal(false)
   // Per nav-group override — absent here just follows the route (see isMenuOpen).
   private readonly menuManualOverrides = signal<Record<string, boolean>>({})
 

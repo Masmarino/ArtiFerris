@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core'
+import { catchError, of } from 'rxjs'
 import { AdminMetricsService } from '../application/metrics.service'
 import { HealthStatus } from '../domain/metrics.entity'
 import { Card, GaugeBar } from '@masmarino/gabarit'
@@ -17,9 +18,20 @@ export class HealthStatusPage implements OnInit {
   private readonly metricsService = inject(AdminMetricsService)
 
   readonly status = signal<HealthStatus | null>(null)
+  readonly loadError = signal(false)
 
   ngOnInit(): void {
-    this.metricsService.health().subscribe((status) => this.status.set(status))
+    this.metricsService
+      .health()
+      .pipe(
+        catchError(() => {
+          this.loadError.set(true)
+          return of(null)
+        }),
+      )
+      .subscribe((status) => {
+        if (status) this.status.set(status)
+      })
   }
 
   readonly formatByteRatio = (value: number, max: number): string =>

@@ -10,7 +10,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { FormsModule } from '@angular/forms'
-import { map, of } from 'rxjs'
+import { catchError, map, of } from 'rxjs'
 import {
   Button,
   Card,
@@ -78,6 +78,7 @@ export class RepositoryDetail implements OnDestroy {
   )
 
   readonly repository = signal<RepositorySummary | null>(null)
+  readonly loadError = signal(false)
   readonly repositoryName = computed(() => this.repository()?.name ?? '')
   // Admin-only actions are hidden, not just left to fail with a 403.
   readonly isAdmin = computed(() => this.repository()?.my_role === 'admin')
@@ -134,27 +135,38 @@ export class RepositoryDetail implements OnDestroy {
   }
 
   private reload(id: string): void {
-    this.repositoriesService.get(id).subscribe((repository) => {
-      if (id !== this.routeId()) {
-        return
-      }
-      this.repository.set(repository)
-      this.newName.set(repository.name)
-      this.quotaMb.set(
-        repository.quota_bytes == null ? '' : String(repository.quota_bytes / BYTES_PER_MB),
-      )
-      this.retentionKeepLastN.set(
-        repository.retention_keep_last_n == null ? '' : String(repository.retention_keep_last_n),
-      )
-      if (repository.repo_type === 'group' && repository.group_members.length > 0) {
-        this.repositoriesService.list().subscribe((repositories) => {
-          if (id !== this.routeId()) {
-            return
+    this.loadError.set(false)
+    this.repositoriesService
+      .get(id)
+      .pipe(
+        catchError(() => {
+          if (id === this.routeId()) {
+            this.loadError.set(true)
           }
-          this.repositoryNamesById.set(new Map(repositories.map((r) => [r.id, r.name])))
-        })
-      }
-    })
+          return of(null)
+        }),
+      )
+      .subscribe((repository) => {
+        if (id !== this.routeId() || !repository) {
+          return
+        }
+        this.repository.set(repository)
+        this.newName.set(repository.name)
+        this.quotaMb.set(
+          repository.quota_bytes == null ? '' : String(repository.quota_bytes / BYTES_PER_MB),
+        )
+        this.retentionKeepLastN.set(
+          repository.retention_keep_last_n == null ? '' : String(repository.retention_keep_last_n),
+        )
+        if (repository.repo_type === 'group' && repository.group_members.length > 0) {
+          this.repositoriesService.list().subscribe((repositories) => {
+            if (id !== this.routeId()) {
+              return
+            }
+            this.repositoryNamesById.set(new Map(repositories.map((r) => [r.id, r.name])))
+          })
+        }
+      })
     this.permissionsService.list(id).subscribe((permissions) => {
       if (id !== this.routeId()) {
         return
