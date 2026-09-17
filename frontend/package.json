@@ -8,7 +8,9 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "lint": "ng lint",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "storybook": "ng run artiferris-web:storybook",
+    "build-storybook": "ng run artiferris-web:build-storybook"
   },
   "private": true,
   "packageManager": "npm@12.0.2",
@@ -39,7 +41,24 @@
     "prettier": "^3.9.6",
     "typescript": "~6.0.2",
     "typescript-eslint": "8.70.0",
-    "vitest": "^4.0.8"
+    "vitest": "^4.0.8",
+    "storybook": "^10.6.0",
+    "@storybook/angular-vite": "^10.6.0",
+    "@chromatic-com/storybook": "latest",
+    "@storybook/addon-vitest": "^10.6.0",
+    "@storybook/addon-a11y": "^10.6.0",
+    "@storybook/addon-docs": "^10.6.0",
+    "@types/node": "^20",
+    "@angular-devkit/build-angular": "^22.1.6",
+    "@angular-devkit/architect": "^0.2201.6",
+    "@angular-devkit/core": "^22.1.6",
+    "@angular/animations": "^22.1.6",
+    "@analogjs/vite-plugin-angular": "^2.5.2",
+    "vite": "latest",
+    "eslint-plugin-storybook": "^10.6.0",
+    "@vitest/browser-playwright": "4.1.11",
+    "@vitest/coverage-v8": "4.1.11",
+    "playwright": "latest"
   },
   "allowScripts": {
     "@parcel/watcher": false,

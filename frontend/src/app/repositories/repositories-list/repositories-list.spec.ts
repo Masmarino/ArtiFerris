@@ -112,7 +112,9 @@ describe('RepositoriesList', () => {
     const { fixture, httpMock } = setup()
 
     fixture.detectChanges()
-    httpMock.expectOne('/api/repositories').flush('error', { status: 500, statusText: 'Server Error' })
+    httpMock
+      .expectOne('/api/repositories')
+      .flush('error', { status: 500, statusText: 'Server Error' })
     httpMock.expectOne('/api/organizations').flush([PUBLIC_ORG])
     fixture.detectChanges()
 
@@ -244,7 +246,9 @@ describe('RepositoriesList', () => {
       const { fixture, httpMock } = setup({ isSuperAdmin: false })
 
       fixture.detectChanges()
-      httpMock.expectOne('/api/repositories').flush('error', { status: 500, statusText: 'Server Error' })
+      httpMock
+        .expectOne('/api/repositories')
+        .flush('error', { status: 500, statusText: 'Server Error' })
       fixture.detectChanges()
 
       expect(fixture.componentInstance.loading()).toBe(false)

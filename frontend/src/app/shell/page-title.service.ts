@@ -12,7 +12,9 @@ export class PageTitleService {
     // Otherwise the tab title (and what a screen reader announces) never changes between routes.
     effect(() => {
       const title = this.title()
-      this.browserTitle.setTitle(title ? `${title} · ArtiFerris` : 'ArtiFerris · Artifact Repository')
+      this.browserTitle.setTitle(
+        title ? `${title} · ArtiFerris` : 'ArtiFerris · Artifact Repository',
+      )
     })
   }
 }

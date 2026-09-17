@@ -6,6 +6,13 @@
       "runtimeExecutable": "sh",
       "runtimeArgs": ["-c", "cd frontend && npx ng serve --proxy-config proxy.conf.json --port 4200"],
       "port": 4200
+    },
+    {
+      "name": "storybook",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd frontend && npx ng run artiferris-web:storybook --port $PORT"],
+      "port": 6006,
+      "autoPort": true
     }
   ]
 }
