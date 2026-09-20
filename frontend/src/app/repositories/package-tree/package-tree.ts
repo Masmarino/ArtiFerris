@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core'
 import { RouterLink } from '@angular/router'
-import { Icon } from '@masmarino/gabarit'
+import { Icon, Spinner } from '@masmarino/gabarit'
 import { RepositoriesService } from '../application/repositories.service'
 import { RepositoryPackages } from '../domain/repository.entity'
 import { VulnerabilitySummaryBadge } from '../vulnerability-summary/vulnerability-summary'
@@ -16,7 +16,7 @@ import { VulnerabilitySummaryBadge } from '../vulnerability-summary/vulnerabilit
 @Component({
   selector: 'app-package-tree',
   standalone: true,
-  imports: [Icon, RouterLink, VulnerabilitySummaryBadge],
+  imports: [Icon, RouterLink, Spinner, VulnerabilitySummaryBadge],
   templateUrl: './package-tree.html',
   styleUrl: './package-tree.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

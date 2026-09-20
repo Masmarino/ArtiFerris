@@ -1,7 +1,7 @@
 <div class="form-container">
   <gbt-card heading="Serveur mail (SMTP)" icon="mail">
     @if (loading()) {
-      <p>Chargement…</p>
+      <gbt-spinner label="Chargement…" />
     } @else {
       <gbt-input
         label="Hôte SMTP"

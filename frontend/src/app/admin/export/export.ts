@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
-import { Button, Card } from '@masmarino/gabarit'
+import { FormsModule } from '@angular/forms'
+import { Button, Card, FileUpload } from '@masmarino/gabarit'
 import { ExportService } from '../application/export.service'
 import { ImportReport } from '../domain/export.entity'
 import { downloadBlob } from '../../shared/download'
@@ -7,7 +8,7 @@ import { downloadBlob } from '../../shared/download'
 @Component({
   selector: 'app-export',
   standalone: true,
-  imports: [Button, Card],
+  imports: [Button, Card, FileUpload, FormsModule],
   templateUrl: './export.html',
   styleUrl: './export.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -18,10 +19,11 @@ export class ExportAdmin {
   readonly downloading = signal(false)
   readonly error = signal<string | null>(null)
 
-  readonly selectedFile = signal<File | null>(null)
+  readonly selectedFile = signal<File[]>([])
   readonly importing = signal(false)
   readonly importError = signal<string | null>(null)
   readonly importReport = signal<ImportReport | null>(null)
+  readonly removeFileLabel = (name: string): string => `Retirer ${name}`
 
   downloadConfiguration(): void {
     this.error.set(null)
@@ -38,15 +40,14 @@ export class ExportAdmin {
     })
   }
 
-  onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement
-    this.selectedFile.set(input.files?.[0] ?? null)
+  onFileSelected(files: File[]): void {
+    this.selectedFile.set(files)
     this.importReport.set(null)
     this.importError.set(null)
   }
 
   importConfiguration(): void {
-    const file = this.selectedFile()
+    const file = this.selectedFile()[0]
     if (!file || this.importing()) return
     if (
       !confirm(

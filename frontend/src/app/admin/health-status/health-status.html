@@ -5,24 +5,15 @@
     </gbt-card>
   } @else if (status(); as s) {
     <gbt-card heading="Base de données" icon="database">
-      <dl>
-        <dt>Statut</dt>
-        <dd
-          [class.status-up]="s.database.status === 'up'"
-          [class.status-down]="s.database.status === 'down'"
-        >
+      <ng-template #dbStatusValue>
+        <gbt-badge [variant]="s.database.status === 'up' ? 'success' : 'error'">
           {{ s.database.status }}
           @if (s.database.detail) {
             — {{ s.database.detail }}
           }
-        </dd>
-        <dt>Temps de réponse</dt>
-        <dd>{{ s.database.response_time_ms }} ms</dd>
-        @if (s.database.server_version) {
-          <dt>Version PostgreSQL</dt>
-          <dd>{{ s.database.server_version }}</dd>
-        }
-      </dl>
+        </gbt-badge>
+      </ng-template>
+      <gbt-description-list [items]="databaseItems()" layout="inline" />
       <gbt-gauge-bar
         label="Connexions"
         [value]="s.database.active_connections"
@@ -34,20 +25,15 @@
     </gbt-card>
 
     <gbt-card heading="Stockage" icon="hard-drive">
-      <dl>
-        <dt>Statut</dt>
-        <dd
-          [class.status-up]="s.storage.status === 'up'"
-          [class.status-down]="s.storage.status === 'down'"
-        >
+      <ng-template #storageStatusValue>
+        <gbt-badge [variant]="s.storage.status === 'up' ? 'success' : 'error'">
           {{ s.storage.status }}
           @if (s.storage.detail) {
             — {{ s.storage.detail }}
           }
-        </dd>
-        <dt>Espace libre</dt>
-        <dd>{{ s.storage.free_bytes | formatBytes }}</dd>
-      </dl>
+        </gbt-badge>
+      </ng-template>
+      <gbt-description-list [items]="storageItems()" layout="inline" />
       <gbt-gauge-bar
         label="Espace utilisé"
         [value]="s.storage.used_bytes"
@@ -59,10 +45,7 @@
     </gbt-card>
 
     <gbt-card heading="Serveur" icon="server">
-      <dl>
-        <dt>Démarré depuis</dt>
-        <dd>{{ formatUptime(s.uptime_seconds) }}</dd>
-      </dl>
+      <gbt-description-list [items]="serverItems()" layout="inline" />
     </gbt-card>
   }
 </div>

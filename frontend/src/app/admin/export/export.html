@@ -23,17 +23,19 @@
       exporté précédemment. Ne fonctionne que sur une instance fraîchement provisionnée, sans
       dépôt ni autre utilisateur que vous — les paquets/images ne sont pas restaurés.
     </p>
-    <input
-      type="file"
+    <gbt-file-upload
+      label="Fichier de configuration JSON"
       accept=".json"
-      aria-label="Choisir un fichier de configuration JSON"
-      (change)="onFileSelected($event)"
+      dropLabel="Glisser-déposer un fichier ici, ou cliquer pour parcourir"
+      [removeLabel]="removeFileLabel"
+      [ngModel]="selectedFile()"
+      (ngModelChange)="onFileSelected($event)"
     />
     <gbt-button
       text="Importer"
       [loading]="importing()"
       loadingLabel="Chargement en cours"
-      [disabled]="!selectedFile()"
+      [disabled]="selectedFile().length === 0"
       (clicked)="importConfiguration()"
     />
     @if (importError(); as message) {

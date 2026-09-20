@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { Button, Checkbox, GbtInput, Tooltip } from '@masmarino/gabarit'
+import { Button, Checkbox, GbtInput, Spinner, Tooltip } from '@masmarino/gabarit'
 import { OrganizationMembersService } from '../application/organization-members.service'
 import { OrganizationMember } from '../domain/organization-member.entity'
 import { ToastService } from '../../shared/toast.service'
@@ -8,7 +8,7 @@ import { ToastService } from '../../shared/toast.service'
 @Component({
   selector: 'app-organization-members',
   standalone: true,
-  imports: [Button, GbtInput, Checkbox, FormsModule, Tooltip],
+  imports: [Button, GbtInput, Checkbox, FormsModule, Spinner, Tooltip],
   templateUrl: './organization-members.html',
   styleUrl: './organization-members.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

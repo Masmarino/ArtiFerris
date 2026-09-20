@@ -3,7 +3,7 @@
     <img src="/api/branding/logo" alt="ArtiFerris logo" class="auth-layout__logo" />
     @if (tokenMissing) {
       <h1>Activation impossible</h1>
-      <p class="gbt-form-error" role="alert">Lien d'activation invalide : aucun jeton fourni.</p>
+      <gbt-alert variant="error">Lien d'activation invalide : aucun jeton fourni.</gbt-alert>
     } @else {
       <h1>Activer votre compte</h1>
       <form [formGroup]="form" (ngSubmit)="submit()">

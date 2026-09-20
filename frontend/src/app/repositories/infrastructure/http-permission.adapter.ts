@@ -12,10 +12,6 @@ export class HttpPermissionAdapter implements PermissionPort {
     return this.http.get<PermissionEntry[]>(`/api/repositories/${repositoryId}/permissions`)
   }
 
-  lookupUser(username: string): Observable<UserLookup> {
-    return this.http.get<UserLookup>('/api/users/lookup', { params: { username } })
-  }
-
   searchUsers(query: string): Observable<UserLookup[]> {
     return this.http.get<UserLookup[]>('/api/users/search', { params: { q: query } })
   }

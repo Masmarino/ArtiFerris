@@ -1,21 +1,13 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  OnDestroy,
-  computed,
-  effect,
-  inject,
-  signal,
-} from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { FormsModule } from '@angular/forms'
 import { catchError, map, of } from 'rxjs'
 import {
+  Autocomplete,
   Button,
   Card,
   GbtInput,
-  SearchBar,
   Select,
   Tab,
   Table,
@@ -34,9 +26,6 @@ import { FormatBytesPipe } from '../../shared/format-bytes.pipe'
 import { formatResultsAnnouncement } from '../../shared/format'
 import { ToastService } from '../../shared/toast.service'
 
-// Delay before firing a username-search request, so a fast typist doesn't generate one request per keystroke.
-const USER_SEARCH_DEBOUNCE_MS = 200
-
 const BYTES_PER_MB = 1024 * 1024
 
 @Component({
@@ -46,7 +35,7 @@ const BYTES_PER_MB = 1024 * 1024
     Table,
     Button,
     GbtInput,
-    SearchBar,
+    Autocomplete,
     Select,
     Tab,
     Tabs,
@@ -61,7 +50,7 @@ const BYTES_PER_MB = 1024 * 1024
   styleUrl: './repository-detail.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class RepositoryDetail implements OnDestroy {
+export class RepositoryDetail {
   private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
   private readonly repositoriesService = inject(RepositoriesService)
@@ -102,15 +91,10 @@ export class RepositoryDetail implements OnDestroy {
   readonly retentionSaved = signal(false)
 
   readonly permissions = signal<PermissionEntry[]>([])
-  readonly grantUsername = signal('')
+  readonly grantUser = signal<UserLookup | null>(null)
   readonly grantRole = signal<Role>('read')
   readonly roleOptions = ROLE_OPTIONS
   readonly editingPermission = signal<PermissionEntry | null>(null)
-
-  readonly userSearchResults = signal<UserLookup[]>([])
-  // Set from a picked suggestion so grantPermission() can skip the lookup round trip.
-  private selectedUserId: string | null = null
-  private userSearchTimer: ReturnType<typeof setTimeout> | undefined
 
   // Lets the group-members table show names instead of raw ids.
   readonly repositoryNamesById = signal<Map<string, string>>(new Map())
@@ -129,10 +113,6 @@ export class RepositoryDetail implements OnDestroy {
     { key: 'role', label: 'Rôle' },
   ]
   readonly permissionRowId = (p: PermissionEntry): string => p.user_id
-
-  ngOnDestroy(): void {
-    clearTimeout(this.userSearchTimer)
-  }
 
   private reload(id: string): void {
     this.loadError.set(false)
@@ -260,63 +240,27 @@ export class RepositoryDetail implements OnDestroy {
 
   readonly userDisplayFn = (candidate: UserLookup): string => candidate.username
   readonly resultsAnnouncement = formatResultsAnnouncement
-
-  onGrantUsernameInput(value: string): void {
-    this.grantUsername.set(value)
-    this.selectedUserId = null
-    clearTimeout(this.userSearchTimer)
-    const query = value.trim()
-    if (!query) {
-      this.userSearchResults.set([])
-      return
-    }
-    this.userSearchTimer = setTimeout(() => {
-      this.permissionsService.searchUsers(query).subscribe((results) => {
-        // Guards against a slower, earlier request resolving after a newer one.
-        if (query === this.grantUsername().trim()) {
-          this.userSearchResults.set(results)
-        }
-      })
-    }, USER_SEARCH_DEBOUNCE_MS)
-  }
-
-  selectUser(candidate: UserLookup): void {
-    this.grantUsername.set(candidate.username)
-    this.selectedUserId = candidate.id
-    this.userSearchResults.set([])
-  }
+  readonly searchUsers = (query: string) => this.permissionsService.searchUsers(query)
 
   readonly grantingPermission = signal(false)
 
   grantPermission(): void {
     const repository = this.repository()
-    if (!repository || !this.grantUsername() || this.grantingPermission()) {
+    const user = this.grantUser()
+    if (!repository || !user || this.grantingPermission()) {
       return
     }
     this.grantingPermission.set(true)
-    const resolvedId$ = this.selectedUserId
-      ? of({ id: this.selectedUserId })
-      : this.permissionsService.lookupUser(this.grantUsername())
-    resolvedId$.subscribe({
-      next: (resolved) => {
-        this.permissionsService.grant(repository.id, resolved.id, this.grantRole()).subscribe({
-          next: () => {
-            this.grantingPermission.set(false)
-            this.grantUsername.set('')
-            this.selectedUserId = null
-            this.userSearchResults.set([])
-            this.reload(repository.id)
-            this.toastService.success("Droit d'accès accordé.")
-          },
-          error: () => {
-            this.grantingPermission.set(false)
-            this.toastService.error("Échec de l'attribution du droit d'accès.")
-          },
-        })
+    this.permissionsService.grant(repository.id, user.id, this.grantRole()).subscribe({
+      next: () => {
+        this.grantingPermission.set(false)
+        this.grantUser.set(null)
+        this.reload(repository.id)
+        this.toastService.success("Droit d'accès accordé.")
       },
       error: () => {
         this.grantingPermission.set(false)
-        this.toastService.error('Utilisateur introuvable.')
+        this.toastService.error("Échec de l'attribution du droit d'accès.")
       },
     })
   }

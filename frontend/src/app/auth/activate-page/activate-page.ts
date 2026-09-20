@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
-import { Button, GbtInput } from '@masmarino/gabarit'
+import { Button, GbtInput, Alert } from '@masmarino/gabarit'
 import { AuthService } from '../application/auth.service'
 
 @Component({
   selector: 'app-activate-page',
   standalone: true,
-  imports: [ReactiveFormsModule, GbtInput, Button],
+  imports: [ReactiveFormsModule, GbtInput, Button, Alert],
   templateUrl: './activate-page.html',
   styleUrl: '../login-page/login-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

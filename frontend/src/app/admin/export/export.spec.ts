@@ -50,7 +50,7 @@ describe('ExportAdmin', () => {
     const file = new File(['{}'], 'config.json', { type: 'application/json' })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
 
-    fixture.componentInstance.onFileSelected({ target: { files: [file] } } as unknown as Event)
+    fixture.componentInstance.onFileSelected([file])
     fixture.componentInstance.importConfiguration()
 
     await Promise.resolve()
@@ -76,7 +76,7 @@ describe('ExportAdmin', () => {
     const file = new File(['{}'], 'config.json', { type: 'application/json' })
     vi.spyOn(window, 'confirm').mockReturnValue(false)
 
-    fixture.componentInstance.onFileSelected({ target: { files: [file] } } as unknown as Event)
+    fixture.componentInstance.onFileSelected([file])
     fixture.componentInstance.importConfiguration()
 
     httpMock.expectNone('/api/admin/import/configuration')
@@ -87,7 +87,7 @@ describe('ExportAdmin', () => {
     const file = new File(['{}'], 'config.json', { type: 'application/json' })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
 
-    fixture.componentInstance.onFileSelected({ target: { files: [file] } } as unknown as Event)
+    fixture.componentInstance.onFileSelected([file])
     fixture.componentInstance.importConfiguration()
 
     await Promise.resolve()
@@ -106,7 +106,7 @@ describe('ExportAdmin', () => {
     const file = new File(['{}'], 'config.json', { type: 'application/json' })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
 
-    fixture.componentInstance.onFileSelected({ target: { files: [file] } } as unknown as Event)
+    fixture.componentInstance.onFileSelected([file])
     fixture.componentInstance.importConfiguration()
 
     await Promise.resolve()

@@ -25,6 +25,7 @@ import {
   Icon,
   SearchBar,
   SearchResultCategory,
+  Spinner,
   Toaster,
 } from '@masmarino/gabarit'
 import { AuthService } from '../auth/application/auth.service'
@@ -60,7 +61,16 @@ const STAFF_ONLY_ACTIONS = new Set(['users'])
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon, SearchBar, Toaster, GbtAppShell],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    Icon,
+    SearchBar,
+    Spinner,
+    Toaster,
+    GbtAppShell,
+  ],
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

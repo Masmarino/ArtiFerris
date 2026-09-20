@@ -1,7 +1,7 @@
 <div class="form-container">
   <gbt-card heading="Paramètres système" icon="settings">
     @if (loading()) {
-      <p>Chargement…</p>
+      <gbt-spinner label="Chargement…" />
     } @else {
       @for (field of fields; track field.key) {
         <gbt-input

@@ -19,6 +19,7 @@
           [disabled]="form.invalid || submitting()"
         />
       </form>
+      <gbt-divider />
       <a routerLink="/login" class="auth-layout__link">J'ai déjà un compte</a>
     } @else {
       <app-mfa-enrollment [mfaToken]="mfaToken()!" (completed)="onEnrollmentCompleted()" />

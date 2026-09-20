@@ -11,6 +11,7 @@ import { PermissionRoleEditor } from '../permission-role-editor/permission-role-
 import { PackageTree } from '../package-tree/package-tree'
 import { repositoryProviders } from '../infrastructure/repository.providers'
 import { PageTitleService } from '../../shell/page-title.service'
+import type { UserLookup } from '../domain/permission.entity'
 
 describe('RepositoryDetail', () => {
   afterEach(() => {
@@ -383,7 +384,7 @@ describe('RepositoryDetail', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/repositories'])
   })
 
-  it('grants a permission by resolving the username first, then reloads', () => {
+  it('exposes searchUsers wired to the username-search endpoint, for the grant autocomplete', () => {
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -405,103 +406,26 @@ describe('RepositoryDetail', () => {
     fixture.detectChanges()
     httpMock.expectOne('/api/repositories/repo-1').flush({
       id: 'repo-1',
-      name: 'old-name',
+      name: 'my-repo',
       format: 'npm',
       repo_type: 'hosted',
       remote_url: null,
       group_members: [],
-      quota_bytes: null,
-      retention_keep_last_n: null,
       my_role: 'admin',
     })
     httpMock.expectOne('/api/repositories/repo-1/permissions').flush([])
 
-    fixture.componentInstance.grantUsername.set('florian')
-    fixture.componentInstance.grantRole.set('write')
-    fixture.componentInstance.grantPermission()
-
-    const lookupReq = httpMock.expectOne(
-      (r) => r.url === '/api/users/lookup' && r.params.get('username') === 'florian',
+    let results: UserLookup[] | undefined
+    fixture.componentInstance.searchUsers('flo').subscribe((r) => (results = r))
+    const searchReq = httpMock.expectOne(
+      (r) => r.url === '/api/users/search' && r.params.get('q') === 'flo',
     )
-    lookupReq.flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+    searchReq.flush([{ id: 'user-2', username: 'florian' }])
 
-    const grantReq = httpMock.expectOne('/api/repositories/repo-1/permissions/user-2')
-    expect(grantReq.request.method).toBe('PUT')
-    expect(grantReq.request.body).toEqual({ role: 'write' })
-    grantReq.flush(null)
-
-    httpMock.expectOne('/api/repositories/repo-1').flush({
-      id: 'repo-1',
-      name: 'old-name',
-      format: 'npm',
-      repo_type: 'hosted',
-      remote_url: null,
-      group_members: [],
-      quota_bytes: null,
-      retention_keep_last_n: null,
-      my_role: 'admin',
-    })
-    httpMock
-      .expectOne('/api/repositories/repo-1/permissions')
-      .flush([{ user_id: 'user-2', username: 'florian', role: 'write' }])
-
-    expect(fixture.componentInstance.grantUsername()).toBe('')
-    expect(fixture.componentInstance.permissions()).toEqual([
-      { user_id: 'user-2', username: 'florian', role: 'write' },
-    ])
+    expect(results).toEqual([{ id: 'user-2', username: 'florian' }])
   })
 
-  it('debounces the username search and populates suggestions', () => {
-    vi.useFakeTimers()
-    try {
-      TestBed.configureTestingModule({
-        providers: [
-          provideHttpClient(),
-          provideHttpClientTesting(),
-          ...repositoryProviders,
-          provideRouter([]),
-          {
-            provide: ActivatedRoute,
-            useValue: {
-              snapshot: { paramMap: convertToParamMap({ id: 'repo-1' }) },
-              paramMap: of(convertToParamMap({ id: 'repo-1' })),
-            },
-          },
-        ],
-      })
-      const fixture = TestBed.createComponent(RepositoryDetail)
-      const httpMock = TestBed.inject(HttpTestingController)
-
-      fixture.detectChanges()
-      httpMock.expectOne('/api/repositories/repo-1').flush({
-        id: 'repo-1',
-        name: 'my-repo',
-        format: 'npm',
-        repo_type: 'hosted',
-        remote_url: null,
-        group_members: [],
-        my_role: 'admin',
-      })
-      httpMock.expectOne('/api/repositories/repo-1/permissions').flush([])
-
-      fixture.componentInstance.onGrantUsernameInput('flo')
-      httpMock.expectNone((r) => r.url === '/api/users/search')
-
-      vi.advanceTimersByTime(200)
-      const searchReq = httpMock.expectOne(
-        (r) => r.url === '/api/users/search' && r.params.get('q') === 'flo',
-      )
-      searchReq.flush([{ id: 'user-2', username: 'florian' }])
-
-      expect(fixture.componentInstance.userSearchResults()).toEqual([
-        { id: 'user-2', username: 'florian' },
-      ])
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('grants a permission using the selected suggestion id, skipping the exact-lookup round trip', () => {
+  it('grants a permission to the user selected in the autocomplete, then reloads', () => {
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -534,10 +458,7 @@ describe('RepositoryDetail', () => {
     })
     httpMock.expectOne('/api/repositories/repo-1/permissions').flush([])
 
-    fixture.componentInstance.selectUser({ id: 'user-2', username: 'florian' })
-    expect(fixture.componentInstance.grantUsername()).toBe('florian')
-    expect(fixture.componentInstance.userSearchResults()).toEqual([])
-
+    fixture.componentInstance.grantUser.set({ id: 'user-2', username: 'florian' })
     fixture.componentInstance.grantRole.set('write')
     fixture.componentInstance.grantPermission()
 
@@ -561,6 +482,11 @@ describe('RepositoryDetail', () => {
     httpMock
       .expectOne('/api/repositories/repo-1/permissions')
       .flush([{ user_id: 'user-2', username: 'florian', role: 'write' }])
+
+    expect(fixture.componentInstance.grantUser()).toBeNull()
+    expect(fixture.componentInstance.permissions()).toEqual([
+      { user_id: 'user-2', username: 'florian', role: 'write' },
+    ])
   })
 
   it('opens the role editor when a permission row is clicked, and revokes on confirmation', () => {

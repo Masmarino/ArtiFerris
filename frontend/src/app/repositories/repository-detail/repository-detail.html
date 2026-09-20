@@ -87,21 +87,16 @@
                 (rowClick)="openRoleEditor($event)"
               />
             }
-            <gbt-search-bar
+            <gbt-autocomplete
               placeholder="Nom d'utilisateur"
               noResultsMessage="Aucun résultat"
-              noResultsHint="Essayez une autre recherche."
-              clearLabel="Effacer la recherche"
-              navigateHint="Naviguer"
-              selectHint="Sélectionner"
-              closeHint="Fermer"
-              [results]="userSearchResults()"
+              searchErrorMessage="Échec de la recherche"
+              loadingMessage="Recherche en cours…"
+              [search]="searchUsers"
               [displayFn]="userDisplayFn"
               [resultsAnnouncement]="resultsAnnouncement"
-              [keepQueryOnSelect]="true"
-              (queryChange)="onGrantUsernameInput($event)"
-              (clear)="onGrantUsernameInput('')"
-              (itemSelected)="selectUser($event)"
+              [ngModel]="grantUser()"
+              (ngModelChange)="grantUser.set($event)"
             />
             <gbt-select
               label="Rôle"
@@ -110,7 +105,7 @@
               [ngModel]="grantRole()"
               (ngModelChange)="grantRole.set($event)"
             />
-            <gbt-button text="Accorder" [disabled]="!grantUsername()" [loading]="grantingPermission()" (clicked)="grantPermission()" loadingLabel="Chargement en cours" />
+            <gbt-button text="Accorder" [disabled]="!grantUser()" [loading]="grantingPermission()" (clicked)="grantPermission()" loadingLabel="Chargement en cours" />
           </gbt-card>
 
           @if (editingPermission(); as entry) {

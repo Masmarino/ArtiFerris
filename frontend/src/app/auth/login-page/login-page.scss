@@ -43,6 +43,7 @@
   &__actions {
     display: flex;
     flex-direction: column;
+    margin-top: 1rem;
     gap: 0.5rem;
   }
 
@@ -65,8 +66,8 @@
   &__codes {
     font-family: monospace;
     list-style: none;
-    padding: 0;
-    margin: 0;
+    padding: 1rem;
+    margin: 1rem 0;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.25rem 1rem;

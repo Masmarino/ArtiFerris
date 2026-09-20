@@ -1,6 +1,6 @@
 <div class="stack">
   @if (loading()) {
-    <p>Chargement…</p>
+    <gbt-spinner label="Chargement…" />
   } @else if (members().length === 0) {
     <p>Aucun membre</p>
   } @else {

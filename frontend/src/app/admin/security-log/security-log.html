@@ -1,6 +1,6 @@
 <div class="container">
   @if (loading()) {
-    <p>Chargement…</p>
+    <gbt-spinner label="Chargement…" />
   } @else {
     @if (summary().length > 0) {
       <gbt-card heading="Résumé" icon="shield">

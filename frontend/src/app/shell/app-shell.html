@@ -1,5 +1,7 @@
 @if (isLoading()) {
-  <div class="app-shell__loading">Chargement…</div>
+  <div class="app-shell__loading">
+    <gbt-spinner label="Chargement…" />
+  </div>
 } @else {
   <gbt-app-shell
     navLabel="Navigation principale"
