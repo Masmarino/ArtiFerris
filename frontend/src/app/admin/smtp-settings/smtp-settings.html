@@ -1,7 +1,7 @@
 <div class="form-container">
   <gbt-card heading="Serveur mail (SMTP)" icon="mail">
     @if (loading()) {
-      <p>Chargement…</p>
+      <gbt-spinner label="Chargement…" />
     } @else {
       <gbt-input
         label="Hôte SMTP"
@@ -52,7 +52,13 @@
         (ngModelChange)="security.set($event)"
       />
 
-      <gbt-button text="Enregistrer" [loading]="saving()" [disabled]="hasErrors()" (clicked)="save()" loadingLabel="Chargement en cours" />
+      <gbt-button
+        text="Enregistrer"
+        [loading]="saving()"
+        [disabled]="hasErrors()"
+        (clicked)="save()"
+        loadingLabel="Chargement en cours"
+      />
     }
   </gbt-card>
 
@@ -63,7 +69,9 @@
         [ngModel]="testRecipient()"
         (ngModelChange)="testRecipient.set($event)"
       />
-      <gbt-tooltip text="Utilise la configuration déjà enregistrée, pas les modifications du formulaire ci-dessus.">
+      <gbt-tooltip
+        text="Utilise la configuration déjà enregistrée, pas les modifications du formulaire ci-dessus."
+      >
         <gbt-button
           text="Envoyer"
           variant="secondary"

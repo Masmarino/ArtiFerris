@@ -14,7 +14,9 @@
 
         <gbt-card heading="Changer le mot de passe" icon="lock">
           <form class="stack" [formGroup]="form" (ngSubmit)="submit()">
-            <p class="gbt-form-required-note">Les champs marqués d'un astérisque (*) sont obligatoires.</p>
+            <p class="gbt-form-required-note">
+              Les champs marqués d'un astérisque (*) sont obligatoires.
+            </p>
             <gbt-input
               label="Mot de passe actuel"
               type="password"

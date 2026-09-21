@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { firstValueFrom } from 'rxjs'
-import { Button, Card, GbtInput } from '@masmarino/gabarit'
+import { Button, Card, GbtInput, Spinner } from '@masmarino/gabarit'
 import { MfaService } from '../application/mfa.service'
 import { PasskeySummary } from '../domain/mfa.types'
 import { createPasskeyCredential, passkeysSupported } from '../../shared/webauthn-browser'
@@ -10,7 +10,7 @@ import { ToastService } from '../../shared/toast.service'
 @Component({
   selector: 'app-passkey-settings',
   standalone: true,
-  imports: [Button, Card, GbtInput, FormsModule],
+  imports: [Button, Card, GbtInput, FormsModule, Spinner],
   templateUrl: './passkey-settings.html',
   styleUrl: './passkey-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

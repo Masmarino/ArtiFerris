@@ -1,11 +1,13 @@
 <div class="stack">
   @if (loading()) {
-    <p>Chargement…</p>
+    <gbt-spinner label="Chargement…" />
   } @else if (members().length === 0) {
     <p>Aucun membre</p>
   } @else {
     <table class="organization-members__table">
-      <caption>Membres de l'organisation</caption>
+      <caption>
+        Membres de l'organisation
+      </caption>
       <thead>
         <tr>
           <th scope="col">Nom d'utilisateur</th>

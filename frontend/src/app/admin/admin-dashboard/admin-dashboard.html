@@ -39,6 +39,7 @@
   <section class="admin-dashboard__charts">
     <gbt-card heading="Évolution du stockage" icon="hard-drive">
       <gbt-select
+        size="sm"
         card-header-actions
         placeholder="Sélectionner…"
         [options]="evolutionDaysOptions"
@@ -59,6 +60,7 @@
     </gbt-card>
     <gbt-card heading="Évolution des utilisateurs et dépôts" icon="trending-up">
       <gbt-select
+        size="sm"
         card-header-actions
         placeholder="Sélectionner…"
         [options]="evolutionDaysOptions"
@@ -84,7 +86,10 @@
       event of recentEvents();
       track event.occurred_at + event.event_type + event.aggregate_id
     ) {
-      <p>{{ event.occurred_at | date: 'short' }} · {{ event.aggregate_type }} · {{ event.event_type }}</p>
+      <p>
+        {{ event.occurred_at | date: 'short' }} · {{ event.aggregate_type }} ·
+        {{ event.event_type }}
+      </p>
     } @empty {
       <p>Aucune activité récente.</p>
     }

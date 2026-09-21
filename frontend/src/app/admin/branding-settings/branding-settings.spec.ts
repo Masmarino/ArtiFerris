@@ -28,24 +28,11 @@ function selectFile(fixture: ReturnType<typeof render>['fixture'], which: 'logo'
   const file = new File(['fake-image-bytes'], which === 'logo' ? 'logo.png' : 'favicon.ico', {
     type: 'image/png',
   })
-  const handler = which === 'logo' ? 'onLogoFileSelected' : 'onFaviconFileSelected'
-  fixture.componentInstance[handler]({ target: { files: [file] } } as unknown as Event)
+  // Simulates the (ngModelChange) that gbt-file-upload emits once it accepts a picked file —
+  // oversize rejection is the library's own responsibility, not this component's.
+  const target = which === 'logo' ? 'selectedLogoFile' : 'selectedFaviconFile'
+  fixture.componentInstance[target].set([file])
   return file
-}
-
-function selectOversizedFile(
-  fixture: ReturnType<typeof render>['fixture'],
-  which: 'logo' | 'favicon',
-) {
-  const file = new File(['x'], which === 'logo' ? 'logo.png' : 'favicon.ico', {
-    type: 'image/png',
-  })
-  // File.size is read-only and too small for the tiny string above, so override it directly.
-  Object.defineProperty(file, 'size', { value: 2 * 1024 * 1024 + 1 })
-  const handler = which === 'logo' ? 'onLogoFileSelected' : 'onFaviconFileSelected'
-  const input = { files: [file], value: 'logo.png' }
-  fixture.componentInstance[handler]({ target: input } as unknown as Event)
-  return input
 }
 
 describe('BrandingSettingsAdmin', () => {
@@ -69,11 +56,11 @@ describe('BrandingSettingsAdmin', () => {
 
   it('disables the logo import button until a file is selected', () => {
     const { fixture } = render()
-    expect(fixture.componentInstance.selectedLogoFile()).toBeNull()
+    expect(fixture.componentInstance.selectedLogoFile()).toEqual([])
 
     selectFile(fixture, 'logo')
 
-    expect(fixture.componentInstance.selectedLogoFile()).not.toBeNull()
+    expect(fixture.componentInstance.selectedLogoFile()).not.toEqual([])
   })
 
   it('uploads the selected logo and refetches the preview on success', () => {
@@ -85,7 +72,7 @@ describe('BrandingSettingsAdmin', () => {
     httpMock
       .expectOne((r) => r.url === '/api/admin/branding/logo' && r.method === 'PUT')
       .flush(null)
-    expect(fixture.componentInstance.selectedLogoFile()).toBeNull()
+    expect(fixture.componentInstance.selectedLogoFile()).toEqual([])
 
     httpMock
       .expectOne((r) => r.url === '/api/admin/branding/logo' && r.method === 'GET')
@@ -152,28 +139,6 @@ describe('BrandingSettingsAdmin', () => {
     httpMock
       .expectOne((r) => r.url === '/api/admin/branding/favicon' && r.method === 'GET')
       .flush(new Blob(['default-favicon-bytes'], { type: 'image/png' }))
-  })
-
-  it('rejects an oversized logo file before any upload, clearing the input', () => {
-    const { fixture, httpMock } = render()
-
-    const input = selectOversizedFile(fixture, 'logo')
-
-    expect(fixture.componentInstance.selectedLogoFile()).toBeNull()
-    expect(fixture.componentInstance.logoError()).toContain('2 Mo')
-    expect(input.value).toBe('')
-    httpMock.expectNone((r) => r.url === '/api/admin/branding/logo' && r.method === 'PUT')
-  })
-
-  it('rejects an oversized favicon file before any upload, clearing the input', () => {
-    const { fixture, httpMock } = render()
-
-    const input = selectOversizedFile(fixture, 'favicon')
-
-    expect(fixture.componentInstance.selectedFaviconFile()).toBeNull()
-    expect(fixture.componentInstance.faviconError()).toContain('2 Mo')
-    expect(input.value).toBe('')
-    httpMock.expectNone((r) => r.url === '/api/admin/branding/favicon' && r.method === 'PUT')
   })
 
   it('re-fetches the logo and favicon when organizationId changes to a different organization — the component is reused, not recreated, across a super-admin switching organizations', () => {
