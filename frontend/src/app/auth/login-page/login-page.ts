@@ -8,7 +8,7 @@ import {
 } from '@angular/forms'
 import { Router, RouterLink } from '@angular/router'
 import { firstValueFrom } from 'rxjs'
-import { Button, GbtInput } from '@masmarino/gabarit'
+import { Alert, Button, Divider, GbtInput } from '@masmarino/gabarit'
 import { AuthService } from '../application/auth.service'
 import { getPasskeyAssertion, passkeysSupported } from '../../shared/webauthn-browser'
 import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
@@ -16,7 +16,16 @@ import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
 @Component({
   selector: 'app-login-page',
   standalone: true,
-  imports: [ReactiveFormsModule, FormsModule, GbtInput, Button, MfaEnrollmentPage, RouterLink],
+  imports: [
+    ReactiveFormsModule,
+    FormsModule,
+    GbtInput,
+    Button,
+    MfaEnrollmentPage,
+    RouterLink,
+    Alert,
+    Divider,
+  ],
   templateUrl: './login-page.html',
   styleUrl: './login-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

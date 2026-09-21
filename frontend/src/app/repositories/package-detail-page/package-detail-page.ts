@@ -13,7 +13,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router'
 import { DatePipe } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { map } from 'rxjs'
-import { Button, Card, Select, type SelectOption } from '@masmarino/gabarit'
+import { Button, Card, Select, Spinner, type SelectOption } from '@masmarino/gabarit'
 import { RepositoriesService } from '../application/repositories.service'
 import {
   DockerImageDetails,
@@ -78,6 +78,7 @@ const NPM_SEVERITY_OPTIONS: SelectOption<string>[] = [
     RouterLink,
     Card,
     Select,
+    Spinner,
     FormsModule,
     FormatBytesPipe,
     ShortDigestPipe,

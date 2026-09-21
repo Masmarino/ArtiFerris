@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { Button, Card, Checkbox, GbtInput } from '@masmarino/gabarit'
+import { Button, Card, Checkbox, GbtInput, Spinner } from '@masmarino/gabarit'
 import { SystemSettingsService } from '../application/system-settings.service'
 import { ToastService } from '../../shared/toast.service'
 
@@ -29,7 +29,7 @@ const FIELDS: FieldSpec[] = [
 @Component({
   selector: 'app-system-settings',
   standalone: true,
-  imports: [Button, Card, GbtInput, Checkbox, FormsModule],
+  imports: [Button, Card, GbtInput, Checkbox, FormsModule, Spinner],
   templateUrl: './system-settings.html',
   styleUrl: './system-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

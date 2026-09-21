@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { Button, Card, GbtInput, Select, SelectOption, Tooltip } from '@masmarino/gabarit'
+import { Button, Card, GbtInput, Select, SelectOption, Spinner, Tooltip } from '@masmarino/gabarit'
 import { PageTitleService } from '../../shell/page-title.service'
 import { OrganizationsService } from '../application/organizations.service'
 import { OrganizationSummary } from '../domain/organization.entity'
@@ -23,7 +23,7 @@ const PROVIDER_TYPE_OPTIONS: SelectOption<'ldap' | 'oidc'>[] = [
 @Component({
   selector: 'app-organization-detail',
   standalone: true,
-  imports: [Card, GbtInput, Button, Select, FormsModule, OrganizationMembers, Tooltip],
+  imports: [Card, GbtInput, Button, Select, FormsModule, OrganizationMembers, Spinner, Tooltip],
   templateUrl: './organization-detail.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

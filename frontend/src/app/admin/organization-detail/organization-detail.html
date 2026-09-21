@@ -1,6 +1,6 @@
 <div class="container">
   @if (loading()) {
-    <p>Chargement…</p>
+    <gbt-spinner label="Chargement…" />
   } @else if (organization(); as org) {
     <gbt-card>
       <div class="stack">
@@ -14,8 +14,8 @@
         <h3>Authentification</h3>
         @if (identityProviderConfigured()) {
           <p>
-            {{ selectedProviderType() === 'oidc' ? 'OIDC' : 'LDAP' }} est actuellement configuré pour
-            cette organisation.
+            {{ selectedProviderType() === 'oidc' ? 'OIDC' : 'LDAP' }} est actuellement configuré
+            pour cette organisation.
           </p>
         } @else {
           <p>Cette organisation utilise des comptes locaux.</p>
@@ -103,7 +103,9 @@
           (clicked)="save()"
         />
         @if (identityProviderConfigured()) {
-          <gbt-tooltip text="Supprime la configuration du fournisseur d'identité et repasse cette organisation en comptes locaux.">
+          <gbt-tooltip
+            text="Supprime la configuration du fournisseur d'identité et repasse cette organisation en comptes locaux."
+          >
             <gbt-button
               text="Revenir aux comptes locaux"
               variant="secondary"

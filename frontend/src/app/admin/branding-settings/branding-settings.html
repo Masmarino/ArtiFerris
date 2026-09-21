@@ -1,8 +1,8 @@
 <div class="form-container">
   <gbt-card heading="Logo" icon="image">
     <p>
-      Affiché sur les pages de connexion, d'activation et dans l'en-tête de l'application, ainsi
-      que dans les e-mails envoyés par cette instance. PNG ou JPEG, 2 Mo maximum.
+      Affiché sur les pages de connexion, d'activation et dans l'en-tête de l'application, ainsi que
+      dans les e-mails envoyés par cette instance. PNG ou JPEG, 2 Mo maximum.
     </p>
     @if (logoPreviewUrl(); as url) {
       <img
@@ -13,18 +13,24 @@
         height="80"
       />
     }
-    <input
-      type="file"
+    <gbt-file-upload
+      label="Fichier logo (PNG ou JPEG)"
       accept="image/png,image/jpeg"
-      aria-label="Choisir un fichier logo (PNG ou JPEG)"
-      (change)="onLogoFileSelected($event)"
+      dropLabel="Glisser-déposer un fichier ici, ou cliquer pour parcourir"
+      [maxSizeMb]="maxSizeMb"
+      [removeLabel]="removeFileLabel"
+      [oversizeMessage]="oversizeMessage"
+      [disabled]="uploadingLogo()"
+      [errorMessage]="logoError()"
+      [ngModel]="selectedLogoFile()"
+      (ngModelChange)="selectedLogoFile.set($event)"
     />
     <div class="branding-settings__actions">
       <gbt-button
         text="Importer"
         [loading]="uploadingLogo()"
         loadingLabel="Chargement en cours"
-        [disabled]="!selectedLogoFile()"
+        [disabled]="selectedLogoFile().length === 0"
         (clicked)="uploadLogo()"
       />
       <gbt-tooltip text="Revient au logo par défaut de ArtiFerris.">
@@ -36,9 +42,6 @@
         />
       </gbt-tooltip>
     </div>
-    @if (logoError(); as message) {
-      <p class="gbt-form-error" role="alert">{{ message }}</p>
-    }
   </gbt-card>
 
   <gbt-card heading="Favicon" icon="image">
@@ -52,18 +55,24 @@
         height="32"
       />
     }
-    <input
-      type="file"
+    <gbt-file-upload
+      label="Fichier favicon (PNG, JPEG ou ICO)"
       accept="image/png,image/jpeg,image/x-icon,.ico"
-      aria-label="Choisir un fichier favicon (PNG, JPEG ou ICO)"
-      (change)="onFaviconFileSelected($event)"
+      dropLabel="Glisser-déposer un fichier ici, ou cliquer pour parcourir"
+      [maxSizeMb]="maxSizeMb"
+      [removeLabel]="removeFileLabel"
+      [oversizeMessage]="oversizeMessage"
+      [disabled]="uploadingFavicon()"
+      [errorMessage]="faviconError()"
+      [ngModel]="selectedFaviconFile()"
+      (ngModelChange)="selectedFaviconFile.set($event)"
     />
     <div class="branding-settings__actions">
       <gbt-button
         text="Importer"
         [loading]="uploadingFavicon()"
         loadingLabel="Chargement en cours"
-        [disabled]="!selectedFaviconFile()"
+        [disabled]="selectedFaviconFile().length === 0"
         (clicked)="uploadFavicon()"
       />
       <gbt-tooltip text="Revient au favicon par défaut de ArtiFerris.">
@@ -75,8 +84,5 @@
         />
       </gbt-tooltip>
     </div>
-    @if (faviconError(); as message) {
-      <p class="gbt-form-error" role="alert">{{ message }}</p>
-    }
   </gbt-card>
 </div>

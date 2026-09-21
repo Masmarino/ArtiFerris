@@ -15,5 +15,8 @@
   />
 }
 @if (showCreateModal()) {
-  <app-create-organization-modal (created)="onOrganizationCreated()" (cancelled)="showCreateModal.set(false)" />
+  <app-create-organization-modal
+    (created)="onOrganizationCreated()"
+    (cancelled)="showCreateModal.set(false)"
+  />
 }

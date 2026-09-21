@@ -33,17 +33,6 @@ describe('HttpPermissionAdapter', () => {
     req.flush([{ user_id: 'user-1', username: 'member', role: 'write' }])
   })
 
-  it('looks up a user by username', () => {
-    const { adapter, httpMock } = setup()
-
-    adapter.lookupUser('florian').subscribe()
-    const req = httpMock.expectOne(
-      (r) => r.url === '/api/users/lookup' && r.params.get('username') === 'florian',
-    )
-    expect(req.request.method).toBe('GET')
-    req.flush({ id: 'user-1', username: 'florian', is_super_admin: false })
-  })
-
   it('revokes a permission', () => {
     const { adapter, httpMock } = setup()
 

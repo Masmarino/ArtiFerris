@@ -4,7 +4,9 @@
     <img src="/api/branding/logo" alt="ArtiFerris logo" class="auth-layout__logo" />
     @if (!mfaToken()) {
       @if (ssoType() === 'oidc') {
-        <p>Cette organisation utilise l'authentification unique (OIDC).</p>
+        <gbt-alert variant="info"
+          >Cette organisation utilise l'authentification unique (OIDC).</gbt-alert
+        >
         <a href="/api/auth/sso/oidc/login" class="auth-layout__link"
           >Se connecter avec le fournisseur d'identité</a
         >
@@ -40,6 +42,7 @@
           />
         </form>
         @if (registrationEnabled()) {
+          <gbt-divider />
           <a routerLink="/register" class="auth-layout__link">Créer un compte</a>
         }
       }
@@ -51,22 +54,24 @@
           <p class="gbt-form-required-note">
             Les champs marqués d'un astérisque (*) sont obligatoires.
           </p>
-          <gbt-input
-            [label]="useBackupCode() ? 'Code de secours' : 'Code de vérification'"
-            formControlName="code"
-            [required]="true"
-            [autocomplete]="useBackupCode() ? 'off' : 'one-time-code'"
-          />
+          <div class="d-flex align-items-end gap-2">
+            <gbt-input
+              [label]="useBackupCode() ? 'Code de secours' : 'Code de vérification'"
+              formControlName="code"
+              [required]="true"
+              [autocomplete]="useBackupCode() ? 'off' : 'one-time-code'"
+            />
+            <gbt-button
+              text="Vérifier"
+              type="submit"
+              [loading]="submitting()"
+              loadingLabel="Chargement en cours"
+              [disabled]="mfaForm.invalid || submitting()"
+            />
+          </div>
           @if (errorMessage(); as message) {
             <p class="gbt-form-error" role="alert">{{ message }}</p>
           }
-          <gbt-button
-            text="Vérifier"
-            type="submit"
-            [loading]="submitting()"
-            loadingLabel="Chargement en cours"
-            [disabled]="mfaForm.invalid || submitting()"
-          />
           <button type="button" class="auth-layout__link" (click)="toggleBackupCode()">
             {{
               useBackupCode()
@@ -79,6 +84,7 @@
         <p class="gbt-form-error" role="alert">{{ message }}</p>
       }
       @if (passkeysSupported && mfaHasPasskey()) {
+        <gbt-divider label="OU" />
         <gbt-button
           text="Utiliser une clé d'accès"
           variant="secondary"

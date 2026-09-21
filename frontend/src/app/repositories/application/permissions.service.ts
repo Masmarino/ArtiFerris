@@ -11,10 +11,6 @@ export class PermissionsService {
     return this.port.list(repositoryId)
   }
 
-  lookupUser(username: string): Observable<UserLookup> {
-    return this.port.lookupUser(username)
-  }
-
   searchUsers(query: string): Observable<UserLookup[]> {
     return this.port.searchUsers(query)
   }

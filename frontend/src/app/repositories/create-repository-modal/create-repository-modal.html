@@ -2,8 +2,18 @@
   <form [formGroup]="form" (ngSubmit)="submit()">
     <p class="gbt-form-required-note">Les champs marqués d'un astérisque (*) sont obligatoires.</p>
     <gbt-input label="Nom" formControlName="name" [required]="true" />
-    <gbt-select label="Format" placeholder="Sélectionner…" [options]="formatOptions" formControlName="format" />
-    <gbt-select label="Type" placeholder="Sélectionner…" [options]="repoTypeOptions" formControlName="repoType" />
+    <gbt-select
+      label="Format"
+      placeholder="Sélectionner…"
+      [options]="formatOptions"
+      formControlName="format"
+    />
+    <gbt-select
+      label="Type"
+      placeholder="Sélectionner…"
+      [options]="repoTypeOptions"
+      formControlName="repoType"
+    />
 
     @if (isProxy()) {
       <gbt-input label="URL distante" formControlName="remoteUrl" [required]="true" />
@@ -34,7 +44,13 @@
               (ngModelChange)="selectedMemberId.set($event)"
               [ngModelOptions]="{ standalone: true }"
             />
-            <gbt-button class="mb-3" type="button" text="Ajouter" [disabled]="!selectedMemberId()" (clicked)="addMember()" />
+            <gbt-button
+              class="mb-3"
+              type="button"
+              text="Ajouter"
+              [disabled]="!selectedMemberId()"
+              (clicked)="addMember()"
+            />
           </div>
         }
         @if (groupMembers().length > 0) {
@@ -62,7 +78,9 @@
                   >
                     ↓
                   </button>
-                  <button type="button" aria-label="Retirer" (click)="removeMember(member.id)">×</button>
+                  <button type="button" aria-label="Retirer" (click)="removeMember(member.id)">
+                    ×
+                  </button>
                 </div>
               </li>
             }
@@ -82,6 +100,12 @@
       [errorMessage]="retentionError"
     />
 
-    <gbt-button text="Créer" type="submit" [disabled]="hasErrors" [loading]="creating()" loadingLabel="Chargement en cours" />
+    <gbt-button
+      text="Créer"
+      type="submit"
+      [disabled]="hasErrors"
+      [loading]="creating()"
+      loadingLabel="Chargement en cours"
+    />
   </form>
 </gbt-modal>
