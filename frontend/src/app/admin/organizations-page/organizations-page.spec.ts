@@ -15,6 +15,15 @@ import { OrganizationsService } from '../application/organizations.service'
 import { OrganizationMembersService } from '../application/organization-members.service'
 
 describe('OrganizationsPage', () => {
+  beforeEach(() => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   function setup(organizationId: string | null, isSuperAdmin: boolean) {
     TestBed.configureTestingModule({
       imports: [OrganizationsPage],

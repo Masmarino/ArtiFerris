@@ -14,6 +14,7 @@ import {
   Card,
   DimensionCard,
   type DimensionRow,
+  Spinner,
   Table,
   TableColumn,
 } from '@masmarino/gabarit'
@@ -40,7 +41,7 @@ interface EventTypeCount {
 @Component({
   selector: 'app-security-log',
   standalone: true,
-  imports: [Table, DimensionCard, Button, Card],
+  imports: [Table, DimensionCard, Button, Card, Spinner],
   providers: [DatePipe],
   templateUrl: './security-log.html',
   styleUrl: './security-log.scss',

@@ -14,6 +14,7 @@ import {
   Card,
   DimensionCard,
   type DimensionRow,
+  Spinner,
   Table,
   TableColumn,
 } from '@masmarino/gabarit'
@@ -34,7 +35,7 @@ interface AuditCsvRow {
 @Component({
   selector: 'app-audit-log',
   standalone: true,
-  imports: [Table, DimensionCard, Button, Card],
+  imports: [Table, DimensionCard, Button, Card, Spinner],
   providers: [DatePipe],
   templateUrl: './audit-log.html',
   styleUrl: './audit-log.scss',

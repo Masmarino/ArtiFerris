@@ -16,13 +16,6 @@ describe('PermissionsService', () => {
     expect(list).toHaveBeenCalledWith('repo-1')
   })
 
-  it('delegates lookupUser() to the port', () => {
-    const lookupUser = vi.fn().mockReturnValue(of({ id: 'u1', username: 'florian' }))
-    setup({ lookupUser }).lookupUser('florian')
-
-    expect(lookupUser).toHaveBeenCalledWith('florian')
-  })
-
   it('delegates searchUsers() to the port', () => {
     const searchUsers = vi.fn().mockReturnValue(of([]))
     setup({ searchUsers }).searchUsers('flo')

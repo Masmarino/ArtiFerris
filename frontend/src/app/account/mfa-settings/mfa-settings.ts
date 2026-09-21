@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@ang
 import { FormsModule } from '@angular/forms'
 import { HttpErrorResponse } from '@angular/common/http'
 import * as QRCode from 'qrcode'
-import { Button, Card, GbtInput, Tooltip } from '@masmarino/gabarit'
+import { Button, Card, Divider, GbtInput, Spinner, Tooltip } from '@masmarino/gabarit'
 import { MfaService } from '../application/mfa.service'
 import { MfaStatus } from '../domain/mfa.types'
 import { ToastService } from '../../shared/toast.service'
@@ -12,7 +12,7 @@ type ViewState = 'loading' | 'disabled' | 'enrolling' | 'backup-codes' | 'enable
 @Component({
   selector: 'app-mfa-settings',
   standalone: true,
-  imports: [Button, Card, GbtInput, FormsModule, Tooltip],
+  imports: [Button, Card, GbtInput, FormsModule, Spinner, Tooltip, Divider],
   templateUrl: './mfa-settings.html',
   styleUrl: './mfa-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

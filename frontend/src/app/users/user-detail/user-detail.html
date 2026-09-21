@@ -12,7 +12,12 @@
           @if (u.invitation_pending) {
             <p>Statut : invitation en attente d'activation</p>
             @if (canManageTarget()) {
-              <gbt-button text="Renvoyer l'invitation" [loading]="resendingInvitation()" (clicked)="resendInvitation()" loadingLabel="Chargement en cours" />
+              <gbt-button
+                text="Renvoyer l'invitation"
+                [loading]="resendingInvitation()"
+                (clicked)="resendInvitation()"
+                loadingLabel="Chargement en cours"
+              />
             }
           }
         </div>
@@ -49,7 +54,11 @@
             (ngModelChange)="grantRole.set($event)"
           />
           <gbt-button
-            [text]="grantRepositoryIds().length > 1 ? 'Accorder (' + grantRepositoryIds().length + ')' : 'Accorder'"
+            [text]="
+              grantRepositoryIds().length > 1
+                ? 'Accorder (' + grantRepositoryIds().length + ')'
+                : 'Accorder'
+            "
             (clicked)="grantPermission()"
           />
         </div>

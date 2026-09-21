@@ -1,14 +1,14 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms'
 import { Router, RouterLink } from '@angular/router'
-import { Button, GbtInput } from '@masmarino/gabarit'
+import { Button, Divider, GbtInput } from '@masmarino/gabarit'
 import { AuthService } from '../application/auth.service'
 import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
 
 @Component({
   selector: 'app-register-page',
   standalone: true,
-  imports: [ReactiveFormsModule, GbtInput, Button, MfaEnrollmentPage, RouterLink],
+  imports: [ReactiveFormsModule, GbtInput, Button, MfaEnrollmentPage, RouterLink, Divider],
   templateUrl: './register-page.html',
   styleUrl: '../login-page/login-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

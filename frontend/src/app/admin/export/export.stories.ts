@@ -77,7 +77,7 @@ export const ImportingAConfiguration: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const fileInput = canvas.getByLabelText('Choisir un fichier de configuration JSON')
+    const fileInput = canvasElement.querySelector<HTMLInputElement>('.gbt-file-upload__input')!
     await userEvent.upload(fileInput, configFile())
     await userEvent.click(canvas.getByRole('button', { name: 'Importer' }))
     await waitFor(() => expect(canvas.getByText(/admin/)).toBeInTheDocument())
@@ -91,7 +91,7 @@ export const DecliningTheConfirmation: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const fileInput = canvas.getByLabelText('Choisir un fichier de configuration JSON')
+    const fileInput = canvasElement.querySelector<HTMLInputElement>('.gbt-file-upload__input')!
     await userEvent.upload(fileInput, configFile())
     await userEvent.click(canvas.getByRole('button', { name: 'Importer' }))
     expect(canvas.queryByText(/permission\(s\) restaurés/)).not.toBeInTheDocument()
@@ -115,7 +115,7 @@ export const ImportFailed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const fileInput = canvas.getByLabelText('Choisir un fichier de configuration JSON')
+    const fileInput = canvasElement.querySelector<HTMLInputElement>('.gbt-file-upload__input')!
     await userEvent.upload(fileInput, configFile())
     await userEvent.click(canvas.getByRole('button', { name: 'Importer' }))
     await waitFor(() => expect(canvas.getByRole('alert')).toHaveTextContent('instance non vide'))

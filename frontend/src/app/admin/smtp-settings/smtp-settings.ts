@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { Button, Card, GbtInput, Select, SelectOption, Tooltip } from '@masmarino/gabarit'
+import { Button, Card, GbtInput, Select, SelectOption, Spinner, Tooltip } from '@masmarino/gabarit'
 import { SmtpSettingsService } from '../application/smtp-settings.service'
 import { SmtpSecurity } from '../domain/smtp-settings.entity'
 import { ToastService } from '../../shared/toast.service'
@@ -22,7 +22,7 @@ const SECURITY_OPTIONS: SelectOption<SmtpSecurity>[] = [
 @Component({
   selector: 'app-smtp-settings',
   standalone: true,
-  imports: [Button, Card, GbtInput, Select, FormsModule, Tooltip],
+  imports: [Button, Card, GbtInput, Select, FormsModule, Spinner, Tooltip],
   templateUrl: './smtp-settings.html',
   styleUrl: './smtp-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
