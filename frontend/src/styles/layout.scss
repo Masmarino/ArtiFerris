@@ -99,3 +99,11 @@
 .pb-3 {
   padding-bottom: 0.75rem;
 }
+
+.w-full {
+  width: -webkit-fill-available !important;
+}
+
+.w-content {
+  width: -webkit-max-content !important;
+}

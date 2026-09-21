@@ -11,31 +11,34 @@
     }
 
     @case ('enrolling') {
-      <p>
-        Scannez ce QR code avec votre application d'authentification (Google Authenticator, Authy,
-        1Password…), ou saisissez le code manuellement :
-      </p>
-      @if (qrCodeDataUrl(); as dataUrl) {
-        <img [src]="dataUrl" alt="QR code d'activation" class="mfa-settings__qr" />
-      }
-      <p class="mfa-settings__secret">{{ enrollmentSecret() }}</p>
-      <gbt-input
-        label="Code de vérification"
-        [ngModel]="confirmCode()"
-        (ngModelChange)="confirmCode.set($event)"
-      />
-      @if (errorMessage(); as message) {
-        <p class="gbt-form-error" role="alert">{{ message }}</p>
-      }
-      <div class="mfa-settings__actions">
-        <gbt-button
-          text="Confirmer"
-          [loading]="submitting()"
-          loadingLabel="Chargement en cours"
-          [disabled]="confirmCode().trim() === ''"
-          (clicked)="confirmEnrollment()"
-        />
-        <gbt-button text="Annuler" variant="secondary" (clicked)="cancelEnrollment()" />
+      <div class="stack align-items-center">
+        <p class="w-full">
+          Scannez ce QR code avec votre application d'authentification (Google Authenticator, Authy,
+          1Password…), ou saisissez le code manuellement :
+        </p>
+        @if (qrCodeDataUrl(); as dataUrl) {
+          <img [src]="dataUrl" alt="QR code d'activation" class="mfa-settings__qr" />
+        }
+        <p class="mfa-settings__secret">{{ enrollmentSecret() }}</p>
+        <div class="d-flex align-items-end gap-2 w-full">
+          <gbt-input
+            class="w-full"
+            label="Code de vérification"
+            [ngModel]="confirmCode()"
+            (ngModelChange)="confirmCode.set($event)"
+          />
+          <gbt-button
+            text="Confirmer"
+            [loading]="submitting()"
+            loadingLabel="Chargement en cours"
+            [disabled]="confirmCode().trim() === ''"
+            (clicked)="confirmEnrollment()"
+          />
+          <gbt-button text="Annuler" variant="secondary" (clicked)="cancelEnrollment()" />
+        </div>
+        @if (errorMessage(); as message) {
+          <p class="gbt-form-error" role="alert">{{ message }}</p>
+        }
       </div>
     }
 
@@ -66,8 +69,10 @@
         </ul>
         <gbt-button text="J'ai sauvegardé ces codes" (clicked)="dismissRegeneratedCodes()" />
       } @else {
+        <gbt-divider label="REGÉNÉRATION" />
         <div class="mfa-settings__actions">
           <gbt-input
+            class="w-full"
             label="Mot de passe actuel"
             type="password"
             showPasswordLabel="Afficher le mot de passe"
@@ -77,6 +82,7 @@
           />
           <gbt-tooltip text="Les anciens codes de secours cesseront de fonctionner immédiatement.">
             <gbt-button
+              class="w-content"
               text="Régénérer les codes de secours"
               variant="secondary"
               [loading]="submitting()"
@@ -86,8 +92,10 @@
           </gbt-tooltip>
         </div>
 
+        <gbt-divider label="DÉSACTIVATION" />
         <div class="mfa-settings__actions">
           <gbt-input
+            class="w-full"
             label="Mot de passe actuel"
             type="password"
             showPasswordLabel="Afficher le mot de passe"
@@ -97,6 +105,7 @@
           />
           <gbt-tooltip text="Le compte ne demandera plus de code à la connexion.">
             <gbt-button
+              class="w-content"
               text="Désactiver la double authentification"
               variant="danger"
               [loading]="submitting()"

@@ -3,3 +3,13 @@
   flex-direction: column;
   gap: 1rem;
 }
+
+pre {
+  font-family: monospace;
+  text-align: center;
+  letter-spacing: 0.05em;
+  background: var(--bg-panel);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--site-border-radius);
+  display: inline-block;
+}
