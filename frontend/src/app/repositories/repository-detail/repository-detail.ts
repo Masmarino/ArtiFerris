@@ -6,7 +6,7 @@ import { catchError, map, of } from 'rxjs'
 import {
   Autocomplete,
   Button,
-  Card,
+  Card, Divider,
   GbtInput,
   Select,
   Tab,
@@ -45,6 +45,7 @@ const BYTES_PER_MB = 1024 * 1024
     PackageTree,
     Card,
     FormatBytesPipe,
+    Divider,
   ],
   templateUrl: './repository-detail.html',
   styleUrl: './repository-detail.scss',

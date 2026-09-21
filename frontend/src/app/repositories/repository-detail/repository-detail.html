@@ -101,24 +101,31 @@
                 (rowClick)="openRoleEditor($event)"
               />
             }
-            <gbt-autocomplete
-              placeholder="Nom d'utilisateur"
-              noResultsMessage="Aucun résultat"
-              searchErrorMessage="Échec de la recherche"
-              loadingMessage="Recherche en cours…"
-              [search]="searchUsers"
-              [displayFn]="userDisplayFn"
-              [resultsAnnouncement]="resultsAnnouncement"
-              [ngModel]="grantUser()"
-              (ngModelChange)="grantUser.set($event)"
-            />
-            <gbt-select
-              label="Rôle"
-              placeholder="Sélectionner…"
-              [options]="roleOptions"
-              [ngModel]="grantRole()"
-              (ngModelChange)="grantRole.set($event)"
-            />
+            <gbt-divider class="mt-4 mb-4" />
+            <div class="d-flex align-items-end gap-2">
+              <gbt-autocomplete
+                class="w-full"
+                placeholder="Nom d'utilisateur"
+                noResultsMessage="Aucun résultat"
+                searchErrorMessage="Échec de la recherche"
+                loadingMessage="Recherche en cours…"
+                [search]="searchUsers"
+                [displayFn]="userDisplayFn"
+                [resultsAnnouncement]="resultsAnnouncement"
+                [ngModel]="grantUser()"
+                (ngModelChange)="grantUser.set($event)"
+              />
+              <gbt-select
+                class="mb-0"
+                style="max-width: 300px;"
+                label="Rôle"
+                placeholder="Sélectionner…"
+                size="sm"
+                [options]="roleOptions"
+                [ngModel]="grantRole()"
+                (ngModelChange)="grantRole.set($event)"
+              />
+            </div>
             <gbt-button
               text="Accorder"
               [disabled]="!grantUser()"
