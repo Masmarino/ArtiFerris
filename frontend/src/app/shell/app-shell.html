@@ -10,13 +10,17 @@
     closeMenuLabel="Fermer le menu de navigation"
     collapseLabel="Réduire le menu"
     expandLabel="Déployer le menu"
+    [versionLabel]="version.version()"
     [collapsed]="navCollapsed()"
     (collapsedChange)="navCollapsed.set($event)"
   >
     @if (navCollapsed()) {
-      <!-- Org-brandable logos aren't square, so collapsed mode falls back to ArtiFerris's own
-           icon mark instead of clipping a custom logo down to 64px. -->
-      <img src="/Logo.png" alt="ArtiFerris" class="app-shell__logo app-shell__logo--collapsed" shell-brand />
+      <img
+        src="/Logo.png"
+        alt="ArtiFerris"
+        class="app-shell__logo app-shell__logo--collapsed"
+        shell-brand
+      />
     } @else {
       <img src="/api/branding/logo" alt="ArtiFerris logo" class="app-shell__logo" shell-brand />
     }
@@ -46,7 +50,9 @@
                     class="app-shell__nav-group-toggle"
                     [class.app-shell__nav-group-toggle--open]="isMenuOpen(item)"
                     [attr.aria-expanded]="isMenuOpen(item)"
-                    [attr.aria-label]="isMenuOpen(item) ? 'Réduire ' + item.text : 'Déployer ' + item.text"
+                    [attr.aria-label]="
+                      isMenuOpen(item) ? 'Réduire ' + item.text : 'Déployer ' + item.text
+                    "
                     (click)="toggleMenu(item)"
                   >
                     <gbt-icon name="chevron-down" aria-hidden="true" />
@@ -90,11 +96,6 @@
           }
         }
       </ul>
-      @if (version.version(); as versionText) {
-        @if (!navCollapsed()) {
-          <div class="app-shell__version">v{{ versionText }}</div>
-        }
-      }
     </ng-container>
     <div class="app-shell__header" shell-header>
       <h1 class="app-shell__page-title">{{ pageTitle.title() }}</h1>

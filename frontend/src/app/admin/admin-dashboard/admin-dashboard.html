@@ -86,7 +86,10 @@
       event of recentEvents();
       track event.occurred_at + event.event_type + event.aggregate_id
     ) {
-      <p>{{ event.occurred_at | date: 'short' }} · {{ event.aggregate_type }} · {{ event.event_type }}</p>
+      <p>
+        {{ event.occurred_at | date: 'short' }} · {{ event.aggregate_type }} ·
+        {{ event.event_type }}
+      </p>
     } @empty {
       <p>Aucune activité récente.</p>
     }

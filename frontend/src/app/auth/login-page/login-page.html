@@ -4,7 +4,9 @@
     <img src="/api/branding/logo" alt="ArtiFerris logo" class="auth-layout__logo" />
     @if (!mfaToken()) {
       @if (ssoType() === 'oidc') {
-        <gbt-alert variant="info">Cette organisation utilise l'authentification unique (OIDC).</gbt-alert>
+        <gbt-alert variant="info"
+          >Cette organisation utilise l'authentification unique (OIDC).</gbt-alert
+        >
         <a href="/api/auth/sso/oidc/login" class="auth-layout__link"
           >Se connecter avec le fournisseur d'identité</a
         >

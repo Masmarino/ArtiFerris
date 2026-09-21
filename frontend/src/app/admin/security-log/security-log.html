@@ -26,7 +26,11 @@
     }
 
     <div class="d-flex justify-content-end mb-3">
-      <gbt-button text="Télécharger en CSV" [disabled]="rows().length === 0" (clicked)="downloadCsv()" />
+      <gbt-button
+        text="Télécharger en CSV"
+        [disabled]="rows().length === 0"
+        (clicked)="downloadCsv()"
+      />
     </div>
 
     <gbt-table

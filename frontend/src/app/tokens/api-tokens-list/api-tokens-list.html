@@ -18,15 +18,31 @@
 }
 
 @if (showCreateForm()) {
-  <gbt-modal [isOpen]="true" heading="Nouveau token API" closeLabel="Fermer" (closed)="showCreateForm.set(false)">
+  <gbt-modal
+    [isOpen]="true"
+    heading="Nouveau token API"
+    closeLabel="Fermer"
+    (closed)="showCreateForm.set(false)"
+  >
     <p class="gbt-form-required-note">Les champs marqués d'un astérisque (*) sont obligatoires.</p>
     <gbt-input label="Nom (ex. « mon laptop »)" [formControl]="newLabel" [required]="true" />
-    <gbt-button text="Créer" (clicked)="createToken()" [disabled]="newLabel.invalid" [loading]="creatingToken()" loadingLabel="Chargement en cours" />
+    <gbt-button
+      text="Créer"
+      (clicked)="createToken()"
+      [disabled]="newLabel.invalid"
+      [loading]="creatingToken()"
+      loadingLabel="Chargement en cours"
+    />
   </gbt-modal>
 }
 
 @if (createdToken(); as token) {
-  <gbt-modal [isOpen]="true" heading="Token créé" closeLabel="Fermer" (closed)="dismissCreatedToken()">
+  <gbt-modal
+    [isOpen]="true"
+    heading="Token créé"
+    closeLabel="Fermer"
+    (closed)="dismissCreatedToken()"
+  >
     <p>Copiez ce token maintenant — il ne sera plus jamais affiché.</p>
     <pre>{{ token }}</pre>
     <gbt-button text="J'ai copié le token" (clicked)="dismissCreatedToken()" />

@@ -16,7 +16,7 @@
         />
       </gbt-tooltip>
       @if (passkeysSupported) {
-        <gbt-divider label="OU"/>
+        <gbt-divider label="OU" />
         <gbt-tooltip text="Utilise Touch ID, Windows Hello ou une clé de sécurité physique.">
           <gbt-button
             text="Clé d'accès (passkey)"
@@ -61,8 +61,8 @@
   }
   @case ('backup-codes') {
     <p class="mt-4 mb-4">
-      Double authentification activée. Conservez ces codes de secours dans un endroit sûr —
-      chacun ne peut être utilisé qu'une seule fois.
+      Double authentification activée. Conservez ces codes de secours dans un endroit sûr — chacun
+      ne peut être utilisé qu'une seule fois.
     </p>
     <ul class="auth-layout__codes auth-layout__secret">
       @for (code of backupCodes(); track code) {

@@ -1,5 +1,7 @@
 <div class="container">
-  <a [routerLink]="['/repositories', repositoryId]" class="package-detail-page__back">← Retour au dépôt</a>
+  <a [routerLink]="['/repositories', repositoryId]" class="package-detail-page__back"
+    >← Retour au dépôt</a
+  >
 
   @if (loading()) {
     <gbt-spinner label="Chargement…" />
@@ -37,11 +39,15 @@
                   <span
                     class="package-detail__badge gbt-tooltip-trigger"
                     tabindex="0"
-                    [attr.aria-label]="'Déprécié : ' + (version.deprecated_message || 'aucune raison fournie')"
+                    [attr.aria-label]="
+                      'Déprécié : ' + (version.deprecated_message || 'aucune raison fournie')
+                    "
                   >
                     déprécié
                     @if (version.deprecated_message) {
-                      <span class="gbt-tooltip" aria-hidden="true">{{ version.deprecated_message }}</span>
+                      <span class="gbt-tooltip" aria-hidden="true">{{
+                        version.deprecated_message
+                      }}</span>
                     }
                   </span>
                 }
@@ -119,7 +125,9 @@
                   {{ advisory.severity }}
                 </span>
                 <div class="package-detail__advisory-body">
-                  <a [href]="advisory.url" target="_blank" rel="noopener noreferrer">{{ advisory.title }} <span class="sr-only">(nouvelle fenêtre)</span></a>
+                  <a [href]="advisory.url" target="_blank" rel="noopener noreferrer"
+                    >{{ advisory.title }} <span class="sr-only">(nouvelle fenêtre)</span></a
+                  >
                   <p class="package-detail__advisory-meta">
                     Versions concernées : <code>{{ advisory.vulnerable_versions }}</code>
                     @if (advisory.cvss_score !== null) {
@@ -159,10 +167,14 @@
           </p>
         } @else if (depAuditResult(); as result) {
           <p class="package-detail__audit-meta">
-            Dernière analyse le {{ result.scanned_at | date: 'short' }} · {{ result.packages_scanned }}
-            dépendance{{ result.packages_scanned !== 1 ? 's' : '' }} analysée{{ result.packages_scanned !== 1 ? 's' : '' }}
+            Dernière analyse le {{ result.scanned_at | date: 'short' }} ·
+            {{ result.packages_scanned }} dépendance{{
+              result.packages_scanned !== 1 ? 's' : ''
+            }}
+            analysée{{ result.packages_scanned !== 1 ? 's' : '' }}
             @if (result.truncated) {
-              · analyse partielle (arbre de dépendances trop volumineux pour être couvert entièrement)
+              · analyse partielle (arbre de dépendances trop volumineux pour être couvert
+              entièrement)
             }
           </p>
           @if (result.findings.length === 0) {
@@ -185,15 +197,26 @@
               </p>
             } @else {
               <ul class="package-detail__advisories">
-                @for (finding of pagedFindings(); track finding.dependency_name + finding.advisory.id) {
+                @for (
+                  finding of pagedFindings();
+                  track finding.dependency_name + finding.advisory.id
+                ) {
                   <li class="package-detail__advisory">
-                    <span class="package-detail__severity" [class]="finding.advisory.severity | severityClass">
+                    <span
+                      class="package-detail__severity"
+                      [class]="finding.advisory.severity | severityClass"
+                    >
                       {{ finding.advisory.severity }}
                     </span>
                     <div class="package-detail__advisory-body">
-                      <a [href]="finding.advisory.url" target="_blank" rel="noopener noreferrer">{{ finding.advisory.title }} <span class="sr-only">(nouvelle fenêtre)</span></a>
+                      <a [href]="finding.advisory.url" target="_blank" rel="noopener noreferrer"
+                        >{{ finding.advisory.title }}
+                        <span class="sr-only">(nouvelle fenêtre)</span></a
+                      >
                       <p class="package-detail__advisory-meta">
-                        <code>{{ finding.dependency_name }}&#64;{{ finding.dependency_version }}</code>
+                        <code
+                          >{{ finding.dependency_name }}&#64;{{ finding.dependency_version }}</code
+                        >
                         @if (finding.advisory.cvss_score !== null) {
                           · CVSS {{ finding.advisory.cvss_score }}
                         }
@@ -227,7 +250,8 @@
           }
         } @else {
           <p class="package-detail__audit-status">
-            Aucune analyse effectuée pour le moment. Lancez un scan pour vérifier les dépendances transitives.
+            Aucune analyse effectuée pour le moment. Lancez un scan pour vérifier les dépendances
+            transitives.
           </p>
         }
       </gbt-card>
@@ -238,7 +262,11 @@
         <p class="package-detail__danger-text">
           Supprime toutes les versions de <strong>{{ name }}</strong> et ne peut pas être annulé.
         </p>
-        <gbt-button text="Supprimer tout le package" variant="danger" (clicked)="deleteWholePackage()" />
+        <gbt-button
+          text="Supprimer tout le package"
+          variant="danger"
+          (clicked)="deleteWholePackage()"
+        />
       </gbt-card>
     }
   } @else if (format === 'docker' && dockerDetails(); as details) {
@@ -260,7 +288,13 @@
           @for (tag of pagedTags(); track tag.tag) {
             <tr>
               <td class="package-detail__version">{{ tag.tag }}</td>
-              <td class="package-detail__digest" [title]="tag.digest" [attr.aria-label]="tag.digest">{{ tag.digest | shortDigest }}</td>
+              <td
+                class="package-detail__digest"
+                [title]="tag.digest"
+                [attr.aria-label]="tag.digest"
+              >
+                {{ tag.digest | shortDigest }}
+              </td>
               <td>{{ tag.media_type }}</td>
               <td>{{ tag.created_at | date: 'short' }}</td>
               <td class="package-detail__actions">
@@ -324,8 +358,10 @@
           </p>
         } @else if (imageScanResult(); as result) {
           <p class="package-detail__audit-meta">
-            Dernier scan le {{ result.scanned_at | date: 'short' }} · {{ result.vulnerabilities.length }}
-            vulnérabilité{{ result.vulnerabilities.length !== 1 ? 's' : '' }}
+            Dernier scan le {{ result.scanned_at | date: 'short' }} ·
+            {{ result.vulnerabilities.length }} vulnérabilité{{
+              result.vulnerabilities.length !== 1 ? 's' : ''
+            }}
           </p>
           @if (result.vulnerabilities.length === 0) {
             <p class="package-detail__audit-status package-detail__audit-status--clean">
@@ -354,7 +390,10 @@
                     </span>
                     <div class="package-detail__advisory-body">
                       @if (vuln.primary_url) {
-                        <a [href]="vuln.primary_url" target="_blank" rel="noopener noreferrer">{{ vuln.title ?? vuln.id }} <span class="sr-only">(nouvelle fenêtre)</span></a>
+                        <a [href]="vuln.primary_url" target="_blank" rel="noopener noreferrer"
+                          >{{ vuln.title ?? vuln.id }}
+                          <span class="sr-only">(nouvelle fenêtre)</span></a
+                        >
                       } @else {
                         <span>{{ vuln.title ?? vuln.id }}</span>
                       }
@@ -393,7 +432,8 @@
           }
         } @else {
           <p class="package-detail__audit-status">
-            Aucun scan effectué pour le moment. Lancez un scan pour vérifier les vulnérabilités connues.
+            Aucun scan effectué pour le moment. Lancez un scan pour vérifier les vulnérabilités
+            connues.
           </p>
         }
       </gbt-card>
@@ -404,7 +444,11 @@
         <p class="package-detail__danger-text">
           Supprime toutes les étiquettes de <strong>{{ name }}</strong> et ne peut pas être annulé.
         </p>
-        <gbt-button text="Supprimer toute l'image" variant="danger" (clicked)="deleteWholeImage()" />
+        <gbt-button
+          text="Supprimer toute l'image"
+          variant="danger"
+          (clicked)="deleteWholeImage()"
+        />
       </gbt-card>
     }
   }

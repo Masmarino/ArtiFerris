@@ -14,11 +14,20 @@
           @if (isAdmin()) {
             <div class="d-flex align-items-end gap-4">
               <gbt-input label="Nom" [ngModel]="newName()" (ngModelChange)="newName.set($event)" />
-              <gbt-button class="mb-3" text="Renommer" [disabled]="newName() === repo.name" [loading]="renaming()" (clicked)="rename()" loadingLabel="Chargement en cours" />
+              <gbt-button
+                class="mb-3"
+                text="Renommer"
+                [disabled]="newName() === repo.name"
+                [loading]="renaming()"
+                (clicked)="rename()"
+                loadingLabel="Chargement en cours"
+              />
             </div>
           }
           @if (repo.remote_url) {
-            <p class="repository-detail__remote">Dépôt distant : <code>{{ repo.remote_url }}</code></p>
+            <p class="repository-detail__remote">
+              Dépôt distant : <code>{{ repo.remote_url }}</code>
+            </p>
           }
         </gbt-card>
 
@@ -64,7 +73,12 @@
                 [ngModel]="newMemberId()"
                 (ngModelChange)="newMemberId.set($event)"
               />
-              <gbt-button text="Ajouter" [loading]="addingMember()" (clicked)="addMember()" loadingLabel="Chargement en cours" />
+              <gbt-button
+                text="Ajouter"
+                [loading]="addingMember()"
+                (clicked)="addMember()"
+                loadingLabel="Chargement en cours"
+              />
             }
           </gbt-card>
         </gbt-tab>
@@ -105,7 +119,13 @@
               [ngModel]="grantRole()"
               (ngModelChange)="grantRole.set($event)"
             />
-            <gbt-button text="Accorder" [disabled]="!grantUser()" [loading]="grantingPermission()" (clicked)="grantPermission()" loadingLabel="Chargement en cours" />
+            <gbt-button
+              text="Accorder"
+              [disabled]="!grantUser()"
+              [loading]="grantingPermission()"
+              (clicked)="grantPermission()"
+              loadingLabel="Chargement en cours"
+            />
           </gbt-card>
 
           @if (editingPermission(); as entry) {
@@ -134,7 +154,13 @@
                 (ngModelChange)="setQuotaMb($event)"
                 [errorMessage]="quotaError()"
               />
-              <gbt-button class="mb-3" text="Enregistrer" [loading]="savingQuota()" (clicked)="saveQuota()" loadingLabel="Chargement en cours" />
+              <gbt-button
+                class="mb-3"
+                text="Enregistrer"
+                [loading]="savingQuota()"
+                (clicked)="saveQuota()"
+                loadingLabel="Chargement en cours"
+              />
             </div>
             @if (quotaSaved()) {
               <p class="repository-detail__quota-success">Quota enregistré.</p>
@@ -162,16 +188,34 @@
                 (ngModelChange)="setRetentionKeepLastN($event)"
                 [errorMessage]="retentionError()"
               />
-              <gbt-button class="mb-3" text="Enregistrer" [loading]="savingRetention()" (clicked)="saveRetentionPolicy()" loadingLabel="Chargement en cours" />
+              <gbt-button
+                class="mb-3"
+                text="Enregistrer"
+                [loading]="savingRetention()"
+                (clicked)="saveRetentionPolicy()"
+                loadingLabel="Chargement en cours"
+              />
             </div>
             @if (retentionSaved()) {
               <p class="repository-detail__quota-success">Politique de rétention enregistrée.</p>
             }
           </gbt-card>
 
-          <gbt-card class="repository-detail__danger" heading="Zone de danger" icon="triangle-alert">
-            <p>La suppression d'un dépôt est définitive et efface tous les packages qu'il contient.</p>
-            <gbt-button text="Supprimer le dépôt" variant="danger" [loading]="deletingRepository()" (clicked)="deleteRepository()" loadingLabel="Chargement en cours" />
+          <gbt-card
+            class="repository-detail__danger"
+            heading="Zone de danger"
+            icon="triangle-alert"
+          >
+            <p>
+              La suppression d'un dépôt est définitive et efface tous les packages qu'il contient.
+            </p>
+            <gbt-button
+              text="Supprimer le dépôt"
+              variant="danger"
+              [loading]="deletingRepository()"
+              (clicked)="deleteRepository()"
+              loadingLabel="Chargement en cours"
+            />
           </gbt-card>
         </gbt-tab>
       }
