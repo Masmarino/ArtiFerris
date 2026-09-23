@@ -7,8 +7,8 @@ pub struct Config {
     pub bind_addr: String,
     /// `None` restricts CORS to localhost/127.0.0.1/[::1] on any port (see `main::cors_layer`).
     pub cors_allowed_origin: Option<String>,
-    /// Defaults from `bind_addr` — wrong behind a reverse proxy or TLS termination, override with `ARTIFERRIS_DOCKER_TOKEN_REALM`.
-    pub docker_token_realm: String,
+    /// `None` (the default) derives the Docker Bearer-challenge realm per request from `Host` and `public_url`'s scheme. Set `ARTIFERRIS_DOCKER_TOKEN_REALM` only if that request info can't be trusted.
+    pub docker_token_realm_override: Option<String>,
     /// Base URL invitation links are built against. Defaults from `bind_addr`, override with `PUBLIC_URL` behind a proxy.
     pub public_url: String,
     /// Postgres pool size, override with `DB_MAX_CONNECTIONS`.
@@ -28,10 +28,7 @@ impl Config {
             bind_addr: std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string()),
             // docker-compose ${VAR:-} passthroughs set an empty string, not unset.
             cors_allowed_origin: std::env::var("CORS_ALLOWED_ORIGIN").ok().filter(|s| !s.is_empty()),
-            docker_token_realm: std::env::var("ARTIFERRIS_DOCKER_TOKEN_REALM")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| format!("http://{}/v2/token", std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string()))),
+            docker_token_realm_override: std::env::var("ARTIFERRIS_DOCKER_TOKEN_REALM").ok().filter(|s| !s.is_empty()),
             public_url: std::env::var("PUBLIC_URL")
                 .ok()
                 .filter(|s| !s.is_empty())

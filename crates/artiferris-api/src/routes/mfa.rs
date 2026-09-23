@@ -205,7 +205,7 @@ mod tests {
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
-            docker_token_realm: "http://localhost/v2/token".to_string(),
+            docker_token_realm_override: None,
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),

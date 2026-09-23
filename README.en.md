@@ -133,10 +133,11 @@ docker compose up -d --build
 ```
 
 See [Configuration reference](#configuration-reference) below for every
-variable `docker-compose.yml` wires through, and note the
-`ARTIFERRIS_DOCKER_TOKEN_REALM` variable in particular — the Docker registry
-protocol will not work for any client outside the container until it's set
-to a URL your `docker` CLI can actually reach.
+variable `docker-compose.yml` wires through. The Docker registry protocol's
+token realm (`ARTIFERRIS_DOCKER_TOKEN_REALM`) is derived automatically per
+request and normally needs no configuration at all — set it explicitly only
+if this deployment sits behind something that doesn't forward the original
+`Host` header and scheme faithfully.
 
 > Kubernetes/Helm deployment: to be documented later.
 
@@ -157,15 +158,16 @@ bare-container deployment or for overriding those defaults.
 | `STATIC_DIR` | No | `./static` | Path to the built frontend assets served for non-API routes. Only relevant if you're not using the shipped Docker image. |
 | `RUST_LOG` | No | — (no logging without it) | `tracing_subscriber` env-filter, e.g. `info` or `artiferris_api=debug,info`. Without it, the container logs almost nothing. |
 | `CORS_ALLOWED_ORIGIN` | No | permissive (any origin) | Locks CORS to one origin. Leave unset for local dev (`ng serve` on a different port than the backend) or when the frontend is served from the same origin as the API (the shipped image's default setup). |
-| `ARTIFERRIS_DOCKER_TOKEN_REALM` | Effectively yes, for Docker | derived from `BIND_ADDR` (`http://0.0.0.0:8080/v2/token` — unreachable from outside the container) | Absolute URL of this deployment's own `/v2/token` endpoint, embedded in every `WWW-Authenticate` challenge. The Docker CLI resolves `login`/`push`/`pull` token requests against it — get this wrong and the entire Docker auth flow fails for real clients. Must be `https://` for any non-localhost host (`docker` refuses plain `http://` otherwise). |
+| `ARTIFERRIS_DOCKER_TOKEN_REALM` | No | derived per request from that request's own `Host` header and `PUBLIC_URL`'s scheme | Overrides the realm URL embedded in every `WWW-Authenticate` challenge, which the Docker CLI resolves `login`/`push`/`pull` token requests against — normally derived automatically so it's correct for however many organization subdomains this deployment serves. Set it only when the request's `Host`/scheme can't be trusted (e.g. an intermediary that doesn't forward them faithfully); doing so pins every client to this one fixed realm, which then breaks auth for every organization subdomain except whichever one this host happens to resolve to. Must be `https://` for any non-localhost host (`docker` refuses plain `http://` otherwise). |
 | `PUBLIC_URL` | Effectively yes, once invitations are used | derived from `BIND_ADDR` (same unreachable-from-outside caveat) | Base URL account-invitation links are built against. Must be reachable from the recipient's mail client. |
 | `ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME` | No | — | Username for the account auto-created **only when the `users` table is empty**. Safe to leave set across restarts/upgrades. |
 | `ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD` | No, but you need *some* way to get a first admin | — | Password for that same bootstrap account. Must be ≥ 8 characters — a shorter value fails silently (logged, not fatal) and leaves the deployment with no admin at all. |
 
-Both `ARTIFERRIS_DOCKER_TOKEN_REALM` and `PUBLIC_URL` fall back to guessing a
-URL from `BIND_ADDR`, which is only ever correct for a deployment reached
-directly with no reverse proxy and no TLS termination — set them
-explicitly in every other case.
+`PUBLIC_URL` falls back to guessing a URL from `BIND_ADDR`, which is only
+ever correct for a deployment reached directly with no reverse proxy and no
+TLS termination — set it explicitly in every other case. It also supplies
+the scheme (`http`/`https`) `ARTIFERRIS_DOCKER_TOKEN_REALM`'s automatic
+per-request derivation uses.
 
 **Not environment-configurable today** (hardcoded): the metrics-snapshot
 sweep (hourly) and the retention-policy sweep (every 6 hours). The Docker

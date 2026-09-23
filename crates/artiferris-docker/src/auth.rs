@@ -30,10 +30,10 @@ async fn scope_hint(parts: &mut Parts, state: &DockerState) -> Option<String> {
 }
 
 /// Always challenges with the combined `pull,push` scope — `docker push` relies on this for its first, unauthenticated request. Safe: it's an upper bound, narrowed later by `IssueDockerAccessTokenUseCase`.
-fn unauthorized(state: &DockerState, scope: Option<&str>) -> Response {
+fn unauthorized(state: &DockerState, host: &str, scope: Option<&str>) -> Response {
     (
         StatusCode::UNAUTHORIZED,
-        [(axum::http::header::WWW_AUTHENTICATE, www_authenticate_challenge(state, scope))],
+        [(axum::http::header::WWW_AUTHENTICATE, www_authenticate_challenge(state, host, scope))],
         Json(json!({ "errors": [{ "code": "UNAUTHORIZED", "message": "authentication required" }] })),
     )
         .into_response()
@@ -45,10 +45,11 @@ impl FromRequestParts<DockerState> for DockerAuthUser {
     async fn from_request_parts(parts: &mut Parts, state: &DockerState) -> Result<Self, Self::Rejection> {
         // Must run before the Bearer extraction below consumes `parts`.
         let scope = scope_hint(parts, state).await;
+        let host = state.host_header(&parts.headers).to_string();
 
         let TypedHeader(Authorization(bearer)) =
-            parts.extract::<TypedHeader<Authorization<Bearer>>>().await.map_err(|_| unauthorized(state, scope.as_deref()))?;
-        let claims = state.token_issuer.verify(bearer.token()).map_err(|_| unauthorized(state, scope.as_deref()))?;
+            parts.extract::<TypedHeader<Authorization<Bearer>>>().await.map_err(|_| unauthorized(state, &host, scope.as_deref()))?;
+        let claims = state.token_issuer.verify(bearer.token()).map_err(|_| unauthorized(state, &host, scope.as_deref()))?;
         Ok(DockerAuthUser {
             user_id: claims.user_id,
             organization_id: claims.organization_id,

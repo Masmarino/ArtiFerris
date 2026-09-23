@@ -27,9 +27,10 @@ async fn check_version(State(state): State<DockerState>, headers: axum::http::He
     if authenticated {
         (StatusCode::OK, [(HeaderName::from_static("docker-distribution-api-version"), "registry/2.0")], Json(json!({}))).into_response()
     } else {
+        let host = state.host_header(&headers);
         (
             StatusCode::UNAUTHORIZED,
-            [(axum::http::header::WWW_AUTHENTICATE, www_authenticate_challenge(&state, None))],
+            [(axum::http::header::WWW_AUTHENTICATE, www_authenticate_challenge(&state, host, None))],
             Json(json!({ "errors": [{ "code": "UNAUTHORIZED", "message": "authentication required" }] })),
         )
             .into_response()
@@ -64,15 +65,17 @@ fn merge_scopes(raw_scopes: &[String]) -> Option<String> {
 
 async fn issue_token(
     State(state): State<DockerState>,
+    headers: axum::http::HeaderMap,
     resolved_org: ResolvedOrganization,
     RawQuery(raw_query): RawQuery,
     basic_auth: Option<TypedHeader<Authorization<Basic>>>,
 ) -> Response {
     let merged_scope = merge_scopes(&scope_values(raw_query.as_deref()));
     let Some(TypedHeader(Authorization(basic))) = basic_auth else {
+        let host = state.host_header(&headers);
         return (
             StatusCode::UNAUTHORIZED,
-            [(axum::http::header::WWW_AUTHENTICATE, www_authenticate_challenge(&state, merged_scope.as_deref()))],
+            [(axum::http::header::WWW_AUTHENTICATE, www_authenticate_challenge(&state, host, merged_scope.as_deref()))],
             Json(json!({ "errors": [{ "code": "UNAUTHORIZED", "message": "missing Basic credentials" }] })),
         )
             .into_response();
@@ -113,6 +116,28 @@ mod tests {
         let challenge = response.headers().get(axum::http::header::WWW_AUTHENTICATE).unwrap().to_str().unwrap();
         assert!(challenge.starts_with("Bearer "));
         assert!(challenge.contains("realm="));
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn the_challenge_realm_matches_the_organization_subdomain_the_client_actually_pushed_to(pool: sqlx::PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let app = crate::router(test_state(pool, dir.path()).await);
+
+        let acme_response = app
+            .clone()
+            .oneshot(Request::builder().uri("/").header(axum::http::header::HOST, "acme.artiferris.localhost").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let acme_challenge = acme_response.headers().get(axum::http::header::WWW_AUTHENTICATE).unwrap().to_str().unwrap().to_string();
+
+        let other_response = app
+            .oneshot(Request::builder().uri("/").header(axum::http::header::HOST, "other.artiferris.localhost").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let other_challenge = other_response.headers().get(axum::http::header::WWW_AUTHENTICATE).unwrap().to_str().unwrap().to_string();
+
+        assert!(acme_challenge.contains(r#"realm="http://acme.artiferris.localhost/v2/token""#), "got: {acme_challenge}");
+        assert!(other_challenge.contains(r#"realm="http://other.artiferris.localhost/v2/token""#), "got: {other_challenge}");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

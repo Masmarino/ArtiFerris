@@ -141,11 +141,12 @@ docker compose up -d --build
 ```
 
 Voir la [référence de configuration](#référence-de-configuration)
-ci-dessous pour chaque variable câblée par `docker-compose.yml`, et en
-particulier `ARTIFERRIS_DOCKER_TOKEN_REALM` — le protocole Docker ne
-fonctionnera pour aucun client extérieur au conteneur tant que cette
-variable ne pointe pas vers une URL réellement joignable par le CLI
-`docker`.
+ci-dessous pour chaque variable câblée par `docker-compose.yml`. Le realm de
+jeton du protocole Docker (`ARTIFERRIS_DOCKER_TOKEN_REALM`) est dérivé
+automatiquement par requête et ne nécessite normalement aucune
+configuration — à définir explicitement uniquement si ce déploiement se
+trouve derrière quelque chose qui ne transmet pas fidèlement le `Host` et le
+schéma d'origine.
 
 > Déploiement Kubernetes/Helm : à documenter ultérieurement.
 
@@ -166,15 +167,16 @@ pour surcharger les valeurs par défaut.
 | `STATIC_DIR` | Non | `./static` | Chemin des assets frontend compilés servis pour les routes non-API. Pertinent uniquement si vous n'utilisez pas l'image Docker fournie. |
 | `RUST_LOG` | Non | — (aucun log sans elle) | Filtre `tracing_subscriber`, ex. `info` ou `artiferris_api=debug,info`. Sans elle, le conteneur ne log quasiment rien. |
 | `CORS_ALLOWED_ORIGIN` | Non | permissif (toute origine) | Restreint le CORS à une seule origine. À laisser vide en dev local (`ng serve` sur un port différent du backend) ou quand le frontend est servi depuis la même origine que l'API (configuration par défaut de l'image fournie). |
-| `ARTIFERRIS_DOCKER_TOKEN_REALM` | En pratique oui, pour Docker | dérivée de `BIND_ADDR` (`http://0.0.0.0:8080/v2/token` — injoignable depuis l'extérieur du conteneur) | URL absolue du endpoint `/v2/token` de ce déploiement, intégrée dans chaque challenge `WWW-Authenticate`. Le CLI Docker résout dessus les requêtes de token pour `login`/`push`/`pull` — une mauvaise valeur casse tout le flux d'authentification Docker pour les clients réels. Doit être en `https://` pour tout hôte non-localhost (Docker refuse le `http://` simple sinon). |
+| `ARTIFERRIS_DOCKER_TOKEN_REALM` | Non | dérivée par requête à partir du `Host` de cette requête et du schéma de `PUBLIC_URL` | Surcharge l'URL de realm intégrée dans chaque challenge `WWW-Authenticate`, sur laquelle le CLI Docker résout les requêtes de token pour `login`/`push`/`pull` — normalement dérivée automatiquement, donc correcte quel que soit le nombre de sous-domaines d'organisation servis par ce déploiement. À définir uniquement quand le `Host`/schéma de la requête n'est pas fiable (ex. un intermédiaire qui ne les transmet pas fidèlement) ; le faire fige alors tous les clients sur ce seul realm fixe, ce qui casse l'authentification pour tout sous-domaine d'organisation autre que celui vers lequel cet hôte résout. Doit être en `https://` pour tout hôte non-localhost (Docker refuse le `http://` simple sinon). |
 | `PUBLIC_URL` | En pratique oui, dès qu'on utilise les invitations | dérivée de `BIND_ADDR` (même souci de non-joignabilité) | URL de base sur laquelle sont construits les liens d'invitation de compte. Doit être joignable depuis le client mail du destinataire. |
 | `ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME` | Non | — | Nom d'utilisateur du compte créé automatiquement **uniquement si la table `users` est vide**. Peut rester défini au fil des redémarrages/mises à jour. |
 | `ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD` | Non, mais il faut *un* moyen d'obtenir un premier admin | — | Mot de passe de ce même compte bootstrap. Doit faire ≥ 8 caractères — une valeur plus courte échoue silencieusement (loggé, non fatal) et laisse le déploiement sans admin. |
 
-`ARTIFERRIS_DOCKER_TOKEN_REALM` et `PUBLIC_URL` retombent tous deux sur une
-URL devinée à partir de `BIND_ADDR`, ce qui n'est correct que pour un
-déploiement exposé directement, sans reverse proxy ni terminaison TLS —
-à définir explicitement dans tous les autres cas.
+`PUBLIC_URL` retombe sur une URL devinée à partir de `BIND_ADDR`, ce qui
+n'est correct que pour un déploiement exposé directement, sans reverse proxy
+ni terminaison TLS — à définir explicitement dans tous les autres cas. Elle
+fournit aussi le schéma (`http`/`https`) qu'utilise la dérivation
+automatique par requête d'`ARTIFERRIS_DOCKER_TOKEN_REALM`.
 
 **Non configurable via l'environnement aujourd'hui** (codé en dur) : la
 purge des métriques (horaire) et la purge de rétention (toutes les

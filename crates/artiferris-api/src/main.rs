@@ -38,7 +38,7 @@ async fn main() {
         state,
         config.cors_allowed_origin.clone(),
         config.jwt_secret.clone(),
-        config.docker_token_realm.clone(),
+        config.docker_token_realm_override.clone(),
         config.public_url.clone(),
     );
 
@@ -124,12 +124,18 @@ fn spawn_retention_sweep_timer(state: &AppState) {
 
 /// Fully permissive CORS — the default that keeps a separately served Angular dev server working.
 pub fn build_router(state: AppState) -> Router {
-    build_router_with_cors(state, None, "insecure-dev-only-jwt-secret".to_string(), "http://localhost/v2/token".to_string(), "http://localhost:4200".to_string())
+    build_router_with_cors(state, None, "insecure-dev-only-jwt-secret".to_string(), None, "http://localhost:4200".to_string())
 }
 
-pub fn build_router_with_cors(state: AppState, cors_allowed_origin: Option<String>, jwt_secret: String, docker_token_realm: String, public_url: String) -> Router {
+pub fn build_router_with_cors(
+    state: AppState,
+    cors_allowed_origin: Option<String>,
+    jwt_secret: String,
+    docker_token_realm_override: Option<String>,
+    public_url: String,
+) -> Router {
     let npm_state = build_npm_state(&state);
-    let docker_state = build_docker_state(&state, &jwt_secret, &docker_token_realm);
+    let docker_state = build_docker_state(&state, &jwt_secret, docker_token_realm_override, &public_url);
     // Scoped to this JSON surface only — /npm and /v2 already serve compressed binary content.
     let json_api_routes = Router::new()
         .route("/healthz", get(|| async { "ok" }))
@@ -233,8 +239,8 @@ fn build_npm_state(state: &AppState) -> artiferris_npm::NpmState {
     }
 }
 
-/// Reuses `AppState`'s adapters; `jwt_secret`/`token_realm` arrive as explicit params since `AppState` doesn't store them.
-fn build_docker_state(state: &AppState, jwt_secret: &str, token_realm: &str) -> artiferris_docker::DockerState {
+/// Reuses `AppState`'s adapters; `jwt_secret`/`docker_token_realm_override`/`public_url` arrive as explicit params since `AppState` doesn't store them.
+fn build_docker_state(state: &AppState, jwt_secret: &str, docker_token_realm_override: Option<String>, public_url: &str) -> artiferris_docker::DockerState {
     let remote: Arc<dyn artiferris_domain::docker_remote::RemoteDockerRegistryPort> =
         Arc::new(artiferris_infrastructure::http_remote_docker_registry::HttpRemoteDockerRegistry::new());
     let token_issuer: Arc<dyn artiferris_domain::docker_registry::DockerTokenIssuerPort> =
@@ -247,7 +253,9 @@ fn build_docker_state(state: &AppState, jwt_secret: &str, token_realm: &str) -> 
         organizations: state.organizations.clone(),
         artiferris_base_domain: state.artiferris_base_domain.clone(),
         token_issuer: token_issuer.clone(),
-        token_realm: token_realm.to_string(),
+        token_realm_override: docker_token_realm_override,
+        // Same source as the HSTS check below.
+        public_scheme: if public_url.starts_with("https://") { "https".to_string() } else { "http".to_string() },
         token_service: "artiferris".to_string(),
         issue_access_token: Arc::new(artiferris_application::use_cases::docker_access_token::IssueDockerAccessTokenUseCase::new(
             state.api_tokens.clone(),
@@ -347,7 +355,7 @@ mod tests {
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
-            docker_token_realm: "http://localhost/v2/token".to_string(),
+            docker_token_realm_override: None,
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),
@@ -369,7 +377,7 @@ mod tests {
     }
 
     fn router_with(pool: sqlx::PgPool, config: &Config, cors_allowed_origin: Option<String>) -> Router {
-        build_router_with_cors(AppState::build(pool, config), cors_allowed_origin, config.jwt_secret.clone(), config.docker_token_realm.clone(), config.public_url.clone())
+        build_router_with_cors(AppState::build(pool, config), cors_allowed_origin, config.jwt_secret.clone(), config.docker_token_realm_override.clone(), config.public_url.clone())
     }
 
     #[test]
@@ -473,7 +481,7 @@ mod tests {
     #[sqlx::test]
     async fn hsts_is_absent_when_public_url_is_plain_http(pool: sqlx::PgPool) {
         let config = test_config();
-        let app = build_router_with_cors(AppState::build(pool, &config), None, config.jwt_secret.clone(), config.docker_token_realm.clone(), "http://artiferris.example".to_string());
+        let app = build_router_with_cors(AppState::build(pool, &config), None, config.jwt_secret.clone(), config.docker_token_realm_override.clone(), "http://artiferris.example".to_string());
 
         let response = app.oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap()).await.unwrap();
 
@@ -483,7 +491,7 @@ mod tests {
     #[sqlx::test]
     async fn hsts_is_present_when_public_url_is_https(pool: sqlx::PgPool) {
         let config = test_config();
-        let app = build_router_with_cors(AppState::build(pool, &config), None, config.jwt_secret.clone(), config.docker_token_realm.clone(), "https://artiferris.example".to_string());
+        let app = build_router_with_cors(AppState::build(pool, &config), None, config.jwt_secret.clone(), config.docker_token_realm_override.clone(), "https://artiferris.example".to_string());
 
         let response = app.oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap()).await.unwrap();
 
