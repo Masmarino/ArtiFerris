@@ -64,8 +64,10 @@ spec:
                   key: ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD
             - name: ARTIFERRIS_BASE_DOMAIN
               value: {{ .Values.artiferris.baseDomain | quote }}
+            {{- if .Values.artiferris.dockerTokenRealmOverride }}
             - name: ARTIFERRIS_DOCKER_TOKEN_REALM
-              value: {{ include "artiferris.dockerTokenRealm" . | quote }}
+              value: {{ .Values.artiferris.dockerTokenRealmOverride | quote }}
+            {{- end }}
             - name: PUBLIC_URL
               value: {{ include "artiferris.publicUrl" . | quote }}
             - name: STORAGE_ROOT

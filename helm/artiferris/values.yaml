@@ -30,7 +30,11 @@ artiferris:
   baseDomain: artiferris.pro
   bootstrapAdminUsername: admin
   rustLog: info
-  # dockerTokenRealm defaults to https://<ingress.host>/v2/token — see _helpers.tpl
+  # Leave unset — artiferris-api derives the Docker token realm per request from Host and
+  # PUBLIC_URL's scheme, correct for every organization subdomain under wildcardHost. Setting
+  # this pins every client to one fixed realm instead, which breaks Docker auth for every
+  # subdomain except whichever one it points to.
+  dockerTokenRealmOverride: ""
 
 postgres:
   image: postgres:18-alpine3.24@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
