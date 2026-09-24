@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_blobs SET reference_count = 0, created_at = now() - interval '100 hours' WHERE digest = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "10b4febce59d44b748722c2a23398c010d37548baa018df643898094bfe8ebb4"
+}

@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT manifest_id FROM docker_tags WHERE package_repository_id = $1 AND image_name = $2 AND tag = $3 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "manifest_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "docker_tags",
+            "name": "manifest_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "33a9ecfe8d24d50aa94f598bc544a9ffaf3743a7962571f3fabd0fc02a48a3aa"
+}

@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http'
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite'
 import { expect, userEvent, waitFor, within } from 'storybook/test'
 import { of, throwError } from 'rxjs'
@@ -69,7 +70,11 @@ export const UploadFailed: Story = {
         {
           provide: BrandingService,
           useValue: fakeBranding({
-            uploadLogo: () => throwError(() => ({ error: { error: 'format non supporté' } })),
+            uploadLogo: () =>
+              throwError(
+                () =>
+                  new HttpErrorResponse({ status: 400, error: { error: 'format non supporté' } }),
+              ),
           }),
         },
       ],

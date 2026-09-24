@@ -1,0 +1,146 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, organization_id, name, format, repo_type, remote_url, remote_username, remote_password, quota_bytes, retention_keep_last_n, is_public FROM package_repository_projections WHERE deleted_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "organization_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "format",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "format"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "repo_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "repo_type"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "remote_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "remote_url"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "remote_username",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "remote_username"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "remote_password",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "remote_password"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "quota_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "quota_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "retention_keep_last_n",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "retention_keep_last_n"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "is_public",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "package_repository_projections",
+            "name": "is_public"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "99c40701f89328e7701985c454b5d3a82f6e2e373299d999edc37d5975af9725"
+}

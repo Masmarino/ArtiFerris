@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use artiferris_domain::audit::AdminAuditRecord;
 use artiferris_domain::branding::{BrandingAsset, BrandingPort};
 use uuid::Uuid;
 
@@ -73,9 +74,9 @@ impl SetBrandingLogoUseCase {
         Self { branding }
     }
 
-    pub async fn execute(&self, organization_id: Uuid, bytes: Vec<u8>) -> Result<(), ApplicationError> {
+    pub async fn execute(&self, organization_id: Uuid, bytes: Vec<u8>, audit: Option<&AdminAuditRecord>) -> Result<(), ApplicationError> {
         let asset = validate_asset(bytes, false, "PNG ou JPEG uniquement")?;
-        self.branding.set_logo(organization_id, &asset).await?;
+        self.branding.set_logo(organization_id, &asset, audit).await?;
         Ok(())
     }
 }
@@ -89,8 +90,8 @@ impl ClearBrandingLogoUseCase {
         Self { branding }
     }
 
-    pub async fn execute(&self, organization_id: Uuid) -> Result<(), ApplicationError> {
-        Ok(self.branding.clear_logo(organization_id).await?)
+    pub async fn execute(&self, organization_id: Uuid, audit: Option<&AdminAuditRecord>) -> Result<(), ApplicationError> {
+        Ok(self.branding.clear_logo(organization_id, audit).await?)
     }
 }
 
@@ -103,9 +104,9 @@ impl SetBrandingFaviconUseCase {
         Self { branding }
     }
 
-    pub async fn execute(&self, organization_id: Uuid, bytes: Vec<u8>) -> Result<(), ApplicationError> {
+    pub async fn execute(&self, organization_id: Uuid, bytes: Vec<u8>, audit: Option<&AdminAuditRecord>) -> Result<(), ApplicationError> {
         let asset = validate_asset(bytes, true, "PNG, JPEG ou ICO uniquement")?;
-        self.branding.set_favicon(organization_id, &asset).await?;
+        self.branding.set_favicon(organization_id, &asset, audit).await?;
         Ok(())
     }
 }
@@ -119,8 +120,8 @@ impl ClearBrandingFaviconUseCase {
         Self { branding }
     }
 
-    pub async fn execute(&self, organization_id: Uuid) -> Result<(), ApplicationError> {
-        Ok(self.branding.clear_favicon(organization_id).await?)
+    pub async fn execute(&self, organization_id: Uuid, audit: Option<&AdminAuditRecord>) -> Result<(), ApplicationError> {
+        Ok(self.branding.clear_favicon(organization_id, audit).await?)
     }
 }
 
@@ -147,19 +148,19 @@ mod tests {
         async fn get(&self, _organization_id: Uuid) -> Result<BrandingSettings, DomainError> {
             Ok(self.settings.lock().unwrap().clone())
         }
-        async fn set_logo(&self, _organization_id: Uuid, asset: &BrandingAsset) -> Result<(), DomainError> {
+        async fn set_logo(&self, _organization_id: Uuid, asset: &BrandingAsset, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             self.settings.lock().unwrap().logo = Some(asset.clone());
             Ok(())
         }
-        async fn clear_logo(&self, _organization_id: Uuid) -> Result<(), DomainError> {
+        async fn clear_logo(&self, _organization_id: Uuid, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             self.settings.lock().unwrap().logo = None;
             Ok(())
         }
-        async fn set_favicon(&self, _organization_id: Uuid, asset: &BrandingAsset) -> Result<(), DomainError> {
+        async fn set_favicon(&self, _organization_id: Uuid, asset: &BrandingAsset, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             self.settings.lock().unwrap().favicon = Some(asset.clone());
             Ok(())
         }
-        async fn clear_favicon(&self, _organization_id: Uuid) -> Result<(), DomainError> {
+        async fn clear_favicon(&self, _organization_id: Uuid, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             self.settings.lock().unwrap().favicon = None;
             Ok(())
         }
@@ -204,7 +205,7 @@ mod tests {
     async fn setting_a_logo_then_getting_it_round_trips() {
         let branding = Arc::new(FakeBranding::new());
         let set = SetBrandingLogoUseCase::new(branding.clone());
-        set.execute(test_org_id(), png_bytes()).await.unwrap();
+        set.execute(test_org_id(), png_bytes(), None).await.unwrap();
 
         let settings = GetBrandingUseCase::new(branding, test_defaults()).execute(test_org_id()).await.unwrap();
         assert_eq!(settings.logo.content_type, "image/png");
@@ -213,7 +214,7 @@ mod tests {
     #[tokio::test]
     async fn a_jpeg_logo_is_accepted_and_sniffed_correctly() {
         let branding = Arc::new(FakeBranding::new());
-        SetBrandingLogoUseCase::new(branding.clone()).execute(test_org_id(), jpeg_bytes()).await.unwrap();
+        SetBrandingLogoUseCase::new(branding.clone()).execute(test_org_id(), jpeg_bytes(), None).await.unwrap();
 
         let settings = GetBrandingUseCase::new(branding, test_defaults()).execute(test_org_id()).await.unwrap();
         assert_eq!(settings.logo.content_type, "image/jpeg");
@@ -230,14 +231,14 @@ mod tests {
     #[tokio::test]
     async fn an_ico_logo_is_rejected() {
         let branding = Arc::new(FakeBranding::new());
-        let err = SetBrandingLogoUseCase::new(branding).execute(test_org_id(), ico_bytes()).await.unwrap_err();
+        let err = SetBrandingLogoUseCase::new(branding).execute(test_org_id(), ico_bytes(), None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidBrandingAsset(_)));
     }
 
     #[tokio::test]
     async fn an_ico_favicon_is_accepted() {
         let branding = Arc::new(FakeBranding::new());
-        SetBrandingFaviconUseCase::new(branding.clone()).execute(test_org_id(), ico_bytes()).await.unwrap();
+        SetBrandingFaviconUseCase::new(branding.clone()).execute(test_org_id(), ico_bytes(), None).await.unwrap();
 
         let settings = GetBrandingUseCase::new(branding, test_defaults()).execute(test_org_id()).await.unwrap();
         assert_eq!(settings.favicon.content_type, "image/x-icon");
@@ -246,7 +247,7 @@ mod tests {
     #[tokio::test]
     async fn an_unrecognized_format_is_rejected() {
         let branding = Arc::new(FakeBranding::new());
-        let err = SetBrandingLogoUseCase::new(branding).execute(test_org_id(), b"not an image".to_vec()).await.unwrap_err();
+        let err = SetBrandingLogoUseCase::new(branding).execute(test_org_id(), b"not an image".to_vec(), None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidBrandingAsset(_)));
     }
 
@@ -255,24 +256,24 @@ mod tests {
         let mut bytes = PNG_MAGIC.to_vec();
         bytes.resize(MAX_ASSET_BYTES + 1, 0);
         let branding = Arc::new(FakeBranding::new());
-        let err = SetBrandingLogoUseCase::new(branding).execute(test_org_id(), bytes).await.unwrap_err();
+        let err = SetBrandingLogoUseCase::new(branding).execute(test_org_id(), bytes, None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidBrandingAsset(_)));
     }
 
     #[tokio::test]
     async fn an_empty_upload_is_rejected() {
         let branding = Arc::new(FakeBranding::new());
-        let err = SetBrandingLogoUseCase::new(branding).execute(test_org_id(), Vec::new()).await.unwrap_err();
+        let err = SetBrandingLogoUseCase::new(branding).execute(test_org_id(), Vec::new(), None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidBrandingAsset(_)));
     }
 
     #[tokio::test]
     async fn clearing_the_logo_leaves_the_favicon_alone() {
         let branding = Arc::new(FakeBranding::new());
-        SetBrandingLogoUseCase::new(branding.clone()).execute(test_org_id(), png_bytes()).await.unwrap();
-        SetBrandingFaviconUseCase::new(branding.clone()).execute(test_org_id(), ico_bytes()).await.unwrap();
+        SetBrandingLogoUseCase::new(branding.clone()).execute(test_org_id(), png_bytes(), None).await.unwrap();
+        SetBrandingFaviconUseCase::new(branding.clone()).execute(test_org_id(), ico_bytes(), None).await.unwrap();
 
-        ClearBrandingLogoUseCase::new(branding.clone()).execute(test_org_id()).await.unwrap();
+        ClearBrandingLogoUseCase::new(branding.clone()).execute(test_org_id(), None).await.unwrap();
 
         let settings = GetBrandingUseCase::new(branding, test_defaults()).execute(test_org_id()).await.unwrap();
         assert_eq!(settings.logo.content_type, "image/default-logo", "cleared logo must fall back to the compiled-in default");
@@ -282,10 +283,10 @@ mod tests {
     #[tokio::test]
     async fn clearing_the_favicon_leaves_the_logo_alone() {
         let branding = Arc::new(FakeBranding::new());
-        SetBrandingLogoUseCase::new(branding.clone()).execute(test_org_id(), png_bytes()).await.unwrap();
-        SetBrandingFaviconUseCase::new(branding.clone()).execute(test_org_id(), ico_bytes()).await.unwrap();
+        SetBrandingLogoUseCase::new(branding.clone()).execute(test_org_id(), png_bytes(), None).await.unwrap();
+        SetBrandingFaviconUseCase::new(branding.clone()).execute(test_org_id(), ico_bytes(), None).await.unwrap();
 
-        ClearBrandingFaviconUseCase::new(branding.clone()).execute(test_org_id()).await.unwrap();
+        ClearBrandingFaviconUseCase::new(branding.clone()).execute(test_org_id(), None).await.unwrap();
 
         let settings = GetBrandingUseCase::new(branding, test_defaults()).execute(test_org_id()).await.unwrap();
         assert_eq!(settings.logo.content_type, "image/png");

@@ -36,7 +36,7 @@ impl CreatePackageRepositoryUseCase {
             return Err(ApplicationError::RepositoryNameTaken);
         }
         let repository_id = Uuid::new_v4();
-        let event = PackageRepository::create(repository_id, organization_id, name, format, repo_type, remote_url, remote_username, remote_password);
+        let event = PackageRepository::create(repository_id, organization_id, name, format, repo_type, remote_url, remote_username, remote_password)?;
         self.events.append(repository_id, 0, vec![event], actor_id).await?;
         Ok(repository_id)
     }
@@ -187,6 +187,24 @@ impl SetRetentionPolicyUseCase {
     }
 }
 
+pub struct SetRepositoryVisibilityUseCase {
+    events: Arc<dyn PackageRepositoryEventStorePort>,
+}
+
+impl SetRepositoryVisibilityUseCase {
+    pub fn new(events: Arc<dyn PackageRepositoryEventStorePort>) -> Self {
+        Self { events }
+    }
+
+    pub async fn execute(&self, repository_id: Uuid, is_public: bool, actor_id: Uuid) -> Result<(), ApplicationError> {
+        let (version, past_events) = self.events.load(repository_id).await?;
+        let repo = PackageRepository::from_events(&past_events);
+        let event = repo.set_visibility(is_public)?;
+        self.events.append(repository_id, version, vec![event], actor_id).await?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,6 +253,7 @@ mod tests {
                 group_members: repo.group_members.into_iter().map(|(id, _)| id).collect(),
                 quota_bytes: repo.quota_bytes,
                 retention_keep_last_n: repo.retention_keep_last_n,
+                is_public: repo.is_public,
             })
         }
     }
@@ -285,6 +304,11 @@ mod tests {
             let streams = self.streams.lock().unwrap();
             Ok(streams.iter().filter_map(|(id, events)| Self::summarize(*id, events)).collect())
         }
+
+        async fn list_by_organization(&self, organization_id: Uuid) -> Result<Vec<PackageRepositorySummary>, EventStoreError> {
+            let streams = self.streams.lock().unwrap();
+            Ok(streams.iter().filter_map(|(id, events)| Self::summarize(*id, events)).filter(|s| s.organization_id == organization_id).collect())
+        }
     }
 
     #[tokio::test]
@@ -297,6 +321,32 @@ mod tests {
             .unwrap();
         let summary = store.find_by_id(id).await.unwrap().unwrap();
         assert_eq!(summary.name, "my-npm-repo");
+    }
+
+    #[tokio::test]
+    async fn rejects_a_name_using_the_reserved_prefix() {
+        let store = Arc::new(FakePackageRepositoryStore::new());
+        let use_case = CreatePackageRepositoryUseCase::new(store.clone(), store.clone());
+        let err = use_case
+            .execute(ORG_ID, "artiferris-npm", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, Uuid::new_v4())
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ApplicationError::Domain(artiferris_domain::error::DomainError::ReservedName(_))));
+    }
+
+    #[tokio::test]
+    async fn rejects_renaming_onto_the_reserved_prefix() {
+        let store = Arc::new(FakePackageRepositoryStore::new());
+        let create = CreatePackageRepositoryUseCase::new(store.clone(), store.clone());
+        let id = create
+            .execute(ORG_ID, "fine-name", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, Uuid::new_v4())
+            .await
+            .unwrap();
+
+        let err = RenamePackageRepositoryUseCase::new(store.clone(), store.clone()).execute(id, "artiferris-docker", Uuid::new_v4()).await.unwrap_err();
+
+        assert!(matches!(err, ApplicationError::Domain(artiferris_domain::error::DomainError::ReservedName(_))));
+        assert_eq!(store.find_by_id(id).await.unwrap().unwrap().name, "fine-name");
     }
 
     #[tokio::test]
@@ -581,5 +631,20 @@ mod tests {
         let err = set_retention.execute(id, Some(0), Uuid::new_v4()).await.unwrap_err();
 
         assert!(matches!(err, ApplicationError::Domain(DomainError::Validation(_))), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn setting_visibility_appends_a_visibility_changed_event() {
+        let store = Arc::new(FakePackageRepositoryStore::new());
+        let create = CreatePackageRepositoryUseCase::new(store.clone(), store.clone());
+        let id = create.execute(ORG_ID, "visibility-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, Uuid::new_v4()).await.unwrap();
+        assert!(!store.find_by_id(id).await.unwrap().unwrap().is_public);
+
+        let set_visibility = SetRepositoryVisibilityUseCase::new(store.clone());
+        set_visibility.execute(id, true, Uuid::new_v4()).await.unwrap();
+        assert!(store.find_by_id(id).await.unwrap().unwrap().is_public);
+
+        set_visibility.execute(id, false, Uuid::new_v4()).await.unwrap();
+        assert!(!store.find_by_id(id).await.unwrap().unwrap().is_public);
     }
 }

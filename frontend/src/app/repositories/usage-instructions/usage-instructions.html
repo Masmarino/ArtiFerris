@@ -8,21 +8,21 @@ echo &lt;votre-token&gt; | docker login {{
     @if (isHosted()) {
       <p>Marquage et publication de l'image :</p>
       <pre>
-docker tag mon-image:latest {{ host }}/{{ repository().name }}/mon-image:latest
-docker push {{ host }}/{{ repository().name }}/mon-image:latest</pre>
+docker tag mon-image:latest {{ host }}/{{ repositoryPath() }}/mon-image:latest
+docker push {{ host }}/{{ repositoryPath() }}/mon-image:latest</pre>
     }
     <p>Récupération d'une image :</p>
-    <pre>docker pull {{ host }}/{{ repository().name }}/&lt;image&gt;:&lt;tag&gt;</pre>
+    <pre>docker pull {{ host }}/{{ repositoryPath() }}/&lt;image&gt;:&lt;tag&gt;</pre>
   } @else {
     <p>Ajoutez ces lignes à votre <code>.npmrc</code> :</p>
     <pre>
-registry={{ origin }}/npm/{{ repository().name }}/
-//{{ host }}/npm/{{ repository().name }}/:_authToken=&lt;votre-token&gt;</pre>
+registry={{ origin }}/npm/{{ repositoryPath() }}/
+//{{ host }}/npm/{{ repositoryPath() }}/:_authToken=&lt;votre-token&gt;</pre>
     @if (isHosted()) {
       <pre>npm publish</pre>
     }
     <pre>npm install</pre>
   }
 
-  <p><a routerLink="/account">Créer un token API</a></p>
+  <p><a [routerLink]="apiTokenLink()">{{ apiTokenLinkLabel() }}</a></p>
 </section>

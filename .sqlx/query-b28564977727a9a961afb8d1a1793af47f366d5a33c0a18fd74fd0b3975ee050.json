@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO npm_packages (id, package_repository_id, name, created_at, updated_at, metadata_fetched_at, cached_metadata) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (package_repository_id, name) DO NOTHING RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "npm_packages",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b28564977727a9a961afb8d1a1793af47f366d5a33c0a18fd74fd0b3975ee050"
+}

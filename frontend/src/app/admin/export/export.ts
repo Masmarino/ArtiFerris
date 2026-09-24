@@ -3,7 +3,10 @@ import { FormsModule } from '@angular/forms'
 import { Button, Card, FileUpload } from '@masmarino/gabarit'
 import { ExportService } from '../application/export.service'
 import { ImportReport } from '../domain/export.entity'
+import { ConfirmService } from '../../shared/confirm.service'
+import { badRequestBlobMessage } from '../../shared/api-error'
 import { downloadBlob } from '../../shared/download'
+import { badRequestMessage } from '../../shared/api-error'
 
 @Component({
   selector: 'app-export',
@@ -15,6 +18,7 @@ import { downloadBlob } from '../../shared/download'
 })
 export class ExportAdmin {
   private readonly exportService = inject(ExportService)
+  private readonly confirmService = inject(ConfirmService)
 
   readonly downloading = signal(false)
   readonly error = signal<string | null>(null)
@@ -33,9 +37,10 @@ export class ExportAdmin {
         this.downloading.set(false)
         downloadBlob(blob, `artiferris-config-${new Date().toISOString().slice(0, 10)}.json`)
       },
-      error: () => {
+      error: async (err) => {
+        const message = await badRequestBlobMessage(err)
         this.downloading.set(false)
-        this.error.set("Échec de l'export de la configuration.")
+        this.error.set(message ?? "Échec de l'export de la configuration.")
       },
     })
   }
@@ -46,16 +51,17 @@ export class ExportAdmin {
     this.importError.set(null)
   }
 
-  importConfiguration(): void {
+  async importConfiguration(): Promise<void> {
     const file = this.selectedFile()[0]
     if (!file || this.importing()) return
-    if (
-      !confirm(
+    const confirmed = await this.confirmService.ask({
+      heading: 'Importer la configuration',
+      message:
         'Importer cette configuration ? Cette opération ne fonctionne que sur une instance vide (sans dépôt, sans autre utilisateur que le vôtre).',
-      )
-    ) {
-      return
-    }
+      confirmLabel: 'Importer',
+      danger: true,
+    })
+    if (!confirmed) return
     this.importing.set(true)
     this.importError.set(null)
     this.importReport.set(null)
@@ -66,7 +72,7 @@ export class ExportAdmin {
       },
       error: (err) => {
         this.importing.set(false)
-        this.importError.set(err?.error?.error ?? "Échec de l'import de la configuration.")
+        this.importError.set(badRequestMessage(err) ?? "Échec de l'import de la configuration.")
       },
     })
   }

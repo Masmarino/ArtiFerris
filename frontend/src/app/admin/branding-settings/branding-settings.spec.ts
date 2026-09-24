@@ -175,6 +175,57 @@ describe('BrandingSettingsAdmin', () => {
     fixture.detectChanges()
   })
 
+  it('drops the previous organization preview and ignores its late answer when switching', () => {
+    const { fixture, httpMock } = render()
+    const logoFor = (org: string) =>
+      httpMock.expectOne(
+        (r) => r.url === '/api/admin/branding/logo' && r.params.get('organization_id') === org,
+      )
+    const faviconFor = (org: string) =>
+      httpMock.expectOne(
+        (r) => r.url === '/api/admin/branding/favicon' && r.params.get('organization_id') === org,
+      )
+    expect(fixture.componentInstance.logoPreviewUrl()).toBe('blob:mock')
+
+    fixture.componentRef.setInput('organizationId', 'org-a')
+    fixture.detectChanges()
+    // The stale preview is gone right away, before any answer for the new organization.
+    expect(fixture.componentInstance.logoPreviewUrl()).toBeNull()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock')
+    const lateLogo = logoFor('org-a')
+    const lateFavicon = faviconFor('org-a')
+
+    fixture.componentRef.setInput('organizationId', 'org-b')
+    fixture.detectChanges()
+    logoFor('org-b').flush(new Blob(['b-logo'], { type: 'image/png' }))
+    faviconFor('org-b').flush(new Blob(['b-favicon'], { type: 'image/png' }))
+    vi.mocked(URL.createObjectURL).mockClear()
+    lateLogo.flush(new Blob(['a-logo'], { type: 'image/png' }))
+    lateFavicon.flush(new Blob(['a-favicon'], { type: 'image/png' }))
+
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('does not throw when a preview fetch fails', () => {
+    const { fixture, httpMock } = render()
+
+    fixture.componentRef.setInput('organizationId', 'org-a')
+    fixture.detectChanges()
+    httpMock
+      .expectOne(
+        (r) => r.url === '/api/admin/branding/logo' && r.params.get('organization_id') === 'org-a',
+      )
+      .flush(null, { status: 500, statusText: 'boom' })
+    httpMock
+      .expectOne(
+        (r) =>
+          r.url === '/api/admin/branding/favicon' && r.params.get('organization_id') === 'org-a',
+      )
+      .flush(null, { status: 500, statusText: 'boom' })
+
+    expect(fixture.componentInstance.logoPreviewUrl()).toBeNull()
+  })
+
   it('explains what each reset button does via a tooltip', () => {
     const { fixture } = render()
 

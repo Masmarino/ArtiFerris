@@ -73,4 +73,14 @@ describe('HttpOrganizationsAdapter', () => {
     req.flush(null)
     httpMock.verify()
   })
+
+  it('keeps a hostile organization id inside its path segment', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.get('a/../../users').subscribe()
+    httpMock.expectOne('/api/organizations/a%2F..%2F..%2Fusers').flush({})
+
+    expect(() => adapter.get('..')).toThrow(RangeError)
+    httpMock.verify()
+  })
 })

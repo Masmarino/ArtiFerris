@@ -13,7 +13,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router'
 import { DatePipe } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { map } from 'rxjs'
-import { Button, Card, Select, Spinner, type SelectOption } from '@masmarino/gabarit'
+import { Button, Card, EmptyState, Select, Spinner } from '@masmarino/gabarit'
 import { RepositoriesService } from '../application/repositories.service'
 import {
   DockerImageDetails,
@@ -21,13 +21,24 @@ import {
   NpmAdvisory,
   NpmDependencyAuditResult,
   NpmPackageDetails,
+  NpmVersionDetail,
   RepositoryFormat,
 } from '../domain/repository.entity'
 import { PageTitleService } from '../../shell/page-title.service'
 import { FormatBytesPipe } from '../../shared/format-bytes.pipe'
-import { bySeverityDesc } from '../../shared/severity'
-import { formatSelectedCount } from '../../shared/format'
+import {
+  bySeverityDesc,
+  DOCKER_SEVERITY_OPTIONS,
+  NPM_SEVERITY_OPTIONS,
+  SeverityClassPipe,
+} from '../../shared/severity'
+import { formatSelectedCount, formatWeeklyDownloads } from '../../shared/format'
+import { ConfirmService } from '../../shared/confirm.service'
 import { ToastService } from '../../shared/toast.service'
+import { overloadMessage } from '../../shared/api-error'
+import { CopyableCommand } from '../../shared/copyable-command/copyable-command'
+import { ReadmeView } from '../../shared/readme-view/readme-view'
+import { dockerPullCommand, npmInstallCommand, preferredTag } from '../domain/install-commands'
 
 const PAGE_SIZE = 20
 
@@ -40,35 +51,6 @@ class ShortDigestPipe implements PipeTransform {
   }
 }
 
-@Pipe({ name: 'severityClass' })
-class SeverityClassPipe implements PipeTransform {
-  transform(severity: string): string {
-    const normalized = severity.toLowerCase()
-    if (normalized === 'critical' || normalized === 'high') {
-      return 'package-detail__severity--high'
-    }
-    if (normalized === 'moderate' || normalized === 'medium') {
-      return 'package-detail__severity--moderate'
-    }
-    return 'package-detail__severity--low'
-  }
-}
-
-const DOCKER_SEVERITY_OPTIONS: SelectOption<string>[] = [
-  { value: 'CRITICAL', label: 'Critique' },
-  { value: 'HIGH', label: 'Élevée' },
-  { value: 'MEDIUM', label: 'Moyenne' },
-  { value: 'LOW', label: 'Faible' },
-  { value: 'UNKNOWN', label: 'Inconnue' },
-]
-
-const NPM_SEVERITY_OPTIONS: SelectOption<string>[] = [
-  { value: 'critical', label: 'Critique' },
-  { value: 'high', label: 'Élevée' },
-  { value: 'moderate', label: 'Moyenne' },
-  { value: 'low', label: 'Faible' },
-]
-
 @Component({
   selector: 'app-package-detail-page',
   standalone: true,
@@ -77,6 +59,9 @@ const NPM_SEVERITY_OPTIONS: SelectOption<string>[] = [
     DatePipe,
     RouterLink,
     Card,
+    CopyableCommand,
+    EmptyState,
+    ReadmeView,
     Select,
     Spinner,
     FormsModule,
@@ -94,6 +79,7 @@ export class PackageDetailPage {
   private readonly repositoriesService = inject(RepositoriesService)
   private readonly pageTitle = inject(PageTitleService)
   private readonly toastService = inject(ToastService)
+  private readonly confirmService = inject(ConfirmService)
 
   // Reactive, not route.snapshot — Angular reuses this component across param changes.
   private readonly routeParams = toSignal(
@@ -153,11 +139,14 @@ export class PackageDetailPage {
   readonly auditLoading = signal(true)
   readonly auditAdvisories = signal<NpmAdvisory[] | null>(null)
   readonly auditFailed = signal(false)
+  /** Set when the failure was the server limiting or shedding load, not npm's database being down. */
+  readonly auditNotice = signal<string | null>(null)
 
   // Reads the last persisted result for `latest` — a fresh scan needs a click.
   readonly depAuditLoading = signal(true)
   readonly depAuditResult = signal<NpmDependencyAuditResult | null>(null)
   readonly depAuditFailed = signal(false)
+  readonly depAuditNotice = signal<string | null>(null)
   readonly depAuditScanning = signal(false)
   readonly depAuditSeverityFilter = signal<string[]>([])
   readonly depAuditPage = signal(1)
@@ -221,19 +210,53 @@ export class PackageDetailPage {
       this.repositoryId = params.repositoryId
       this.format = params.format
       this.name = params.name
+      this.resetPackageState()
       this.reload()
-      this.repositoriesService
-        .get(this.repositoryId)
-        .subscribe((repo) =>
-          this.canWrite.set(repo.my_role === 'write' || repo.my_role === 'admin'),
-        )
+      const stillCurrent = this.stillCurrentGuard()
+      this.repositoriesService.get(this.repositoryId).subscribe({
+        next: (repo) => {
+          if (!stillCurrent()) {
+            return
+          }
+          this.canWrite.set(repo.my_role === 'write' || repo.my_role === 'admin')
+        },
+        error: () => {
+          // canWrite stays false: write buttons are a convenience, the backend re-checks the role.
+        },
+      })
     })
   }
 
-  private reload(): void {
-    this.loading.set(true)
+  // Reused across packages: drop the previous one's data.
+  private resetPackageState(): void {
+    this.npmDetails.set(null)
+    this.dockerDetails.set(null)
+    this.canWrite.set(false)
+    this.versionsPage.set(1)
+    this.tagsPage.set(1)
+    this.auditLoading.set(true)
+    this.auditAdvisories.set(null)
+    this.auditFailed.set(false)
+    this.auditNotice.set(null)
+    this.depAuditLoading.set(true)
+    this.depAuditResult.set(null)
+    this.depAuditFailed.set(false)
+    this.depAuditNotice.set(null)
+    this.depAuditScanning.set(false)
+    this.depAuditSeverityFilter.set([])
+    this.depAuditPage.set(1)
+    this.imageScanLoading.set(true)
+    this.imageScanResult.set(null)
+    this.imageScanFailed.set(false)
+    this.imageScanScanning.set(false)
+    this.imageScanSeverityFilter.set([])
+    this.imageScanPage.set(1)
+  }
+
+  // Drops a response for a package the user has since left.
+  private stillCurrentGuard(): () => boolean {
     const requested = { repositoryId: this.repositoryId, format: this.format, name: this.name }
-    const stillCurrent = () => {
+    return () => {
       const current = this.routeParams()
       return (
         current.repositoryId === requested.repositoryId &&
@@ -241,6 +264,11 @@ export class PackageDetailPage {
         current.name === requested.name
       )
     }
+  }
+
+  private reload(): void {
+    this.loading.set(true)
+    const stillCurrent = this.stillCurrentGuard()
     if (this.format === 'npm') {
       this.repositoriesService.npmPackageDetails(this.repositoryId, this.name).subscribe({
         next: (details) => {
@@ -291,12 +319,21 @@ export class PackageDetailPage {
   private loadAudit(): void {
     this.auditLoading.set(true)
     this.auditFailed.set(false)
+    this.auditNotice.set(null)
+    const stillCurrent = this.stillCurrentGuard()
     this.repositoriesService.npmPackageAudit(this.repositoryId, this.name).subscribe({
       next: (advisories) => {
+        if (!stillCurrent()) {
+          return
+        }
         this.auditAdvisories.set(advisories)
         this.auditLoading.set(false)
       },
-      error: () => {
+      error: (error: unknown) => {
+        if (!stillCurrent()) {
+          return
+        }
+        this.auditNotice.set(overloadMessage(error))
         this.auditFailed.set(true)
         this.auditLoading.set(false)
       },
@@ -312,9 +349,15 @@ export class PackageDetailPage {
     if (latestTag) {
       return latestTag.version
     }
-    return details.versions.length > 0
-      ? details.versions[details.versions.length - 1].version
-      : null
+    // No `latest` tag: the newest published version, whatever order the list comes in.
+    const newest = details.versions.reduce<NpmVersionDetail | null>(
+      (best, candidate) =>
+        best === null || Date.parse(candidate.published_at) > Date.parse(best.published_at)
+          ? candidate
+          : best,
+      null,
+    )
+    return newest?.version ?? null
   })
 
   private loadDependencyAudit(): void {
@@ -325,13 +368,22 @@ export class PackageDetailPage {
     }
     this.depAuditLoading.set(true)
     this.depAuditFailed.set(false)
+    this.depAuditNotice.set(null)
+    const stillCurrent = this.stillCurrentGuard()
     this.repositoriesService.getDependencyAudit(this.repositoryId, this.name, version).subscribe({
       next: (result) => {
+        if (!stillCurrent()) {
+          return
+        }
         this.depAuditResult.set(result)
         this.depAuditPage.set(1)
         this.depAuditLoading.set(false)
       },
-      error: () => {
+      error: (error: unknown) => {
+        if (!stillCurrent()) {
+          return
+        }
+        this.depAuditNotice.set(overloadMessage(error))
         this.depAuditFailed.set(true)
         this.depAuditLoading.set(false)
       },
@@ -345,13 +397,22 @@ export class PackageDetailPage {
     }
     this.depAuditScanning.set(true)
     this.depAuditFailed.set(false)
+    this.depAuditNotice.set(null)
+    const stillCurrent = this.stillCurrentGuard()
     this.repositoriesService.scanDependencyTree(this.repositoryId, this.name, version).subscribe({
       next: (result) => {
+        if (!stillCurrent()) {
+          return
+        }
         this.depAuditResult.set(result)
         this.depAuditPage.set(1)
         this.depAuditScanning.set(false)
       },
-      error: () => {
+      error: (error: unknown) => {
+        if (!stillCurrent()) {
+          return
+        }
+        this.depAuditNotice.set(overloadMessage(error))
         this.depAuditFailed.set(true)
         this.depAuditScanning.set(false)
       },
@@ -369,10 +430,22 @@ export class PackageDetailPage {
 
   readonly scannedTag = computed(() => {
     const details = this.dockerDetails()
-    if (!details || details.tags.length === 0) {
-      return null
-    }
-    return details.tags.find((tag) => tag.tag === 'latest')?.tag ?? details.tags[0].tag
+    return details ? preferredTag(details.tags) : null
+  })
+
+  readonly downloads = computed(() => {
+    const count = (this.npmDetails() ?? this.dockerDetails())?.downloads_7d ?? 0
+    return count > 0 ? formatWeeklyDownloads(count) : null
+  })
+
+  readonly npmCommand = computed(() => {
+    const details = this.npmDetails()
+    return details ? npmInstallCommand(details.name, details.registry_url) : ''
+  })
+
+  readonly dockerCommand = computed(() => {
+    const details = this.dockerDetails()
+    return details ? dockerPullCommand(details.image_reference, this.scannedTag()) : ''
   })
 
   private loadImageScan(): void {
@@ -383,13 +456,20 @@ export class PackageDetailPage {
     }
     this.imageScanLoading.set(true)
     this.imageScanFailed.set(false)
+    const stillCurrent = this.stillCurrentGuard()
     this.repositoriesService.getDockerImageScan(this.repositoryId, this.name, tag).subscribe({
       next: (result) => {
+        if (!stillCurrent()) {
+          return
+        }
         this.imageScanResult.set(result)
         this.imageScanPage.set(1)
         this.imageScanLoading.set(false)
       },
       error: () => {
+        if (!stillCurrent()) {
+          return
+        }
         this.imageScanFailed.set(true)
         this.imageScanLoading.set(false)
       },
@@ -403,13 +483,20 @@ export class PackageDetailPage {
     }
     this.imageScanScanning.set(true)
     this.imageScanFailed.set(false)
+    const stillCurrent = this.stillCurrentGuard()
     this.repositoriesService.scanDockerImage(this.repositoryId, this.name, tag).subscribe({
       next: (result) => {
+        if (!stillCurrent()) {
+          return
+        }
         this.imageScanResult.set(result)
         this.imageScanPage.set(1)
         this.imageScanScanning.set(false)
       },
       error: () => {
+        if (!stillCurrent()) {
+          return
+        }
         this.imageScanFailed.set(true)
         this.imageScanScanning.set(false)
       },
@@ -437,8 +524,14 @@ export class PackageDetailPage {
     this.router.navigate(['/repositories', this.repositoryId])
   }
 
-  deleteVersion(version: string): void {
-    if (!confirm(`Supprimer la version ${version} de ${this.name} ?`)) {
+  async deleteVersion(version: string): Promise<void> {
+    const confirmed = await this.confirmService.ask({
+      heading: 'Supprimer la version',
+      message: `Supprimer la version ${version} de ${this.name} ?`,
+      confirmLabel: 'Supprimer',
+      danger: true,
+    })
+    if (!confirmed) {
       return
     }
     this.repositoriesService
@@ -452,10 +545,15 @@ export class PackageDetailPage {
       })
   }
 
-  deleteWholePackage(): void {
-    if (
-      !confirm(`Supprimer entièrement le package ${this.name} ? Cette action est irréversible.`)
-    ) {
+  async deleteWholePackage(): Promise<void> {
+    const confirmed = await this.confirmService.ask({
+      heading: 'Supprimer le package',
+      message: `Supprimer entièrement le package ${this.name} ? Cette action est irréversible.`,
+      confirmLabel: 'Supprimer',
+      danger: true,
+      typeToConfirm: this.name,
+    })
+    if (!confirmed) {
       return
     }
     this.repositoriesService.deleteNpmPackage(this.repositoryId, this.name).subscribe({
@@ -467,12 +565,14 @@ export class PackageDetailPage {
     })
   }
 
-  deleteTag(tag: string): void {
-    if (
-      !confirm(
-        `Supprimer le tag ${tag} de ${this.name} ? Toute autre étiquette pointant vers la même image sera aussi supprimée.`,
-      )
-    ) {
+  async deleteTag(tag: string): Promise<void> {
+    const confirmed = await this.confirmService.ask({
+      heading: 'Supprimer le tag',
+      message: `Supprimer le tag ${tag} de ${this.name} ? Toute autre étiquette pointant vers la même image sera aussi supprimée.`,
+      confirmLabel: 'Supprimer',
+      danger: true,
+    })
+    if (!confirmed) {
       return
     }
     this.repositoriesService.deleteDockerTag(this.repositoryId, this.name, tag).subscribe({
@@ -484,8 +584,15 @@ export class PackageDetailPage {
     })
   }
 
-  deleteWholeImage(): void {
-    if (!confirm(`Supprimer entièrement l'image ${this.name} ? Cette action est irréversible.`)) {
+  async deleteWholeImage(): Promise<void> {
+    const confirmed = await this.confirmService.ask({
+      heading: "Supprimer l'image",
+      message: `Supprimer entièrement l'image ${this.name} ? Cette action est irréversible.`,
+      confirmLabel: 'Supprimer',
+      danger: true,
+      typeToConfirm: this.name,
+    })
+    if (!confirmed) {
       return
     }
     this.repositoriesService.deleteDockerImage(this.repositoryId, this.name).subscribe({

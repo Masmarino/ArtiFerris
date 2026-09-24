@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.image_name, m.digest FROM docker_manifests m WHERE m.package_repository_id = $1 AND COALESCE(m.untagged_since, m.created_at) < $2 AND NOT EXISTS (SELECT 1 FROM docker_tags t WHERE t.manifest_id = m.id) AND NOT EXISTS ( SELECT 1 FROM docker_manifest_list_members lm JOIN docker_manifests l ON l.id = lm.list_manifest_id WHERE l.package_repository_id = m.package_repository_id AND l.image_name = m.image_name AND lm.member_digest = m.digest ) ORDER BY m.created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "image_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_manifests",
+            "name": "image_name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "digest",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_manifests",
+            "name": "digest"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "786aeafab1fa4e43544670b92f2aceb0eaed4c6fa4bd89ac4e9872b407d55ba8"
+}

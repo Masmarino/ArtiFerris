@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT dmb.blob_digest FROM docker_manifest_blobs dmb JOIN docker_manifests dm ON dm.id = dmb.manifest_id WHERE dm.package_repository_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "blob_digest",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_manifest_blobs",
+            "name": "blob_digest"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1d68ba991bd712940ee754b956a8c650498cc2bdfae1afe3b94e1ee84c349a75"
+}

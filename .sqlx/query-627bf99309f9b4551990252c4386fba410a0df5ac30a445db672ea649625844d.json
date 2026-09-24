@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM docker_blobs WHERE digest = ANY($1) AND reference_count <= 0 AND NOT EXISTS (SELECT 1 FROM docker_repository_blobs drb WHERE drb.blob_digest = docker_blobs.digest) RETURNING digest",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "digest",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_blobs",
+            "name": "digest"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "627bf99309f9b4551990252c4386fba410a0df5ac30a445db672ea649625844d"
+}

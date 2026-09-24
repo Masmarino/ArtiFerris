@@ -14,6 +14,31 @@ is covered by a wildcard TLS certificate issued via DNS-01, through the ClusterI
 cm-webhook-ovh Helm release (see helm/cert-manager-webhook-ovh/README.md) — this chart only
 references it by name, it does not create it.
 
+The database password, JWT_SECRET and SECRETS_ENCRYPTION_KEY live in the {{ .Release.Name }}-secrets Secret,
+which `helm uninstall` leaves in place{{ if .Values.persistence.keepOnUninstall }}, like the two volumes ({{ .Release.Name }}-storage and {{ .Release.Name }}-postgres-data; delete them by hand to wipe the data){{ else }}. persistence.keepOnUninstall is false, so `helm uninstall` deletes the volumes and everything on them{{ end }}. Never delete the Secret while the database volume exists: the
+encryption key is what makes every stored SMTP/LDAP/OIDC/proxy secret and TOTP seed readable. If you
+render this chart with `helm template`, Argo CD or Flux instead of `helm upgrade`, `lookup` cannot see
+that Secret, so pass secrets.postgresPassword, secrets.jwtSecret and secrets.secretsEncryptionKey.
+
+To rotate the encryption key, pass the new one as secrets.secretsEncryptionKey, the old one as
+secrets.secretsEncryptionKeyPrevious and set artiferris.reencryptStoredSecrets=true; see the README
+("Upgrading and rotating SECRETS_ENCRYPTION_KEY") before enabling it, there is no rollback afterwards.
+
+Rolling the release back (`helm rollback`, or an older image tag) does not undo database migrations. The first start of the release that
+introduced migrations 0006 to 0010 makes the database unreadable for releases before it: they refuse to start, and only a restore of
+the database backup taken before that upgrade brings them back. Releases from that one on ignore migrations they do not know.
+
+{{- if and .Values.ingress.enabled (not (include "artiferris.trustedProxyIps" .)) }}
+
+WARNING: artiferris.trustedProxyIps is empty and artiferris.allowSharedThrottleBucket is true, so every visitor shares one
+login throttle bucket and one public-catalog request budget (they all appear to come from the ingress pod).
+Set artiferris.trustedProxyIps to the ingress controller's pod CIDR to give each client its own.
+{{- end }}
+{{- if .Values.ingress.middlewares }}
+
+The ingress expects these Traefik middlewares to exist already: {{ .Values.ingress.middlewares }}
+{{- end }}
+
 Log in with:
   username: {{ .Values.artiferris.bootstrapAdminUsername }}
   password: kubectl get secret {{ .Release.Name }}-secrets -n {{ .Release.Namespace }} -o jsonpath='{.data.ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d

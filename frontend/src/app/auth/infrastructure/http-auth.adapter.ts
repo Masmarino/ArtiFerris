@@ -33,6 +33,10 @@ export class HttpAuthAdapter implements AuthPort {
     return this.http.post<void>('/api/auth/activate', { token, new_password: newPassword })
   }
 
+  logoutAll(): Observable<void> {
+    return this.http.post<void>('/api/auth/logout-all', {})
+  }
+
   verifyMfa(mfaToken: string, code?: string, backupCode?: string): Observable<LoginResponse> {
     return this.http.post<LoginResponse>('/api/auth/mfa/verify', {
       mfa_token: mfaToken,

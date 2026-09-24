@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
@@ -6,7 +7,9 @@ import { catchError, map, of } from 'rxjs'
 import {
   Autocomplete,
   Button,
-  Card, Divider,
+  Card,
+  Divider,
+  EmptyState,
   GbtInput,
   Select,
   Tab,
@@ -19,11 +22,14 @@ import { RepositorySummary } from '../domain/repository.entity'
 import { PermissionsService } from '../application/permissions.service'
 import { PermissionEntry, ROLE_OPTIONS, Role, UserLookup } from '../domain/permission.entity'
 import { UsageInstructions } from '../usage-instructions/usage-instructions'
+import { ShareRepositoryLink } from '../share-repository-link/share-repository-link'
 import { PermissionRoleEditor } from '../permission-role-editor/permission-role-editor'
 import { PackageTree } from '../package-tree/package-tree'
 import { PageTitleService } from '../../shell/page-title.service'
 import { FormatBytesPipe } from '../../shared/format-bytes.pipe'
 import { formatResultsAnnouncement } from '../../shared/format'
+import { ConfirmService } from '../../shared/confirm.service'
+import { MeService } from '../../shell/application/me.service'
 import { ToastService } from '../../shared/toast.service'
 
 const BYTES_PER_MB = 1024 * 1024
@@ -41,11 +47,13 @@ const BYTES_PER_MB = 1024 * 1024
     Tabs,
     FormsModule,
     UsageInstructions,
+    ShareRepositoryLink,
     PermissionRoleEditor,
     PackageTree,
     Card,
     FormatBytesPipe,
     Divider,
+    EmptyState,
   ],
   templateUrl: './repository-detail.html',
   styleUrl: './repository-detail.scss',
@@ -57,6 +65,8 @@ export class RepositoryDetail {
   private readonly repositoriesService = inject(RepositoriesService)
   private readonly permissionsService = inject(PermissionsService)
   private readonly toastService = inject(ToastService)
+  private readonly confirmService = inject(ConfirmService)
+  private readonly me = inject(MeService)
   private readonly pageTitle = inject(PageTitleService)
 
   // Reactive, not route.snapshot — Angular reuses this component across :id navigations.
@@ -78,7 +88,11 @@ export class RepositoryDetail {
 
   constructor() {
     effect(() => this.pageTitle.title.set(this.repositoryName()))
-    effect(() => this.reload(this.routeId()))
+    effect(() => {
+      const id = this.routeId()
+      this.resetForNewRepository()
+      this.reload(id)
+    })
   }
   readonly newMemberId = signal('')
   readonly newName = signal('')
@@ -115,7 +129,36 @@ export class RepositoryDetail {
   ]
   readonly permissionRowId = (p: PermissionEntry): string => p.user_id
 
+  // Reused across repositories: drop the previous one's data.
+  private resetForNewRepository(): void {
+    this.repository.set(null)
+    this.permissions.set([])
+    this.repositoryNamesById.set(new Map())
+    this.editingPermission.set(null)
+    this.grantUser.set(null)
+    this.grantRole.set('read')
+    this.newMemberId.set('')
+    this.newName.set('')
+    this.quotaMb.set('')
+    this.quotaError.set(null)
+    this.quotaSaved.set(false)
+    this.retentionKeepLastN.set('')
+    this.retentionError.set(null)
+    this.retentionSaved.set(false)
+    this.savingQuota.set(false)
+    this.savingRetention.set(false)
+    this.grantingPermission.set(false)
+    this.savingRole.set(false)
+    this.renaming.set(false)
+    this.addingMember.set(false)
+    this.changingVisibility.set(false)
+    this.deletingRepository.set(false)
+  }
+
   private reload(id: string): void {
+    if (id !== this.routeId()) {
+      return
+    }
     this.loadError.set(false)
     this.repositoriesService
       .get(id)
@@ -147,13 +190,23 @@ export class RepositoryDetail {
             this.repositoryNamesById.set(new Map(repositories.map((r) => [r.id, r.name])))
           })
         }
+        // A viewer with only a public repository's implicit read (no explicit grant) is correctly
+        // refused this list by the server (403/404) — the "Droits d'accès" tab never shows them
+        // anyway, so that expected refusal must not block the rest of the page. Anything else
+        // (a real server error) still does.
+        this.permissionsService.list(id).subscribe({
+          next: (permissions) => {
+            if (id === this.routeId()) {
+              this.permissions.set(permissions)
+            }
+          },
+          error: (error: HttpErrorResponse) => {
+            if (id === this.routeId() && error.status !== 403 && error.status !== 404) {
+              this.loadError.set(true)
+            }
+          },
+        })
       })
-    this.permissionsService.list(id).subscribe((permissions) => {
-      if (id !== this.routeId()) {
-        return
-      }
-      this.permissions.set(permissions)
-    })
   }
 
   setQuotaMb(value: string): void {
@@ -176,12 +229,16 @@ export class RepositoryDetail {
       this.repositoriesService.setQuota(repository.id, null).subscribe({
         next: () => {
           this.savingQuota.set(false)
-          this.quotaSaved.set(true)
+          if (repository.id === this.routeId()) {
+            this.quotaSaved.set(true)
+          }
           this.reload(repository.id)
         },
         error: () => {
           this.savingQuota.set(false)
-          this.quotaError.set("Échec de l'enregistrement du quota.")
+          if (repository.id === this.routeId()) {
+            this.quotaError.set("Échec de l'enregistrement du quota.")
+          }
         },
       })
       return
@@ -195,12 +252,16 @@ export class RepositoryDetail {
     this.repositoriesService.setQuota(repository.id, Math.round(mb * BYTES_PER_MB)).subscribe({
       next: () => {
         this.savingQuota.set(false)
-        this.quotaSaved.set(true)
+        if (repository.id === this.routeId()) {
+          this.quotaSaved.set(true)
+        }
         this.reload(repository.id)
       },
       error: () => {
         this.savingQuota.set(false)
-        this.quotaError.set("Échec de l'enregistrement du quota.")
+        if (repository.id === this.routeId()) {
+          this.quotaError.set("Échec de l'enregistrement du quota.")
+        }
       },
     })
   }
@@ -229,12 +290,16 @@ export class RepositoryDetail {
     this.repositoriesService.setRetentionPolicy(repository.id, keepLastN).subscribe({
       next: () => {
         this.savingRetention.set(false)
-        this.retentionSaved.set(true)
+        if (repository.id === this.routeId()) {
+          this.retentionSaved.set(true)
+        }
         this.reload(repository.id)
       },
       error: () => {
         this.savingRetention.set(false)
-        this.retentionError.set("Échec de l'enregistrement de la politique de rétention.")
+        if (repository.id === this.routeId()) {
+          this.retentionError.set("Échec de l'enregistrement de la politique de rétention.")
+        }
       },
     })
   }
@@ -363,13 +428,19 @@ export class RepositoryDetail {
       })
   }
 
-  removeMember(memberId: string): void {
+  async removeMember(memberId: string): Promise<void> {
     const repository = this.repository()
     if (!repository) {
       return
     }
     const memberName = this.repositoryNamesById().get(memberId) ?? memberId
-    if (!confirm(`Retirer "${memberName}" du groupe ?`)) {
+    const confirmed = await this.confirmService.ask({
+      heading: 'Retirer du groupe',
+      message: `Retirer "${memberName}" du groupe ?`,
+      confirmLabel: 'Retirer',
+      danger: true,
+    })
+    if (!confirmed) {
       return
     }
     this.repositoriesService.removeGroupMember(repository.id, memberId).subscribe({
@@ -381,15 +452,69 @@ export class RepositoryDetail {
     })
   }
 
+  readonly canChangeVisibility = computed(() => {
+    const repository = this.repository()
+    return (
+      repository?.repo_type === 'hosted' && (repository.owner_is_personal || this.me.isSuperAdmin())
+    )
+  })
+
+  readonly changingVisibility = signal(false)
+
+  async changeVisibility(): Promise<void> {
+    const repository = this.repository()
+    if (!repository || this.changingVisibility()) {
+      return
+    }
+    const makePublic = !repository.is_public
+    const confirmed = await this.confirmService.ask(
+      makePublic
+        ? {
+            heading: 'Rendre le dépôt public',
+            message: `Toute personne, sans authentification, pourra consulter et télécharger le contenu de « ${repository.name} ».`,
+            confirmLabel: 'Rendre public',
+            danger: true,
+          }
+        : {
+            heading: 'Rendre le dépôt privé',
+            message: `Seuls les utilisateurs autorisés pourront accéder à « ${repository.name} ».`,
+            confirmLabel: 'Rendre privé',
+          },
+    )
+    if (!confirmed) {
+      return
+    }
+    this.changingVisibility.set(true)
+    this.repositoriesService.setVisibility(repository.id, makePublic).subscribe({
+      next: () => {
+        this.changingVisibility.set(false)
+        this.toastService.success(
+          `Dépôt « ${repository.name} » ${makePublic ? 'public' : 'privé'}.`,
+        )
+        this.reload(repository.id)
+      },
+      error: () => {
+        this.changingVisibility.set(false)
+        this.toastService.error('Échec du changement de visibilité.')
+      },
+    })
+  }
+
   readonly deletingRepository = signal(false)
 
-  deleteRepository(): void {
+  async deleteRepository(): Promise<void> {
     const repository = this.repository()
-    if (
-      !repository ||
-      this.deletingRepository() ||
-      !confirm(`Supprimer le dépôt "${repository.name}" ?`)
-    ) {
+    if (!repository || this.deletingRepository()) {
+      return
+    }
+    const confirmed = await this.confirmService.ask({
+      heading: 'Supprimer le dépôt',
+      message: `Supprimer le dépôt "${repository.name}" ?`,
+      confirmLabel: 'Supprimer',
+      danger: true,
+      typeToConfirm: repository.name,
+    })
+    if (!confirmed) {
       return
     }
     this.deletingRepository.set(true)

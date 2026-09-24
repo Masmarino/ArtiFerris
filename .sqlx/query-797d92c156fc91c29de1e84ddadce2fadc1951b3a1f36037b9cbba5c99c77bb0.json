@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_blob_uploads SET expires_at = now() - interval '1 minute' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "797d92c156fc91c29de1e84ddadce2fadc1951b3a1f36037b9cbba5c99c77bb0"
+}

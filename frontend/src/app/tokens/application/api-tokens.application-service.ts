@@ -11,8 +11,8 @@ export class ApiTokensApplicationService {
     return this.port.list()
   }
 
-  create(label: string): Observable<CreatedApiToken> {
-    return this.port.create(label)
+  create(label: string, currentPassword: string | null = null): Observable<CreatedApiToken> {
+    return this.port.create(label, currentPassword)
   }
 
   revoke(id: string): Observable<void> {

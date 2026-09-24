@@ -30,6 +30,13 @@ services:
   artiferris-api:
     build: .
     restart: unless-stopped
+    # Same hardening as the Helm chart: nothing to escalate to, nothing writable but /data and /tmp.
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,17 +50,24 @@ services:
         limits:
           memory: ${ARTIFERRIS_API_MEMORY_LIMIT:-4g}
     environment:
+      # The password is spliced in as is, so it must only hold URL-safe characters (`openssl rand -hex 24`).
       DATABASE_URL: postgres://artiferris:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/artiferris
       # Defaults to 10 (see artiferris-infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS).
       # Size against expected concurrent users, not left as a guess — each held connection
       # is one in-flight request that would otherwise queue on `acquire_timeout` (10s).
       DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-10}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
-      # Optional: encrypts secrets at rest (SMTP/LDAP/OIDC/proxy-repository credentials,
-      # TOTP seeds) with their own key instead of falling back to JWT_SECRET — see
-      # .env.example. Strongly recommended for a real deployment.
-      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?SECRETS_ENCRYPTION_KEY must be set — generate one with `openssl rand -base64 32`}
+      # Only while rotating SECRETS_ENCRYPTION_KEY: the key the stored secrets are encrypted with today. See the README.
+      SECRETS_ENCRYPTION_KEY_PREVIOUS: ${SECRETS_ENCRYPTION_KEY_PREVIOUS:-}
+      # `true` lets the startup pass rewrite stored secrets to the current format / the new key. See "Upgrading and rotating" in the README before enabling it: there is no rollback afterwards.
+      SECRETS_REENCRYPT_LEGACY: ${SECRETS_REENCRYPT_LEGACY:-}
       ARTIFERRIS_BASE_DOMAIN: ${ARTIFERRIS_BASE_DOMAIN:?ARTIFERRIS_BASE_DOMAIN must be set}
+      # The URL clients reach this deployment at. Drives the Docker token realm, HSTS, passkeys and canonical URLs,
+      # and the server refuses to start with a 0.0.0.0 one.
+      PUBLIC_URL: ${PUBLIC_URL:?PUBLIC_URL must be set, e.g. https://app.artiferris.example.com}
+      # Private ranges LDAP/SMTP/OIDC/proxy hosts may resolve to. See .env.example.
+      ARTIFERRIS_SSRF_ALLOWED_CIDRS: ${ARTIFERRIS_SSRF_ALLOWED_CIDRS:-}
       STORAGE_ROOT: /data
       BIND_ADDR: 0.0.0.0:8080
       # tracing_subscriber::fmt::init() honours RUST_LOG; without it the
@@ -64,11 +78,18 @@ services:
       # first admin account through the running application.
       ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME: ${ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME:-}
       ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD: ${ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD:-}
-      # Without this, the Docker CLI's WWW-Authenticate challenge falls back
-      # to Config::from_env's default (http://0.0.0.0:8080/v2/token), which
-      # a client machine can never resolve — `docker login`/`push`/`pull`
-      # against this deployment fail outright. See .env.example.
+      # The IPs a reverse proxy in front of this container connects from, so
+      # their X-Forwarded-For is believed. Left empty behind a proxy, the
+      # per-IP login throttle becomes one shared bucket for everyone behind
+      # it. See .env.example.
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+      # Days security and administrative audit events are kept; 0 keeps everything. See .env.example.
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
+      # Leave empty: the realm is derived from the request's Host and PUBLIC_URL.
+      # See .env.example.
       ARTIFERRIS_DOCKER_TOKEN_REALM: ${ARTIFERRIS_DOCKER_TOKEN_REALM:-}
+      # The root filesystem is read-only; Trivy caches its vulnerability database here.
+      TRIVY_CACHE_DIR: /tmp/trivy-cache
     ports:
       - "8080:8080"
     volumes:

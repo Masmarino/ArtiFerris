@@ -1,0 +1,20 @@
+.public-repository-page__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+
+  h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+  }
+}
+
+.public-repository-page__badge {
+  padding: 0.1875rem 0.5625rem;
+  background: var(--bg-hover);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}

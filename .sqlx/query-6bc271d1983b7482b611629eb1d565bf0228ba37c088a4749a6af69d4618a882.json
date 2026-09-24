@@ -6,37 +6,79 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "npm_packages",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "package_repository_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "npm_packages",
+            "name": "package_repository_id"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "name",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "npm_packages",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "npm_packages",
+            "name": "created_at"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "updated_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "npm_packages",
+            "name": "updated_at"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "metadata_fetched_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "npm_packages",
+            "name": "metadata_fetched_at"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "cached_metadata",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "npm_packages",
+            "name": "cached_metadata"
+          }
+        }
       }
     ],
     "parameters": {

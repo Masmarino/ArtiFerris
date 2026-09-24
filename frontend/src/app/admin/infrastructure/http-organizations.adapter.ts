@@ -8,6 +8,7 @@ import {
   OrganizationSummary,
 } from '../domain/organization.entity'
 import { OrganizationsPort } from '../application/organizations.port'
+import { apiPath } from '../../shared/api-path'
 
 @Injectable()
 export class HttpOrganizationsAdapter implements OrganizationsPort {
@@ -18,7 +19,7 @@ export class HttpOrganizationsAdapter implements OrganizationsPort {
   }
 
   get(id: string): Observable<OrganizationSummary> {
-    return this.http.get<OrganizationSummary>(`/api/organizations/${id}`)
+    return this.http.get<OrganizationSummary>(apiPath`/api/organizations/${id}`)
   }
 
   create(slug: string, displayName: string): Observable<OrganizationSummary> {
@@ -29,24 +30,26 @@ export class HttpOrganizationsAdapter implements OrganizationsPort {
   }
 
   getIdentityProvider(id: string): Observable<IdentityProviderSummary> {
-    return this.http.get<IdentityProviderSummary>(`/api/organizations/${id}/identity-provider`)
+    return this.http.get<IdentityProviderSummary>(
+      apiPath`/api/organizations/${id}/identity-provider`,
+    )
   }
 
   setLdapIdentityProvider(id: string, config: LdapIdentityProviderInput): Observable<void> {
-    return this.http.put<void>(`/api/organizations/${id}/identity-provider`, {
+    return this.http.put<void>(apiPath`/api/organizations/${id}/identity-provider`, {
       type: 'ldap',
       ...config,
     })
   }
 
   setOidcIdentityProvider(id: string, config: OidcIdentityProviderInput): Observable<void> {
-    return this.http.put<void>(`/api/organizations/${id}/identity-provider`, {
+    return this.http.put<void>(apiPath`/api/organizations/${id}/identity-provider`, {
       type: 'oidc',
       ...config,
     })
   }
 
   clearIdentityProvider(id: string): Observable<void> {
-    return this.http.delete<void>(`/api/organizations/${id}/identity-provider`)
+    return this.http.delete<void>(apiPath`/api/organizations/${id}/identity-provider`)
   }
 }

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_blobs SET reference_count = 1 WHERE digest = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4bb1b568675b1cbbb08e5202a2a6da7d0d661c1cbc6aae51957d7430fe95f732"
+}

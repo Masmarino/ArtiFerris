@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT version, tarball_storage_key FROM npm_package_versions WHERE npm_package_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tarball_storage_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "tarball_storage_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "1450f24f45e6c1c374163b814c2ef6ce14ffd6bc13fb09ece51438b23f2b617e"
+}

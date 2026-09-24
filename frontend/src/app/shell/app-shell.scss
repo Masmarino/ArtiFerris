@@ -196,4 +196,9 @@
     height: 100vh;
     color: var(--text-discret);
   }
+
+  &__load-error {
+    flex-direction: column;
+    gap: 1rem;
+  }
 }

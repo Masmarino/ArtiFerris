@@ -25,6 +25,10 @@ fi
 
 export DATABASE_URL="postgres://artiferris:${POSTGRES_PASSWORD:-artiferris}@localhost:5432/artiferris"
 export JWT_SECRET="local-dev-secret-not-for-production"
+# Mandatory and must differ from JWT_SECRET (compose also checks it even though only postgres starts here).
+# Fixed rather than random so secrets stored in the dev database stay readable across restarts,
+# and not taken from .env, whose value is the placeholder the server refuses to start with.
+export SECRETS_ENCRYPTION_KEY="local-dev-secrets-key-not-for-production"
 export ARTIFERRIS_BASE_DOMAIN="${ARTIFERRIS_BASE_DOMAIN:-artiferris.localhost}"
 export BIND_ADDR="0.0.0.0:8081"
 # The browser only ever talks to the Angular dev server on 4200 (proxy.conf.json
@@ -32,7 +36,8 @@ export BIND_ADDR="0.0.0.0:8081"
 # the backend computes its WebAuthn relying-party origin from BIND_ADDR's own port
 # (8081), which never matches the :4200 origin a passkey ceremony's clientDataJSON
 # actually records, and every passkey registration/login fails with InvalidRPOrigin.
-export PUBLIC_URL="${PUBLIC_URL:-http://localhost:4200}"
+# Not PUBLIC_URL itself: .env carries the production one, which would otherwise win here.
+export PUBLIC_URL="${DEV_PUBLIC_URL:-http://localhost:4200}"
 export STORAGE_ROOT="$ROOT_DIR/data"
 export ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME="admin"
 export ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD="admin123"

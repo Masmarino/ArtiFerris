@@ -1,0 +1,12 @@
+<div class="copyable-command">
+  <pre><code>{{ command() }}</code></pre>
+  <gbt-button
+    variant="secondary"
+    size="small"
+    text="Copier"
+    [iconName]="copyState() === 'copied' ? 'check' : 'copy'"
+    [ariaLabel]="label()"
+    (clicked)="copy()"
+  />
+</div>
+<span class="sr-only" aria-live="polite">{{ copyAnnouncement() }}</span>

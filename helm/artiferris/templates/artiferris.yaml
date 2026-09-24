@@ -1,9 +1,16 @@
+{{- if and .Values.ingress.enabled (not (include "artiferris.trustedProxyIps" .)) (not .Values.artiferris.allowSharedThrottleBucket) }}
+{{- fail "artiferris.trustedProxyIps is empty or blank: behind the ingress every visitor would share one login and public-catalog throttle bucket. Set it to the ingress controller's pod CIDR(s), e.g. --set-string artiferris.trustedProxyIps=10.42.0.0/16 (escape commas as \\, between several), or set artiferris.allowSharedThrottleBucket=true to accept the shared bucket." }}
+{{- end }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ .Release.Name }}-storage
   labels:
     {{- include "artiferris.labels" . | nindent 4 }}
+  {{- if .Values.persistence.keepOnUninstall }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
 spec:
   accessModes: ["ReadWriteOnce"]
   {{- if .Values.storage.storageClassName }}
@@ -33,12 +40,15 @@ spec:
         {{- include "artiferris.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: api
     spec:
+      automountServiceAccountToken: false
       securityContext:
-        fsGroup: 101
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: artiferris-api
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ include "artiferris.image" . | quote }}
+          imagePullPolicy: {{ include "artiferris.pullPolicy" . }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -55,6 +65,15 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-secrets
                   key: SECRETS_ENCRYPTION_KEY
+            {{- if .Values.secrets.secretsEncryptionKeyPrevious }}
+            - name: SECRETS_ENCRYPTION_KEY_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: SECRETS_ENCRYPTION_KEY_PREVIOUS
+            {{- end }}
+            - name: SECRETS_REENCRYPT_LEGACY
+              value: {{ .Values.artiferris.reencryptStoredSecrets | quote }}
             - name: ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME
               value: {{ .Values.artiferris.bootstrapAdminUsername | quote }}
             - name: ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD
@@ -70,20 +89,38 @@ spec:
             {{- end }}
             - name: PUBLIC_URL
               value: {{ include "artiferris.publicUrl" . | quote }}
+            {{- if include "artiferris.trustedProxyIps" . }}
+            - name: TRUSTED_PROXY_IPS
+              value: {{ include "artiferris.trustedProxyIps" . | quote }}
+            {{- end }}
+            - name: AUDIT_RETENTION_DAYS
+              value: {{ .Values.artiferris.auditRetentionDays | quote }}
             - name: STORAGE_ROOT
               value: /data
             - name: BIND_ADDR
               value: "0.0.0.0:8080"
             - name: RUST_LOG
               value: {{ .Values.artiferris.rustLog | quote }}
+            # The rootfs is read-only; Trivy caches its vulnerability database here.
+            - name: TRIVY_CACHE_DIR
+              value: /tmp/trivy-cache
           ports:
             - containerPort: 8080
           volumeMounts:
             - name: storage
               mountPath: /data
-          readinessProbe:
+            - name: tmp
+              mountPath: /tmp
+          # Migrations and the secret check run before the port opens; liveness only starts once this has passed.
+          startupProbe:
             httpGet:
               path: /healthz
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /readyz
               port: 8080
             periodSeconds: 5
           livenessProbe:
@@ -98,6 +135,8 @@ spec:
         - name: storage
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-storage
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

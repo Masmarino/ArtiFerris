@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO domain_events (aggregate_type, aggregate_id, event_type, payload, version, actor_id, organization_id) VALUES ('PackageRepository', $1, $2, $3, $4, $5, COALESCE($6, repository_organization($1)))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Jsonb",
+        "Int8",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e65636038b0d2cb2b10f7df3c5ca8e919337b7c12f80b5da43d1fe067e1042ff"
+}

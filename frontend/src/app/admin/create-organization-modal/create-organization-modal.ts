@@ -3,6 +3,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { Button, GbtInput, Modal } from '@masmarino/gabarit'
 import { OrganizationsService } from '../application/organizations.service'
 import { ToastService } from '../../shared/toast.service'
+import { rejectionMessage } from '../../shared/api-error'
 
 @Component({
   selector: 'app-create-organization-modal',
@@ -39,7 +40,7 @@ export class CreateOrganizationModal {
       },
       error: (err) => {
         this.creating.set(false)
-        this.toastService.error(err?.error?.error ?? "Échec de la création de l'organisation.")
+        this.toastService.error(rejectionMessage(err) ?? "Échec de la création de l'organisation.")
       },
     })
   }

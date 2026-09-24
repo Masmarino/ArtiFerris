@@ -10,6 +10,20 @@ export interface SmtpSettings {
   password_set: boolean
 }
 
+/** What the server answers when the stored SMTP password can no longer be decrypted. */
+export interface UnreadableSmtpSettings {
+  secret_unreadable: true
+  error: string
+}
+
+export type SmtpSettingsResponse = SmtpSettings | UnreadableSmtpSettings
+
+export function isUnreadableSmtpSettings(
+  settings: SmtpSettingsResponse,
+): settings is UnreadableSmtpSettings {
+  return 'secret_unreadable' in settings && settings.secret_unreadable
+}
+
 export interface UpdateSmtpSettings {
   host: string
   port: number

@@ -5,6 +5,7 @@ import { CreateRepositoryModal } from './create-repository-modal'
 import { RepositorySummary } from '../domain/repository.entity'
 import { repositoryProviders } from '../infrastructure/repository.providers'
 import { ToastService } from '../../shared/toast.service'
+import { MeService } from '../../shell/application/me.service'
 
 function repo(overrides: Partial<RepositorySummary>): RepositorySummary {
   return {
@@ -17,15 +18,23 @@ function repo(overrides: Partial<RepositorySummary>): RepositorySummary {
     group_members: [],
     quota_bytes: null,
     retention_keep_last_n: null,
+    is_public: false,
     my_role: 'admin',
     organization_id: 'org-1',
+    owner_name: 'Acme Corp',
+    owner_is_personal: false,
     ...overrides,
   }
 }
 
-function render() {
+function render(options?: { isSuperAdmin?: boolean }) {
   TestBed.configureTestingModule({
-    providers: [provideHttpClient(), provideHttpClientTesting(), ...repositoryProviders],
+    providers: [
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      ...repositoryProviders,
+      { provide: MeService, useValue: { isSuperAdmin: () => options?.isSuperAdmin ?? false } },
+    ],
   })
   const fixture = TestBed.createComponent(CreateRepositoryModal)
   const httpMock = TestBed.inject(HttpTestingController)
@@ -254,6 +263,102 @@ describe('CreateRepositoryModal', () => {
     expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
       variant: 'error',
       message: 'Échec de la création du dépôt.',
+    })
+  })
+
+  describe('the "Rendre public" checkbox', () => {
+    it('is absent for a non-super-admin', () => {
+      const { fixture } = render({ isSuperAdmin: false })
+
+      expect(fixture.nativeElement.querySelector('gbt-checkbox')).toBeNull()
+    })
+
+    it('is present for a super-admin', () => {
+      const { fixture } = render({ isSuperAdmin: true })
+
+      expect(fixture.nativeElement.querySelector('gbt-checkbox')).not.toBeNull()
+    })
+
+    it('does not call setVisibility when left unchecked', () => {
+      const { fixture, httpMock } = render({ isSuperAdmin: true })
+      fixture.componentInstance.form.controls.name.setValue('my-repo')
+
+      fixture.componentInstance.submit()
+
+      httpMock.expectOne('/api/repositories').flush(repo({ id: 'repo-1' }))
+
+      httpMock.expectNone('/api/repositories/repo-1/visibility')
+    })
+
+    it('calls setVisibility with the newly created id before emitting created when checked', () => {
+      const { fixture, httpMock } = render({ isSuperAdmin: true })
+      fixture.componentInstance.form.controls.name.setValue('my-repo')
+      fixture.componentInstance.form.controls.isPublic.setValue(true)
+      let created = false
+      fixture.componentInstance.created.subscribe(() => (created = true))
+
+      fixture.componentInstance.submit()
+
+      httpMock.expectOne('/api/repositories').flush(repo({ id: 'repo-1' }))
+      expect(created).toBe(false)
+
+      const visibilityReq = httpMock.expectOne('/api/repositories/repo-1/visibility')
+      expect(visibilityReq.request.method).toBe('PUT')
+      expect(visibilityReq.request.body).toEqual({ is_public: true })
+      expect(created).toBe(false)
+      visibilityReq.flush(null)
+
+      expect(created).toBe(true)
+    })
+
+    it('still emits created and shows a dedicated error toast when the visibility follow-up fails', () => {
+      const { fixture, httpMock } = render({ isSuperAdmin: true })
+      fixture.componentInstance.form.controls.name.setValue('my-repo')
+      fixture.componentInstance.form.controls.isPublic.setValue(true)
+      let created = false
+      fixture.componentInstance.created.subscribe(() => (created = true))
+
+      fixture.componentInstance.submit()
+
+      httpMock.expectOne('/api/repositories').flush(repo({ id: 'repo-1' }))
+      httpMock
+        .expectOne('/api/repositories/repo-1/visibility')
+        .flush({ error: 'échec' }, { status: 500, statusText: 'Internal Server Error' })
+
+      expect(created).toBe(true)
+      expect(fixture.componentInstance.creating()).toBe(false)
+      expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
+        variant: 'error',
+        message: 'Dépôt créé, mais échec du passage en public.',
+      })
+    })
+
+    it('is absent for a proxy repository, even for a super-admin', () => {
+      const { fixture } = render({ isSuperAdmin: true })
+
+      fixture.componentInstance.form.controls.repoType.setValue('proxy')
+      fixture.detectChanges()
+
+      expect(fixture.nativeElement.querySelector('gbt-checkbox')).toBeNull()
+    })
+
+    it('is absent for a group repository, even for a super-admin', () => {
+      const { fixture } = render({ isSuperAdmin: true })
+
+      fixture.componentInstance.form.controls.repoType.setValue('group')
+      fixture.detectChanges()
+
+      expect(fixture.nativeElement.querySelector('gbt-checkbox')).toBeNull()
+    })
+
+    it('clears a checked state when switching away from hosted', () => {
+      const { fixture } = render({ isSuperAdmin: true })
+      fixture.componentInstance.form.controls.isPublic.setValue(true)
+
+      fixture.componentInstance.form.controls.repoType.setValue('proxy')
+      fixture.detectChanges()
+
+      expect(fixture.componentInstance.form.controls.isPublic.value).toBe(false)
     })
   })
 })

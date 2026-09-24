@@ -7,6 +7,12 @@ export interface AuditEntry {
   actor_id: string | null
 }
 
+export interface AuditPage {
+  entries: AuditEntry[]
+  /** Pass back as `cursor` to get the next page; null on the last one. */
+  next_cursor: string | null
+}
+
 export interface AuditQuery {
   aggregate_type?: string
   exclude_aggregate_type?: string
@@ -15,6 +21,8 @@ export interface AuditQuery {
   from?: string
   to?: string
   organization_id?: string
+  cursor?: string
+  limit?: number
 }
 
 export interface BlockedAccount {

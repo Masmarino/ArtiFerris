@@ -14,6 +14,8 @@ export interface AuthPort {
   getSsoConfig(): Observable<SsoConfig>
   loginWithLdap(username: string, password: string): Observable<LoginResponse>
   activate(token: string, newPassword: string): Observable<void>
+  /** Revokes every session, Docker token and API token of the caller, this one included. */
+  logoutAll(): Observable<void>
   verifyMfa(mfaToken: string, code?: string, backupCode?: string): Observable<LoginResponse>
   // The server's JSON-safe WebAuthn options, passed straight through to the browser's
   // credentials API — never inspected here.

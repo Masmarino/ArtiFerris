@@ -9,6 +9,7 @@ import {
   TotpEnrollment,
 } from '../domain/mfa.types'
 import { MfaPort } from '../application/mfa.port'
+import { apiPath } from '../../shared/api-path'
 
 @Injectable()
 export class HttpMfaAdapter implements MfaPort {
@@ -59,7 +60,7 @@ export class HttpMfaAdapter implements MfaPort {
   }
 
   deletePasskey(id: string, currentPassword: string): Observable<void> {
-    return this.http.delete<void>(`/api/me/mfa/passkey/${id}`, {
+    return this.http.delete<void>(apiPath`/api/me/mfa/passkey/${id}`, {
       body: { current_password: currentPassword },
     })
   }

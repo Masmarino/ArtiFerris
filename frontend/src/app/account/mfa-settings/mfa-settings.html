@@ -5,8 +5,18 @@
         <gbt-spinner label="Chargement…" />
       }
 
+      @case ('load-failed') {
+        <p class="gbt-form-error" role="alert">
+          Échec du chargement de la double authentification.
+        </p>
+        <gbt-button text="Réessayer" variant="secondary" (clicked)="retryLoad()" />
+      }
+
       @case ('disabled') {
         <p>La double authentification n'est pas activée sur ce compte.</p>
+        @if (errorMessage(); as message) {
+          <p class="gbt-form-error" role="alert">{{ message }}</p>
+        }
         <gbt-button text="Activer" (clicked)="startEnrollment()" />
       }
 
@@ -62,12 +72,19 @@
 
         @if (regeneratedCodes(); as codes) {
           <p>Nouveaux codes de secours — les anciens ne fonctionnent plus :</p>
+          <p class="mfa-settings__hint" role="status">
+            Vos sessions vont être fermées : vous devrez vous reconnecter une fois ces codes
+            sauvegardés.
+          </p>
           <ul class="mfa-settings__codes">
             @for (code of codes; track code) {
               <li>{{ code }}</li>
             }
           </ul>
-          <gbt-button text="J'ai sauvegardé ces codes" (clicked)="dismissRegeneratedCodes()" />
+          <gbt-button
+            text="J'ai sauvegardé ces codes, me reconnecter"
+            (clicked)="dismissRegeneratedCodes()"
+          />
         } @else {
           <gbt-divider label="REGÉNÉRATION" />
           <div class="mfa-settings__actions">
@@ -81,7 +98,7 @@
               (ngModelChange)="regeneratePassword.set($event)"
             />
             <gbt-tooltip
-              text="Les anciens codes de secours cesseront de fonctionner immédiatement."
+              text="Les anciens codes de secours cesseront de fonctionner immédiatement et vos sessions seront fermées."
             >
               <gbt-button
                 class="w-content"
@@ -105,7 +122,9 @@
               [ngModel]="disablePassword()"
               (ngModelChange)="disablePassword.set($event)"
             />
-            <gbt-tooltip text="Le compte ne demandera plus de code à la connexion.">
+            <gbt-tooltip
+              text="Le compte ne demandera plus de code à la connexion. Vos sessions seront fermées."
+            >
               <gbt-button
                 class="w-content"
                 text="Désactiver la double authentification"

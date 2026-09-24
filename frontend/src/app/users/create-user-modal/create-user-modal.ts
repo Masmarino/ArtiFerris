@@ -3,6 +3,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { Button, Checkbox, GbtInput, Modal } from '@masmarino/gabarit'
 import { UsersService } from '../application/users.service'
 import { ToastService } from '../../shared/toast.service'
+import { rejectionMessage } from '../../shared/api-error'
 
 @Component({
   selector: 'app-create-user-modal',
@@ -43,7 +44,7 @@ export class CreateUserModal {
       },
       error: (err) => {
         this.creating.set(false)
-        this.toastService.error(err?.error?.error ?? "Échec de la création de l'utilisateur.")
+        this.toastService.error(rejectionMessage(err) ?? "Échec de la création de l'utilisateur.")
       },
     })
   }

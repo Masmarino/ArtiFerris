@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM npm_package_versions WHERE npm_package_id = $1 AND version = $2 RETURNING tarball_storage_key",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tarball_storage_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "tarball_storage_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c8739ab7b4f77f3ce2e3c5cd7a55247280edbc33a35d08847fcafdb3ec29b554"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT untagged_since FROM docker_manifests WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "untagged_since",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "docker_manifests",
+            "name": "untagged_since"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "89f9f5650aeee3bdec7bdba02fdfebed2f7b4be2626b71193751a59e58a52acd"
+}

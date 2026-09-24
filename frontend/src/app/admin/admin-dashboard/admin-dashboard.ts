@@ -13,13 +13,16 @@ import { AdminMetricsService } from '../application/metrics.service'
 import { AdminStats, MetricsSnapshot } from '../domain/metrics.entity'
 import { AuditService } from '../application/audit.service'
 import { AuditEntry } from '../domain/audit.entity'
+import { auditEventLabel } from '../domain/audit-event-label'
 import { RepositoriesService } from '../../repositories/application/repositories.service'
 import { RepositorySummary } from '../../repositories/domain/repository.entity'
 import {
+  Button,
   Card,
   type ChartSeries,
   DimensionCard,
   type DimensionRow,
+  EmptyState,
   LineChart,
   Select,
   SelectOption,
@@ -27,6 +30,7 @@ import {
 import { formatBytes } from '../../shared/format'
 
 const RECENT_ACTIVITY_LIMIT = 10
+const ACTIVITY_FETCH_LIMIT = 200
 // Bucket span for the activity chart — long enough to show a trend, short enough that a quiet self-hosted instance doesn't render a wall of empty bars.
 const ACTIVITY_CHART_DAYS = 7
 
@@ -40,7 +44,7 @@ const EVOLUTION_DAYS_OPTIONS: SelectOption<number>[] = [
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [Card, DimensionCard, LineChart, DatePipe, Select, FormsModule],
+  imports: [Button, Card, DimensionCard, EmptyState, LineChart, DatePipe, Select, FormsModule],
   templateUrl: './admin-dashboard.html',
   styleUrl: './admin-dashboard.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -53,8 +57,12 @@ export class AdminDashboard implements OnInit {
   readonly stats = signal<AdminStats | null>(null)
   readonly recentEvents = signal<AuditEntry[]>([])
   readonly activityEvents = signal<AuditEntry[]>([])
+  // More events than fetched: the older days are under-counted.
+  readonly activityTruncated = signal(false)
   readonly repositories = signal<RepositorySummary[]>([])
   readonly formatBytes = formatBytes
+  readonly eventLabel = auditEventLabel
+  readonly loadFailed = signal(false)
 
   readonly evolutionDaysOptions = EVOLUTION_DAYS_OPTIONS
 
@@ -120,18 +128,35 @@ export class AdminDashboard implements OnInit {
   })
 
   ngOnInit(): void {
-    this.metricsService.stats().subscribe((stats) => this.stats.set(stats))
+    this.load()
+  }
+
+  retry(): void {
+    this.load()
+  }
+
+  private load(): void {
+    this.loadFailed.set(false)
+    const failed = () => this.loadFailed.set(true)
+    this.metricsService.stats().subscribe({ next: (stats) => this.stats.set(stats), error: failed })
 
     const from = new Date()
     from.setUTCDate(from.getUTCDate() - (ACTIVITY_CHART_DAYS - 1))
     from.setUTCHours(0, 0, 0, 0)
-    this.auditService.query({ from: from.toISOString() }).subscribe((entries) => {
-      // Newest-first from the backend, so the same bounded query covers both the chart and the recent list.
-      this.activityEvents.set(entries)
-      this.recentEvents.set(entries.slice(0, RECENT_ACTIVITY_LIMIT))
+    this.auditService.query({ from: from.toISOString(), limit: ACTIVITY_FETCH_LIMIT }).subscribe({
+      next: ({ entries, next_cursor }) => {
+        // Newest-first from the backend, so the same bounded query covers both the chart and the recent list.
+        this.activityEvents.set(entries)
+        this.activityTruncated.set(next_cursor !== null)
+        this.recentEvents.set(entries.slice(0, RECENT_ACTIVITY_LIMIT))
+      },
+      error: failed,
     })
 
-    this.repositoriesService.list().subscribe((repos) => this.repositories.set(repos))
+    this.repositoriesService.list().subscribe({
+      next: (repos) => this.repositories.set(repos),
+      error: failed,
+    })
 
     this.loadStorageHistory()
     this.loadCountsHistory()
@@ -149,21 +174,27 @@ export class AdminDashboard implements OnInit {
 
   private loadStorageHistory(): void {
     const requestedDays = this.storageEvolutionDays()
-    this.metricsService.history(requestedDays).subscribe((history) => {
-      // A slower, earlier request can resolve after a newer one — only apply the result
-      // that's still what's selected.
-      if (requestedDays === this.storageEvolutionDays()) {
-        this.storageHistory.set(history)
-      }
+    this.metricsService.history(requestedDays).subscribe({
+      next: (history) => {
+        // A slower, earlier request can resolve after a newer one — only apply the result
+        // that's still what's selected.
+        if (requestedDays === this.storageEvolutionDays()) {
+          this.storageHistory.set(history)
+        }
+      },
+      error: () => this.loadFailed.set(true),
     })
   }
 
   private loadCountsHistory(): void {
     const requestedDays = this.countsEvolutionDays()
-    this.metricsService.history(requestedDays).subscribe((history) => {
-      if (requestedDays === this.countsEvolutionDays()) {
-        this.countsHistory.set(history)
-      }
+    this.metricsService.history(requestedDays).subscribe({
+      next: (history) => {
+        if (requestedDays === this.countsEvolutionDays()) {
+          this.countsHistory.set(history)
+        }
+      },
+      error: () => this.loadFailed.set(true),
     })
   }
 }

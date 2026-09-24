@@ -2,7 +2,11 @@
   @if (loading()) {
     <gbt-spinner label="Chargement…" />
   } @else if (members().length === 0) {
-    <p>Aucun membre</p>
+    <gbt-empty-state
+      illustration="folder"
+      heading="Aucun membre"
+      message="Invitez des membres pour leur donner accès à cette organisation."
+    />
   } @else {
     <table class="organization-members__table">
       <caption>

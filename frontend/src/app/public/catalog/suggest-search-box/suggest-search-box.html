@@ -1,0 +1,58 @@
+<div class="suggest" [class.suggest--compact]="compact()">
+  <label class="suggest__label" [class.sr-only]="labelHidden()" [for]="inputId">{{
+    label()
+  }}</label>
+  <input
+    class="suggest__input"
+    type="text"
+    role="combobox"
+    autocomplete="off"
+    aria-autocomplete="list"
+    [id]="inputId"
+    [placeholder]="placeholder()"
+    [attr.maxlength]="maxLength()"
+    [value]="value()"
+    [attr.aria-expanded]="expanded()"
+    [attr.aria-controls]="listboxId"
+    [attr.aria-activedescendant]="activeDescendant()"
+    (input)="onInput($event)"
+    (keydown)="onKeydown($event)"
+    (blur)="dismiss()"
+  />
+  <div class="suggest__popup" [hidden]="!open()" (mousedown)="$event.preventDefault()">
+    <ul class="suggest__list" role="listbox" [id]="listboxId" aria-label="Suggestions">
+      @for (
+        suggestion of suggestions();
+        track suggestion.kind +
+          suggestion.owner.slug +
+          suggestion.repository.name +
+          suggestion.name;
+        let i = $index
+      ) {
+        <!-- Options never take focus, the input handles the keys through aria-activedescendant -->
+        <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+        <li
+          class="suggest__option"
+          role="option"
+          [id]="optionId(i)"
+          [class.suggest__option--active]="i === activeIndex()"
+          [attr.aria-selected]="i === activeIndex()"
+          (click)="select(i)"
+        >
+          <span class="suggest__format">{{ formatLabel(suggestion.kind) }}</span>
+          <span class="suggest__name">{{ suggestion.name }}</span>
+          <span class="suggest__meta"
+            >par {{ suggestion.owner.display_name }} / {{ suggestion.repository.name }}</span
+          >
+        </li>
+      }
+    </ul>
+    @if (notice(); as message) {
+      <p class="suggest__empty" aria-hidden="true">{{ message }}</p>
+    }
+    @if (noSuggestion()) {
+      <p class="suggest__empty" aria-hidden="true">Aucune suggestion</p>
+    }
+  </div>
+  <span class="sr-only" aria-live="polite">{{ announcement() }}</span>
+</div>

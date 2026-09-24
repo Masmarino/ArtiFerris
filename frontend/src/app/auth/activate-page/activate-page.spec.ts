@@ -72,6 +72,24 @@ describe('ActivatePage', () => {
     expect(router.navigateByUrl).toHaveBeenCalledWith('/login')
   })
 
+  it('says the server is busy, not that the link is invalid, on a 503', () => {
+    const { fixture, httpMock } = render()
+    fixture.componentInstance.form.setValue({
+      newPassword: 'new-s3cret!',
+      confirmPassword: 'new-s3cret!',
+    })
+
+    fixture.componentInstance.submit()
+    httpMock
+      .expectOne('/api/auth/activate')
+      .flush({ error: 'busy' }, { status: 503, statusText: 'Service Unavailable' })
+    fixture.detectChanges()
+
+    const text = fixture.nativeElement.textContent as string
+    expect(text).toContain('Service momentanément occupé')
+    expect(text).not.toContain('invalide ou a expiré')
+  })
+
   it('shows an error message when activation fails', () => {
     const { fixture, httpMock } = render()
     fixture.componentInstance.form.setValue({

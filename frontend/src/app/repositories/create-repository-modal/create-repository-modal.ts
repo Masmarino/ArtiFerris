@@ -16,10 +16,12 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms'
-import { Button, GbtInput, Modal, Select, type SelectOption } from '@masmarino/gabarit'
+import { Button, Checkbox, GbtInput, Modal, Select, type SelectOption } from '@masmarino/gabarit'
 import { RepositoriesService } from '../application/repositories.service'
 import { RepositoryFormat, RepositorySummary, RepositoryType } from '../domain/repository.entity'
 import { ToastService } from '../../shared/toast.service'
+import { MeService } from '../../shell/application/me.service'
+import { rejectionMessage } from '../../shared/api-error'
 
 const FORMAT_OPTIONS: SelectOption<RepositoryFormat>[] = [
   { value: 'npm', label: 'npm' },
@@ -37,7 +39,7 @@ const BYTES_PER_MB = 1024 * 1024
 @Component({
   selector: 'app-create-repository-modal',
   standalone: true,
-  imports: [ReactiveFormsModule, FormsModule, Modal, GbtInput, Select, Button],
+  imports: [ReactiveFormsModule, FormsModule, Modal, GbtInput, Select, Checkbox, Button],
   templateUrl: './create-repository-modal.html',
   styleUrl: './create-repository-modal.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,12 +47,19 @@ const BYTES_PER_MB = 1024 * 1024
 export class CreateRepositoryModal implements OnInit {
   private readonly repositoriesService = inject(RepositoriesService)
   private readonly toastService = inject(ToastService)
+  private readonly me = inject(MeService)
 
   readonly created = output<void>()
   readonly cancelled = output<void>()
 
   readonly formatOptions = FORMAT_OPTIONS
   readonly repoTypeOptions = REPO_TYPE_OPTIONS
+
+  // A super-admin using this app's own UI always creates into the public organization —
+  // there's no subdomain-awareness on the frontend, so every request here resolves to it
+  // (see organization_middleware.rs). That's the only "public organization context" this
+  // form ever runs in, so gating on super-admin status alone is correct.
+  readonly isSuperAdmin = computed(() => this.me.isSuperAdmin())
 
   readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -61,6 +70,7 @@ export class CreateRepositoryModal implements OnInit {
     remotePassword: new FormControl('', { nonNullable: true }),
     quotaMb: new FormControl('', { nonNullable: true }),
     retentionKeepLastN: new FormControl('', { nonNullable: true }),
+    isPublic: new FormControl(false, { nonNullable: true }),
   })
 
   // Zoneless only re-renders on signal changes, so this can't just read the FormControl directly.
@@ -72,6 +82,10 @@ export class CreateRepositoryModal implements OnInit {
   })
   readonly isProxy = computed(() => this.repoType() === 'proxy')
   readonly isGroup = computed(() => this.repoType() === 'group')
+  // A public proxy would relay anonymously to its upstream using the repo's own stored
+  // credentials; a public group would silently expose every member's own visibility (#74) —
+  // the backend rejects both, so the checkbox only makes sense for a hosted repository.
+  readonly canBePublic = computed(() => !this.isProxy() && !this.isGroup())
 
   readonly allRepositories = signal<RepositorySummary[]>([])
   readonly selectedMemberId = signal('')
@@ -89,6 +103,13 @@ export class CreateRepositoryModal implements OnInit {
     effect(() => {
       this.format()
       this.groupMembers.set([])
+    })
+    // Drop a stale checked state so it can't survive a repo-type change while the checkbox row
+    // is hidden and still get submitted.
+    effect(() => {
+      if (!this.canBePublic()) {
+        this.form.controls.isPublic.setValue(false)
+      }
     })
   }
 
@@ -174,6 +195,7 @@ export class CreateRepositoryModal implements OnInit {
       remotePassword,
       quotaMb,
       retentionKeepLastN,
+      isPublic,
     } = this.form.getRawValue()
     const quotaBytes = quotaMb.trim() === '' ? null : Math.round(Number(quotaMb) * BYTES_PER_MB)
     const retentionKeepLastNValue =
@@ -190,14 +212,34 @@ export class CreateRepositoryModal implements OnInit {
         retentionKeepLastN: retentionKeepLastNValue,
       })
       .subscribe({
-        next: () => {
-          this.creating.set(false)
-          this.created.emit()
-          this.toastService.success(`Dépôt « ${name} » créé.`)
+        next: (created) => {
+          if (!isPublic) {
+            this.creating.set(false)
+            this.created.emit()
+            this.toastService.success(`Dépôt « ${name} » créé.`)
+            return
+          }
+          // The creation endpoint has no visibility field — making it public is a second,
+          // separate call, only ever fired when the checkbox was ticked.
+          this.repositoriesService.setVisibility(created.id, true).subscribe({
+            next: () => {
+              this.creating.set(false)
+              this.created.emit()
+              this.toastService.success(`Dépôt « ${name} » créé.`)
+            },
+            error: (err) => {
+              this.creating.set(false)
+              // The repository itself was created — only the visibility follow-up failed.
+              this.created.emit()
+              this.toastService.error(
+                rejectionMessage(err) ?? 'Dépôt créé, mais échec du passage en public.',
+              )
+            },
+          })
         },
         error: (err) => {
           this.creating.set(false)
-          this.toastService.error(err?.error?.error ?? 'Échec de la création du dépôt.')
+          this.toastService.error(rejectionMessage(err) ?? 'Échec de la création du dépôt.')
         },
       })
   }

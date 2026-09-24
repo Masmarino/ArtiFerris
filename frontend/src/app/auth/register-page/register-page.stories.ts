@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http'
 import {
   applicationConfig,
   moduleMetadata,
@@ -62,7 +63,14 @@ export const UsernameAlreadyTaken: Story = {
         {
           provide: AuthService,
           useValue: fakeAuth({
-            register: () => throwError(() => ({ error: { error: 'username already taken' } })),
+            register: () =>
+              throwError(
+                () =>
+                  new HttpErrorResponse({
+                    status: 400,
+                    error: { error: 'username already taken' },
+                  }),
+              ),
           }),
         },
       ],
@@ -86,7 +94,11 @@ export const RegistrationDisabled: Story = {
         {
           provide: AuthService,
           useValue: fakeAuth({
-            register: () => throwError(() => ({ error: { error: 'currently disabled' } })),
+            register: () =>
+              throwError(
+                () =>
+                  new HttpErrorResponse({ status: 400, error: { error: 'currently disabled' } }),
+              ),
           }),
         },
       ],

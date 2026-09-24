@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO docker_blobs (digest, size_bytes, storage_key, reference_count, created_at) VALUES ($1, $2, $1, 0, now())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "84ef4566caf9302e0b312425791926c3e1f51386f8de039c12801d7953bb7329"
+}

@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use chrono::{Duration, Utc};
+use artiferris_domain::audit::{AdminAuditEvent, AdminAuditRecord, AuditRecord};
 use artiferris_domain::email::EmailPort;
 use artiferris_domain::error::DomainError;
 use artiferris_domain::invitation::{UserInvitation, UserInvitationPort};
 use artiferris_domain::organization::{Organization, OrganizationRepositoryPort};
-use artiferris_domain::user::{Password, PasswordHasherPort, User, UserRepositoryPort, Username};
+use artiferris_domain::user::{Password, PasswordHasherPort, User, UserRepositoryPort, UserSecurityPort, Username};
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -15,10 +16,9 @@ use crate::error::ApplicationError;
 /// `https://<slug>.<artiferris_base_domain>` (or `https://app.<artiferris_base_domain>` for the
 /// public org — the main app's own reserved host, see `organization_middleware`'s "app" label) —
 /// the origin an invited/imported user's own org is served from.
-/// Mirrors `organization_origin` in `artiferris-api`'s `routes/auth.rs`, kept in sync by hand since artiferris-application can't depend on artiferris-api.
-pub(crate) fn organization_origin(artiferris_base_domain: &str, organization: &Organization) -> String {
+pub fn organization_origin(artiferris_base_domain: &str, organization: &Organization) -> String {
     let host = if organization.is_public { format!("app.{}", artiferris_base_domain) } else { format!("{}.{}", organization.slug.as_str(), artiferris_base_domain) };
-    format!("{}://{}", if artiferris_base_domain.starts_with("localhost") { "http" } else { "https" }, host)
+    format!("{}://{}", crate::base_domain::scheme_for_domain(artiferris_base_domain), host)
 }
 
 pub(crate) async fn require_organization(organizations: &dyn OrganizationRepositoryPort, organization_id: Uuid) -> Result<Organization, ApplicationError> {
@@ -48,8 +48,18 @@ pub(crate) async fn unusable_password_hash(hasher: &dyn PasswordHasherPort) -> R
     Ok(hasher.hash(&hex::encode(bytes)).await?)
 }
 
+/// RFC 5321's limit on a whole address.
+const MAX_EMAIL_LEN: usize = 254;
+
 pub(crate) fn validate_email(email: &str) -> Result<(), ApplicationError> {
-    if email.trim().is_empty() || !email.contains('@') {
+    let trimmed = email.trim();
+    if trimmed.is_empty() || trimmed != email || email.len() > MAX_EMAIL_LEN || email.chars().any(|c| c.is_control()) {
+        return Err(ApplicationError::InvalidEmail(email.to_string()));
+    }
+    let Some((local, domain)) = email.split_once('@') else {
+        return Err(ApplicationError::InvalidEmail(email.to_string()));
+    };
+    if local.is_empty() || domain.is_empty() || domain.contains('@') || !domain.contains('.') || domain.starts_with('.') || domain.ends_with('.') || email.chars().any(char::is_whitespace) {
         return Err(ApplicationError::InvalidEmail(email.to_string()));
     }
     Ok(())
@@ -57,6 +67,7 @@ pub(crate) fn validate_email(email: &str) -> Result<(), ApplicationError> {
 
 pub struct InviteUserUseCase {
     users: Arc<dyn UserRepositoryPort>,
+    security: Arc<dyn UserSecurityPort>,
     invitations: Arc<dyn UserInvitationPort>,
     hasher: Arc<dyn PasswordHasherPort>,
     email: Arc<dyn EmailPort>,
@@ -68,21 +79,26 @@ pub struct InviteUserUseCase {
 impl InviteUserUseCase {
     pub fn new(
         users: Arc<dyn UserRepositoryPort>,
+        security: Arc<dyn UserSecurityPort>,
         invitations: Arc<dyn UserInvitationPort>,
         hasher: Arc<dyn PasswordHasherPort>,
         email: Arc<dyn EmailPort>,
         organizations: Arc<dyn OrganizationRepositoryPort>,
         artiferris_base_domain: String,
     ) -> Self {
-        Self { users, invitations, hasher, email, organizations, artiferris_base_domain }
+        Self { users, security, invitations, hasher, email, organizations, artiferris_base_domain }
     }
 
     /// `organization_id` is normally the acting admin's own org, but a super-admin inviting an org's first local admin can pass any organization.
-    pub async fn execute(&self, organization_id: Uuid, is_organization_admin: bool, username: &str, email: &str, is_super_admin: bool) -> Result<Uuid, ApplicationError> {
-        let username = Username::parse(username)?;
+    /// The `UserInvited` audit entry is written with the invitation; if that fails, the account is removed again.
+    pub async fn execute(&self, organization_id: Uuid, is_organization_admin: bool, username: &str, email: &str, is_super_admin: bool, actor_id: Uuid) -> Result<Uuid, ApplicationError> {
+        let username = Username::parse_new(username)?;
         validate_email(email)?;
         if self.users.find_by_username(&username).await?.is_some() {
             return Err(ApplicationError::UsernameTaken);
+        }
+        if self.security.find_by_verified_email(organization_id, email).await?.is_some() {
+            return Err(DomainError::EmailTaken.into());
         }
 
         let user = User {
@@ -96,10 +112,21 @@ impl InviteUserUseCase {
             tokens_valid_after: Utc::now(),
             email: Some(email.to_string()),
         };
+        // Not verified yet: nobody has proven the address until the invitation is redeemed.
         self.users.insert(&user).await?;
 
         let token = generate_invitation_token();
-        self.invitations.upsert(&UserInvitation { user_id: user.id, token_hash: hash_invitation_token(&token), expires_at: Utc::now() + Duration::hours(INVITATION_TTL_HOURS) }).await?;
+        let audit = AdminAuditRecord {
+            event: AdminAuditEvent::UserInvited { user_id: user.id, organization_id, username: user.username.as_str().to_string(), is_organization_admin, is_super_admin },
+            actor_id: Some(actor_id),
+        };
+        let invitation = UserInvitation { user_id: user.id, token_hash: hash_invitation_token(&token), expires_at: Utc::now() + Duration::hours(INVITATION_TTL_HOURS) };
+        if let Err(e) = self.invitations.upsert(&invitation, Some(&audit)).await {
+            if let Err(cleanup) = self.users.delete(user.id).await {
+                tracing::error!("failed to remove user {} after its invitation could not be stored: {cleanup}", user.id);
+            }
+            return Err(e.into());
+        }
 
         // After persisting the user, not before — if the org lookup ever fails, the account still exists and can be reached via ResendInvitationUseCase.
         let organization = require_organization(self.organizations.as_ref(), organization_id).await?;
@@ -136,7 +163,8 @@ impl ResendInvitationUseCase {
     }
 
     /// An already-activated account has no invitation row left, so this also returns `InvitationNotFound` for it, same as for an unknown user id.
-    pub async fn execute(&self, user_id: Uuid) -> Result<(), ApplicationError> {
+    /// The `InvitationResent` audit entry is written with the new invitation.
+    pub async fn execute(&self, user_id: Uuid, actor_id: Uuid) -> Result<(), ApplicationError> {
         let user = self.users.find_by_id(user_id).await?.ok_or(ApplicationError::InvitationNotFound)?;
         if self.invitations.find_by_user_id(user_id).await?.is_none() {
             return Err(ApplicationError::InvitationNotFound);
@@ -146,7 +174,8 @@ impl ResendInvitationUseCase {
         };
 
         let token = generate_invitation_token();
-        self.invitations.upsert(&UserInvitation { user_id, token_hash: hash_invitation_token(&token), expires_at: Utc::now() + Duration::hours(INVITATION_TTL_HOURS) }).await?;
+        let audit = AdminAuditRecord { event: AdminAuditEvent::InvitationResent { user_id, organization_id: user.organization_id }, actor_id: Some(actor_id) };
+        self.invitations.upsert(&UserInvitation { user_id, token_hash: hash_invitation_token(&token), expires_at: Utc::now() + Duration::hours(INVITATION_TTL_HOURS) }, Some(&audit)).await?;
 
         // The user's own organization, not whatever the acting admin resolved against.
         let organization = require_organization(self.organizations.as_ref(), user.organization_id).await?;
@@ -160,31 +189,51 @@ impl ResendInvitationUseCase {
 
 pub struct ActivateAccountUseCase {
     users: Arc<dyn UserRepositoryPort>,
+    security: Arc<dyn UserSecurityPort>,
     invitations: Arc<dyn UserInvitationPort>,
     hasher: Arc<dyn PasswordHasherPort>,
 }
 
 impl ActivateAccountUseCase {
-    pub fn new(users: Arc<dyn UserRepositoryPort>, invitations: Arc<dyn UserInvitationPort>, hasher: Arc<dyn PasswordHasherPort>) -> Self {
-        Self { users, invitations, hasher }
+    pub fn new(users: Arc<dyn UserRepositoryPort>, security: Arc<dyn UserSecurityPort>, invitations: Arc<dyn UserInvitationPort>, hasher: Arc<dyn PasswordHasherPort>) -> Self {
+        Self { users, security, invitations, hasher }
     }
 
-    pub async fn execute(&self, token: &str, new_password: &str) -> Result<(), ApplicationError> {
+    /// The id of the account that was activated.
+    pub async fn execute(&self, token: &str, new_password: &str) -> Result<Uuid, ApplicationError> {
         let invitation = self.invitations.find_by_token_hash(&hash_invitation_token(token)).await?.ok_or(ApplicationError::InvitationNotFound)?;
         if invitation.expires_at < Utc::now() {
             return Err(ApplicationError::InvitationExpired);
         }
         let password = Password::parse(new_password)?;
         let hash = self.hasher.hash(password.as_str()).await?;
-        self.users.update_password(invitation.user_id, hash).await?;
-        self.invitations.delete(invitation.user_id).await?;
+
+        // Of several parallel activations only one gets the invitation.
+        let redeemed = self.invitations.redeem(&invitation.token_hash).await?.ok_or(ApplicationError::InvitationNotFound)?;
+        // Put the invitation back on failure so the mailed link still works.
+        if let Err(e) = self.set_password_and_verify_email(redeemed.user_id, hash).await {
+            if let Err(restore_error) = self.invitations.upsert(&redeemed, None).await {
+                tracing::error!("failed to restore invitation of user {} after a failed activation: {restore_error}", redeemed.user_id);
+            }
+            return Err(e);
+        }
+        Ok(redeemed.user_id)
+    }
+
+    /// Redeeming the invitation is what proves the address, so it's verified here and not at invite time.
+    /// The `UserActivated` audit entry is written with the password.
+    async fn set_password_and_verify_email(&self, user_id: Uuid, password_hash: String) -> Result<(), ApplicationError> {
+        let user = self.users.find_by_id(user_id).await?.ok_or(ApplicationError::InvitationNotFound)?;
+        let audit = AuditRecord::Admin(AdminAuditRecord { event: AdminAuditEvent::UserActivated { user_id, organization_id: user.organization_id }, actor_id: Some(user_id) });
+        self.users.update_password(user_id, password_hash, Some(&audit)).await?;
+        self.security.mark_email_verified(user_id).await?;
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::sync::Mutex;
 
     use async_trait::async_trait;
@@ -197,11 +246,32 @@ mod tests {
 
     struct FakeUsers {
         users: Mutex<HashMap<Uuid, User>>,
+        verified: Mutex<HashSet<Uuid>>,
+        fail_update_password: std::sync::atomic::AtomicBool,
     }
 
     impl FakeUsers {
         fn new() -> Self {
-            Self { users: Mutex::new(HashMap::new()) }
+            Self { users: Mutex::new(HashMap::new()), verified: Mutex::new(HashSet::new()), fail_update_password: std::sync::atomic::AtomicBool::new(false) }
+        }
+    }
+
+    #[async_trait]
+    impl UserSecurityPort for FakeUsers {
+        async fn revoke_sessions(&self, _id: Uuid, _audit: Option<&artiferris_domain::audit::SecurityAuditRecord>) -> Result<(), DomainError> {
+            Ok(())
+        }
+        async fn find_by_verified_email(&self, organization_id: Uuid, email: &str) -> Result<Option<User>, DomainError> {
+            let verified = self.verified.lock().unwrap();
+            Ok(self.users.lock().unwrap().values().find(|u| u.organization_id == organization_id && verified.contains(&u.id) && u.email.as_deref() == Some(email)).cloned())
+        }
+        async fn insert_with_verified_email(&self, user: &User) -> Result<(), DomainError> {
+            self.users.lock().unwrap().insert(user.id, user.clone());
+            self.verified.lock().unwrap().insert(user.id);
+            Ok(())
+        }
+        async fn mark_email_verified(&self, id: Uuid) -> Result<bool, DomainError> {
+            Ok(self.verified.lock().unwrap().insert(id))
         }
     }
 
@@ -219,6 +289,34 @@ mod tests {
         async fn list_all(&self) -> Result<Vec<User>, DomainError> {
             Ok(self.users.lock().unwrap().values().cloned().collect())
         }
+        async fn find_by_ids(&self, ids: &[Uuid]) -> Result<Vec<User>, DomainError> {
+            Ok(self.users.lock().unwrap().values().filter(|u| ids.contains(&u.id)).cloned().collect())
+        }
+        async fn count_by_organization(&self, organization_id: Uuid) -> Result<i64, DomainError> {
+            Ok(self.users.lock().unwrap().values().filter(|u| u.organization_id == organization_id).count() as i64)
+        }
+        async fn search_by_organization(&self, organization_id: Uuid, query: &str, limit: i64) -> Result<Vec<User>, DomainError> {
+            let query = query.to_lowercase();
+            let mut matches: Vec<User> = self
+                .users
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|u| u.organization_id == organization_id && u.username.as_str().to_lowercase().contains(&query))
+                .cloned()
+                .collect();
+            matches.sort_by(|a, b| a.username.as_str().cmp(b.username.as_str()));
+            matches.truncate(limit as usize);
+            Ok(matches)
+        }
+        async fn search_all_organizations(&self, query: &str, limit: i64) -> Result<Vec<User>, DomainError> {
+            let query = query.to_lowercase();
+            let mut matches: Vec<User> =
+                self.users.lock().unwrap().values().filter(|u| u.username.as_str().to_lowercase().contains(&query)).cloned().collect();
+            matches.sort_by(|a, b| a.username.as_str().cmp(b.username.as_str()));
+            matches.truncate(limit as usize);
+            Ok(matches)
+        }
         async fn insert(&self, user: &User) -> Result<(), DomainError> {
             self.users.lock().unwrap().insert(user.id, user.clone());
             Ok(())
@@ -227,7 +325,10 @@ mod tests {
             self.users.lock().unwrap().remove(&id);
             Ok(())
         }
-        async fn update_password(&self, id: Uuid, new_password_hash: String) -> Result<(), DomainError> {
+        async fn update_password(&self, id: Uuid, new_password_hash: String, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
+            if self.fail_update_password.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(DomainError::Infrastructure("update failed".to_string()));
+            }
             if let Some(user) = self.users.lock().unwrap().get_mut(&id) {
                 user.password_hash = new_password_hash;
             }
@@ -239,17 +340,17 @@ mod tests {
             }
             Ok(())
         }
-        async fn set_organization_admin(&self, id: Uuid, is_organization_admin: bool) -> Result<(), DomainError> {
+        async fn set_organization_admin(&self, id: Uuid, is_organization_admin: bool, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             if let Some(user) = self.users.lock().unwrap().get_mut(&id) {
                 user.is_organization_admin = is_organization_admin;
             }
             Ok(())
         }
-        async fn delete_unless_last_super_admin(&self, id: Uuid) -> Result<bool, DomainError> {
+        async fn delete_unless_last_super_admin(&self, id: Uuid, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<bool, DomainError> {
             self.users.lock().unwrap().remove(&id);
             Ok(true)
         }
-        async fn set_super_admin_unless_last(&self, id: Uuid, is_super_admin: bool) -> Result<bool, DomainError> {
+        async fn set_super_admin_unless_last(&self, id: Uuid, is_super_admin: bool, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<bool, DomainError> {
             if let Some(user) = self.users.lock().unwrap().get_mut(&id) {
                 user.is_super_admin = is_super_admin;
             }
@@ -269,7 +370,7 @@ mod tests {
 
     #[async_trait]
     impl UserInvitationPort for FakeInvitations {
-        async fn upsert(&self, invitation: &UserInvitation) -> Result<(), DomainError> {
+        async fn upsert(&self, invitation: &UserInvitation, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             self.by_user.lock().unwrap().insert(invitation.user_id, invitation.clone());
             Ok(())
         }
@@ -287,6 +388,13 @@ mod tests {
             self.by_user.lock().unwrap().remove(&user_id);
             Ok(())
         }
+        async fn redeem(&self, token_hash: &str) -> Result<Option<UserInvitation>, DomainError> {
+            let mut by_user = self.by_user.lock().unwrap();
+            let Some(user_id) = by_user.values().find(|i| i.token_hash == token_hash && i.expires_at > Utc::now()).map(|i| i.user_id) else {
+                return Ok(None);
+            };
+            Ok(by_user.remove(&user_id))
+        }
     }
 
     struct FakeHasher;
@@ -296,8 +404,8 @@ mod tests {
         async fn hash(&self, plain_password: &str) -> Result<String, DomainError> {
             Ok(format!("hashed:{plain_password}"))
         }
-        async fn verify(&self, plain_password: &str, hash: &str) -> bool {
-            hash == format!("hashed:{plain_password}")
+        async fn verify(&self, plain_password: &str, hash: &str) -> Result<bool, DomainError> {
+            Ok(hash == format!("hashed:{plain_password}"))
         }
     }
 
@@ -354,7 +462,7 @@ mod tests {
         let organizations = Arc::new(FakeOrganizations::new());
         let organization_id = Uuid::new_v4();
         organizations
-            .create(&Organization { id: organization_id, slug: OrganizationSlug::parse("public").unwrap(), display_name: "Public".to_string(), is_public: true, created_at: Utc::now() })
+            .create(&Organization { id: organization_id, slug: OrganizationSlug::parse("public").unwrap(), display_name: "Public".to_string(), is_public: true, is_personal: false, created_at: Utc::now() })
             .await
             .unwrap();
         (Arc::new(FakeUsers::new()), Arc::new(FakeInvitations::new()), Arc::new(FakeHasher), Arc::new(FakeEmail::new()), organizations, organization_id)
@@ -363,9 +471,9 @@ mod tests {
     #[tokio::test]
     async fn invites_a_user_and_sends_an_activation_email() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
-        let use_case = InviteUserUseCase::new(users.clone(), invitations.clone(), hasher, email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
+        let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher, email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
 
-        let id = use_case.execute(organization_id, false, "florian", "florian@example.com", false).await.unwrap();
+        let id = use_case.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let user = users.find_by_id(id).await.unwrap().unwrap();
         assert_eq!(user.email.as_deref(), Some("florian@example.com"));
@@ -379,16 +487,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn an_invited_users_email_is_not_verified_before_activation() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
+
+        use_case.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+
+        assert!(users.find_by_verified_email(organization_id, "florian@example.com").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn an_email_verified_in_the_organization_cannot_be_invited_again() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
+        let first = use_case.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        users.mark_email_verified(first).await.unwrap();
+
+        let err = use_case.execute(organization_id, false, "florian2", "florian@example.com", false, Uuid::new_v4()).await.unwrap_err();
+
+        assert!(matches!(err, ApplicationError::Domain(DomainError::EmailTaken)), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn an_email_verified_in_another_organization_can_still_be_invited() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations.clone(), TEST_BASE_DOMAIN.to_string());
+        let other_organization_id = Uuid::new_v4();
+        organizations.create(&Organization { id: other_organization_id, slug: OrganizationSlug::parse("acme").unwrap(), display_name: "Acme".to_string(), is_public: false, is_personal: false, created_at: Utc::now() }).await.unwrap();
+        let first = use_case.execute(other_organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        users.mark_email_verified(first).await.unwrap();
+
+        use_case.execute(organization_id, false, "florian2", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+    }
+
+    #[tokio::test]
     async fn invites_a_user_into_the_given_organization() {
         let (users, invitations, hasher, email, organizations, _default_organization_id) = setup().await;
         let organization_id = Uuid::new_v4();
         organizations
-            .create(&Organization { id: organization_id, slug: OrganizationSlug::parse("acme").unwrap(), display_name: "Acme".to_string(), is_public: false, created_at: Utc::now() })
+            .create(&Organization { id: organization_id, slug: OrganizationSlug::parse("acme").unwrap(), display_name: "Acme".to_string(), is_public: false, is_personal: false, created_at: Utc::now() })
             .await
             .unwrap();
-        let use_case = InviteUserUseCase::new(users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
+        let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
 
-        let id = use_case.execute(organization_id, false, "florian", "florian@example.com", false).await.unwrap();
+        let id = use_case.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let user = users.find_by_id(id).await.unwrap().unwrap();
         assert_eq!(user.organization_id, organization_id);
@@ -399,12 +541,12 @@ mod tests {
         let (users, invitations, hasher, email, organizations, _default_organization_id) = setup().await;
         let organization_id = Uuid::new_v4();
         organizations
-            .create(&Organization { id: organization_id, slug: OrganizationSlug::parse("acme").unwrap(), display_name: "Acme".to_string(), is_public: false, created_at: Utc::now() })
+            .create(&Organization { id: organization_id, slug: OrganizationSlug::parse("acme").unwrap(), display_name: "Acme".to_string(), is_public: false, is_personal: false, created_at: Utc::now() })
             .await
             .unwrap();
-        let use_case = InviteUserUseCase::new(users, invitations, hasher, email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
+        let use_case = InviteUserUseCase::new(users.clone(), users, invitations, hasher, email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
 
-        use_case.execute(organization_id, false, "florian", "florian@example.com", false).await.unwrap();
+        use_case.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let sent = email.sent.lock().unwrap();
         assert!(sent[0].3.contains("https://acme.artiferris.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
@@ -413,30 +555,39 @@ mod tests {
     #[tokio::test]
     async fn rejects_a_duplicate_username() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
-        let use_case = InviteUserUseCase::new(users, invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
-        use_case.execute(organization_id, false, "florian", "a@example.com", false).await.unwrap();
+        let use_case = InviteUserUseCase::new(users.clone(), users, invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
+        use_case.execute(organization_id, false, "florian", "a@example.com", false, Uuid::new_v4()).await.unwrap();
 
-        let err = use_case.execute(organization_id, false, "florian", "b@example.com", false).await.unwrap_err();
+        let err = use_case.execute(organization_id, false, "florian", "b@example.com", false, Uuid::new_v4()).await.unwrap_err();
         assert!(matches!(err, ApplicationError::UsernameTaken));
+    }
+
+    #[tokio::test]
+    async fn rejects_a_username_using_the_reserved_prefix() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let use_case = InviteUserUseCase::new(users.clone(), users, invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
+
+        let err = use_case.execute(organization_id, false, "ArtiFerris-docker", "a@example.com", false, Uuid::new_v4()).await.unwrap_err();
+        assert!(matches!(err, ApplicationError::Domain(DomainError::ReservedName(_))));
     }
 
     #[tokio::test]
     async fn rejects_an_invalid_email() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
-        let use_case = InviteUserUseCase::new(users, invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
+        let use_case = InviteUserUseCase::new(users.clone(), users, invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
 
-        let err = use_case.execute(organization_id, false, "florian", "not-an-email", false).await.unwrap_err();
+        let err = use_case.execute(organization_id, false, "florian", "not-an-email", false, Uuid::new_v4()).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidEmail(_)));
     }
 
     #[tokio::test]
     async fn an_invited_user_cannot_log_in_before_activating() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
-        let invite = InviteUserUseCase::new(users.clone(), invitations, hasher.clone(), email, organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false).await.unwrap();
+        let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher.clone(), email, organizations, TEST_BASE_DOMAIN.to_string());
+        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let user = users.find_by_id(id).await.unwrap().unwrap();
-        assert!(!hasher.verify("anything", &user.password_hash).await, "no plaintext should verify against the placeholder hash");
+        assert!(!hasher.verify("anything", &user.password_hash).await.unwrap(), "no plaintext should verify against the placeholder hash");
     }
 
     /// Recovers the token the same way a real invitee would: from the sent email's link.
@@ -448,22 +599,69 @@ mod tests {
     #[tokio::test]
     async fn activates_an_account_with_a_valid_token() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
-        let invite = InviteUserUseCase::new(users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false).await.unwrap();
+        let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
+        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         let token = extract_token_from_last_email(&email);
 
-        let activate = ActivateAccountUseCase::new(users.clone(), invitations.clone(), hasher.clone());
-        activate.execute(&token, "new-s3cret!").await.unwrap();
+        let activate = ActivateAccountUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone());
+        let activated = activate.execute(&token, "new-s3cret!").await.unwrap();
 
+        assert_eq!(activated, id);
         let user = users.find_by_id(id).await.unwrap().unwrap();
-        assert!(hasher.verify("new-s3cret!", &user.password_hash).await);
+        assert!(hasher.verify("new-s3cret!", &user.password_hash).await.unwrap());
         assert!(invitations.find_by_user_id(id).await.unwrap().is_none(), "the invitation must be consumed after activation");
+    }
+
+    #[tokio::test]
+    async fn activation_verifies_the_invited_email() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
+        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let token = extract_token_from_last_email(&email);
+
+        ActivateAccountUseCase::new(users.clone(), users.clone(), invitations, hasher).execute(&token, "new-s3cret!").await.unwrap();
+
+        assert_eq!(users.find_by_verified_email(organization_id, "florian@example.com").await.unwrap().map(|u| u.id), Some(id));
+    }
+
+    #[tokio::test]
+    async fn two_parallel_activations_with_one_token_let_exactly_one_through() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
+        invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let token = extract_token_from_last_email(&email);
+        let activate = Arc::new(ActivateAccountUseCase::new(users.clone(), users, invitations, hasher));
+
+        let (first, second) = tokio::join!(
+            { let activate = activate.clone(); let token = token.clone(); tokio::spawn(async move { activate.execute(&token, "first-s3cret!").await }) },
+            { let activate = activate.clone(); let token = token.clone(); tokio::spawn(async move { activate.execute(&token, "second-s3cret!").await }) },
+        );
+        let results = [first.unwrap(), second.unwrap()];
+
+        assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1, "{results:?}");
+        assert!(results.iter().any(|r| matches!(r, Err(ApplicationError::InvitationNotFound))));
+    }
+
+    #[tokio::test]
+    async fn a_failed_activation_leaves_the_link_usable() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
+        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let token = extract_token_from_last_email(&email);
+        let activate = ActivateAccountUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher);
+
+        users.fail_update_password.store(true, std::sync::atomic::Ordering::SeqCst);
+        assert!(activate.execute(&token, "new-s3cret!").await.is_err());
+        assert!(invitations.find_by_user_id(id).await.unwrap().is_some(), "the invitation must survive a failure between redeeming and setting the password");
+
+        users.fail_update_password.store(false, std::sync::atomic::Ordering::SeqCst);
+        activate.execute(&token, "new-s3cret!").await.unwrap();
     }
 
     #[tokio::test]
     async fn rejects_an_unknown_token() {
         let (users, invitations, hasher, _email, _organizations, _organization_id) = setup().await;
-        let activate = ActivateAccountUseCase::new(users, invitations, hasher);
+        let activate = ActivateAccountUseCase::new(users.clone(), users, invitations, hasher);
 
         let err = activate.execute("not-a-real-token", "new-s3cret!").await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvitationNotFound));
@@ -487,9 +685,9 @@ mod tests {
             })
             .await
             .unwrap();
-        invitations.upsert(&UserInvitation { user_id, token_hash: hash_invitation_token("raw-token"), expires_at: Utc::now() - Duration::hours(1) }).await.unwrap();
+        invitations.upsert(&UserInvitation { user_id, token_hash: hash_invitation_token("raw-token"), expires_at: Utc::now() - Duration::hours(1) }, None).await.unwrap();
 
-        let activate = ActivateAccountUseCase::new(users, invitations, hasher);
+        let activate = ActivateAccountUseCase::new(users.clone(), users, invitations, hasher);
         let err = activate.execute("raw-token", "new-s3cret!").await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvitationExpired));
     }
@@ -497,12 +695,12 @@ mod tests {
     #[tokio::test]
     async fn resends_an_invitation_with_a_fresh_token() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
-        let invite = InviteUserUseCase::new(users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false).await.unwrap();
+        let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
+        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         let first_token_hash = invitations.find_by_user_id(id).await.unwrap().unwrap().token_hash;
 
         let resend = ResendInvitationUseCase::new(users, invitations.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        resend.execute(id).await.unwrap();
+        resend.execute(id, Uuid::new_v4()).await.unwrap();
 
         let second_token_hash = invitations.find_by_user_id(id).await.unwrap().unwrap().token_hash;
         assert_ne!(first_token_hash, second_token_hash);
@@ -514,19 +712,19 @@ mod tests {
         let (users, invitations, _hasher, email, organizations, _organization_id) = setup().await;
         let resend = ResendInvitationUseCase::new(users, invitations, email, organizations, TEST_BASE_DOMAIN.to_string());
 
-        let err = resend.execute(Uuid::new_v4()).await.unwrap_err();
+        let err = resend.execute(Uuid::new_v4(), Uuid::new_v4()).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvitationNotFound));
     }
 
     #[tokio::test]
     async fn resending_for_an_already_activated_user_fails() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
-        let invite = InviteUserUseCase::new(users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false).await.unwrap();
+        let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
+        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         invitations.delete(id).await.unwrap(); // simulates a completed activation
 
         let resend = ResendInvitationUseCase::new(users, invitations, email, organizations, TEST_BASE_DOMAIN.to_string());
-        let err = resend.execute(id).await.unwrap_err();
+        let err = resend.execute(id, Uuid::new_v4()).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvitationNotFound));
     }
 
@@ -535,14 +733,14 @@ mod tests {
         let (users, invitations, hasher, email, organizations, _default_organization_id) = setup().await;
         let organization_id = Uuid::new_v4();
         organizations
-            .create(&Organization { id: organization_id, slug: OrganizationSlug::parse("acme").unwrap(), display_name: "Acme".to_string(), is_public: false, created_at: Utc::now() })
+            .create(&Organization { id: organization_id, slug: OrganizationSlug::parse("acme").unwrap(), display_name: "Acme".to_string(), is_public: false, is_personal: false, created_at: Utc::now() })
             .await
             .unwrap();
-        let invite = InviteUserUseCase::new(users.clone(), invitations.clone(), hasher, email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false).await.unwrap();
+        let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher, email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
+        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let resend = ResendInvitationUseCase::new(users, invitations, email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        resend.execute(id).await.unwrap();
+        resend.execute(id, Uuid::new_v4()).await.unwrap();
 
         let sent = email.sent.lock().unwrap();
         assert!(sent[1].3.contains("https://acme.artiferris.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[1].3);
@@ -558,19 +756,58 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: Utc::now(),
             })
             .await
             .unwrap();
         let users = Arc::new(artiferris_infrastructure::postgres::user_repository::PostgresUserRepository::new(pool.clone()));
         let (_, invitations, hasher, email, _fake_organizations, _fake_organization_id) = setup().await;
-        let use_case = InviteUserUseCase::new(users.clone(), invitations, hasher, email, organizations, "localhost".to_string());
+        let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, "localhost".to_string());
 
-        let user_id = use_case.execute(organization_id, true, "acme-admin", "admin@acme.example", false).await.unwrap();
+        let user_id = use_case.execute(organization_id, true, "acme-admin", "admin@acme.example", false, Uuid::new_v4()).await.unwrap();
 
         let created = users.find_by_id(user_id).await.unwrap().unwrap();
         assert_eq!(created.organization_id, organization_id);
         assert!(created.is_organization_admin);
         assert!(!created.is_super_admin);
+    }
+
+    fn organization(slug: &str, is_public: bool) -> Organization {
+        Organization { id: Uuid::new_v4(), slug: OrganizationSlug::parse(slug).unwrap(), display_name: slug.to_string(), is_public, is_personal: false, created_at: Utc::now() }
+    }
+
+    #[test]
+    fn a_dev_base_domain_ending_in_localhost_yields_http_links() {
+        assert_eq!(organization_origin("artiferris.localhost", &organization("acme", false)), "http://acme.artiferris.localhost");
+        assert_eq!(organization_origin("artiferris.localhost", &organization("public", true)), "http://app.artiferris.localhost");
+    }
+
+    #[test]
+    fn a_real_base_domain_yields_https_links_even_if_it_starts_with_localhost() {
+        assert_eq!(organization_origin("artiferris.example.com", &organization("acme", false)), "https://acme.artiferris.example.com");
+        assert_eq!(organization_origin("localhost.example.com", &organization("acme", false)), "https://acme.localhost.example.com");
+    }
+
+    #[test]
+    fn validate_email_rejects_embedded_control_characters() {
+        assert!(validate_email("a@b.com\r\nBcc: victim@evil.com").is_err());
+        assert!(validate_email("a@b.com\nX-Injected: true").is_err());
+    }
+
+    #[test]
+    fn validate_email_rejects_an_address_past_the_length_limit() {
+        assert!(validate_email(&format!("{}@example.com", "a".repeat(250))).is_err());
+    }
+
+    #[test]
+    fn validate_email_rejects_a_second_at_sign_and_embedded_whitespace() {
+        assert!(validate_email("a@b@example.com").is_err());
+        assert!(validate_email("a b@example.com").is_err());
+    }
+
+    #[test]
+    fn validate_email_still_accepts_ordinary_addresses() {
+        assert!(validate_email("florian@example.com").is_ok());
     }
 }

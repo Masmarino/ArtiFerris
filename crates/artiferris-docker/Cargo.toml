@@ -1,6 +1,6 @@
 [package]
 name = "artiferris-docker"
-version = "0.1.0"
+version = "0.5.0"
 edition.workspace = true
 
 [dependencies]
@@ -13,6 +13,7 @@ tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
+futures-util = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 # `axum::extract::Query` (backed by `serde_urlencoded`) does not collect
@@ -25,6 +26,8 @@ chrono = { version = "0.4", features = ["serde"] }
 form_urlencoded = "1"
 
 [dev-dependencies]
+# Only for the in-memory `UserRepositoryPort` fake in `tokens_valid_after_cache`'s tests.
+async-trait = "0.1"
 tower = { version = "0.5", features = ["util"] }
 sqlx = { version = "0.9", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate"] }
 tempfile = "3"

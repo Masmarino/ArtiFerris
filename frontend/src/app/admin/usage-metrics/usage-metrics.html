@@ -1,4 +1,10 @@
 <div class="container">
+  @if (failed()) {
+    <p class="gbt-form-error" role="alert">
+      Échec du chargement de l'utilisation. Vérifiez votre connexion puis réessayez.
+    </p>
+    <gbt-button text="Réessayer" (clicked)="retry()" />
+  }
   <gbt-card heading="Espace utilisé par dépôt" icon="hard-drive">
     <gbt-dimension-card
       [rows]="chartData()"
@@ -27,7 +33,7 @@
 
   <gbt-table
     caption="Utilisation par dépôt"
-    emptyMessage="Aucune donnée disponible"
+    emptyMessage="Aucun détail d'utilisation disponible."
     [data]="usages()"
     [columns]="columns"
     [trackBy]="rowId"

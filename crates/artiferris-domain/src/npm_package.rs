@@ -72,6 +72,42 @@ impl NpmVersion {
     pub fn as_str(&self) -> String {
         self.0.to_string()
     }
+
+    /// The version without its build metadata, which takes no part in precedence: `1.0.0+a` and `1.0.0+b` are one release.
+    pub fn release(&self) -> String {
+        let mut version = self.0.clone();
+        version.build = semver::BuildMetadata::EMPTY;
+        version.to_string()
+    }
+
+    /// A version with a `-` suffix such as `1.0.0-beta.1`. Build metadata (`1.0.0+build-5`) does not make one.
+    pub fn is_prerelease(&self) -> bool {
+        !self.0.pre.is_empty()
+    }
+}
+
+/// Most versions one package may hold. Every packument request loads them all.
+pub const MAX_VERSIONS_PER_PACKAGE: i64 = 5000;
+
+/// Most manifest bytes one package may hold across its versions, which bounds the size of its packument.
+pub const MAX_MANIFEST_BYTES_PER_PACKAGE: i64 = 32 * 1024 * 1024;
+
+/// Longest dist-tag name accepted.
+const MAX_DIST_TAG_LENGTH: usize = 64;
+
+/// A short word such as `latest` or `v2-lts`. A tag that reads as a version (`1.2.3`) is refused: `pkg@1.2.3` would be ambiguous.
+pub fn validate_dist_tag(tag: &str) -> Result<(), DomainError> {
+    let well_formed = !tag.is_empty()
+        && tag.len() <= MAX_DIST_TAG_LENGTH
+        && tag.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && tag.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
+    if !well_formed {
+        return Err(DomainError::Validation(format!("invalid dist-tag name: {tag:?}")));
+    }
+    if Version::parse(tag).is_ok() {
+        return Err(DomainError::Validation(format!("a dist-tag cannot look like a version: {tag:?}")));
+    }
+    Ok(())
 }
 
 mod version_serde {
@@ -128,8 +164,10 @@ pub struct NpmPackageVersionSummary {
     pub id: Uuid,
     pub npm_package_id: Uuid,
     pub version: NpmVersion,
+    pub shasum: String,
     pub tarball_size_bytes: i64,
     pub deprecated: bool,
+    pub deprecated_message: Option<String>,
     pub published_at: DateTime<Utc>,
 }
 
@@ -138,6 +176,29 @@ pub struct NpmDistTag {
     pub npm_package_id: Uuid,
     pub tag: String,
     pub version: NpmVersion,
+}
+
+/// What `unpublish_version` removed.
+#[derive(Debug, Clone)]
+pub struct UnpublishedVersion {
+    pub package_id: Uuid,
+    pub tarball_storage_key: String,
+    /// The version was the package's last, so the package went with it.
+    pub package_deleted: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum UnpublishVersionOutcome {
+    PackageNotFound,
+    VersionNotFound,
+    Removed(UnpublishedVersion),
+}
+
+/// What `unpublish_package` removed.
+#[derive(Debug, Clone)]
+pub struct UnpublishedPackage {
+    pub package_id: Uuid,
+    pub tarball_storage_keys: Vec<String>,
 }
 
 #[async_trait]
@@ -150,7 +211,8 @@ pub trait NpmPackageRepositoryPort: Send + Sync {
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<NpmPackage>, DomainError>;
 
-    async fn create_package(&self, package: &NpmPackage) -> Result<(), DomainError>;
+    /// Returns the id of the row, which is the existing one when another request created the same (repository, name) first.
+    async fn create_package(&self, package: &NpmPackage) -> Result<Uuid, DomainError>;
 
     async fn touch_metadata_fetched_at(
         &self,
@@ -163,6 +225,9 @@ pub trait NpmPackageRepositoryPort: Send + Sync {
     async fn list_versions(&self, npm_package_id: Uuid) -> Result<Vec<NpmPackageVersion>, DomainError>;
     /// Batched form of `list_versions` across several packages in one query.
     async fn list_versions_for_packages(&self, npm_package_ids: &[Uuid]) -> Result<Vec<NpmPackageVersionSummary>, DomainError>;
+    /// Like `list_versions_for_packages`, but at most the `per_package` newest versions of each package, newest first: the cut happens
+    /// in the query, so a package with thousands of versions costs no more than one with `per_package`.
+    async fn list_latest_versions_for_packages(&self, npm_package_ids: &[Uuid], per_package: i64) -> Result<Vec<NpmPackageVersionSummary>, DomainError>;
 
     async fn find_version(
         &self,
@@ -172,9 +237,22 @@ pub trait NpmPackageRepositoryPort: Send + Sync {
 
     async fn insert_version(&self, version: &NpmPackageVersion) -> Result<(), DomainError>;
 
-    async fn delete_version(&self, npm_package_id: Uuid, version: &NpmVersion) -> Result<(), DomainError>;
+    /// A publish, in one transaction under a lock on the package row (created here if it doesn't exist yet): inserts the version
+    /// and points each of `dist_tags` at it. `version.npm_package_id` is replaced by the row's id, which is returned. Fails with
+    /// `NpmVersionAlreadyExists` if the version (build metadata aside) exists or was unpublished before, with `NpmPackageLimit` if
+    /// the package is at `MAX_VERSIONS_PER_PACKAGE` or `MAX_MANIFEST_BYTES_PER_PACKAGE`, and with `CommitFailed` if the outcome of
+    /// the commit is unknown; any other error means nothing was written.
+    async fn publish_version(&self, package: &NpmPackage, version: &NpmPackageVersion, dist_tags: &[String]) -> Result<Uuid, DomainError>;
 
-    async fn delete_package(&self, npm_package_id: Uuid) -> Result<(), DomainError>;
+    /// An unpublish, in one transaction under the same package lock as `publish_version`: remembers the version as unpublished,
+    /// deletes it and the dist-tags pointing at it, and deletes the package if that was its last version.
+    async fn unpublish_version(&self, repository_id: Uuid, name: &NpmPackageName, version: &NpmVersion) -> Result<UnpublishVersionOutcome, DomainError>;
+
+    /// Like `unpublish_version` for every version of the package at once. `None` if there is no such package.
+    async fn unpublish_package(&self, repository_id: Uuid, name: &NpmPackageName) -> Result<Option<UnpublishedPackage>, DomainError>;
+
+    /// Build metadata aside: `1.0.0+b` counts as unpublished if `1.0.0` was.
+    async fn was_unpublished(&self, repository_id: Uuid, name: &NpmPackageName, version: &NpmVersion) -> Result<bool, DomainError>;
 
     async fn set_deprecated(
         &self,
@@ -187,6 +265,7 @@ pub trait NpmPackageRepositoryPort: Send + Sync {
     /// Batched form of `list_dist_tags` across several packages in one query.
     async fn list_dist_tags_for_packages(&self, npm_package_ids: &[Uuid]) -> Result<Vec<NpmDistTag>, DomainError>;
 
+    /// Fails with `NpmVersionNotFound` if the version is gone, checked under the package lock, so a tag never lands on a version a concurrent unpublish removed.
     async fn set_dist_tag(&self, npm_package_id: Uuid, tag: &str, version: &NpmVersion) -> Result<(), DomainError>;
 
     async fn delete_dist_tag(&self, npm_package_id: Uuid, tag: &str) -> Result<(), DomainError>;
@@ -198,7 +277,8 @@ pub trait NpmPackageRepositoryPort: Send + Sync {
         limit: i64,
     ) -> Result<Vec<NpmPackage>, DomainError>;
 
-    async fn increment_download_counter(&self, npm_package_version_id: Uuid) -> Result<(), DomainError>;
+    /// Up to `limit` packages in name order, starting after `after`.
+    async fn list_packages_page(&self, repository_id: Uuid, after: Option<&str>, limit: i64) -> Result<Vec<NpmPackage>, DomainError>;
 }
 
 #[cfg(test)]
@@ -242,6 +322,24 @@ mod tests {
     fn parses_a_valid_semver_version() {
         assert!(NpmVersion::parse("1.2.3").is_ok());
         assert!(NpmVersion::parse("1.2.3-beta.1").is_ok());
+    }
+
+    #[test]
+    fn build_metadata_is_not_a_prerelease() {
+        assert!(!NpmVersion::parse("1.0.0+build-5").unwrap().is_prerelease());
+        assert!(!NpmVersion::parse("1.0.0").unwrap().is_prerelease());
+        assert!(NpmVersion::parse("1.0.0-beta.1").unwrap().is_prerelease());
+        assert!(NpmVersion::parse("1.0.0-rc.1+build-5").unwrap().is_prerelease());
+    }
+
+    #[test]
+    fn dist_tag_names_are_short_words_that_do_not_look_like_versions() {
+        for good in ["latest", "next", "v2-lts", "beta.1", "canary_2", "A1"] {
+            assert!(validate_dist_tag(good).is_ok(), "{good}");
+        }
+        for bad in ["", "1.2.3", "1.0.0-beta.1", "-x", ".x", "a b", "a/b", "a@b", "a:b", "tag\n", &"x".repeat(65)] {
+            assert!(validate_dist_tag(bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]

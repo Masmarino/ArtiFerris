@@ -24,6 +24,7 @@ describe('SystemSettingsService', () => {
       login_attempt_window_seconds: 60,
       session_ttl_hours: 1,
       registration_enabled: true,
+      seo_indexing_enabled: false,
     }
     const update = vi.fn().mockReturnValue(of(undefined))
     setup({ update }).update(settings)

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_manifests SET untagged_since = NULL WHERE id = $1 AND untagged_since IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7e94081034f54a445dfa77b36ca07df4742068599d7201f59a6c0bb26128a039"
+}

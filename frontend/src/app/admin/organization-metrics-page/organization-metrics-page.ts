@@ -18,11 +18,27 @@ export class OrganizationMetricsPage {
   readonly organizationId = input<string | undefined>(undefined)
 
   readonly stats = signal<AdminStats | null>(null)
+  readonly loadFailed = signal(false)
 
   // effect(), so it re-fetches — this component is reused across organizations on the same route.
   constructor() {
     effect(() => {
-      this.metricsService.stats(this.organizationId()).subscribe((stats) => this.stats.set(stats))
+      const organizationId = this.organizationId()
+      const stillCurrent = () => this.organizationId() === organizationId
+      this.stats.set(null)
+      this.loadFailed.set(false)
+      this.metricsService.stats(organizationId).subscribe({
+        next: (stats) => {
+          if (stillCurrent()) {
+            this.stats.set(stats)
+          }
+        },
+        error: () => {
+          if (stillCurrent()) {
+            this.loadFailed.set(true)
+          }
+        },
+      })
     })
   }
 }

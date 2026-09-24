@@ -7,4 +7,20 @@ ul {
   gap: 0.25rem;
   font-size: 0.875rem;
   color: var(--text-primary);
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+}
+
+.partial-note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+gbt-card .partial-note {
+  margin-bottom: 0.5rem;
 }

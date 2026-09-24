@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use artiferris_domain::error::DomainError;
 use crate::error_ext::InfraErr;
 use artiferris_domain::mfa::{TotpCredential, TotpCredentialPort};
@@ -31,29 +32,43 @@ impl TotpCredentialPort for PostgresTotpCredentialRepository {
         let Some(row) = row else {
             return Ok(None);
         };
-        let secret = secret_box::decrypt(&row.encrypted_secret, &row.secret_nonce, &self.secrets_encryption_key)?;
+        let secret = secret_box::open(&row.encrypted_secret, &row.secret_nonce, &self.secrets_encryption_key, secret_box::TOTP_SEED)
+            .inspect_err(|e| tracing::error!(%user_id, "the stored TOTP seed cannot be read, this user cannot pass MFA: {e}"))?;
         Ok(Some(TotpCredential { user_id: row.user_id, secret, confirmed: row.confirmed, last_used_step: row.last_used_step, created_at: row.created_at }))
     }
 
-    async fn upsert(&self, credential: &TotpCredential) -> Result<(), DomainError> {
-        let (encrypted_secret, secret_nonce) = secret_box::encrypt(&credential.secret, &self.secrets_encryption_key);
-        sqlx::query!(
+    async fn begin_enrollment(&self, user_id: Uuid, secret: &str, created_at: DateTime<Utc>) -> Result<bool, DomainError> {
+        let (encrypted_secret, secret_nonce) = secret_box::seal(secret, &self.secrets_encryption_key, secret_box::TOTP_SEED);
+        // The WHERE on the conflict branch is what keeps a confirmed credential from being replaced.
+        let result = sqlx::query!(
             "INSERT INTO totp_credentials (user_id, encrypted_secret, secret_nonce, confirmed, last_used_step, created_at) \
-             VALUES ($1, $2, $3, $4, $5, $6) \
+             VALUES ($1, $2, $3, false, NULL, $4) \
              ON CONFLICT (user_id) DO UPDATE SET \
              encrypted_secret = EXCLUDED.encrypted_secret, secret_nonce = EXCLUDED.secret_nonce, \
-             confirmed = EXCLUDED.confirmed, last_used_step = EXCLUDED.last_used_step",
-            credential.user_id,
+             confirmed = false, last_used_step = NULL, created_at = EXCLUDED.created_at \
+             WHERE NOT totp_credentials.confirmed",
+            user_id,
             encrypted_secret,
             secret_nonce,
-            credential.confirmed,
-            credential.last_used_step,
-            credential.created_at,
+            created_at,
         )
         .execute(&self.pool)
         .await
         .infra_err()?;
-        Ok(())
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn confirm(&self, user_id: Uuid, enrollment_created_at: DateTime<Utc>, step: i64) -> Result<bool, DomainError> {
+        let result = sqlx::query!(
+            "UPDATE totp_credentials SET confirmed = true, last_used_step = $3 WHERE user_id = $1 AND created_at = $2 AND NOT confirmed",
+            user_id,
+            enrollment_created_at,
+            step,
+        )
+        .execute(&self.pool)
+        .await
+        .infra_err()?;
+        Ok(result.rows_affected() > 0)
     }
 
     async fn set_last_used_step(&self, user_id: Uuid, step: i64) -> Result<bool, DomainError> {
@@ -99,8 +114,13 @@ mod tests {
         user.id
     }
 
-    fn sample(user_id: Uuid) -> TotpCredential {
-        TotpCredential { user_id, secret: "JBSWY3DPEHPK3PXP".to_string(), confirmed: false, last_used_step: None, created_at: chrono::Utc::now() }
+    const SECRET: &str = "JBSWY3DPEHPK3PXP";
+
+    async fn enrolled(repo: &PostgresTotpCredentialRepository, user_id: Uuid) -> DateTime<Utc> {
+        let created_at = Utc::now();
+        assert!(repo.begin_enrollment(user_id, SECRET, created_at).await.unwrap());
+        // Postgres keeps microseconds only; confirm against what was actually stored.
+        repo.get(user_id).await.unwrap().unwrap().created_at
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -111,36 +131,81 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
-    async fn upsert_then_get_round_trips_including_the_secret(pool: sqlx::PgPool) {
+    async fn enrolling_then_getting_round_trips_including_the_secret(pool: sqlx::PgPool) {
         let user_id = seed_user(&pool).await;
         let repo = PostgresTotpCredentialRepository::new(pool, "jwt-secret".to_string());
-        let credential = sample(user_id);
-        repo.upsert(&credential).await.unwrap();
+        let created_at = Utc::now();
+
+        assert!(repo.begin_enrollment(user_id, SECRET, created_at).await.unwrap());
 
         let found = repo.get(user_id).await.unwrap().unwrap();
-        // Postgres timestamptz only keeps microsecond precision — compare at that granularity, not against Utc::now()'s full nanosecond value.
-        assert_eq!(
-            TotpCredential { created_at: found.created_at, ..credential.clone() },
-            found
-        );
-        assert_eq!(found.created_at.timestamp_micros(), credential.created_at.timestamp_micros());
+        assert_eq!(found.secret, SECRET);
+        assert!(!found.confirmed);
+        assert_eq!(found.last_used_step, None);
+        // Postgres timestamptz only keeps microsecond precision.
+        assert_eq!(found.created_at.timestamp_micros(), created_at.timestamp_micros());
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
-    async fn a_second_upsert_confirms_rather_than_duplicating(pool: sqlx::PgPool) {
+    async fn a_new_attempt_replaces_an_unconfirmed_one(pool: sqlx::PgPool) {
         let user_id = seed_user(&pool).await;
         let repo = PostgresTotpCredentialRepository::new(pool, "jwt-secret".to_string());
-        repo.upsert(&sample(user_id)).await.unwrap();
-        repo.upsert(&TotpCredential { confirmed: true, ..sample(user_id) }).await.unwrap();
+        enrolled(&repo, user_id).await;
 
-        assert!(repo.get(user_id).await.unwrap().unwrap().confirmed);
+        assert!(repo.begin_enrollment(user_id, "MFRGGZDFMZTWQ2LK", Utc::now()).await.unwrap());
+
+        assert_eq!(repo.get(user_id).await.unwrap().unwrap().secret, "MFRGGZDFMZTWQ2LK");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn enrolling_never_replaces_a_confirmed_credential(pool: sqlx::PgPool) {
+        let user_id = seed_user(&pool).await;
+        let repo = PostgresTotpCredentialRepository::new(pool, "jwt-secret".to_string());
+        let created_at = enrolled(&repo, user_id).await;
+        assert!(repo.confirm(user_id, created_at, 7).await.unwrap());
+
+        assert!(!repo.begin_enrollment(user_id, "MFRGGZDFMZTWQ2LK", Utc::now()).await.unwrap());
+
+        let found = repo.get(user_id).await.unwrap().unwrap();
+        assert!(found.confirmed, "the confirmed factor must survive a racing enrol");
+        assert_eq!(found.secret, SECRET);
+        assert_eq!(found.last_used_step, Some(7));
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn confirming_needs_the_attempt_that_was_started(pool: sqlx::PgPool) {
+        let user_id = seed_user(&pool).await;
+        let repo = PostgresTotpCredentialRepository::new(pool, "jwt-secret".to_string());
+        let first_attempt = enrolled(&repo, user_id).await;
+        repo.begin_enrollment(user_id, "MFRGGZDFMZTWQ2LK", first_attempt + chrono::Duration::seconds(1)).await.unwrap();
+
+        assert!(!repo.confirm(user_id, first_attempt, 7).await.unwrap(), "a confirm for a replaced attempt must not confirm the new secret");
+
+        assert!(!repo.get(user_id).await.unwrap().unwrap().confirmed);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn of_two_parallel_confirms_only_one_wins(pool: sqlx::PgPool) {
+        let user_id = seed_user(&pool).await;
+        let repo = std::sync::Arc::new(PostgresTotpCredentialRepository::new(pool, "jwt-secret".to_string()));
+        let created_at = enrolled(&repo, user_id).await;
+
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let repo = repo.clone();
+                tokio::spawn(async move { repo.confirm(user_id, created_at, 7).await.unwrap() })
+            })
+            .collect();
+        let winners = futures_util::future::join_all(handles).await.into_iter().filter(|r| *r.as_ref().unwrap()).count();
+
+        assert_eq!(winners, 1);
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn set_last_used_step_persists(pool: sqlx::PgPool) {
         let user_id = seed_user(&pool).await;
         let repo = PostgresTotpCredentialRepository::new(pool, "jwt-secret".to_string());
-        repo.upsert(&sample(user_id)).await.unwrap();
+        enrolled(&repo, user_id).await;
 
         let advanced = repo.set_last_used_step(user_id, 42).await.unwrap();
 
@@ -152,7 +217,7 @@ mod tests {
     async fn set_last_used_step_is_a_compare_and_swap_not_an_unconditional_write(pool: sqlx::PgPool) {
         let user_id = seed_user(&pool).await;
         let repo = PostgresTotpCredentialRepository::new(pool, "jwt-secret".to_string());
-        repo.upsert(&sample(user_id)).await.unwrap();
+        enrolled(&repo, user_id).await;
 
         let first = repo.set_last_used_step(user_id, 100).await.unwrap();
         let second = repo.set_last_used_step(user_id, 100).await.unwrap();
@@ -168,7 +233,7 @@ mod tests {
     async fn delete_removes_the_credential(pool: sqlx::PgPool) {
         let user_id = seed_user(&pool).await;
         let repo = PostgresTotpCredentialRepository::new(pool, "jwt-secret".to_string());
-        repo.upsert(&sample(user_id)).await.unwrap();
+        enrolled(&repo, user_id).await;
 
         repo.delete(user_id).await.unwrap();
 
@@ -179,7 +244,7 @@ mod tests {
     async fn the_secret_is_never_stored_in_plaintext(pool: sqlx::PgPool) {
         let user_id = seed_user(&pool).await;
         let repo = PostgresTotpCredentialRepository::new(pool, "jwt-secret".to_string());
-        repo.upsert(&sample(user_id)).await.unwrap();
+        enrolled(&repo, user_id).await;
 
         let row: (Vec<u8>,) = sqlx::query_as("SELECT encrypted_secret FROM totp_credentials WHERE user_id = $1")
             .bind(user_id)
@@ -187,6 +252,6 @@ mod tests {
             .await
             .unwrap();
         let stored = String::from_utf8_lossy(&row.0);
-        assert!(!stored.contains("JBSWY3DPEHPK3PXP"));
+        assert!(!stored.contains(SECRET));
     }
 }

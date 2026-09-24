@@ -48,14 +48,20 @@ pub struct NpmPackageTreeVersion {
 
 pub struct NpmPackageTreeEntry {
     pub name: String,
+    /// Newest first, at most `MAX_VERSIONS_PER_PACKAGE_IN_LIST`.
     pub versions: Vec<NpmPackageTreeVersion>,
+    /// The package has more versions than are listed.
+    pub truncated: bool,
     /// From the most-recently-published version's dependency audit — absent (all zeros) if that version was never audited.
     pub vulnerability_summary: VulnerabilitySummary,
 }
 
 pub struct DockerImageTreeEntry {
     pub image_name: String,
+    /// The most recently updated tags, at most `MAX_TAGS_PER_IMAGE_IN_LIST`, by tag name.
     pub tags: Vec<String>,
+    /// The image has more tags than are listed.
+    pub truncated: bool,
     /// From the most-recently-updated tag's scan — absent (all zeros) if that manifest was never scanned.
     pub vulnerability_summary: VulnerabilitySummary,
 }
@@ -64,6 +70,16 @@ pub enum RepositoryPackageTree {
     Npm(Vec<NpmPackageTreeEntry>),
     Docker(Vec<DockerImageTreeEntry>),
 }
+
+pub struct RepositoryPackagesPage {
+    pub tree: RepositoryPackageTree,
+    /// The last name of this page when more follow: pass it as `after` to get the next page.
+    pub next_after: Option<String>,
+}
+
+pub const MAX_PACKAGES_PER_PAGE: usize = 200;
+pub const MAX_VERSIONS_PER_PACKAGE_IN_LIST: usize = 200;
+pub const MAX_TAGS_PER_IMAGE_IN_LIST: usize = 100;
 
 pub struct ListRepositoryPackagesUseCase {
     npm_packages: Arc<dyn NpmPackageRepositoryPort>,
@@ -82,21 +98,29 @@ impl ListRepositoryPackagesUseCase {
         Self { npm_packages, npm_dependency_audits, docker_manifests, docker_image_scans }
     }
 
-    pub async fn execute(
-        &self,
-        repository_id: Uuid,
-        format: RepositoryFormat,
-    ) -> Result<RepositoryPackageTree, ApplicationError> {
-        match format {
-            RepositoryFormat::Npm => Ok(RepositoryPackageTree::Npm(self.list_npm(repository_id).await?)),
-            RepositoryFormat::Docker => Ok(RepositoryPackageTree::Docker(self.list_docker(repository_id).await?)),
-        }
+    pub async fn execute(&self, repository_id: Uuid, format: RepositoryFormat, after: Option<&str>, limit: usize) -> Result<RepositoryPackagesPage, ApplicationError> {
+        let limit = limit.clamp(1, MAX_PACKAGES_PER_PAGE);
+        let (tree, next_after) = match format {
+            RepositoryFormat::Npm => {
+                let (entries, more) = self.list_npm(repository_id, after, limit).await?;
+                let next_after = entries.last().map(|e| e.name.clone()).filter(|_| more);
+                (RepositoryPackageTree::Npm(entries), next_after)
+            }
+            RepositoryFormat::Docker => {
+                let (entries, more) = self.list_docker(repository_id, after, limit).await?;
+                let next_after = entries.last().map(|e| e.image_name.clone()).filter(|_| more);
+                (RepositoryPackageTree::Docker(entries), next_after)
+            }
+        };
+        Ok(RepositoryPackagesPage { tree, next_after })
     }
 
-    async fn list_npm(&self, repository_id: Uuid) -> Result<Vec<NpmPackageTreeEntry>, ApplicationError> {
-        let packages = self.npm_packages.search(repository_id, "", i64::MAX).await?;
+    async fn list_npm(&self, repository_id: Uuid, after: Option<&str>, limit: usize) -> Result<(Vec<NpmPackageTreeEntry>, bool), ApplicationError> {
+        let mut packages = self.npm_packages.list_packages_page(repository_id, after, limit as i64 + 1).await?;
+        let more = packages.len() > limit;
+        packages.truncate(limit);
         let package_ids: Vec<Uuid> = packages.iter().map(|p| p.id).collect();
-        let all_versions = self.npm_packages.list_versions_for_packages(&package_ids).await?;
+        let all_versions = self.npm_packages.list_latest_versions_for_packages(&package_ids, MAX_VERSIONS_PER_PACKAGE_IN_LIST as i64 + 1).await?;
         let mut versions_by_package: HashMap<Uuid, Vec<_>> = HashMap::new();
         for v in all_versions {
             versions_by_package.entry(v.npm_package_id).or_default().push(v);
@@ -117,7 +141,9 @@ impl ListRepositoryPackagesUseCase {
 
         let mut entries = Vec::with_capacity(packages.len());
         for package in packages {
-            let versions = versions_by_package.remove(&package.id).unwrap_or_default();
+            let mut versions = versions_by_package.remove(&package.id).unwrap_or_default();
+            let truncated = versions.len() > MAX_VERSIONS_PER_PACKAGE_IN_LIST;
+            versions.truncate(MAX_VERSIONS_PER_PACKAGE_IN_LIST);
             let vulnerability_summary = latest_version_id_by_package
                 .get(&package.id)
                 .and_then(|version_id| audit_by_version.get(version_id))
@@ -134,20 +160,25 @@ impl ListRepositoryPackagesUseCase {
                         deprecated: v.deprecated,
                     })
                     .collect(),
+                truncated,
                 vulnerability_summary,
             });
         }
-        Ok(entries)
+        Ok((entries, more))
     }
 
-    async fn list_docker(&self, repository_id: Uuid) -> Result<Vec<DockerImageTreeEntry>, ApplicationError> {
-        let pairs = self.docker_manifests.list_all_tags_for_repository(repository_id).await?;
+    async fn list_docker(&self, repository_id: Uuid, after: Option<&str>, limit: usize) -> Result<(Vec<DockerImageTreeEntry>, bool), ApplicationError> {
+        let mut names = self.docker_manifests.list_image_names_page(repository_id, after, limit as i64 + 1).await?;
+        let more = names.len() > limit;
+        names.truncate(limit);
+        let image_names: Vec<String> = names.iter().map(|n| n.as_str().to_string()).collect();
+        let pairs = self.docker_manifests.list_recent_tags_for_images(repository_id, &image_names, MAX_TAGS_PER_IMAGE_IN_LIST as i64 + 1).await?;
         let mut tags_by_image: HashMap<String, Vec<String>> = HashMap::new();
         for (image_name, tag) in pairs {
             tags_by_image.entry(image_name.as_str().to_string()).or_default().push(tag);
         }
 
-        let latest_manifests = self.docker_manifests.list_latest_manifest_id_per_image(repository_id).await?;
+        let latest_manifests = self.docker_manifests.list_latest_manifest_id_per_image(repository_id, &image_names).await?;
         let latest_manifest_id_by_image: HashMap<String, Uuid> =
             latest_manifests.iter().map(|(name, id)| (name.as_str().to_string(), *id)).collect();
         let manifest_ids: Vec<Uuid> = latest_manifests.into_iter().map(|(_, id)| id).collect();
@@ -159,15 +190,17 @@ impl ListRepositoryPackagesUseCase {
         let mut entries = Vec::with_capacity(sorted_names.len());
         for image_name in sorted_names {
             let mut tags = tags_by_image.remove(&image_name).unwrap_or_default();
+            let truncated = tags.len() > MAX_TAGS_PER_IMAGE_IN_LIST;
+            tags.truncate(MAX_TAGS_PER_IMAGE_IN_LIST);
             tags.sort();
             let vulnerability_summary = latest_manifest_id_by_image
                 .get(&image_name)
                 .and_then(|manifest_id| scan_by_manifest.get(manifest_id))
                 .map(|scan| VulnerabilitySummary::count(scan.vulnerabilities.iter().map(|v| v.severity.as_str())))
                 .unwrap_or_default();
-            entries.push(DockerImageTreeEntry { image_name, tags, vulnerability_summary });
+            entries.push(DockerImageTreeEntry { image_name, tags, truncated, vulnerability_summary });
         }
-        Ok(entries)
+        Ok((entries, more))
     }
 }
 
@@ -251,7 +284,7 @@ mod tests {
             Arc::new(FakeDockerManifestRepository::new()),
             Arc::new(FakeDockerImageScanResults::new()),
         );
-        let tree = use_case.execute(repository_id, RepositoryFormat::Npm).await.unwrap();
+        let tree = use_case.execute(repository_id, RepositoryFormat::Npm, None, MAX_PACKAGES_PER_PAGE).await.unwrap().tree;
 
         let RepositoryPackageTree::Npm(entries) = tree else { panic!("expected an npm tree") };
         assert_eq!(entries.len(), 1);
@@ -276,7 +309,7 @@ mod tests {
             manifests,
             Arc::new(FakeDockerImageScanResults::new()),
         );
-        let tree = use_case.execute(repository_id, RepositoryFormat::Docker).await.unwrap();
+        let tree = use_case.execute(repository_id, RepositoryFormat::Docker, None, MAX_PACKAGES_PER_PAGE).await.unwrap().tree;
 
         let RepositoryPackageTree::Docker(entries) = tree else { panic!("expected a docker tree") };
         assert_eq!(entries.len(), 1);
@@ -332,7 +365,7 @@ mod tests {
             .unwrap();
 
         let use_case = build_use_case(Arc::new(FakePackages::new()), Arc::new(FakeDependencyAuditResults::new()), manifests, scans);
-        let tree = use_case.execute(repository_id, RepositoryFormat::Docker).await.unwrap();
+        let tree = use_case.execute(repository_id, RepositoryFormat::Docker, None, MAX_PACKAGES_PER_PAGE).await.unwrap().tree;
 
         let RepositoryPackageTree::Docker(entries) = tree else { panic!("expected a docker tree") };
         let summary = &entries[0].vulnerability_summary;
@@ -367,7 +400,7 @@ mod tests {
             .unwrap();
 
         let use_case = build_use_case(Arc::new(FakePackages::new()), Arc::new(FakeDependencyAuditResults::new()), manifests, scans);
-        let tree = use_case.execute(repository_id, RepositoryFormat::Docker).await.unwrap();
+        let tree = use_case.execute(repository_id, RepositoryFormat::Docker, None, MAX_PACKAGES_PER_PAGE).await.unwrap().tree;
 
         let RepositoryPackageTree::Docker(entries) = tree else { panic!("expected a docker tree") };
         let summary = &entries[0].vulnerability_summary;
@@ -390,7 +423,7 @@ mod tests {
             manifests,
             Arc::new(FakeDockerImageScanResults::new()),
         );
-        let tree = use_case.execute(repository_id, RepositoryFormat::Docker).await.unwrap();
+        let tree = use_case.execute(repository_id, RepositoryFormat::Docker, None, MAX_PACKAGES_PER_PAGE).await.unwrap().tree;
 
         let RepositoryPackageTree::Docker(entries) = tree else { panic!("expected a docker tree") };
         assert_eq!(entries[0].vulnerability_summary, VulnerabilitySummary::default());
@@ -425,7 +458,7 @@ mod tests {
             .unwrap();
 
         let use_case = build_use_case(packages, audits, Arc::new(FakeDockerManifestRepository::new()), Arc::new(FakeDockerImageScanResults::new()));
-        let tree = use_case.execute(repository_id, RepositoryFormat::Npm).await.unwrap();
+        let tree = use_case.execute(repository_id, RepositoryFormat::Npm, None, MAX_PACKAGES_PER_PAGE).await.unwrap().tree;
 
         let RepositoryPackageTree::Npm(entries) = tree else { panic!("expected an npm tree") };
         let summary = &entries[0].vulnerability_summary;
@@ -442,9 +475,120 @@ mod tests {
         packages.insert_version(&sample_npm_version(package.id, "1.0.0")).await.unwrap();
 
         let use_case = build_use_case(packages, Arc::new(FakeDependencyAuditResults::new()), Arc::new(FakeDockerManifestRepository::new()), Arc::new(FakeDockerImageScanResults::new()));
-        let tree = use_case.execute(repository_id, RepositoryFormat::Npm).await.unwrap();
+        let tree = use_case.execute(repository_id, RepositoryFormat::Npm, None, MAX_PACKAGES_PER_PAGE).await.unwrap().tree;
 
         let RepositoryPackageTree::Npm(entries) = tree else { panic!("expected an npm tree") };
         assert_eq!(entries[0].vulnerability_summary, VulnerabilitySummary::default());
+    }
+
+    #[tokio::test]
+    async fn npm_packages_come_in_pages_that_follow_each_other_without_gaps() {
+        let packages = Arc::new(FakePackages::new());
+        let repository_id = Uuid::new_v4();
+        for name in ["e", "b", "a", "d", "c"] {
+            let package = sample_npm_package(repository_id, name);
+            packages.create_package(&package).await.unwrap();
+            packages.insert_version(&sample_npm_version(package.id, "1.0.0")).await.unwrap();
+        }
+        let use_case = build_use_case(packages, Arc::new(FakeDependencyAuditResults::new()), Arc::new(FakeDockerManifestRepository::new()), Arc::new(FakeDockerImageScanResults::new()));
+
+        let mut seen = Vec::new();
+        let mut after: Option<String> = None;
+        let mut pages = 0;
+        loop {
+            let page = use_case.execute(repository_id, RepositoryFormat::Npm, after.as_deref(), 2).await.unwrap();
+            let RepositoryPackageTree::Npm(entries) = page.tree else { panic!("expected an npm tree") };
+            assert!(entries.len() <= 2);
+            seen.extend(entries.into_iter().map(|e| e.name));
+            pages += 1;
+            match page.next_after {
+                Some(next) => after = Some(next),
+                None => break,
+            }
+        }
+
+        assert_eq!((seen, pages), (vec!["a", "b", "c", "d", "e"].into_iter().map(String::from).collect::<Vec<_>>(), 3));
+    }
+
+    #[tokio::test]
+    async fn a_request_for_more_than_the_page_maximum_is_cut_and_says_where_to_continue() {
+        let packages = Arc::new(FakePackages::new());
+        let repository_id = Uuid::new_v4();
+        for i in 0..MAX_PACKAGES_PER_PAGE + 5 {
+            packages.create_package(&sample_npm_package(repository_id, &format!("p{i:04}"))).await.unwrap();
+        }
+        let use_case = build_use_case(packages, Arc::new(FakeDependencyAuditResults::new()), Arc::new(FakeDockerManifestRepository::new()), Arc::new(FakeDockerImageScanResults::new()));
+
+        let page = use_case.execute(repository_id, RepositoryFormat::Npm, None, usize::MAX).await.unwrap();
+
+        let RepositoryPackageTree::Npm(entries) = page.tree else { panic!("expected an npm tree") };
+        assert_eq!(entries.len(), MAX_PACKAGES_PER_PAGE);
+        assert_eq!(page.next_after.as_deref(), Some(entries.last().unwrap().name.as_str()));
+    }
+
+    #[tokio::test]
+    async fn docker_images_come_in_pages_with_only_their_own_tags() {
+        let manifests = Arc::new(FakeDockerManifestRepository::new());
+        let repository_id = Uuid::new_v4();
+        for image in ["a", "b", "c"] {
+            let name = DockerImageName::parse(image).unwrap();
+            let manifest = docker_manifest(repository_id, &name);
+            manifests.insert_manifest(&manifest, &[]).await.unwrap();
+            manifests.set_tag(repository_id, &name, &format!("{image}-tag"), manifest.id).await.unwrap();
+        }
+        let use_case = build_use_case(Arc::new(FakePackages::new()), Arc::new(FakeDependencyAuditResults::new()), manifests, Arc::new(FakeDockerImageScanResults::new()));
+
+        let first = use_case.execute(repository_id, RepositoryFormat::Docker, None, 2).await.unwrap();
+        let second = use_case.execute(repository_id, RepositoryFormat::Docker, first.next_after.as_deref(), 2).await.unwrap();
+
+        let (RepositoryPackageTree::Docker(first_entries), RepositoryPackageTree::Docker(second_entries)) = (first.tree, second.tree) else { panic!("expected docker trees") };
+        assert_eq!(first_entries.iter().map(|e| (e.image_name.as_str(), e.tags.clone())).collect::<Vec<_>>(), vec![("a", vec!["a-tag".to_string()]), ("b", vec!["b-tag".to_string()])]);
+        assert_eq!(second_entries.iter().map(|e| e.image_name.as_str()).collect::<Vec<_>>(), vec!["c"]);
+        assert_eq!(second.next_after, None);
+    }
+
+    #[tokio::test]
+    async fn versions_and_tags_are_capped_per_package_by_the_queries_and_the_entry_says_so() {
+        let packages = Arc::new(FakePackages::new());
+        let manifests = Arc::new(FakeDockerManifestRepository::new());
+        let repository_id = Uuid::new_v4();
+        let package = sample_npm_package(repository_id, "busy");
+        packages.create_package(&package).await.unwrap();
+        for i in 0..300 {
+            let mut version = sample_npm_version(package.id, &format!("1.0.{i}"));
+            version.published_at = Utc::now() - Duration::seconds(300 - i);
+            packages.insert_version(&version).await.unwrap();
+        }
+        let image = DockerImageName::parse("busy").unwrap();
+        let manifest = docker_manifest(repository_id, &image);
+        manifests.insert_manifest(&manifest, &[]).await.unwrap();
+        for i in 0..150 {
+            manifests.set_tag(repository_id, &image, &format!("t{i:03}"), manifest.id).await.unwrap();
+        }
+        let use_case = build_use_case(packages.clone(), Arc::new(FakeDependencyAuditResults::new()), manifests.clone(), Arc::new(FakeDockerImageScanResults::new()));
+
+        let RepositoryPackageTree::Npm(npm) = use_case.execute(repository_id, RepositoryFormat::Npm, None, 10).await.unwrap().tree else { panic!("expected an npm tree") };
+        let RepositoryPackageTree::Docker(docker) = use_case.execute(repository_id, RepositoryFormat::Docker, None, 10).await.unwrap().tree else { panic!("expected a docker tree") };
+
+        assert_eq!((npm[0].versions.len(), npm[0].truncated), (MAX_VERSIONS_PER_PACKAGE_IN_LIST, true));
+        assert_eq!(npm[0].versions[0].version, "1.0.299", "the newest ones");
+        assert!(packages.capped_summaries_returned.load(std::sync::atomic::Ordering::Relaxed) <= MAX_VERSIONS_PER_PACKAGE_IN_LIST + 1, "the query returned only the cap");
+        assert_eq!((docker[0].tags.len(), docker[0].truncated), (MAX_TAGS_PER_IMAGE_IN_LIST, true));
+        assert!(docker[0].tags.contains(&"t149".to_string()) && !docker[0].tags.contains(&"t000".to_string()), "the most recently updated tags");
+        assert!(manifests.recent_tags_returned.load(std::sync::atomic::Ordering::Relaxed) <= MAX_TAGS_PER_IMAGE_IN_LIST + 1);
+    }
+
+    #[tokio::test]
+    async fn a_package_within_the_caps_is_not_marked_truncated() {
+        let packages = Arc::new(FakePackages::new());
+        let repository_id = Uuid::new_v4();
+        let package = sample_npm_package(repository_id, "small");
+        packages.create_package(&package).await.unwrap();
+        packages.insert_version(&sample_npm_version(package.id, "1.0.0")).await.unwrap();
+        let use_case = build_use_case(packages, Arc::new(FakeDependencyAuditResults::new()), Arc::new(FakeDockerManifestRepository::new()), Arc::new(FakeDockerImageScanResults::new()));
+
+        let RepositoryPackageTree::Npm(entries) = use_case.execute(repository_id, RepositoryFormat::Npm, None, 10).await.unwrap().tree else { panic!("expected an npm tree") };
+
+        assert!(!entries[0].truncated);
     }
 }

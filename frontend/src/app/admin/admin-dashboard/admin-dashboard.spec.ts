@@ -35,7 +35,7 @@ describe('AdminDashboard', () => {
     // The recent-activity list is derived client-side from this same bounded query — see AdminDashboard.
     httpMock
       .expectOne((r) => r.url === '/api/audit/events' && r.params.has('from'))
-      .flush(activityEntries)
+      .flush({ entries: activityEntries, next_cursor: null })
     httpMock.expectOne('/api/repositories').flush(repositories)
     // Two independent requests — one per evolution chart, each with its
     // own duration control (see AdminDashboard's storage/counts split).
@@ -43,6 +43,83 @@ describe('AdminDashboard', () => {
     expect(historyRequests.length).toBe(2)
     historyRequests.forEach((req) => req.flush(history))
   }
+
+  it('asks for the largest audit page so the activity chart keeps its window', () => {
+    const { httpMock } = render()
+
+    const request = httpMock.expectOne((r) => r.url === '/api/audit/events' && r.params.has('from'))
+
+    expect(request.request.params.get('limit')).toBe('200')
+    httpMock.match(() => true)
+  })
+
+  it('shows an error with a retry when a load fails, and clears it once a retry succeeds', () => {
+    const { fixture, httpMock } = render()
+    httpMock.expectOne('/api/admin/stats').flush(null, { status: 500, statusText: 'Server Error' })
+    httpMock
+      .expectOne((r) => r.url === '/api/audit/events' && r.params.has('from'))
+      .flush({ entries: [], next_cursor: null })
+    httpMock.expectOne('/api/repositories').flush([])
+    httpMock.match((r) => r.url === '/api/admin/metrics/history').forEach((req) => req.flush([]))
+    fixture.detectChanges()
+
+    const alert = fixture.nativeElement.querySelector('[role="alert"]')
+    expect(alert.textContent).toContain("Échec du chargement d'une partie du tableau de bord.")
+
+    fixture.componentInstance.retry()
+    // The repository list succeeded the first time and is cached, so only the rest is refetched.
+    httpMock.expectOne('/api/admin/stats').flush({
+      total_users: 0,
+      total_repositories: 0,
+      total_active_permissions: 0,
+    })
+    httpMock
+      .expectOne((r) => r.url === '/api/audit/events' && r.params.has('from'))
+      .flush({ entries: [], next_cursor: null })
+    httpMock.match((r) => r.url === '/api/admin/metrics/history').forEach((req) => req.flush([]))
+    fixture.detectChanges()
+
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('reports a failed history load too', () => {
+    const { fixture, httpMock } = render()
+    httpMock.expectOne('/api/admin/stats').flush({
+      total_users: 0,
+      total_repositories: 0,
+      total_active_permissions: 0,
+    })
+    httpMock
+      .expectOne((r) => r.url === '/api/audit/events' && r.params.has('from'))
+      .flush({ entries: [], next_cursor: null })
+    httpMock.expectOne('/api/repositories').flush([])
+    httpMock
+      .match((r) => r.url === '/api/admin/metrics/history')
+      .forEach((req) => req.flush(null, { status: 500, statusText: 'Server Error' }))
+    fixture.detectChanges()
+
+    expect(fixture.componentInstance.loadFailed()).toBe(true)
+  })
+
+  it('shows the French label of a recent event, not its raw type', () => {
+    const { fixture, httpMock } = render()
+
+    flushCommon(httpMock, undefined, [
+      {
+        aggregate_type: 'Security',
+        aggregate_id: 'x',
+        event_type: 'LoginFailed',
+        payload: {},
+        occurred_at: '2026-01-01T00:00:00Z',
+        actor_id: null,
+      },
+    ])
+    fixture.detectChanges()
+
+    const text = fixture.nativeElement.textContent as string
+    expect(text).toContain('Échec de connexion')
+    expect(text).not.toContain('LoginFailed')
+  })
 
   it('shows the three stat totals', () => {
     const { fixture, httpMock } = render()
@@ -80,7 +157,7 @@ describe('AdminDashboard', () => {
     flushCommon(httpMock)
     fixture.detectChanges()
 
-    expect(fixture.nativeElement.textContent).toContain('Aucune activité récente.')
+    expect(fixture.nativeElement.textContent).toContain('Aucune activité récente')
   })
 
   it('buckets activity events by day into a 7-day chart, zero-filling quiet days', () => {
@@ -240,5 +317,44 @@ describe('AdminDashboard', () => {
 
     expect(fixture.componentInstance.countsEvolutionDays()).toBe(7)
     expect(fixture.componentInstance.storageEvolutionDays()).toBe(1)
+  })
+
+  describe('activity chart coverage', () => {
+    const entry = (n: number) => ({
+      aggregate_type: 'Admin',
+      aggregate_id: `a${n}`,
+      event_type: 'QuotaSet',
+      payload: {},
+      occurred_at: new Date().toISOString(),
+      actor_id: null,
+    })
+
+    function renderWithActivity(nextCursor: string | null) {
+      const { fixture, httpMock } = render()
+      httpMock.expectOne('/api/admin/stats').flush({
+        total_users: 0,
+        total_repositories: 0,
+        total_active_permissions: 0,
+      })
+      httpMock
+        .expectOne((r) => r.url === '/api/audit/events' && r.params.has('from'))
+        .flush({ entries: [entry(1), entry(2), entry(3)], next_cursor: nextCursor })
+      httpMock.expectOne('/api/repositories').flush([])
+      httpMock.match((r) => r.url === '/api/admin/metrics/history').forEach((r) => r.flush([]))
+      fixture.detectChanges()
+      return fixture.nativeElement as HTMLElement
+    }
+
+    it('warns that older days are under-counted when the server has more events', () => {
+      const el = renderWithActivity('more')
+
+      expect(el.textContent).toContain('Basé sur les 3 événements les plus récents')
+    })
+
+    it('shows no warning when the whole week fits in the fetched page', () => {
+      const el = renderWithActivity(null)
+
+      expect(el.textContent).not.toContain('Basé sur les')
+    })
   })
 })

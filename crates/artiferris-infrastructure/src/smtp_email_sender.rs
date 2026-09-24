@@ -14,6 +14,8 @@ use uuid::Uuid;
 
 use crate::branding_defaults::{DEFAULT_LOGO_BYTES, DEFAULT_LOGO_CONTENT_TYPE};
 
+pub const UNENCRYPTED_SMTP_REFUSED: &str = "SMTP without TLS sends the login in cleartext and is only allowed for hosts in ARTIFERRIS_SSRF_ALLOWED_CIDRS; use STARTTLS or TLS";
+
 pub struct SmtpEmailSender {
     settings: Arc<dyn SmtpSettingsPort>,
     branding: Arc<dyn BrandingPort>,
@@ -72,6 +74,9 @@ impl EmailPort for SmtpEmailSender {
 
         // Same SSRF guard as the other admin-configured remote hosts — the "send test email" feature would otherwise make this an on-demand probe.
         crate::ssrf_guard::ensure_public_host_and_port(&settings.host, settings.port as u16).await?;
+        if settings.security == SmtpSecurity::None && !crate::ssrf_allowlist::host_is_allow_listed(&settings.host, settings.port as u16).await {
+            return Err(DomainError::Infrastructure(UNENCRYPTED_SMTP_REFUSED.to_string()));
+        }
 
         let credentials = Credentials::new(settings.username.clone(), settings.password.clone());
         let transport = match settings.security {
@@ -110,7 +115,7 @@ mod tests {
         async fn get(&self, organization_id: Uuid) -> Result<Option<artiferris_domain::email::SmtpSettings>, DomainError> {
             Ok(self.settings.lock().unwrap().get(&organization_id).cloned())
         }
-        async fn update(&self, organization_id: Uuid, settings: &artiferris_domain::email::SmtpSettings) -> Result<(), DomainError> {
+        async fn update(&self, organization_id: Uuid, settings: &artiferris_domain::email::SmtpSettings, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             self.settings.lock().unwrap().insert(organization_id, settings.clone());
             Ok(())
         }
@@ -123,16 +128,16 @@ mod tests {
         async fn get(&self, _organization_id: Uuid) -> Result<BrandingSettings, DomainError> {
             Ok(BrandingSettings::default())
         }
-        async fn set_logo(&self, _organization_id: Uuid, _asset: &BrandingAsset) -> Result<(), DomainError> {
+        async fn set_logo(&self, _organization_id: Uuid, _asset: &BrandingAsset, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             unreachable!("not exercised by this test")
         }
-        async fn clear_logo(&self, _organization_id: Uuid) -> Result<(), DomainError> {
+        async fn clear_logo(&self, _organization_id: Uuid, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             unreachable!("not exercised by this test")
         }
-        async fn set_favicon(&self, _organization_id: Uuid, _asset: &BrandingAsset) -> Result<(), DomainError> {
+        async fn set_favicon(&self, _organization_id: Uuid, _asset: &BrandingAsset, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             unreachable!("not exercised by this test")
         }
-        async fn clear_favicon(&self, _organization_id: Uuid) -> Result<(), DomainError> {
+        async fn clear_favicon(&self, _organization_id: Uuid, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             unreachable!("not exercised by this test")
         }
     }
@@ -192,6 +197,18 @@ mod tests {
         let err = sender.send(org_id, "to@example.com", "subject", "text", "<p>html</p>").await.unwrap_err();
 
         assert!(err.to_string().contains("private or reserved"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn unencrypted_smtp_to_a_host_outside_the_allowlist_is_refused_before_connecting() {
+        let org_id = Uuid::new_v4();
+        let mut settings_by_org = std::collections::HashMap::new();
+        settings_by_org.insert(org_id, artiferris_domain::email::SmtpSettings { host: "8.8.8.8".to_string(), security: SmtpSecurity::None, ..sample_smtp_settings() });
+        let sender = SmtpEmailSender::new(Arc::new(FakeSmtpSettings { settings: Mutex::new(settings_by_org) }), Arc::new(FakeBranding));
+
+        let err = sender.send(org_id, "to@example.com", "subject", "text", "<p>html</p>").await.unwrap_err();
+
+        assert!(err.to_string().contains("cleartext"), "got: {err}");
     }
 
     #[test]

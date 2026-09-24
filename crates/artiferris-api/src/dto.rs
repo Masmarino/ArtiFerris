@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use axum::http::StatusCode;
 use axum::Json;
 use chrono::{DateTime, Utc};
@@ -90,6 +92,16 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+/// Seconds between two warnings about a service that is busy; a flood of requests would otherwise be a flood of log lines.
+const BUSY_LOG_INTERVAL_SECONDS: u64 = 10;
+static LAST_BUSY_LOG: AtomicU64 = AtomicU64::new(0);
+
+/// True when at least `BUSY_LOG_INTERVAL_SECONDS` have passed since `last` was stored; claims the slot for `now` if so.
+fn busy_log_due(last: &AtomicU64, now: u64) -> bool {
+    let before = last.load(Ordering::Relaxed);
+    now.saturating_sub(before) >= BUSY_LOG_INTERVAL_SECONDS && last.compare_exchange(before, now, Ordering::Relaxed, Ordering::Relaxed).is_ok()
+}
+
 /// Infrastructure-shaped errors are logged server-side and answered with a flat `500`, never echoing raw backend text to the client.
 pub fn application_error_response(context: &str, error: ApplicationError) -> (StatusCode, Json<ErrorResponse>) {
     match error {
@@ -97,11 +109,60 @@ pub fn application_error_response(context: &str, error: ApplicationError) -> (St
             tracing::error!("{context}: {error}");
             (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() }))
         }
+        ApplicationError::Domain(DomainError::Busy(_)) => {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_secs());
+            if busy_log_due(&LAST_BUSY_LOG, now) {
+                tracing::warn!("{context}: {error} (further ones within {BUSY_LOG_INTERVAL_SECONDS}s are not logged)");
+            }
+            (StatusCode::SERVICE_UNAVAILABLE, Json(ErrorResponse { error: "busy, try again shortly".to_string() }))
+        }
+        // The detail names key fingerprints: for the log, not for the client.
+        ApplicationError::Domain(DomainError::SecretUnreadable(_)) => {
+            tracing::error!("{context}: {error}");
+            (StatusCode::CONFLICT, Json(ErrorResponse { error: "a secret stored on the server cannot be read, ask an administrator to check the server's encryption keys".to_string() }))
+        }
         ApplicationError::LastSuperAdmin => (StatusCode::CONFLICT, Json(ErrorResponse { error: error.to_string() })),
+        ApplicationError::PersonalOrganizationAlreadyExists => (StatusCode::CONFLICT, Json(ErrorResponse { error: error.to_string() })),
+        ApplicationError::DependencyScanBusy => (StatusCode::SERVICE_UNAVAILABLE, Json(ErrorResponse { error: error.to_string() })),
+        ApplicationError::DependencyScanRateLimited => (StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: error.to_string() })),
         // A server misconfiguration, not the caller's fault.
         ApplicationError::PasskeysUnavailable => (StatusCode::SERVICE_UNAVAILABLE, Json(ErrorResponse { error: error.to_string() })),
         // Same "don't confirm existence across a trust boundary" convention as authz::require_same_organization's 404 — here the boundary is per-user, not per-organization.
         ApplicationError::ApiTokenNotFound => (StatusCode::NOT_FOUND, Json(ErrorResponse { error: error.to_string() })),
         error => (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: error.to_string() })),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_busy_service_is_a_503_and_never_a_500() {
+        let (status, body) = application_error_response("test", ApplicationError::Domain(DomainError::Busy("the public catalog is busy".to_string())));
+
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(body.0.error, "busy, try again shortly");
+        let (status, _) = application_error_response("test", ApplicationError::Domain(DomainError::Infrastructure("boom".to_string())));
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn an_unreadable_secret_is_a_409_that_never_repeats_the_key_fingerprints() {
+        let detail = "sealed with another SECRETS_ENCRYPTION_KEY (key id a1b2c3d4, this server's is 0badf00d)";
+
+        let (status, body) = application_error_response("test", ApplicationError::Domain(DomainError::SecretUnreadable(detail.to_string())));
+
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert!(!body.0.error.contains("a1b2c3d4") && !body.0.error.contains("0badf00d") && !body.0.error.contains("key id"), "got: {}", body.0.error);
+    }
+
+    #[test]
+    fn busy_warnings_are_spaced_out() {
+        let last = AtomicU64::new(0);
+
+        assert!(busy_log_due(&last, 1_000));
+        assert!(!busy_log_due(&last, 1_000 + BUSY_LOG_INTERVAL_SECONDS - 1));
+        assert!(busy_log_due(&last, 1_000 + BUSY_LOG_INTERVAL_SECONDS));
     }
 }

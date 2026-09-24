@@ -6,6 +6,9 @@
   @if (loading()) {
     <gbt-spinner label="Chargement…" />
   } @else if (format === 'npm' && npmDetails(); as details) {
+    @if (downloads(); as downloads) {
+      <p class="package-detail__audit-meta">{{ downloads }}</p>
+    }
     @if (details.dist_tags.length > 0) {
       <gbt-card>
         <p class="package-detail__eyebrow">Tags</p>
@@ -18,9 +21,22 @@
     }
 
     <gbt-card>
+      <p class="package-detail__eyebrow">Installation</p>
+      <app-copyable-command
+        [command]="npmCommand()"
+        [label]="'Copier la commande d\'installation de ' + name"
+      />
+    </gbt-card>
+
+    <gbt-card>
       <p class="package-detail__eyebrow">
         {{ details.versions.length }} version{{ details.versions.length !== 1 ? 's' : '' }}
       </p>
+      @if (details.truncated) {
+        <p class="package-detail__audit-meta" data-testid="truncated-notice">
+          Seules les 200 versions les plus récentes sont affichées.
+        </p>
+      }
       <table class="package-detail__table">
         <thead>
           <tr>
@@ -92,6 +108,8 @@
       }
     </gbt-card>
 
+    <app-readme-view [html]="details.readme_html" />
+
     <gbt-card>
       <div class="package-detail__audit-header">
         <p class="package-detail__eyebrow">Sécurité</p>
@@ -107,10 +125,13 @@
         }
       </div>
       @if (auditLoading()) {
-        <p class="package-detail__audit-status">Vérification des vulnérabilités connues…</p>
+        <gbt-spinner size="sm" label="Vérification des vulnérabilités connues…" />
       } @else if (auditFailed()) {
         <p class="package-detail__audit-status">
-          Impossible de vérifier les vulnérabilités pour le moment (base d'alertes npm injoignable).
+          {{
+            auditNotice() ??
+              "Impossible de vérifier les vulnérabilités pour le moment (base d'alertes npm injoignable)."
+          }}
         </p>
       } @else if (auditAdvisories(); as advisories) {
         @if (advisories.length === 0) {
@@ -160,10 +181,13 @@
           }
         </div>
         @if (depAuditLoading()) {
-          <p class="package-detail__audit-status">Chargement du dernier résultat…</p>
+          <gbt-spinner size="sm" label="Chargement du dernier résultat…" />
         } @else if (depAuditFailed()) {
           <p class="package-detail__audit-status">
-            Impossible d'effectuer l'analyse pour le moment (base d'alertes npm injoignable).
+            {{
+              depAuditNotice() ??
+                "Impossible d'effectuer l'analyse pour le moment (base d'alertes npm injoignable)."
+            }}
           </p>
         } @else if (depAuditResult(); as result) {
           <p class="package-detail__audit-meta">
@@ -249,10 +273,22 @@
             }
           }
         } @else {
-          <p class="package-detail__audit-status">
-            Aucune analyse effectuée pour le moment. Lancez un scan pour vérifier les dépendances
-            transitives.
-          </p>
+          <gbt-empty-state
+            illustration="pipeline"
+            heading="Aucune analyse"
+            message="Une analyse vérifie les vulnérabilités connues de l'arbre de dépendances."
+          >
+            @if (canWrite()) {
+              <gbt-button
+                text="Lancer un scan approfondi"
+                variant="secondary"
+                size="small"
+                [loading]="depAuditScanning()"
+                loadingLabel="Chargement en cours"
+                (clicked)="runDependencyScan()"
+              />
+            }
+          </gbt-empty-state>
         }
       </gbt-card>
     }
@@ -270,10 +306,23 @@
       </gbt-card>
     }
   } @else if (format === 'docker' && dockerDetails(); as details) {
+    @if (downloads(); as downloads) {
+      <p class="package-detail__audit-meta">{{ downloads }}</p>
+    }
+    <gbt-card>
+      <p class="package-detail__eyebrow">Installation</p>
+      <app-copyable-command [command]="dockerCommand()" label="Copier la commande docker pull" />
+    </gbt-card>
+
     <gbt-card>
       <p class="package-detail__eyebrow">
         {{ details.tags.length }} tag{{ details.tags.length !== 1 ? 's' : '' }}
       </p>
+      @if (details.truncated) {
+        <p class="package-detail__audit-meta" data-testid="truncated-notice">
+          Seuls les 100 tags les plus récents sont affichés.
+        </p>
+      }
       <table class="package-detail__table">
         <thead>
           <tr>
@@ -281,6 +330,7 @@
             <th>Digest</th>
             <th>Type</th>
             <th>Mise à jour</th>
+            <th>Taille</th>
             <th></th>
           </tr>
         </thead>
@@ -297,6 +347,7 @@
               </td>
               <td>{{ tag.media_type }}</td>
               <td>{{ tag.created_at | date: 'short' }}</td>
+              <td>{{ tag.size_bytes | formatBytes }}</td>
               <td class="package-detail__actions">
                 @if (canWrite()) {
                   <gbt-button
@@ -351,7 +402,7 @@
           }
         </div>
         @if (imageScanLoading()) {
-          <p class="package-detail__audit-status">Chargement du dernier résultat…</p>
+          <gbt-spinner size="sm" label="Chargement du dernier résultat…" />
         } @else if (imageScanFailed()) {
           <p class="package-detail__audit-status">
             Impossible d'effectuer le scan pour le moment (Trivy indisponible ou erreur d'analyse).
@@ -431,10 +482,22 @@
             }
           }
         } @else {
-          <p class="package-detail__audit-status">
-            Aucun scan effectué pour le moment. Lancez un scan pour vérifier les vulnérabilités
-            connues.
-          </p>
+          <gbt-empty-state
+            illustration="pipeline"
+            heading="Aucun scan"
+            message="Un scan vérifie les vulnérabilités connues de l'image."
+          >
+            @if (canWrite()) {
+              <gbt-button
+                text="Lancer un scan"
+                variant="secondary"
+                size="small"
+                [loading]="imageScanScanning()"
+                loadingLabel="Chargement en cours"
+                (clicked)="runImageScan()"
+              />
+            }
+          </gbt-empty-state>
         }
       </gbt-card>
     }

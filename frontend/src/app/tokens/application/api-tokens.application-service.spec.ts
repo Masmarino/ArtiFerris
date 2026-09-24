@@ -24,7 +24,16 @@ describe('ApiTokensApplicationService', () => {
 
     service.create('laptop')
 
-    expect(create).toHaveBeenCalledWith('laptop')
+    expect(create).toHaveBeenCalledWith('laptop', null)
+  })
+
+  it('forwards the password of a long-lived token to the port', () => {
+    const create = vi.fn().mockReturnValue(of({ id: '1', token: 'hgr_secret' }))
+    const service = setup({ create })
+
+    service.create('laptop', 's3cret!')
+
+    expect(create).toHaveBeenCalledWith('laptop', 's3cret!')
   })
 
   it('delegates revoke() to the port with the given id', () => {

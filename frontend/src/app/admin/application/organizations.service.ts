@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core'
-import { Observable, catchError, shareReplay, tap, throwError } from 'rxjs'
+import { Observable, tap } from 'rxjs'
 import {
   IdentityProviderSummary,
   LdapIdentityProviderInput,
@@ -7,24 +7,16 @@ import {
   OrganizationSummary,
 } from '../domain/organization.entity'
 import { ORGANIZATIONS_PORT } from './organizations.port'
+import { TokenScopedCache } from '../../shared/token-scoped-cache'
 
 @Injectable({ providedIn: 'root' })
 export class OrganizationsService {
   private readonly port = inject(ORGANIZATIONS_PORT)
 
-  private cachedList$: Observable<OrganizationSummary[]> | null = null
+  private readonly listCache = new TokenScopedCache<OrganizationSummary[]>(() => this.port.list())
 
   list(options?: { forceRefresh?: boolean }): Observable<OrganizationSummary[]> {
-    if (!this.cachedList$ || options?.forceRefresh) {
-      this.cachedList$ = this.port.list().pipe(
-        catchError((err: unknown) => {
-          this.cachedList$ = null
-          return throwError(() => err)
-        }),
-        shareReplay(1),
-      )
-    }
-    return this.cachedList$
+    return this.listCache.get(options?.forceRefresh)
   }
 
   get(id: string): Observable<OrganizationSummary> {
@@ -32,7 +24,7 @@ export class OrganizationsService {
   }
 
   create(slug: string, displayName: string): Observable<OrganizationSummary> {
-    return this.port.create(slug, displayName).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.create(slug, displayName).pipe(tap(() => this.listCache.clear()))
   }
 
   getIdentityProvider(id: string): Observable<IdentityProviderSummary> {
@@ -40,14 +32,14 @@ export class OrganizationsService {
   }
 
   setLdapIdentityProvider(id: string, config: LdapIdentityProviderInput): Observable<void> {
-    return this.port.setLdapIdentityProvider(id, config).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.setLdapIdentityProvider(id, config).pipe(tap(() => this.listCache.clear()))
   }
 
   setOidcIdentityProvider(id: string, config: OidcIdentityProviderInput): Observable<void> {
-    return this.port.setOidcIdentityProvider(id, config).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.setOidcIdentityProvider(id, config).pipe(tap(() => this.listCache.clear()))
   }
 
   clearIdentityProvider(id: string): Observable<void> {
-    return this.port.clearIdentityProvider(id).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.clearIdentityProvider(id).pipe(tap(() => this.listCache.clear()))
   }
 }

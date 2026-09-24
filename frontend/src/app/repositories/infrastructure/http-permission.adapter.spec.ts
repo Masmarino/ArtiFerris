@@ -41,4 +41,14 @@ describe('HttpPermissionAdapter', () => {
     expect(req.request.method).toBe('DELETE')
     req.flush(null)
   })
+
+  it('keeps a hostile repository or user id inside its path segment', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.revoke('r/../x', 'u/..').subscribe()
+    httpMock.expectOne('/api/repositories/r%2F..%2Fx/permissions/u%2F..').flush(null)
+
+    expect(() => adapter.list('..')).toThrow(RangeError)
+    httpMock.verify()
+  })
 })

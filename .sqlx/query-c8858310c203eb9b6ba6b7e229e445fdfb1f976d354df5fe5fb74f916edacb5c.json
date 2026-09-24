@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_blob_uploads SET sealed_at = COALESCE(sealed_at, now()) WHERE id = $1 AND expires_at > now() RETURNING id, package_repository_id, staging_path, bytes_received, created_at, expires_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "docker_blob_uploads",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "package_repository_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "docker_blob_uploads",
+            "name": "package_repository_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "staging_path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_blob_uploads",
+            "name": "staging_path"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "bytes_received",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "docker_blob_uploads",
+            "name": "bytes_received"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "docker_blob_uploads",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "docker_blob_uploads",
+            "name": "expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c8858310c203eb9b6ba6b7e229e445fdfb1f976d354df5fe5fb74f916edacb5c"
+}

@@ -45,11 +45,19 @@ impl GetNpmPackageMetadataUseCase {
         Ok(Some(build_metadata_document(name, versions, &dist_tags)))
     }
 
-    pub fn execute<'a>(
+    /// `authorize_member` is the caller's read policy, consulted for every group member the
+    /// traversal would descend into — the top-level repository's own access is the caller's
+    /// responsibility, checked once before this is ever called (C-1).
+    pub fn execute<'a, FAuthorize, FutAuthorize>(
         &'a self,
         repository_id: Uuid,
         name: &'a NpmPackageName,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<serde_json::Value>, ApplicationError>> + Send + 'a>> {
+        authorize_member: FAuthorize,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<serde_json::Value>, ApplicationError>> + Send + 'a>>
+    where
+        FAuthorize: Fn(&PackageRepositorySummary) -> FutAuthorize + Clone + Send + 'a,
+        FutAuthorize: std::future::Future<Output = bool> + Send + 'a,
+    {
         resolve_in_group(
             &self.repositories,
             repository_id,
@@ -57,6 +65,7 @@ impl GetNpmPackageMetadataUseCase {
             move |repository_id| self.execute_hosted(repository_id, name),
             move |repository_id, repo| self.execute_proxy(repository_id, repo, name),
             || ApplicationError::NpmPackageNotFound,
+            authorize_member,
         )
     }
 
@@ -78,7 +87,7 @@ impl GetNpmPackageMetadataUseCase {
                 .as_deref()
                 .ok_or_else(|| ApplicationError::InvalidNpmPayload("proxy repository has no remote_url configured".into()))?;
             match self.remote.fetch_metadata(remote_url, name, repo.remote_username.as_deref(), repo.remote_password.as_deref()).await {
-                Ok(document) => {
+                Ok(Some(document)) => {
                     let package_id = match &existing {
                         Some(p) => p.id,
                         None => {
@@ -91,13 +100,16 @@ impl GetNpmPackageMetadataUseCase {
                                 metadata_fetched_at: None,
                                 cached_metadata: None,
                             };
-                            self.packages.create_package(&created).await?;
-                            created.id
+                            // Two cold requests race here; both get the same row.
+                            self.packages.create_package(&created).await?
                         }
                     };
                     self.packages.set_cached_metadata(package_id, document).await?;
                     self.packages.touch_metadata_fetched_at(package_id, Utc::now()).await?;
                 }
+                // Genuinely not found upstream — leave any existing (stale) cache as-is rather
+                // than manufacturing a package entry for something that doesn't exist remotely.
+                Ok(None) => {}
                 // Remote unreachable, but we have a stale cache — serve it rather than fail.
                 Err(_e) if existing.is_some() => {}
                 Err(e) => return Err(e.into()),
@@ -113,6 +125,9 @@ fn build_metadata_document(name: &NpmPackageName, versions: Vec<NpmPackageVersio
     for v in versions {
         let mut manifest = v.manifest;
         if let Some(obj) = manifest.as_object_mut() {
+            // The row's identity wins over the manifest's.
+            obj.insert("name".to_string(), json!(name.as_str()));
+            obj.insert("version".to_string(), json!(v.version.as_str()));
             obj.insert("dist".to_string(), json!({ "shasum": v.shasum, "integrity": v.integrity }));
             // npm's protocol wants the deprecation message as the field's value; absence means "not deprecated".
             if v.deprecated {
@@ -227,6 +242,46 @@ mod tests {
         assert_eq!(doc["versions"]["1.0.0"]["deprecated"], json!("use left-pad2 instead"));
     }
 
+    /// B-16 regression: a first-time proxy fetch (no existing cache) whose upstream call
+    /// genuinely 404s (`fetch_metadata` returns `Ok(None)`) must come out the other end of
+    /// `execute_proxy` as "not found" — not an error, and without manufacturing a package entry
+    /// for something that doesn't exist remotely.
+    #[tokio::test]
+    async fn a_first_time_proxy_fetch_that_404s_upstream_returns_not_found() {
+        let packages = Arc::new(FakePackages::new());
+        let repositories = Arc::new(FakeRepositories::new());
+        let remote = Arc::new(FakeRemoteRegistry::new());
+        *remote.metadata_response.lock().unwrap() = None;
+
+        let repository_id = Uuid::new_v4();
+        let name = NpmPackageName::parse("totally-unpublished-pkg").unwrap();
+        let repo = PackageRepositorySummary {
+            id: repository_id,
+            organization_id: Uuid::new_v4(),
+            name: "proxy-repo".to_string(),
+            format: RepositoryFormat::Npm,
+            repo_type: RepositoryType::Proxy,
+            remote_url: Some("https://registry.example.com".to_string()),
+            remote_username: None,
+            remote_password: None,
+            quota_bytes: None,
+            retention_keep_last_n: None,
+            is_public: false,
+            group_members: vec![],
+        };
+        repositories.insert(repo.clone());
+
+        let use_case = GetNpmPackageMetadataUseCase::new(packages.clone(), repositories, remote);
+
+        let result = use_case.execute_proxy(repository_id, repo, &name).await.unwrap();
+
+        assert!(result.is_none(), "a first-time upstream 404 must be Ok(None), not an error or a manufactured document");
+        assert!(
+            packages.find_package(repository_id, &name).await.unwrap().is_none(),
+            "no package entry should be created for something that doesn't exist remotely"
+        );
+    }
+
     #[tokio::test]
     async fn a_hosted_repository_without_the_package_returns_none() {
         let use_case = GetNpmPackageMetadataUseCase::new(
@@ -254,7 +309,7 @@ mod tests {
             remote_url: None,
             remote_username: None,
             remote_password: None,
-            quota_bytes: None, retention_keep_last_n: None, group_members: vec![repo_b_id],
+            quota_bytes: None, retention_keep_last_n: None, is_public: false, group_members: vec![repo_b_id],
         });
         repositories.insert(PackageRepositorySummary {
             id: repo_b_id,
@@ -265,7 +320,7 @@ mod tests {
             remote_url: None,
             remote_username: None,
             remote_password: None,
-            quota_bytes: None, retention_keep_last_n: None, group_members: vec![repo_a_id],
+            quota_bytes: None, retention_keep_last_n: None, is_public: false, group_members: vec![repo_a_id],
         });
 
         let use_case = GetNpmPackageMetadataUseCase::new(
@@ -275,9 +330,131 @@ mod tests {
         );
         let name = NpmPackageName::parse("left-pad").unwrap();
 
-        let result = tokio::time::timeout(std::time::Duration::from_secs(5), use_case.execute(repo_a_id, &name))
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            use_case.execute(repo_a_id, &name, |_repo: &PackageRepositorySummary| async { true }),
+        )
             .await
             .expect("execute() must not hang on a cyclic group configuration");
         assert!(result.unwrap().is_none());
+    }
+
+    /// A group member the caller-supplied policy rejects must not be reachable through the group,
+    /// even though it's readable directly — the group's own broader access must not leak into it (C-1).
+    #[tokio::test]
+    async fn metadata_from_a_group_skips_a_member_the_caller_is_not_authorized_to_read() {
+        let packages = Arc::new(FakePackages::new());
+        let repositories = Arc::new(FakeRepositories::new());
+        let org = Uuid::new_v4();
+        let forbidden_member_id = Uuid::new_v4();
+        repositories.insert(PackageRepositorySummary {
+            id: forbidden_member_id,
+            organization_id: org,
+            name: "private-member".to_string(),
+            format: RepositoryFormat::Npm,
+            repo_type: RepositoryType::Hosted,
+            remote_url: None,
+            remote_username: None,
+            remote_password: None,
+            quota_bytes: None,
+            retention_keep_last_n: None,
+            is_public: false,
+            group_members: vec![],
+        });
+        let group_id = Uuid::new_v4();
+        repositories.insert(PackageRepositorySummary {
+            id: group_id,
+            organization_id: org,
+            name: "group".to_string(),
+            format: RepositoryFormat::Npm,
+            repo_type: RepositoryType::Group,
+            remote_url: None,
+            remote_username: None,
+            remote_password: None,
+            quota_bytes: None,
+            retention_keep_last_n: None,
+            is_public: true,
+            group_members: vec![forbidden_member_id],
+        });
+
+        let name = NpmPackageName::parse("some-package").unwrap();
+        let package = artiferris_domain::npm_package::NpmPackage {
+            id: Uuid::new_v4(),
+            package_repository_id: forbidden_member_id,
+            name: name.clone(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            metadata_fetched_at: None,
+            cached_metadata: None,
+        };
+        packages.create_package(&package).await.unwrap();
+        packages
+            .insert_version(&artiferris_domain::npm_package::NpmPackageVersion {
+                id: Uuid::new_v4(),
+                npm_package_id: package.id,
+                version: artiferris_domain::npm_package::NpmVersion::parse("1.0.0").unwrap(),
+                manifest: json!({ "name": "some-package", "version": "1.0.0" }),
+                shasum: "abc".to_string(),
+                integrity: "sha512-abc".to_string(),
+                tarball_storage_key: "some-package/-/some-package-1.0.0.tgz".to_string(),
+                tarball_size_bytes: 100,
+                deprecated: false,
+                deprecated_message: None,
+                published_by: None,
+                published_at: Utc::now(),
+                origin: artiferris_domain::npm_package::NpmPackageOrigin::Local,
+            })
+            .await
+            .unwrap();
+
+        let use_case = GetNpmPackageMetadataUseCase::new(packages, repositories, Arc::new(FakeRemoteRegistry::new()));
+
+        // Sanity check: the member really does hold the package, so the assertion below is explained by the policy, not a missing package.
+        assert!(use_case.execute_hosted(forbidden_member_id, &name).await.unwrap().is_some());
+
+        let result = use_case.execute(group_id, &name, |_repo: &PackageRepositorySummary| async { false }).await.unwrap();
+
+        assert!(result.is_none(), "a member the policy rejects must not be reachable through the group");
+    }
+
+    #[tokio::test]
+    async fn the_metadata_document_names_each_version_after_its_row_not_its_manifest() {
+        let packages = Arc::new(FakePackages::new());
+        let repository_id = Uuid::new_v4();
+        let name = NpmPackageName::parse("left-pad").unwrap();
+        let package = artiferris_domain::npm_package::NpmPackage {
+            id: Uuid::new_v4(),
+            package_repository_id: repository_id,
+            name: name.clone(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            metadata_fetched_at: None,
+            cached_metadata: None,
+        };
+        packages.create_package(&package).await.unwrap();
+        packages
+            .insert_version(&artiferris_domain::npm_package::NpmPackageVersion {
+                id: Uuid::new_v4(),
+                npm_package_id: package.id,
+                version: artiferris_domain::npm_package::NpmVersion::parse("1.0.0").unwrap(),
+                manifest: json!({ "name": "somebody-elses-package", "version": "9.9.9" }),
+                shasum: "abc".to_string(),
+                integrity: "sha512-abc".to_string(),
+                tarball_storage_key: "left-pad/-/left-pad-1.0.0.tgz".to_string(),
+                tarball_size_bytes: 100,
+                deprecated: false,
+                deprecated_message: None,
+                published_by: None,
+                published_at: Utc::now(),
+                origin: artiferris_domain::npm_package::NpmPackageOrigin::Local,
+            })
+            .await
+            .unwrap();
+
+        let use_case = GetNpmPackageMetadataUseCase::new(packages, Arc::new(FakeRepositories::new()), Arc::new(FakeRemoteRegistry::new()));
+        let doc = use_case.execute_hosted(repository_id, &name).await.unwrap().unwrap();
+
+        assert_eq!(doc["versions"]["1.0.0"]["name"], "left-pad");
+        assert_eq!(doc["versions"]["1.0.0"]["version"], "1.0.0");
     }
 }

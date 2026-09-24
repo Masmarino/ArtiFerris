@@ -2,6 +2,13 @@
   <div class="app-shell__loading">
     <gbt-spinner label="Chargement…" />
   </div>
+} @else if (loadFailed()) {
+  <div class="app-shell__loading app-shell__load-error">
+    <p class="gbt-form-error" role="alert">
+      Impossible de charger votre session. Vérifiez votre connexion puis réessayez.
+    </p>
+    <gbt-button text="Réessayer" (clicked)="retryLoad()" />
+  </div>
 } @else {
   <gbt-app-shell
     navLabel="Navigation principale"
@@ -82,6 +89,7 @@
               <a
                 [routerLink]="item.link"
                 routerLinkActive="app-shell__nav-link--active"
+                [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
                 [ariaCurrentWhenActive]="'page'"
                 [attr.aria-label]="navCollapsed() ? item.text : null"
                 [title]="navCollapsed() ? item.text : null"
@@ -102,8 +110,10 @@
       <gbt-search-bar
         class="app-shell__search"
         placeholder="Rechercher un dépôt ou un utilisateur..."
-        noResultsMessage="Aucun résultat"
-        noResultsHint="Essayez une autre recherche."
+        [noResultsMessage]="searchFailed() ? 'La recherche a échoué' : 'Aucun résultat'"
+        [noResultsHint]="
+          searchFailed() ? 'Modifiez votre saisie pour réessayer.' : 'Essayez une autre recherche.'
+        "
         clearLabel="Effacer la recherche"
         navigateHint="Naviguer"
         selectHint="Sélectionner"
@@ -159,3 +169,5 @@
   closeLabel="Fermer"
   (dismissed)="toastService.dismiss($event)"
 />
+
+<app-confirm-host />

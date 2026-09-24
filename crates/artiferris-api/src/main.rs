@@ -1,10 +1,14 @@
 mod auth_middleware;
 mod authz;
+mod body_timeout;
 mod config;
 mod dto;
-mod login_throttle;
+mod install_location;
 mod organization_middleware;
+mod response_policy;
+mod seo;
 mod routes;
+mod serve;
 mod state;
 
 use std::sync::Arc;
@@ -15,8 +19,12 @@ use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
+use crate::body_timeout::{limit_body_time, BodyTimeouts};
 use crate::config::Config;
 use crate::state::AppState;
+
+/// How long a client gets to send its request headers.
+const HEADER_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Well above the 2 MiB branding-upload cap, still bounds memory per `/api/*` request.
 const JSON_API_BODY_LIMIT_BYTES: usize = 10 * 1024 * 1024;
@@ -27,13 +35,29 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let config = Config::from_env();
+    configure_ssrf_allowlist();
     let pool = artiferris_infrastructure::postgres::connect(&config.database_url, config.db_max_connections).await.expect("failed to connect to postgres");
     artiferris_infrastructure::postgres::run_migrations(&pool).await.expect("failed to run migrations");
+    reencrypt_stored_secrets(&pool, &config.secrets_encryption_key).await;
+    match artiferris_infrastructure::postgres::reserved_name_audit::find_reserved_name_conflicts(&pool).await {
+        Ok(conflicts) if !conflicts.is_empty() => {
+            tracing::warn!("these names predate the reserved \"artiferris-\" prefix; they keep working but should be renamed: {}", conflicts.join(", "));
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!("could not check for names using the reserved prefix: {e}"),
+    }
 
-    let state = AppState::build(pool, &config);
+    let state = AppState::build(pool.clone(), &config);
     bootstrap_super_admin(&state).await;
     spawn_metrics_snapshot_timer(&state);
     spawn_retention_sweep_timer(&state);
+    spawn_upload_sweep_timer(&state);
+    spawn_repository_deletion_sweep_timer(&state);
+    spawn_download_flush_timer(&state);
+    spawn_download_prune_timer(&state);
+    spawn_audit_prune_timer(&state);
+    let flush_downloads = state.flush_downloads.clone();
+    let seo_app_state = state.clone();
     let app = build_router_with_cors(
         state,
         config.cors_allowed_origin.clone(),
@@ -43,16 +67,114 @@ async fn main() {
     );
 
     let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "./static".to_string());
-    let app = app.fallback_service(
-        tower_http::services::ServeDir::new(&static_dir)
-            .not_found_service(tower_http::services::ServeFile::new(format!("{static_dir}/index.html"))),
-    );
-    // Second pass — the fallback above didn't exist yet at the first one (see with_security_headers).
-    let app = with_security_headers(app, config.public_url.starts_with("https://"));
+    let index_template = std::fs::read_to_string(format!("{static_dir}/index.html")).unwrap_or_else(|e| {
+        tracing::warn!("could not read {static_dir}/index.html, pages will be served without the app: {e}");
+        "<!doctype html><html><head></head><body></body></html>".to_string()
+    });
+    let app = with_app_fallback(app, &static_dir, seo::SeoState::new(seo_app_state, index_template), config.public_url.starts_with("https://"));
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr).await.expect("failed to bind");
     tracing::info!("artiferris-api listening on {}", config.bind_addr);
-    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>()).await.expect("server error");
+    spawn_audit_backfill(pool, config.db_max_connections);
+    serve::serve(listener, app, HEADER_READ_TIMEOUT, shutdown_signal()).await;
+    // The last few seconds of downloads are still in memory; write them before the process goes.
+    match flush_downloads.execute().await {
+        Ok(written) if written > 0 => tracing::info!(written, "flushed download counts on shutdown"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!("could not flush download counts on shutdown: {e}"),
+    }
+}
+
+/// Static files first; whatever they don't answer is an SPA route (served with its own head), a sitemap or a 404.
+fn with_app_fallback(app: Router, static_dir: &str, seo: seo::SeoState, hsts_enabled: bool) -> Router {
+    let app_routes = seo::app_router(static_dir, seo).layer(axum::middleware::from_fn_with_state(BodyTimeouts::default(), limit_body_time));
+    // Second pass of the security headers: the fallback did not exist yet at the first one (see with_security_headers).
+    with_security_headers(app.fallback_service(app_routes), hsts_enabled)
+}
+
+/// A typo stops startup: an allowlist that silently came out empty or too wide is worse than no server.
+fn configure_ssrf_allowlist() {
+    let raw = std::env::var("ARTIFERRIS_SSRF_ALLOWED_CIDRS").unwrap_or_default();
+    let allowed = artiferris_infrastructure::ssrf_allowlist::parse_allowed_cidrs(&raw).unwrap_or_else(|e| panic!("invalid ARTIFERRIS_SSRF_ALLOWED_CIDRS: {e}"));
+    if !allowed.is_empty() {
+        tracing::info!("ARTIFERRIS_SSRF_ALLOWED_CIDRS exempts the listed ranges from the outbound-request guard");
+    }
+    artiferris_infrastructure::ssrf_allowlist::configure(allowed);
+}
+
+/// Reports what is still in the old format, or under the previous key, and only rewrites it when `SECRETS_REENCRYPT_LEGACY=true`. Releases before the versioned format cannot read the result; rolling back past the migrations needs a restore whatever this flag says.
+async fn reencrypt_stored_secrets(pool: &sqlx::PgPool, key: &str) {
+    let previous_key = std::env::var("SECRETS_ENCRYPTION_KEY_PREVIOUS").ok().filter(|s| !s.is_empty());
+    if let Some(previous) = &previous_key {
+        artiferris_infrastructure::secret_box::set_previous_key(previous);
+    }
+    let apply = matches!(std::env::var("SECRETS_REENCRYPT_LEGACY").ok().as_deref(), Some("true" | "1"));
+    let report = artiferris_infrastructure::secret_migration::reencrypt_secrets(pool, key, previous_key.as_deref(), apply).await.expect("failed to re-encrypt stored secrets");
+    if report.upgraded > 0 {
+        tracing::info!(upgraded = report.upgraded, "re-encrypted stored secrets under the current SECRETS_ENCRYPTION_KEY; releases before the versioned secret format can no longer read them");
+    }
+    if report.pending > 0 {
+        tracing::warn!(
+            pending = report.pending,
+            "stored secrets are in an old format or under SECRETS_ENCRYPTION_KEY_PREVIOUS; once the upgrade is verified, set SECRETS_REENCRYPT_LEGACY=true and restart to convert them (releases before the versioned secret format can no longer read them after that)"
+        );
+    }
+    if report.failed > 0 {
+        tracing::error!(failed = report.failed, "some stored secrets could not be read with SECRETS_ENCRYPTION_KEY (or SECRETS_ENCRYPTION_KEY_PREVIOUS); they were left as they are and the features that need them will not work until an admin enters them again");
+    }
+}
+
+/// Below this many pool connections a request and a batch would compete for the last one.
+const MIN_CONNECTIONS_FOR_BACKFILL: u32 = 3;
+
+fn audit_backfill_may_run(max_connections: u32, forced: bool) -> bool {
+    forced || max_connections >= MIN_CONNECTIONS_FOR_BACKFILL
+}
+
+/// Runs once the listener is up, so a big event history never delays startup.
+fn spawn_audit_backfill(pool: sqlx::PgPool, max_connections: u32) {
+    let forced = matches!(std::env::var("ARTIFERRIS_AUDIT_BACKFILL_FORCE").ok().as_deref(), Some("true" | "1"));
+    if !audit_backfill_may_run(max_connections, forced) {
+        tracing::warn!(
+            max_connections,
+            "not stamping the organization on older audit events: DB_MAX_CONNECTIONS is below {MIN_CONNECTIONS_FOR_BACKFILL} and the job would compete with requests for the pool. Organization audit views miss those events until DB_MAX_CONNECTIONS is raised, or ARTIFERRIS_AUDIT_BACKFILL_FORCE=true runs it anyway"
+        );
+        return;
+    }
+    tokio::spawn(async move {
+        artiferris_infrastructure::postgres::audit_backfill::backfill_until_done(&pool, std::time::Duration::from_millis(50), std::time::Duration::from_secs(60)).await;
+    });
+}
+
+/// Liveness (`/healthz`) says the process is up; readiness says it can reach its database.
+async fn readyz(axum::extract::State(state): axum::extract::State<AppState>) -> axum::http::StatusCode {
+    if state.readiness.is_ready().await {
+        axum::http::StatusCode::OK
+    } else {
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+/// Resolves on Ctrl+C, or on SIGTERM where the platform has it (what a container runtime sends).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        () = ctrl_c => {}
+        () = terminate => {}
+    }
 }
 
 /// No-op unless both bootstrap env vars are set and the `users` table is empty. Failures are logged, never fatal.
@@ -108,11 +230,12 @@ fn spawn_retention_sweep_timer(state: &AppState) {
             interval.tick().await;
             match sweep_retention.execute().await {
                 Ok(report) => {
-                    if report.npm_versions_deleted > 0 || report.docker_tags_deleted > 0 {
+                    if report != Default::default() {
                         tracing::info!(
                             npm_versions_deleted = report.npm_versions_deleted,
                             docker_tags_deleted = report.docker_tags_deleted,
-                            "retention sweep pruned old versions/tags"
+                            docker_untagged_manifests_deleted = report.docker_untagged_manifests_deleted,
+                            "retention sweep pruned old versions, tags and untagged manifests"
                         );
                     }
                 }
@@ -120,6 +243,93 @@ fn spawn_retention_sweep_timer(state: &AppState) {
             }
         }
     });
+}
+
+/// Runs hourly; no immediate run on startup, same as the retention sweep. Reclaims abandoned Docker
+/// upload sessions (M-13) that the lazy sweep in `artiferris_domain::docker_registry::DockerUploadSessionPort::find`
+/// never reaches, since a truly abandoned session is never looked up again, and blobs no manifest ever referenced.
+fn spawn_upload_sweep_timer(state: &AppState) {
+    let sweep_expired_uploads = state.sweep_expired_uploads.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+        interval.tick().await; // consume the immediate first tick — no run on startup
+        loop {
+            interval.tick().await;
+            match sweep_expired_uploads.execute().await {
+                Ok(report) => {
+                    if report != Default::default() {
+                        tracing::info!(
+                            sessions = report.sessions_removed,
+                            blob_links = report.blob_links_removed,
+                            blobs = report.blobs_removed,
+                            temp_files = report.temp_files_removed,
+                            "upload sweep removed abandoned Docker upload sessions, unreferenced blobs and stale temp files"
+                        );
+                    }
+                }
+                Err(e) => tracing::warn!("upload sweep failed: {e}"),
+            }
+        }
+    });
+}
+
+/// Runs daily — more appropriate than hourly given the 30-day grace period this sweep enforces
+/// (B-39); no immediate run on startup, same as the other sweep timers.
+fn spawn_repository_deletion_sweep_timer(state: &AppState) {
+    let sweep_repository_deletions = state.sweep_repository_deletions.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+        interval.tick().await; // consume the immediate first tick — no run on startup
+        loop {
+            interval.tick().await;
+            match sweep_repository_deletions.execute().await {
+                Ok(removed) => {
+                    if removed > 0 {
+                        tracing::info!(removed, "repository deletion sweep hard-deleted repositories past their grace period");
+                    }
+                }
+                Err(e) => tracing::warn!("repository deletion sweep failed: {e}"),
+            }
+        }
+    });
+}
+
+/// Moves the in-memory download counts to the database every 30 seconds; a crash loses at most that much.
+fn spawn_download_flush_timer(state: &AppState) {
+    let flush_downloads = state.flush_downloads.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        interval.tick().await; // consume the immediate first tick — the buffer is empty at startup
+        loop {
+            interval.tick().await;
+            if let Err(e) = flush_downloads.execute().await {
+                tracing::warn!("download count flush failed, will retry: {e}");
+            }
+        }
+    });
+}
+
+/// Runs daily; no immediate run on startup, same as the other sweep timers.
+fn spawn_download_prune_timer(state: &AppState) {
+    let prune_download_stats = state.prune_download_stats.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            match prune_download_stats.execute().await {
+                Ok(removed) if removed > 0 => tracing::info!(removed, "download stats sweep removed old daily counts"),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("download stats sweep failed: {e}"),
+            }
+        }
+    });
+}
+
+/// First sweep shortly after startup, then daily.
+fn spawn_audit_prune_timer(state: &AppState) {
+    let prune_audit_events = state.prune_audit_events.clone();
+    tokio::spawn(async move { prune_audit_events.run_forever(artiferris_application::audit_retention::first_sweep_delay(), artiferris_application::audit_retention::SWEEP_INTERVAL).await });
 }
 
 /// Fully permissive CORS — the default that keeps a separately served Angular dev server working.
@@ -134,23 +344,40 @@ pub fn build_router_with_cors(
     docker_token_realm_override: Option<String>,
     public_url: String,
 ) -> Router {
-    let npm_state = build_npm_state(&state);
-    let docker_state = build_docker_state(&state, &jwt_secret, docker_token_realm_override, &public_url);
+    build_router_with_body_timeouts(state, cors_allowed_origin, jwt_secret, docker_token_realm_override, public_url, BodyTimeouts::default())
+}
+
+fn build_router_with_body_timeouts(
+    state: AppState,
+    cors_allowed_origin: Option<String>,
+    jwt_secret: String,
+    docker_token_realm_override: Option<String>,
+    public_url: String,
+    body_timeouts: BodyTimeouts,
+) -> Router {
+    // One guard for both registries, so the body-memory budget is global.
+    let guard = Arc::new(artiferris_application::request_guard::RequestGuard::new(state.trusted_proxies.clone()));
+    let npm_state = build_npm_state(&state, &public_url, guard.clone());
+    let docker_state = build_docker_state(&state, &jwt_secret, docker_token_realm_override, &public_url, guard);
     // Scoped to this JSON surface only — /npm and /v2 already serve compressed binary content.
     let json_api_routes = Router::new()
         .route("/healthz", get(|| async { "ok" }))
+        .route("/readyz", get(readyz))
         .route("/api/version", get(|| async { axum::Json(serde_json::json!({ "version": env!("CARGO_PKG_VERSION") })) }))
         .merge(routes::admin::router())
         .merge(routes::branding::router())
         .merge(routes::auth::router())
         .merge(routes::mfa::router())
         .merge(routes::organizations::router())
+        .merge(routes::public_catalog::router())
         .merge(routes::repositories::router())
         .merge(routes::users::router())
         .merge(routes::api_tokens::router())
         .layer(CompressionLayer::new())
+        .layer(axum::middleware::map_response(retry_after_when_busy))
         // Otherwise axum buffers a request body of any size before the 2 MiB branding cap ever runs.
-        .layer(axum::extract::DefaultBodyLimit::max(JSON_API_BODY_LIMIT_BYTES));
+        .layer(axum::extract::DefaultBodyLimit::max(JSON_API_BODY_LIMIT_BYTES))
+        .layer(axum::middleware::from_fn_with_state(body_timeouts, limit_body_time));
     let router = Router::new()
         .merge(json_api_routes)
         // .nest_service, not .nest: the nested routers are already state-erased.
@@ -163,6 +390,16 @@ pub fn build_router_with_cors(
     with_security_headers(router, public_url.starts_with("https://"))
 }
 
+const BUSY_RETRY_AFTER_SECONDS: u64 = 5;
+
+async fn retry_after_when_busy(mut response: axum::response::Response) -> axum::response::Response {
+    use axum::http::{header, HeaderValue, StatusCode};
+    if response.status() == StatusCode::SERVICE_UNAVAILABLE && !response.headers().contains_key(header::RETRY_AFTER) {
+        response.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from(BUSY_RETRY_AFTER_SECONDS));
+    }
+    response
+}
+
 /// A layer only wraps routes that exist at the point it's added — needs a second call in main() after the static-file fallback.
 fn with_security_headers(router: Router, hsts_enabled: bool) -> Router {
     use axum::http::{header, HeaderValue};
@@ -172,11 +409,16 @@ fn with_security_headers(router: Router, hsts_enabled: bool) -> Router {
         .layer(SetResponseHeaderLayer::overriding(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")))
         .layer(SetResponseHeaderLayer::overriding(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY")))
         .layer(SetResponseHeaderLayer::overriding(header::REFERRER_POLICY, HeaderValue::from_static("same-origin")))
+        .layer(SetResponseHeaderLayer::overriding(header::HeaderName::from_static("permissions-policy"), HeaderValue::from_static(response_policy::PERMISSIONS_POLICY)))
+        // Sign-in is a full-page redirect and passkeys need no popup, so nothing relies on window.opener.
+        .layer(SetResponseHeaderLayer::overriding(header::HeaderName::from_static("cross-origin-opener-policy"), HeaderValue::from_static("same-origin")))
+        .layer(axum::middleware::from_fn(response_policy::response_policy))
         .layer(SetResponseHeaderLayer::overriding(
             header::CONTENT_SECURITY_POLICY,
             // style-src needs 'unsafe-inline' — Angular injects per-component <style> tags, no CSP nonces.
+            // img-src allows https: for the images of package READMEs (the sanitizer only keeps https ones); it does not loosen script-src.
             HeaderValue::from_static(
-                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             ),
         ));
     if hsts_enabled {
@@ -187,7 +429,7 @@ fn with_security_headers(router: Router, hsts_enabled: bool) -> Router {
 }
 
 /// Reuses every adapter/use-case `AppState` already built.
-fn build_npm_state(state: &AppState) -> artiferris_npm::NpmState {
+fn build_npm_state(state: &AppState, public_url: &str, guard: Arc<artiferris_application::request_guard::RequestGuard>) -> artiferris_npm::NpmState {
     let remote_registry: Arc<dyn artiferris_domain::npm_remote::RemoteNpmRegistryPort> =
         Arc::new(artiferris_infrastructure::http_remote_npm_registry::HttpRemoteNpmRegistry::new());
 
@@ -198,10 +440,13 @@ fn build_npm_state(state: &AppState) -> artiferris_npm::NpmState {
         api_tokens: state.api_tokens.clone(),
         organizations: state.organizations.clone(),
         artiferris_base_domain: state.artiferris_base_domain.clone(),
+        public_scheme: if public_url.starts_with("https://") { "https".to_string() } else { "http".to_string() },
+        guard,
         publish: Arc::new(artiferris_application::use_cases::npm_publish::PublishNpmPackageUseCase::new(
             state.npm_packages.clone(),
             state.storage.clone(),
             state.repositories.clone(),
+            state.repository_quota_lock.clone(),
             state.events.clone(),
         )),
         metadata: Arc::new(artiferris_application::use_cases::npm_metadata::GetNpmPackageMetadataUseCase::new(
@@ -215,6 +460,7 @@ fn build_npm_state(state: &AppState) -> artiferris_npm::NpmState {
             remote_registry.clone(),
             state.repositories.clone(),
         )),
+        downloads: state.download_counter_buffer.clone(),
         unpublish: Arc::new(artiferris_application::use_cases::npm_unpublish::UnpublishNpmPackageUseCase::new(
             state.npm_packages.clone(),
             state.storage.clone(),
@@ -236,21 +482,50 @@ fn build_npm_state(state: &AppState) -> artiferris_npm::NpmState {
         create_api_token: state.create_api_token.clone(),
         list_api_tokens: state.list_api_tokens.clone(),
         revoke_api_token: state.revoke_api_token.clone(),
+        resolve_personal_repository: Arc::new(artiferris_application::use_cases::resolve_personal_repository::ResolvePersonalRepositoryUseCase::new(
+            state.users.clone(),
+            state.organizations.clone(),
+            state.repositories.clone(),
+        )),
     }
 }
 
 /// Reuses `AppState`'s adapters; `jwt_secret`/`docker_token_realm_override`/`public_url` arrive as explicit params since `AppState` doesn't store them.
-fn build_docker_state(state: &AppState, jwt_secret: &str, docker_token_realm_override: Option<String>, public_url: &str) -> artiferris_docker::DockerState {
+fn build_docker_state(
+    state: &AppState,
+    jwt_secret: &str,
+    docker_token_realm_override: Option<String>,
+    public_url: &str,
+    guard: Arc<artiferris_application::request_guard::RequestGuard>,
+) -> artiferris_docker::DockerState {
     let remote: Arc<dyn artiferris_domain::docker_remote::RemoteDockerRegistryPort> =
         Arc::new(artiferris_infrastructure::http_remote_docker_registry::HttpRemoteDockerRegistry::new());
     let token_issuer: Arc<dyn artiferris_domain::docker_registry::DockerTokenIssuerPort> =
         Arc::new(artiferris_infrastructure::jwt_docker_token_issuer::JwtDockerTokenIssuer::new(jwt_secret.to_string()));
     let list_catalog = Arc::new(artiferris_application::use_cases::docker_list::ListCatalogUseCase::new(state.docker_manifests.clone()));
+    let resolve_personal_repository = Arc::new(artiferris_application::use_cases::resolve_personal_repository::ResolvePersonalRepositoryUseCase::new(
+        state.users.clone(),
+        state.organizations.clone(),
+        state.repositories.clone(),
+    ));
+
+    let start_upload = Arc::new(artiferris_application::use_cases::docker_upload::StartBlobUploadUseCase::new(state.docker_uploads.clone()));
+    let patch_upload = Arc::new(artiferris_application::use_cases::docker_upload::PatchBlobUploadUseCase::new(
+        state.docker_uploads.clone(),
+        state.docker_blobs.clone(),
+        state.repositories.clone(),
+        state.repository_quota_lock.clone(),
+    ));
+    let complete_upload = Arc::new(artiferris_application::use_cases::docker_upload::CompleteBlobUploadUseCase::new(state.docker_uploads.clone(), state.docker_blobs.clone()));
 
     artiferris_docker::DockerState {
         repositories: state.repositories.clone(),
         permissions: state.permissions.clone(),
         organizations: state.organizations.clone(),
+        users: state.users.clone(),
+        tokens_valid_after_cache: artiferris_docker::tokens_valid_after_cache::TokensValidAfterCache::new(
+            artiferris_docker::state::TOKENS_VALID_AFTER_CACHE_TTL,
+        ),
         artiferris_base_domain: state.artiferris_base_domain.clone(),
         token_issuer: token_issuer.clone(),
         token_realm_override: docker_token_realm_override,
@@ -263,17 +538,17 @@ fn build_docker_state(state: &AppState, jwt_secret: &str, docker_token_realm_ove
             state.repositories.clone(),
             state.permissions.clone(),
             token_issuer,
+            resolve_personal_repository.clone(),
         )),
-        start_upload: Arc::new(artiferris_application::use_cases::docker_upload::StartBlobUploadUseCase::new(state.docker_uploads.clone())),
-        patch_upload: Arc::new(artiferris_application::use_cases::docker_upload::PatchBlobUploadUseCase::new(state.docker_uploads.clone())),
-        complete_upload: Arc::new(artiferris_application::use_cases::docker_upload::CompleteBlobUploadUseCase::new(
-            state.docker_uploads.clone(),
-            state.docker_blobs.clone(),
-        )),
-        monolithic_upload: Arc::new(artiferris_application::use_cases::docker_upload::MonolithicBlobUploadUseCase::new(state.docker_blobs.clone())),
+        login_throttle: artiferris_application::login_throttle::LoginThrottle::new(),
+        guard,
+        record_security_event: Arc::new(artiferris_application::use_cases::admin::RecordSecurityEventUseCase::new(state.events.clone())),
+        start_upload: start_upload.clone(),
+        patch_upload: patch_upload.clone(),
+        complete_upload: complete_upload.clone(),
+        monolithic_upload: Arc::new(artiferris_application::use_cases::docker_upload::MonolithicBlobUploadUseCase::new(start_upload, patch_upload, complete_upload, state.docker_uploads.clone())),
         put_manifest: Arc::new(artiferris_application::use_cases::docker_manifest_put::PutManifestUseCase::new(
             state.docker_manifests.clone(),
-            state.docker_blobs.clone(),
             state.repositories.clone(),
             state.events.clone(),
         )),
@@ -282,6 +557,7 @@ fn build_docker_state(state: &AppState, jwt_secret: &str, docker_token_realm_ove
             state.repositories.clone(),
             remote.clone(),
         )),
+        downloads: state.download_counter_buffer.clone(),
         cache_proxied_manifest: Arc::new(artiferris_application::use_cases::docker_manifest_cache::CacheProxiedManifestUseCase::new(
             state.docker_manifests.clone(),
         )),
@@ -296,7 +572,7 @@ fn build_docker_state(state: &AppState, jwt_secret: &str, docker_token_realm_ove
             state.docker_blobs.clone(),
             state.events.clone(),
         )),
-        list_tags: Arc::new(artiferris_application::use_cases::docker_list::ListTagsUseCase::new(state.docker_manifests.clone())),
+        list_tags: Arc::new(artiferris_application::use_cases::docker_list::ListTagsUseCase::new(state.docker_manifests.clone(), state.repositories.clone())),
         list_catalog,
         list_registry_catalog: Arc::new(artiferris_application::use_cases::docker_list::ListDockerRegistryCatalogUseCase::new(
             state.repositories.clone(),
@@ -304,6 +580,7 @@ fn build_docker_state(state: &AppState, jwt_secret: &str, docker_token_realm_ove
             state.docker_manifests.clone(),
         )),
         scan_docker_image: state.scan_docker_image.clone(),
+        resolve_personal_repository,
     }
 }
 
@@ -351,7 +628,7 @@ mod tests {
         Config {
             database_url: String::new(),
             jwt_secret: "test-secret".to_string(),
-            secrets_encryption_key: "test-secret".to_string(),
+            secrets_encryption_key: "test-secrets-encryption-key".to_string(),
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
@@ -359,7 +636,18 @@ mod tests {
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),
+            trusted_proxy_ips: std::collections::HashSet::new(),
+            audit_retention_days: None,
         }
+    }
+
+    #[test]
+    fn the_audit_backfill_needs_a_pool_of_three_unless_forced() {
+        assert!(!audit_backfill_may_run(1, false));
+        assert!(!audit_backfill_may_run(2, false));
+        assert!(audit_backfill_may_run(3, false));
+        assert!(audit_backfill_may_run(10, false));
+        assert!(audit_backfill_may_run(1, true));
     }
 
     #[sqlx::test]
@@ -370,6 +658,42 @@ mod tests {
         let response = app.oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap()).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[sqlx::test]
+    async fn readyz_is_ok_while_the_database_answers(pool: sqlx::PgPool) {
+        let app = build_router(AppState::build(pool, &test_config()));
+
+        let response = app.oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap()).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[sqlx::test]
+    async fn readyz_fails_and_healthz_stays_ok_when_the_database_is_gone(pool: sqlx::PgPool) {
+        let app = build_router(AppState::build(pool.clone(), &test_config()));
+        pool.close().await;
+
+        let readyz = app.clone().oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap()).await.unwrap();
+        let healthz = app.oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap()).await.unwrap();
+
+        assert_eq!(readyz.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(healthz.status(), StatusCode::OK);
+    }
+
+    #[sqlx::test]
+    async fn readyz_stays_ok_and_answers_at_once_while_every_pool_connection_is_busy(pool: sqlx::PgPool) {
+        let small = sqlx::postgres::PgPoolOptions::new().max_connections(1).acquire_timeout(std::time::Duration::from_secs(30)).connect_with((*pool.connect_options()).clone()).await.unwrap();
+        let app = build_router(AppState::build(small.clone(), &test_config()));
+        let probe = || Request::builder().uri("/readyz").body(Body::empty()).unwrap();
+        assert_eq!(app.clone().oneshot(probe()).await.unwrap().status(), StatusCode::OK);
+        let _busy = small.acquire().await.unwrap();
+
+        let started = std::time::Instant::now();
+        let response = app.oneshot(probe()).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
     }
 
     fn healthz_from(origin: &str) -> Request<Body> {
@@ -463,6 +787,168 @@ mod tests {
         let csp = headers.get("content-security-policy").unwrap().to_str().unwrap();
         assert!(csp.contains("default-src 'self'"));
         assert!(csp.contains("frame-ancestors 'none'"));
+        let img_src = csp.split(';').map(|directive| directive.trim()).find(|directive| directive.starts_with("img-src")).expect("CSP must declare an img-src directive");
+        assert!(img_src.split_whitespace().any(|source| source == "https:"), "README images are https-only, so https: must be allowed: {img_src}");
+        assert!(!img_src.contains("http:") && !img_src.contains('*'), "plain http and wildcards stay out: {img_src}");
+        // The frontend stores its session JWT in sessionStorage (a deliberate, documented
+        // risk-acceptance — see auth.service.ts's TOKEN_STORAGE_KEY comment) rather than an
+        // HttpOnly cookie. That acceptance is conditioned entirely on script injection being
+        // structurally blocked: a strict script-src with no unsafe-inline/unsafe-eval. If this
+        // assertion ever needs to change, the risk-acceptance in auth.service.ts must be
+        // re-evaluated first, not silently invalidated (M-19).
+        //
+        // style-src legitimately carries 'unsafe-inline' (Angular's per-component <style> tags,
+        // no CSP nonces) — so the unsafe-inline/unsafe-eval check must isolate the script-src
+        // directive rather than scan the whole header, or it would false-fail on style-src today.
+        let script_src = csp
+            .split(';')
+            .map(|directive| directive.trim())
+            .find(|directive| directive.starts_with("script-src"))
+            .expect("CSP must declare a script-src directive");
+        assert_eq!(script_src, "script-src 'self'");
+        assert!(!script_src.contains("unsafe-inline"));
+        assert!(!script_src.contains("unsafe-eval"));
+    }
+
+    #[sqlx::test]
+    async fn every_response_also_carries_the_permissions_and_opener_policies(pool: sqlx::PgPool) {
+        let app = build_router(AppState::build(pool, &test_config()));
+
+        for uri in ["/healthz", "/api/version", "/npm/", "/v2/"] {
+            let response = app.clone().oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap()).await.unwrap();
+            let headers = response.headers();
+            assert_eq!(headers.get("cross-origin-opener-policy").unwrap(), "same-origin", "{uri}");
+            let permissions = headers.get("permissions-policy").unwrap().to_str().unwrap();
+            for feature in ["camera=()", "microphone=()", "geolocation=()", "payment=()", "usb=()"] {
+                assert!(permissions.contains(feature), "{uri}: {permissions}");
+            }
+        }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn json_api_responses_are_not_stored_and_vary_on_the_caller(pool: sqlx::PgPool) {
+        use artiferris_domain::package_repository::{RepositoryFormat, RepositoryType};
+
+        let state = AppState::build(pool, &test_config());
+        let public_org = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let admin_id = state.create_user.execute(public_org, "admin", "sup3r-s3cret!", true).await.unwrap();
+        let repo_id = state.create_repository.execute(public_org, "open", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, admin_id).await.unwrap();
+        state.set_repository_visibility.execute(repo_id, true, admin_id).await.unwrap();
+        let token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        let get = |uri: String, token: Option<&str>| {
+            let mut request = Request::builder().uri(uri);
+            if let Some(token) = token {
+                request = request.header("authorization", format!("Bearer {token}"));
+            }
+            app.clone().oneshot(request.body(Body::empty()).unwrap())
+        };
+
+        for (uri, token) in [
+            (format!("/api/repositories/{repo_id}"), None),
+            (format!("/api/repositories/{repo_id}"), Some(token.as_str())),
+            ("/api/repositories".to_string(), Some(token.as_str())),
+            ("/api/version".to_string(), None),
+            ("/api/no-such-route".to_string(), None),
+        ] {
+            let response = get(uri.clone(), token).await.unwrap();
+            let headers = response.headers();
+            assert_eq!(headers.get("cache-control").unwrap(), "no-store", "{uri}");
+            assert_eq!(headers.get_all("vary").iter().filter(|v| v.to_str().unwrap().contains("Authorization")).count(), 1, "{uri}: {:?}", headers.get_all("vary"));
+            assert_eq!(headers.get("cross-origin-resource-policy").unwrap(), "same-origin", "{uri}");
+        }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn the_public_catalog_and_branding_keep_the_cache_headers_their_handlers_chose(pool: sqlx::PgPool) {
+        let app = build_router(AppState::build(pool, &test_config()));
+
+        let catalog = app.clone().oneshot(Request::builder().uri("/api/public/catalogs").body(Body::empty()).unwrap()).await.unwrap();
+        let logo = app.oneshot(Request::builder().uri("/api/branding/logo").body(Body::empty()).unwrap()).await.unwrap();
+
+        assert_eq!(catalog.headers().get_all("cache-control").iter().count(), 1);
+        assert_eq!(catalog.headers().get("cache-control").unwrap(), "no-store");
+        assert_eq!(logo.status(), StatusCode::OK);
+        assert_eq!(logo.headers().get("cache-control").unwrap(), "no-cache", "the branding handler's own choice stays");
+        assert!(logo.headers().get("cross-origin-resource-policy").is_none(), "link previews on other sites embed the logo");
+    }
+
+    #[sqlx::test]
+    async fn the_registries_are_not_given_a_cross_origin_resource_policy(pool: sqlx::PgPool) {
+        let app = build_router(AppState::build(pool, &test_config()));
+
+        for uri in ["/npm/", "/v2/"] {
+            let response = app.clone().oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap()).await.unwrap();
+            assert!(response.headers().get("cross-origin-resource-policy").is_none(), "{uri}: npm and docker clients, proxies and CDNs fetch these");
+            assert!(response.headers().get("vary").is_none_or(|v| !v.to_str().unwrap().is_empty()));
+        }
+    }
+
+    #[sqlx::test]
+    async fn the_app_pages_get_the_same_origin_policies_and_keep_their_own_caching(pool: sqlx::PgPool) {
+        let static_dir = std::env::temp_dir().join(format!("artiferris-headers-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&static_dir).unwrap();
+        std::fs::write(static_dir.join("index.html"), "<!doctype html><html><head><title>x</title></head><body><app-root></app-root></body></html>").unwrap();
+        std::fs::write(static_dir.join("main.js"), "console.log(1)").unwrap();
+        let state = AppState::build(pool, &test_config());
+        let seo = seo::SeoState::new(state.clone(), "<!doctype html><html><head><title>x</title></head><body></body></html>".to_string());
+        let app = with_app_fallback(build_router(state), static_dir.to_str().unwrap(), seo, false);
+
+        for uri in ["/", "/explorer", "/main.js"] {
+            let response = app.clone().oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap()).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            let headers = response.headers();
+            assert_eq!(headers.get("cross-origin-resource-policy").unwrap(), "same-origin", "{uri}");
+            assert_eq!(headers.get("cross-origin-opener-policy").unwrap(), "same-origin", "{uri}");
+            assert!(headers.get("permissions-policy").is_some(), "{uri}");
+            assert!(headers.get("vary").is_none_or(|v| !v.to_str().unwrap().contains("Authorization")), "{uri}: only /api varies on the caller");
+        }
+        std::fs::remove_dir_all(&static_dir).unwrap();
+    }
+
+    fn stalled_json_body() -> Body {
+        use futures::StreamExt;
+        Body::from_stream(futures::stream::iter([Ok::<_, std::convert::Infallible>(axum::body::Bytes::from_static(b"{\"username\":"))]).chain(futures::stream::pending()))
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_json_body_that_stalls_gets_a_408_instead_of_holding_the_request(pool: sqlx::PgPool) {
+        let config = test_config();
+        let timeouts = BodyTimeouts { idle: std::time::Duration::from_millis(100), total: std::time::Duration::from_secs(30) };
+        let app = build_router_with_body_timeouts(AppState::build(pool, &config), None, config.jwt_secret.clone(), None, config.public_url.clone(), timeouts);
+        let request = Request::builder().method("POST").uri("/api/auth/login").header("content-type", "application/json").body(stalled_json_body()).unwrap();
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(5), app.oneshot(request)).await.expect("the request was still waiting for its body").unwrap();
+
+        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_json_body_that_trickles_past_the_total_limit_gets_a_408(pool: sqlx::PgPool) {
+        let config = test_config();
+        let timeouts = BodyTimeouts { idle: std::time::Duration::from_secs(5), total: std::time::Duration::from_millis(300) };
+        let app = build_router_with_body_timeouts(AppState::build(pool, &config), None, config.jwt_secret.clone(), None, config.public_url.clone(), timeouts);
+        let trickle = futures::stream::unfold(0u8, |n| async move {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            Some((Ok::<_, std::convert::Infallible>(axum::body::Bytes::from_static(b" ")), n + 1))
+        });
+        let request = Request::builder().method("POST").uri("/api/auth/login").header("content-type", "application/json").body(Body::from_stream(trickle)).unwrap();
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(5), app.oneshot(request)).await.expect("the request was still waiting for its body").unwrap();
+
+        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_json_body_that_arrives_in_time_is_handled_normally(pool: sqlx::PgPool) {
+        let config = test_config();
+        let timeouts = BodyTimeouts { idle: std::time::Duration::from_millis(100), total: std::time::Duration::from_secs(30) };
+        let app = build_router_with_body_timeouts(AppState::build(pool, &config), None, config.jwt_secret.clone(), None, config.public_url.clone(), timeouts);
+        let request = Request::builder().method("POST").uri("/api/auth/login").header("content-type", "application/json").body(Body::from(r#"{"username":"nobody","password":"wrong-password"}"#)).unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[sqlx::test]

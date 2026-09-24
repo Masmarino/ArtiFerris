@@ -6,6 +6,9 @@ use uuid::Uuid;
 
 use crate::error::ApplicationError;
 
+/// The message ends up in every metadata response, anonymous ones included.
+const MAX_DEPRECATION_MESSAGE_BYTES: usize = 4 * 1024;
+
 pub struct DeprecateNpmVersionUseCase {
     packages: Arc<dyn NpmPackageRepositoryPort>,
     events: Arc<dyn EventPublisherPort>,
@@ -24,6 +27,9 @@ impl DeprecateNpmVersionUseCase {
         message: Option<&str>,
         actor_id: Uuid,
     ) -> Result<(), ApplicationError> {
+        if message.is_some_and(|message| message.len() > MAX_DEPRECATION_MESSAGE_BYTES) {
+            return Err(ApplicationError::InvalidNpmPayload(format!("the deprecation message is longer than {MAX_DEPRECATION_MESSAGE_BYTES} bytes")));
+        }
         let package = self.packages.find_package(repository_id, name).await?.ok_or(ApplicationError::NpmPackageNotFound)?;
         self.packages.find_version(package.id, version).await?.ok_or(ApplicationError::NpmVersionNotFound)?;
         self.packages.set_deprecated(package.id, version, message).await?;
@@ -35,6 +41,7 @@ impl DeprecateNpmVersionUseCase {
                     message: message.map(str::to_string),
                 },
                 package.id,
+                repository_id,
                 Some(actor_id),
             )
             .await?;
@@ -71,5 +78,26 @@ mod tests {
         let found = packages.find_version(package.id, &version).await.unwrap().unwrap();
         assert!(found.deprecated);
         assert_eq!(found.deprecated_message.as_deref(), Some("use left-pad2 instead"));
+    }
+
+    #[tokio::test]
+    async fn a_deprecation_message_over_the_cap_is_refused_and_nothing_is_stored() {
+        let packages = Arc::new(FakePackages::new());
+        let repository_id = Uuid::new_v4();
+        let name = NpmPackageName::parse("left-pad").unwrap();
+        let version = NpmVersion::parse("1.0.0").unwrap();
+        let package = NpmPackage { id: Uuid::new_v4(), package_repository_id: repository_id, name: name.clone(), created_at: Utc::now(), updated_at: Utc::now(), metadata_fetched_at: None, cached_metadata: None };
+        packages.create_package(&package).await.unwrap();
+        packages.insert_version(&NpmPackageVersion {
+            id: Uuid::new_v4(), npm_package_id: package.id, version: version.clone(), manifest: serde_json::json!({}),
+            shasum: "s".into(), integrity: "i".into(), tarball_storage_key: "k".into(), tarball_size_bytes: 5,
+            deprecated: false, deprecated_message: None, published_by: None, published_at: Utc::now(), origin: NpmPackageOrigin::Local,
+        }).await.unwrap();
+
+        let use_case = DeprecateNpmVersionUseCase::new(packages.clone(), Arc::new(FakeEvents::new()));
+        let err = use_case.execute(repository_id, &name, &version, Some(&"x".repeat(2 * 1024 * 1024)), Uuid::new_v4()).await.unwrap_err();
+
+        assert!(matches!(err, ApplicationError::InvalidNpmPayload(_)), "got {err:?}");
+        assert!(!packages.find_version(package.id, &version).await.unwrap().unwrap().deprecated);
     }
 }

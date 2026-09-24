@@ -10,7 +10,9 @@ metadata:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
     traefik.ingress.kubernetes.io/router.tls.options: traefik-mintls13@kubernetescrd
-    traefik.ingress.kubernetes.io/router.middlewares: traefik-https@kubernetescrd,traefik-headers@kubernetescrd,traefik-ratelimit@kubernetescrd
+    {{- if .Values.ingress.middlewares }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Values.ingress.middlewares | quote }}
+    {{- end }}
 spec:
   ingressClassName: traefik
   rules:

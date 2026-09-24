@@ -29,6 +29,10 @@ export class ToastService {
     this.show(message, 'info')
   }
 
+  clear(): void {
+    this.toasts.set([])
+  }
+
   dismiss(id: string): void {
     this.toasts.update((toasts) => toasts.filter((t) => t.id !== id))
   }

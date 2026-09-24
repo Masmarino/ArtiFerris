@@ -1,0 +1,17 @@
+<gbt-card heading="Sessions" icon="lock">
+  <div class="stack">
+    <p>
+      Révoque toutes vos sessions ouvertes, vos jetons API et vos jetons Docker. Utile si un
+      appareil est perdu ou compromis, ou si votre compte passe par un SSO et n'a pas de mot de
+      passe à changer.
+    </p>
+    <gbt-button
+      class="w-content"
+      text="Se déconnecter partout"
+      variant="danger"
+      [loading]="signingOut()"
+      loadingLabel="Chargement en cours"
+      (clicked)="logoutEverywhere()"
+    />
+  </div>
+</gbt-card>

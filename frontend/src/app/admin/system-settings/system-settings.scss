@@ -7,3 +7,17 @@ gbt-input {
   width: 100%;
   margin-bottom: 0.75rem;
 }
+
+.seo {
+  margin: 1rem 0 0.75rem;
+
+  h3 {
+    margin: 0 0 0.5rem;
+  }
+
+  &__hint {
+    font-size: 0.8125rem;
+    color: var(--text-discret);
+    margin: 0.25rem 0 0;
+  }
+}

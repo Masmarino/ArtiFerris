@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core'
 import { HttpClient } from '@angular/common/http'
 import { Observable } from 'rxjs'
-import { SmtpSettings, UpdateSmtpSettings } from '../domain/smtp-settings.entity'
+import { SmtpSettingsResponse, UpdateSmtpSettings } from '../domain/smtp-settings.entity'
 import { SmtpSettingsPort } from '../application/smtp-settings.port'
 
 function orgParams(organizationId?: string): Record<string, string> {
@@ -12,8 +12,8 @@ function orgParams(organizationId?: string): Record<string, string> {
 export class HttpSmtpSettingsAdapter implements SmtpSettingsPort {
   private readonly http = inject(HttpClient)
 
-  get(organizationId?: string): Observable<SmtpSettings | null> {
-    return this.http.get<SmtpSettings | null>('/api/admin/settings/smtp', {
+  get(organizationId?: string): Observable<SmtpSettingsResponse | null> {
+    return this.http.get<SmtpSettingsResponse | null>('/api/admin/settings/smtp', {
       params: orgParams(organizationId),
     })
   }

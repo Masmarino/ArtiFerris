@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT npv.shasum, npv.tarball_size_bytes, npv.tarball_storage_key FROM npm_package_versions npv JOIN npm_packages np ON np.id = npv.npm_package_id WHERE np.package_repository_id = $1 AND npv.version = '1.0.0'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "shasum",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "shasum"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tarball_size_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "tarball_size_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "tarball_storage_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "tarball_storage_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "dc8e484effa1e30db54d87a1bc2633eb9567c4e4e410554f8fdf1c63e276b00b"
+}

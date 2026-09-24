@@ -1,10 +1,11 @@
+import { HttpErrorResponse } from '@angular/common/http'
 import {
   applicationConfig,
   moduleMetadata,
   type Meta,
   type StoryObj,
 } from '@storybook/angular-vite'
-import { provideRouter } from '@angular/router'
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router'
 import { expect, userEvent, waitFor, within } from 'storybook/test'
 import { of, throwError } from 'rxjs'
 import { LoginPage } from './login-page'
@@ -16,6 +17,7 @@ function fakeAuth(overrides: Partial<AuthService> = {}): Partial<AuthService> {
   return {
     getSsoConfig: () => of<SsoConfig>({ type: null, registration_enabled: true }),
     login: () => of<LoginOutcome>({ mfaRequired: false }),
+    abandonSsoLogin: () => undefined,
     ...overrides,
   }
 }
@@ -45,7 +47,38 @@ export default meta
 
 type Story = StoryObj<LoginPage>
 
-export const Default: Story = {}
+/** Local login form, with a way into the public explorer for visitors without an account. */
+export const Default: Story = {
+  play: async ({ canvasElement }) => {
+    const link = await within(canvasElement).findByRole('link', {
+      name: 'Explorer les paquets publics',
+    })
+    expect(link).toHaveAttribute('href', expect.stringMatching(/\/explorer$/))
+  },
+}
+
+/** Sent back here after an action that ended every session (password change, MFA factor removal). */
+export const AfterSessionsWereEnded: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: { queryParamMap: convertToParamMap({ reason: 'sessions-revoked' }) },
+          },
+        },
+      ],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    expect(
+      await canvas.findByText('Vos sessions ont été fermées : reconnectez-vous.'),
+    ).toBeVisible()
+    expect(canvas.getByRole('button', { name: 'Se connecter' })).toBeInTheDocument()
+  },
+}
 
 export const LdapSso: Story = {
   decorators: [
@@ -92,6 +125,30 @@ export const InvalidCredentials: Story = {
     await submitLoginForm(canvasElement)
     await waitFor(() =>
       expect(within(canvasElement).getByRole('alert')).toHaveTextContent('Identifiants invalides'),
+    )
+  },
+}
+
+/** The password hasher is saturated: a retry hint instead of "Identifiants invalides". */
+export const ServerBusy: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        {
+          provide: AuthService,
+          useValue: fakeAuth({
+            login: () => throwError(() => new HttpErrorResponse({ status: 503 })),
+          }),
+        },
+      ],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    await submitLoginForm(canvasElement)
+    await waitFor(() =>
+      expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
+        'Service momentanément occupé, réessayez',
+      ),
     )
   },
 }

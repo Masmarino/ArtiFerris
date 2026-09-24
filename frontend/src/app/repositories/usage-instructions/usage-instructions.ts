@@ -15,8 +15,17 @@ export class UsageInstructions {
   private readonly document = inject(DOCUMENT)
 
   readonly repository = input.required<RepositorySummary>()
+  readonly apiTokenLink = input('/account')
+  readonly apiTokenLinkLabel = input('Créer un token API')
 
   readonly host = this.document.location.host
   readonly origin = this.document.location.origin
   readonly isHosted = computed(() => this.repository().repo_type === 'hosted')
+  /** A personal repository lives under `u/{owner}/{name}`, an organization one directly under `{name}`. */
+  readonly repositoryPath = computed(() => {
+    const repository = this.repository()
+    return repository.owner_is_personal
+      ? `u/${repository.owner_name}/${repository.name}`
+      : repository.name
+  })
 }

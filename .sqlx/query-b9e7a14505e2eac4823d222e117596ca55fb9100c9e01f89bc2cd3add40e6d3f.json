@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ( COALESCE((SELECT SUM(db.size_bytes) FROM docker_blobs db WHERE db.digest IN ( SELECT dmb.blob_digest FROM docker_manifest_blobs dmb JOIN docker_manifests dm ON dm.id = dmb.manifest_id WHERE dm.package_repository_id = $1 UNION SELECT UNNEST($2::text[]) )), 0) + COALESCE((SELECT SUM(octet_length(body)) FROM docker_manifests WHERE package_repository_id = $1 AND NOT (image_name = $3 AND digest = $4)), 0) + $5 + (SELECT count(*) FROM docker_tags WHERE package_repository_id = $1) * $6 )::BIGINT AS \"total!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray",
+        "Text",
+        "Text",
+        "Numeric",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b9e7a14505e2eac4823d222e117596ca55fb9100c9e01f89bc2cd3add40e6d3f"
+}

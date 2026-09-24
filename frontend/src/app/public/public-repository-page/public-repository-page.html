@@ -1,0 +1,33 @@
+<app-public-layout>
+  @if (loading()) {
+    <div class="loading-state"><gbt-spinner size="lg" label="Chargement…" /></div>
+  } @else if (loadError()) {
+    <gbt-card>
+      <p class="gbt-form-error" role="alert">Échec du chargement du dépôt.</p>
+    </gbt-card>
+  } @else if (notFound()) {
+    <gbt-card>
+      <p class="gbt-form-error" role="alert">Dépôt introuvable.</p>
+    </gbt-card>
+  } @else if (repository(); as repo) {
+    <gbt-card>
+      <div class="public-repository-page__header">
+        <h1>{{ repo.name }}</h1>
+        <span class="public-repository-page__badge">{{ repo.format }}</span>
+        <span class="public-repository-page__badge">{{ repo.repo_type }}</span>
+      </div>
+    </gbt-card>
+
+    <gbt-card heading="Utilisation" icon="terminal">
+      <app-usage-instructions
+        [repository]="repo"
+        apiTokenLink="/login"
+        apiTokenLinkLabel="Se connecter"
+      />
+    </gbt-card>
+
+    <gbt-card heading="Packages">
+      <app-package-tree [repositoryId]="repo.id" [basePath]="basePath()" />
+    </gbt-card>
+  }
+</app-public-layout>

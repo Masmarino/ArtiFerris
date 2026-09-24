@@ -19,6 +19,13 @@ export interface RepositoryPort {
 
   get(id: string): Observable<RepositorySummary>
 
+  /** Resolves a personal project by its owner's username and its own name — used by the public,
+   * unauthenticated repository view (#72), never by the authenticated app. */
+  getByOwner(username: string, repoName: string): Observable<RepositorySummary>
+
+  /** Same public view for a repository owned by a non-personal organization, by its slug. */
+  getByOrg(slug: string, repoName: string): Observable<RepositorySummary>
+
   create(
     name: string,
     format: RepositoryFormat,
@@ -35,13 +42,16 @@ export interface RepositoryPort {
   /** `keepLastN: null` disables automatic cleanup. */
   setRetentionPolicy(id: string, keepLastN: number | null): Observable<void>
 
+  setVisibility(id: string, isPublic: boolean): Observable<void>
+
   delete(id: string): Observable<void>
 
   addGroupMember(groupId: string, memberRepositoryId: string, position: number): Observable<void>
 
   removeGroupMember(groupId: string, memberId: string): Observable<void>
 
-  packages(id: string): Observable<RepositoryPackages>
+  /** One page of the package tree; pass the previous page's `next_after` as `after` to get the next. */
+  packages(id: string, after?: string | null): Observable<RepositoryPackages>
 
   npmPackageDetails(id: string, name: string): Observable<NpmPackageDetails>
 

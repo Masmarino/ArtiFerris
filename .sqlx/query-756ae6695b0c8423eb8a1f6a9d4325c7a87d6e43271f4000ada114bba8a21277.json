@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id FROM docker_manifests m WHERE m.package_repository_id = $1 AND m.image_name = $2 AND m.digest = $3 AND COALESCE(m.untagged_since, m.created_at) < $4 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "docker_manifests",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "756ae6695b0c8423eb8a1f6a9d4325c7a87d6e43271f4000ada114bba8a21277"
+}

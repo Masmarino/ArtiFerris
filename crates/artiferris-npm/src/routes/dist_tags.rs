@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -9,16 +10,22 @@ use artiferris_domain::npm_package::{NpmPackageName, NpmVersion};
 use artiferris_domain::permission::Role;
 use serde_json::json;
 
-use crate::authz::{require_hosted, require_npm_hosted_repository, require_repository_by_name, require_repository_role};
+use crate::authz::{require_hosted, require_npm_format_repository, require_personal_repository_role, require_repository_by_name, require_repository_role, resolve_personal_repository};
 use crate::auth::NpmAuthUser;
+use crate::body::read_text;
 use crate::errors::{bad_request, npm_error_response};
 use crate::organization_resolution::ResolvedOrganization;
 use crate::state::NpmState;
+
+/// The body of a dist-tag update is one version string.
+const SET_TAG_BODY_LIMIT_BYTES: usize = 1024;
 
 pub fn router() -> Router<NpmState> {
     Router::new()
         .route("/{repository}/-/package/{package}/dist-tags", get(list_tags))
         .route("/{repository}/-/package/{package}/dist-tags/{tag}", put(set_tag).delete(delete_tag))
+        .route("/u/{username}/{repo}/-/package/{package}/dist-tags", get(list_tags_personal))
+        .route("/u/{username}/{repo}/-/package/{package}/dist-tags/{tag}", put(set_tag_personal).delete(delete_tag_personal))
 }
 
 async fn list_tags(
@@ -28,8 +35,25 @@ async fn list_tags(
     user: NpmAuthUser,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    require_npm_hosted_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
+    require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Read).await.map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;
+    let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
+
+    let tags = state.list_dist_tags.execute(repo.id, &name).await.map_err(npm_error_response)?;
+    let map: HashMap<String, String> = tags.into_iter().map(|t| (t.tag, t.version.as_str())).collect();
+    Ok(Json(map))
+}
+
+async fn list_tags_personal(
+    State(state): State<NpmState>,
+    Path((username, repo, package)): Path<(String, String, String)>,
+    user: NpmAuthUser,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let repo = resolve_personal_repository(&state, &username, &repo).await.map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
+    require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
+    require_personal_repository_role(&state, &user, repo.id, repo.organization_id, Role::Read)
+        .await
+        .map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
     let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
 
     let tags = state.list_dist_tags.execute(repo.id, &name).await.map_err(npm_error_response)?;
@@ -42,14 +66,16 @@ async fn set_tag(
     Path((repository, package, tag)): Path<(String, String, String)>,
     resolved_org: ResolvedOrganization,
     user: NpmAuthUser,
-    body: String,
+    body: Body,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    require_npm_hosted_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    require_hosted(&repo).map_err(|s| (s, Json(json!({ "error": "dist-tags cannot be set on a proxy or group repository" }))))?;
+    require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
+    // Role before type (B-14): see publish.rs's identical reordering.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write).await.map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;
+    require_hosted(&repo).map_err(|s| (s, Json(json!({ "error": "dist-tags cannot be set on a proxy or group repository" }))))?;
     let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
     // npm sends the version as a raw JSON string, e.g. "1.0.0" — no full JSON parse needed.
+    let body = read_text(&state, body, SET_TAG_BODY_LIMIT_BYTES).await?;
     let version_str = body.trim().trim_matches('"');
     let version = NpmVersion::parse(version_str).map_err(|_| bad_request("invalid version"))?;
 
@@ -64,9 +90,49 @@ async fn delete_tag(
     user: NpmAuthUser,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    require_npm_hosted_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    require_hosted(&repo).map_err(|s| (s, Json(json!({ "error": "dist-tags cannot be deleted on a proxy or group repository" }))))?;
+    require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
+    // Role before type (B-14): see publish.rs's identical reordering.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write).await.map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;
+    require_hosted(&repo).map_err(|s| (s, Json(json!({ "error": "dist-tags cannot be deleted on a proxy or group repository" }))))?;
+    let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
+
+    state.delete_dist_tag.execute(repo.id, &name, &tag).await.map_err(npm_error_response)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn set_tag_personal(
+    State(state): State<NpmState>,
+    Path((username, repo, package, tag)): Path<(String, String, String, String)>,
+    user: NpmAuthUser,
+    body: Body,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let repo = resolve_personal_repository(&state, &username, &repo).await.map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
+    require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
+    require_personal_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write)
+        .await
+        .map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
+    require_hosted(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
+    let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
+    // npm sends the version as a raw JSON string, e.g. "1.0.0" — no full JSON parse needed.
+    let body = read_text(&state, body, SET_TAG_BODY_LIMIT_BYTES).await?;
+    let version_str = body.trim().trim_matches('"');
+    let version = NpmVersion::parse(version_str).map_err(|_| bad_request("invalid version"))?;
+
+    state.set_dist_tag.execute(repo.id, &name, &tag, &version, user.id).await.map_err(npm_error_response)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn delete_tag_personal(
+    State(state): State<NpmState>,
+    Path((username, repo, package, tag)): Path<(String, String, String, String)>,
+    user: NpmAuthUser,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let repo = resolve_personal_repository(&state, &username, &repo).await.map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
+    require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
+    require_personal_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write)
+        .await
+        .map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
+    require_hosted(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
     let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
 
     state.delete_dist_tag.execute(repo.id, &name, &tag).await.map_err(npm_error_response)?;
@@ -89,7 +155,10 @@ mod tests {
     use artiferris_application::use_cases::npm_publish::PublishNpmPackageUseCase;
     use artiferris_application::use_cases::npm_search::SearchNpmPackagesUseCase;
     use artiferris_application::use_cases::npm_unpublish::UnpublishNpmPackageUseCase;
-    use artiferris_domain::organization::{Organization, OrganizationSlug};
+    use artiferris_application::use_cases::personal_repository::{CreateUserProjectUseCase, ReservePersonalOrganizationUseCase};
+    use artiferris_application::use_cases::resolve_personal_repository::ResolvePersonalRepositoryUseCase;
+    use artiferris_domain::organization::{Organization, OrganizationSlug, PUBLIC_ORGANIZATION_ID};
+    use artiferris_domain::package_repository::{RepositoryFormat, RepositoryType};
     use artiferris_infrastructure::filesystem_storage::FilesystemStorageBackend;
     use artiferris_infrastructure::http_npm_audit_client::HttpNpmAuditClient;
     use artiferris_infrastructure::http_remote_npm_registry::HttpRemoteNpmRegistry;
@@ -128,9 +197,12 @@ mod tests {
             api_tokens: api_tokens.clone(),
             organizations: organizations.clone(),
             artiferris_base_domain: "artiferris.localhost".to_string(),
-            publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), events.clone())),
+            public_scheme: "http".to_string(),
+            guard: std::sync::Arc::new(artiferris_application::request_guard::RequestGuard::default()),
+            publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), repositories.clone(), events.clone())),
             metadata: Arc::new(GetNpmPackageMetadataUseCase::new(npm_packages.clone(), repositories.clone(), remote_registry.clone())),
             download: Arc::new(DownloadNpmTarballUseCase::new(npm_packages.clone(), storage.clone(), remote_registry.clone(), repositories.clone())),
+            downloads: Arc::new(artiferris_domain::download_stats::NoopDownloadRecorder),
             unpublish: Arc::new(UnpublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), events.clone())),
             deprecate: Arc::new(DeprecateNpmVersionUseCase::new(npm_packages.clone(), events.clone())),
             set_dist_tag: Arc::new(SetDistTagUseCase::new(npm_packages.clone(), events.clone())),
@@ -142,13 +214,14 @@ mod tests {
             create_api_token: Arc::new(CreateApiTokenUseCase::new(api_tokens.clone())),
             list_api_tokens: Arc::new(ListApiTokensUseCase::new(api_tokens.clone())),
             revoke_api_token: Arc::new(RevokeApiTokenUseCase::new(api_tokens.clone())),
+            resolve_personal_repository: Arc::new(ResolvePersonalRepositoryUseCase::new(users.clone(), organizations.clone(), repositories.clone())),
         }
     }
 
     async fn create_org(state: &NpmState, id: Uuid, slug: &str) {
         state
             .organizations
-            .create(&Organization { id, slug: OrganizationSlug::parse(slug).unwrap(), display_name: slug.to_string(), is_public: false, created_at: chrono::Utc::now() })
+            .create(&Organization { id, slug: OrganizationSlug::parse(slug).unwrap(), display_name: slug.to_string(), is_public: false, is_personal: false, created_at: chrono::Utc::now() })
             .await
             .unwrap();
     }
@@ -203,6 +276,43 @@ mod tests {
         .unwrap();
     }
 
+    /// Same as `seed_user_with_active_token`, but with a caller-chosen username — needed to hit
+    /// `/u/{username}/...` routes. Mirrors `routes/metadata.rs`'s identical helper.
+    async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: Uuid, username: &str, plaintext_token: &str) -> Uuid {
+        let user_id = Uuid::new_v4();
+        sqlx::query!(
+            "INSERT INTO users (id, username, password_hash, is_super_admin, organization_id, created_at) VALUES ($1, $2, 'irrelevant', false, $3, now())",
+            user_id,
+            username,
+            organization_id,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query!(
+            "INSERT INTO api_tokens (id, user_id, token_hash, label, created_at) VALUES ($1, $2, $3, 'test', now())",
+            Uuid::new_v4(),
+            user_id,
+            hash_api_token(plaintext_token),
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        user_id
+    }
+
+    /// Creates `owner_user_id`'s personal organization and a hosted npm project inside it,
+    /// returning the new repository's id. Mirrors `routes/metadata.rs`'s identical helper.
+    async fn create_personal_project(pool: &PgPool, owner_user_id: Uuid, project_name: &str) -> Uuid {
+        let organizations = Arc::new(PostgresOrganizationRepository::new(pool.clone()));
+        let users = Arc::new(PostgresUserRepository::new(pool.clone()));
+        let repository_store = Arc::new(PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string()));
+
+        ReservePersonalOrganizationUseCase::new(organizations.clone(), users.clone()).execute(owner_user_id).await.unwrap();
+        let create_project = CreateUserProjectUseCase::new(organizations, repository_store.clone(), repository_store);
+        create_project.execute(owner_user_id, project_name, RepositoryFormat::Npm, RepositoryType::Hosted).await.unwrap()
+    }
+
     /// npm-hosted repository, a user with write+read access, and one published version
     /// (1.0.0, which the publish use case's own `latest`-on-first-publish behavior already
     /// tags). Returns (TempDir guard — MUST be kept alive, state, repo_id, repo_name, user_id).
@@ -219,7 +329,7 @@ mod tests {
 
         let name = NpmPackageName::parse("widget").unwrap();
         let version = NpmVersion::parse("1.0.0").unwrap();
-        state.publish.execute(repo_id, &name, &version, json!({ "name": "widget", "version": "1.0.0" }), Bytes::from_static(b"tarball-bytes"), user_id).await.unwrap();
+        state.publish.execute(repo_id, &name, &version, json!({ "name": "widget", "version": "1.0.0" }), Bytes::from_static(b"tarball-bytes"), &[], user_id).await.unwrap();
 
         (dir, state, repo_id, repo_name, user_id)
     }
@@ -389,5 +499,129 @@ mod tests {
             StatusCode::NOT_FOUND,
             "a write-role grant on a repository in a DIFFERENT organization must not let a dist-tag change through the actual route"
         );
+    }
+
+    // ---- B-13: personal-namespace write support ----
+
+    fn put_personal_dist_tag(app: axum::Router, username: &str, repo_name: &str, tag: &str, raw_body: &str, bearer: &str) -> impl std::future::Future<Output = axum::response::Response> {
+        let request = Request::builder()
+            .method("PUT")
+            .uri(format!("/u/{username}/{repo_name}/-/package/widget/dist-tags/{tag}"))
+            .header(axum::http::header::AUTHORIZATION, format!("Bearer {bearer}"))
+            .body(Body::from(raw_body.to_string()))
+            .unwrap();
+        async move { app.oneshot(request).await.unwrap() }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn setting_a_dist_tag_on_a_personal_project_by_its_owner_succeeds(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let alice_id = seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "alice", "alice-token").await;
+        let repo_id = create_personal_project(&pool, alice_id, "widget").await;
+
+        let name = NpmPackageName::parse("widget").unwrap();
+        let version = NpmVersion::parse("1.0.0").unwrap();
+        state.publish.execute(repo_id, &name, &version, json!({ "name": "widget", "version": "1.0.0" }), Bytes::from_static(b"personal-tarball-bytes"), &[], alice_id).await.unwrap();
+
+        let app = crate::router(state.clone());
+        let response = put_personal_dist_tag(app, "alice", "widget", "beta", "1.0.0", "alice-token").await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let tags = state.list_dist_tags.execute(repo_id, &name).await.unwrap();
+        assert!(tags.iter().any(|t| t.tag == "beta" && t.version.as_str() == "1.0.0"));
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn setting_a_dist_tag_on_someone_elses_personal_project_is_rejected_as_not_found(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let alice_id = seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "alice", "alice-token").await;
+        let repo_id = create_personal_project(&pool, alice_id, "widget").await;
+
+        let name = NpmPackageName::parse("widget").unwrap();
+        let version = NpmVersion::parse("1.0.0").unwrap();
+        state.publish.execute(repo_id, &name, &version, json!({ "name": "widget", "version": "1.0.0" }), Bytes::from_static(b"personal-tarball-bytes"), &[], alice_id).await.unwrap();
+
+        let other_id = Uuid::new_v4();
+        create_org(&state, other_id, "other-corp").await;
+        seed_named_user_with_active_token(&pool, other_id, "mallory", "mallory-token").await;
+
+        let app = crate::router(state.clone());
+        let response = put_personal_dist_tag(app, "alice", "widget", "beta", "1.0.0", "mallory-token").await;
+
+        assert_eq!(
+            response.status(),
+            StatusCode::NOT_FOUND,
+            "a non-owner must not be able to tell a private personal project apart from a nonexistent one"
+        );
+        let tags = state.list_dist_tags.execute(repo_id, &name).await.unwrap();
+        assert!(!tags.iter().any(|t| t.tag == "beta"), "the rejected caller must not have moved any tag");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_personal_repositorys_dist_tags_can_be_listed_by_its_owner_only(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let alice_id = seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "alice", "alice-token").await;
+        seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "mallory", "mallory-token").await;
+        let repo_id = create_personal_project(&pool, alice_id, "my-lib").await;
+        let name = NpmPackageName::parse("widget").unwrap();
+        state.publish.execute(repo_id, &name, &NpmVersion::parse("1.0.0").unwrap(), json!({}), Bytes::from_static(b"bytes"), &[], alice_id).await.unwrap();
+        let app = crate::router(state);
+        let list = |token: &'static str| {
+            Request::builder().uri("/u/alice/my-lib/-/package/widget/dist-tags").header(axum::http::header::AUTHORIZATION, format!("Bearer {token}")).body(Body::empty()).unwrap()
+        };
+
+        let owner = app.clone().oneshot(list("alice-token")).await.unwrap();
+        assert_eq!(owner.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(owner.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(serde_json::from_slice::<serde_json::Value>(&body).unwrap(), json!({ "latest": "1.0.0" }));
+
+        let stranger = app.oneshot(list("mallory-token")).await.unwrap();
+        assert_eq!(stranger.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_dist_tag_name_that_is_not_a_word_is_refused_and_its_body_is_never_read_for_a_reader(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let alice_id = seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "alice", "alice-token").await;
+        seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "mallory", "mallory-token").await;
+        let repo_id = create_personal_project(&pool, alice_id, "my-lib").await;
+        let name = NpmPackageName::parse("widget").unwrap();
+        state.publish.execute(repo_id, &name, &NpmVersion::parse("1.0.0").unwrap(), json!({}), Bytes::from_static(b"bytes"), &[], alice_id).await.unwrap();
+        let app = crate::router(state);
+
+        let bad_tag = app
+            .clone()
+            .oneshot(Request::builder().method("PUT").uri("/u/alice/my-lib/-/package/widget/dist-tags/1.2.3").header(axum::http::header::AUTHORIZATION, "Bearer alice-token").body(Body::from("\"1.0.0\"")).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(bad_tag.status(), StatusCode::BAD_REQUEST);
+
+        let (body, polled) = crate::test_support::probe_body();
+        let refused = app
+            .oneshot(Request::builder().method("PUT").uri("/u/alice/my-lib/-/package/widget/dist-tags/next").header(axum::http::header::AUTHORIZATION, "Bearer mallory-token").body(body).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(refused.status(), StatusCode::NOT_FOUND);
+        assert!(!polled.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_dist_tag_body_larger_than_a_version_string_is_refused(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let alice_id = seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "alice", "alice-token").await;
+        create_personal_project(&pool, alice_id, "my-lib").await;
+        let app = crate::router(state);
+
+        let response = app
+            .oneshot(Request::builder().method("PUT").uri("/u/alice/my-lib/-/package/widget/dist-tags/next").header(axum::http::header::AUTHORIZATION, "Bearer alice-token").body(Body::from("x".repeat(SET_TAG_BODY_LIMIT_BYTES + 1))).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 }

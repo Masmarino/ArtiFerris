@@ -1,0 +1,121 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, aggregate_type, aggregate_id, event_type, payload, occurred_at, actor_id, organization_id\n            FROM domain_events\n            WHERE ($1::text IS NULL OR aggregate_type = $1)\n              AND ($2::text IS NULL OR aggregate_id = $2)\n              AND ($3::uuid IS NULL OR actor_id = $3)\n              AND ($4::timestamptz IS NULL OR occurred_at >= $4)\n              AND ($5::timestamptz IS NULL OR occurred_at <= $5)\n              AND ($6::text IS NULL OR aggregate_type != $6)\n              AND ($7::uuid IS NULL OR organization_id = $7)\n              AND ($8::timestamptz IS NULL OR (occurred_at, id) < ($8, $9::uuid))\n            ORDER BY occurred_at DESC, id DESC\n            LIMIT $10\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "domain_events",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "aggregate_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "domain_events",
+            "name": "aggregate_type"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "aggregate_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "domain_events",
+            "name": "aggregate_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "event_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "domain_events",
+            "name": "event_type"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "payload",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "domain_events",
+            "name": "payload"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "occurred_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "domain_events",
+            "name": "occurred_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "actor_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "domain_events",
+            "name": "actor_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "domain_events",
+            "name": "organization_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Uuid",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "44e20e2976f2cedaf359b1d54288f7a1cd4479d960bff2926dc5ba326ad3c608"
+}

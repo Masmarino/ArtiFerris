@@ -4,6 +4,7 @@ import { provideHttpClient } from '@angular/common/http'
 import { PasskeySettings } from './passkey-settings'
 import { mfaProviders } from '../infrastructure/mfa.providers'
 import { ToastService } from '../../shared/toast.service'
+import { SessionRevocationService } from '../../auth/application/session-revocation.service'
 
 function stubCredentialsSupported(supported: boolean): void {
   Object.defineProperty(navigator, 'credentials', {
@@ -14,9 +15,17 @@ function stubCredentialsSupported(supported: boolean): void {
   })
 }
 
+const signOutAndRedirect = vi.fn()
+
 function render(passkeys: { id: string; name: string; created_at: string }[] = []) {
+  signOutAndRedirect.mockClear()
   TestBed.configureTestingModule({
-    providers: [provideHttpClient(), provideHttpClientTesting(), ...mfaProviders],
+    providers: [
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      ...mfaProviders,
+      { provide: SessionRevocationService, useValue: { signOutAndRedirect } },
+    ],
   })
   const fixture = TestBed.createComponent(PasskeySettings)
   const httpMock = TestBed.inject(HttpTestingController)
@@ -118,7 +127,20 @@ describe('PasskeySettings', () => {
     expect(req.request.method).toBe('DELETE')
     expect(req.request.body).toEqual({ current_password: 's3cret!' })
     req.flush(null)
-    httpMock.expectOne('/api/me/mfa/passkey').flush([])
+  })
+
+  it('signs the user out once a passkey is deleted, since the backend revoked the session', () => {
+    stubCredentialsSupported(true)
+    const { fixture, httpMock } = render([
+      { id: 'p1', name: 'MacBook', created_at: '2026-01-01T00:00:00Z' },
+    ])
+    fixture.componentInstance.setPasswordFor('p1', 's3cret!')
+
+    fixture.componentInstance.delete('p1')
+    expect(signOutAndRedirect).not.toHaveBeenCalled()
+    httpMock.expectOne('/api/me/mfa/passkey/p1').flush(null)
+
+    expect(signOutAndRedirect).toHaveBeenCalledTimes(1)
   })
 
   it('shows an error when deletion fails', () => {
@@ -138,12 +160,18 @@ describe('PasskeySettings', () => {
       variant: 'error',
       message: 'Mot de passe incorrect.',
     })
+    expect(signOutAndRedirect).not.toHaveBeenCalled()
   })
 
   it('shows an error and stops loading when the initial passkey list fails to load', () => {
     stubCredentialsSupported(true)
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting(), ...mfaProviders],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...mfaProviders,
+        { provide: SessionRevocationService, useValue: { signOutAndRedirect } },
+      ],
     })
     const fixture = TestBed.createComponent(PasskeySettings)
     const httpMock = TestBed.inject(HttpTestingController)

@@ -10,7 +10,7 @@ COPY frontend/ ./
 
 RUN npm run build -- --configuration production
 
-FROM rust:1.98.0-alpine3.24@sha256:a10e64dd139b7387337c7fbe8aca31b959b57b2fd4c8ae20a02cf1d6ea424dce AS chef
+FROM rust:1.98.1-alpine3.24@sha256:7cc1c22d77d9432f7fe012a70e6d3e555af54c2a6832700ed7d553f1769ae89f AS chef
 
 WORKDIR /app
 
@@ -63,13 +63,15 @@ ENV STATIC_DIR=/app/static
 
 EXPOSE 8080
 
-RUN addgroup -S artiferris && adduser -S -G artiferris -h /app -H artiferris \
+# Numeric ids, so a Kubernetes runAsNonRoot check and the chart's fsGroup can name them. 100/101 is what
+# Alpine handed out before they were pinned, so volumes written by older images stay writable.
+RUN addgroup -S -g 101 artiferris && adduser -S -u 100 -G artiferris -h /app -H artiferris \
     && mkdir -p /data \
-    && chown -R artiferris:artiferris /app /data
+    && chown -R 100:101 /app /data
 
-USER artiferris
+USER 100:101
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/readyz || exit 1
 
 CMD ["./artiferris-api"]

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_blobs SET reference_count = reference_count - 1 WHERE digest IN (SELECT blob_digest FROM docker_manifest_blobs WHERE manifest_id = $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "117032043a02a2e28ca6f49f4bd9c9d1f12bcd7182b54612d2b6d5ab8dc4a3ee"
+}

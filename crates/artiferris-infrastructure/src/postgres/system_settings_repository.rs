@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use artiferris_domain::audit::AdminAuditRecord;
 use artiferris_domain::error::DomainError;
 use crate::error_ext::InfraErr;
 use artiferris_domain::system_settings::{SystemSettings, SystemSettingsPort};
@@ -15,11 +16,34 @@ impl PostgresSystemSettingsRepository {
     }
 }
 
+pub(crate) async fn update_settings<'e>(executor: impl sqlx::PgExecutor<'e>, organization_id: Uuid, settings: &SystemSettings) -> Result<(), DomainError> {
+    sqlx::query!(
+        "INSERT INTO system_settings (organization_id, max_login_attempts, login_attempt_window_seconds, session_ttl_hours, registration_enabled, seo_indexing_enabled) \
+         VALUES ($1, $2, $3, $4, $5, $6) \
+         ON CONFLICT (organization_id) DO UPDATE SET \
+         max_login_attempts = EXCLUDED.max_login_attempts, \
+         login_attempt_window_seconds = EXCLUDED.login_attempt_window_seconds, \
+         session_ttl_hours = EXCLUDED.session_ttl_hours, \
+         registration_enabled = EXCLUDED.registration_enabled, \
+         seo_indexing_enabled = EXCLUDED.seo_indexing_enabled",
+        organization_id,
+        settings.max_login_attempts,
+        settings.login_attempt_window_seconds,
+        settings.session_ttl_hours,
+        settings.registration_enabled,
+        settings.seo_indexing_enabled,
+    )
+    .execute(executor)
+    .await
+    .infra_err()?;
+    Ok(())
+}
+
 #[async_trait]
 impl SystemSettingsPort for PostgresSystemSettingsRepository {
     async fn get(&self, organization_id: Uuid) -> Result<SystemSettings, DomainError> {
         let row = sqlx::query!(
-            "SELECT max_login_attempts, login_attempt_window_seconds, session_ttl_hours, registration_enabled FROM system_settings WHERE organization_id = $1",
+            "SELECT max_login_attempts, login_attempt_window_seconds, session_ttl_hours, registration_enabled, seo_indexing_enabled FROM system_settings WHERE organization_id = $1",
             organization_id
         )
         .fetch_optional(&self.pool)
@@ -31,29 +55,17 @@ impl SystemSettingsPort for PostgresSystemSettingsRepository {
                 login_attempt_window_seconds: row.login_attempt_window_seconds,
                 session_ttl_hours: row.session_ttl_hours,
                 registration_enabled: row.registration_enabled,
+                seo_indexing_enabled: row.seo_indexing_enabled,
             },
             None => SystemSettings::defaults(),
         })
     }
 
-    async fn update(&self, organization_id: Uuid, settings: &SystemSettings) -> Result<(), DomainError> {
-        sqlx::query!(
-            "INSERT INTO system_settings (organization_id, max_login_attempts, login_attempt_window_seconds, session_ttl_hours, registration_enabled) \
-             VALUES ($1, $2, $3, $4, $5) \
-             ON CONFLICT (organization_id) DO UPDATE SET \
-             max_login_attempts = EXCLUDED.max_login_attempts, \
-             login_attempt_window_seconds = EXCLUDED.login_attempt_window_seconds, \
-             session_ttl_hours = EXCLUDED.session_ttl_hours, \
-             registration_enabled = EXCLUDED.registration_enabled",
-            organization_id,
-            settings.max_login_attempts,
-            settings.login_attempt_window_seconds,
-            settings.session_ttl_hours,
-            settings.registration_enabled,
-        )
-        .execute(&self.pool)
-        .await
-        .infra_err()?;
+    async fn update(&self, organization_id: Uuid, settings: &SystemSettings, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError> {
+        let mut tx = self.pool.begin().await.infra_err()?;
+        update_settings(&mut *tx, organization_id, settings).await?;
+        crate::postgres::event_publisher::insert_admin_audit(&mut tx, audit).await?;
+        tx.commit().await.infra_err()?;
         Ok(())
     }
 }
@@ -72,9 +84,9 @@ mod tests {
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn update_then_get_round_trips_the_new_values(pool: sqlx::PgPool) {
         let repo = PostgresSystemSettingsRepository::new(pool);
-        let updated = SystemSettings { max_login_attempts: 5, login_attempt_window_seconds: 60, session_ttl_hours: 24, registration_enabled: false };
+        let updated = SystemSettings { max_login_attempts: 5, login_attempt_window_seconds: 60, session_ttl_hours: 24, registration_enabled: false, seo_indexing_enabled: false };
 
-        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &updated).await.unwrap();
+        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &updated, None).await.unwrap();
 
         assert_eq!(repo.get(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID).await.unwrap(), updated);
     }
@@ -82,8 +94,8 @@ mod tests {
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_second_update_overwrites_the_first_rather_than_inserting_a_row(pool: sqlx::PgPool) {
         let repo = PostgresSystemSettingsRepository::new(pool);
-        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &SystemSettings { max_login_attempts: 5, login_attempt_window_seconds: 60, session_ttl_hours: 24, registration_enabled: true }).await.unwrap();
-        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &SystemSettings { max_login_attempts: 20, login_attempt_window_seconds: 120, session_ttl_hours: 48, registration_enabled: false }).await.unwrap();
+        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &SystemSettings { max_login_attempts: 5, login_attempt_window_seconds: 60, session_ttl_hours: 24, registration_enabled: true, seo_indexing_enabled: false }, None).await.unwrap();
+        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &SystemSettings { max_login_attempts: 20, login_attempt_window_seconds: 120, session_ttl_hours: 48, registration_enabled: false, seo_indexing_enabled: false }, None).await.unwrap();
 
         let count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM system_settings").fetch_one(&repo.pool).await.unwrap().unwrap();
         assert_eq!(count, 1);
@@ -97,7 +109,7 @@ mod tests {
 
         let mut settings = repo.get(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID).await.unwrap();
         settings.registration_enabled = false;
-        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &settings).await.unwrap();
+        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &settings, None).await.unwrap();
 
         assert!(!repo.get(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID).await.unwrap().registration_enabled);
     }
@@ -111,7 +123,7 @@ mod tests {
         // pre-migration singleton row is expected to end up in after the `UPDATE ... SET
         // organization_id = ...` statement: reachable by the public organization's id.
         let repo = PostgresSystemSettingsRepository::new(pool.clone());
-        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &SystemSettings { max_login_attempts: 7, login_attempt_window_seconds: 90, session_ttl_hours: 6, registration_enabled: false }).await.unwrap();
+        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &SystemSettings { max_login_attempts: 7, login_attempt_window_seconds: 90, session_ttl_hours: 6, registration_enabled: false, seo_indexing_enabled: false }, None).await.unwrap();
 
         let row: (uuid::Uuid,) = sqlx::query_as("SELECT organization_id FROM system_settings").fetch_one(&pool).await.unwrap();
         assert_eq!(row.0, artiferris_domain::organization::PUBLIC_ORGANIZATION_ID);
@@ -127,9 +139,22 @@ mod tests {
         .await
         .unwrap();
 
-        repo.update(other_org_id, &SystemSettings { max_login_attempts: 3, login_attempt_window_seconds: 30, session_ttl_hours: 2, registration_enabled: false }).await.unwrap();
+        repo.update(other_org_id, &SystemSettings { max_login_attempts: 3, login_attempt_window_seconds: 30, session_ttl_hours: 2, registration_enabled: false, seo_indexing_enabled: false }, None).await.unwrap();
 
         assert_eq!(repo.get(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID).await.unwrap(), SystemSettings::defaults(), "the public organization's settings must be untouched");
         assert_eq!(repo.get(other_org_id).await.unwrap().max_login_attempts, 3);
+    }
+
+    #[sqlx::test]
+    async fn seo_indexing_is_off_by_default_and_round_trips(pool: sqlx::PgPool) {
+        let repo = PostgresSystemSettingsRepository::new(pool);
+        let public = artiferris_domain::organization::PUBLIC_ORGANIZATION_ID;
+        assert!(!repo.get(public).await.unwrap().seo_indexing_enabled);
+
+        let mut settings = SystemSettings::defaults();
+        settings.seo_indexing_enabled = true;
+        repo.update(public, &settings, None).await.unwrap();
+
+        assert!(repo.get(public).await.unwrap().seo_indexing_enabled);
     }
 }

@@ -1,6 +1,9 @@
 <div class="toolbar">
-  <gbt-button text="Nouveau dépôt" (clicked)="showCreateModal.set(true)" />
-  @if (isSuperAdmin()) {
+  <gbt-button
+    [text]="mode() === 'personal' ? 'Nouveau projet' : 'Nouveau dépôt'"
+    (clicked)="showCreateModal.set(true)"
+  />
+  @if (showOrganizationControls()) {
     <gbt-select
       label="Organisation"
       placeholder="Sélectionner…"
@@ -11,14 +14,34 @@
   }
 </div>
 @if (loading()) {
-  <p>Chargement…</p>
+  <div class="loading-state"><gbt-spinner label="Chargement…" /></div>
 } @else if (error(); as message) {
   <p class="gbt-form-error" role="alert">{{ message }}</p>
   <gbt-button text="Réessayer" (clicked)="reload()" />
+} @else if (repositories().length === 0) {
+  <gbt-empty-state
+    illustration="folder"
+    [heading]="mode() === 'personal' ? 'Aucun projet' : 'Aucun dépôt'"
+    [message]="
+      mode() === 'personal'
+        ? 'Créez votre premier projet pour y publier des paquets npm ou des images docker.'
+        : 'Créez un dépôt pour commencer à publier des paquets npm ou des images docker.'
+    "
+  >
+    <gbt-button
+      [text]="mode() === 'personal' ? 'Nouveau projet' : 'Nouveau dépôt'"
+      (clicked)="showCreateModal.set(true)"
+    />
+  </gbt-empty-state>
+} @else if (filteredRepositories().length === 0) {
+  <gbt-empty-state
+    illustration="folder"
+    heading="Aucun résultat"
+    message="Aucun dépôt ne correspond à l'organisation sélectionnée. Changez le filtre pour en voir d'autres."
+  />
 } @else {
   <gbt-table
     caption="Dépôts"
-    emptyMessage="Aucune donnée disponible"
     [clickableRows]="true"
     [data]="filteredRepositories()"
     [columns]="columns()"
@@ -27,5 +50,12 @@
   />
 }
 @if (showCreateModal()) {
-  <app-create-repository-modal (created)="onCreated()" (cancelled)="showCreateModal.set(false)" />
+  @if (mode() === 'personal') {
+    <app-create-user-project-modal
+      (created)="onCreated()"
+      (cancelled)="showCreateModal.set(false)"
+    />
+  } @else {
+    <app-create-repository-modal (created)="onCreated()" (cancelled)="showCreateModal.set(false)" />
+  }
 }

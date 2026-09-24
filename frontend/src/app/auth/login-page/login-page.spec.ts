@@ -2,10 +2,11 @@ import { TestBed } from '@angular/core/testing'
 import { By } from '@angular/platform-browser'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
-import { Router, provideRouter } from '@angular/router'
+import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router'
 import { LoginPage } from './login-page'
 import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
 import { authProviders } from '../infrastructure/auth.providers'
+import { AuthService } from '../application/auth.service'
 
 describe('LoginPage', () => {
   let httpMock: HttpTestingController
@@ -33,13 +34,226 @@ describe('LoginPage', () => {
 
   afterEach(() => {
     sessionStorage.clear()
+    window.location.hash = ''
     httpMock.verify()
     vi.restoreAllMocks()
+  })
+
+  it('explains that all sessions were closed when sent back by a session revocation', () => {
+    const route = TestBed.inject(ActivatedRoute)
+    route.snapshot = {
+      queryParamMap: convertToParamMap({ reason: 'sessions-revoked' }),
+    } as ActivatedRoute['snapshot']
+    const fixture = TestBed.createComponent(LoginPage)
+    fixture.detectChanges()
+    flushSsoConfig()
+    fixture.detectChanges()
+
+    expect(fixture.nativeElement.querySelector('gbt-alert').textContent).toContain(
+      'Vos sessions ont été fermées : reconnectez-vous.',
+    )
+  })
+
+  it('shows no session notice for an unknown reason', () => {
+    const route = TestBed.inject(ActivatedRoute)
+    route.snapshot = {
+      queryParamMap: convertToParamMap({ reason: '<b>hacked</b>' }),
+    } as ActivatedRoute['snapshot']
+    const fixture = TestBed.createComponent(LoginPage)
+    fixture.detectChanges()
+    flushSsoConfig()
+    fixture.detectChanges()
+
+    expect(fixture.nativeElement.querySelector('gbt-alert')).toBeNull()
   })
 
   it('creates the component', () => {
     const fixture = TestBed.createComponent(LoginPage)
     expect(fixture.componentInstance).toBeTruthy()
+  })
+
+  function withReturnUrl(returnUrl: string | null): void {
+    const route = TestBed.inject(ActivatedRoute)
+    route.snapshot = {
+      queryParamMap: convertToParamMap(returnUrl ? { returnUrl } : {}),
+    } as ActivatedRoute['snapshot']
+  }
+
+  it('reads an OIDC token from the URL fragment, applies it, and scrubs the fragment', () => {
+    window.location.hash = '#token=abc123'
+    const auth = TestBed.inject(AuthService)
+    const router = TestBed.inject(Router)
+    auth.beginSsoLogin(null)
+    const completeExternalLoginSpy = vi.spyOn(auth, 'completeExternalLogin')
+    const replaceStateSpy = vi.spyOn(history, 'replaceState')
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
+
+    const fixture = TestBed.createComponent(LoginPage)
+    fixture.detectChanges()
+
+    // The SSO config endpoint must not be hit — the fragment-token path returns early.
+    httpMock.expectNone('/api/auth/sso/config')
+
+    expect(completeExternalLoginSpy).toHaveBeenCalledWith('abc123')
+    expect(auth.token()).toBe('abc123')
+    expect(replaceStateSpy).toHaveBeenCalledTimes(1)
+    const [, , url] = replaceStateSpy.mock.calls[0]
+    expect(url).not.toContain('#')
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/')
+  })
+
+  it('ignores a fragment token when this tab never started an SSO login, and says so', () => {
+    window.location.hash = '#token=attacker-jwt'
+    const auth = TestBed.inject(AuthService)
+    const router = TestBed.inject(Router)
+    const replaceStateSpy = vi.spyOn(history, 'replaceState')
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
+
+    const fixture = TestBed.createComponent(LoginPage)
+    fixture.detectChanges()
+    flushSsoConfig()
+    fixture.detectChanges()
+
+    expect(auth.token()).toBeNull()
+    expect(sessionStorage.getItem('artiferris_token')).toBeNull()
+    expect(router.navigateByUrl).not.toHaveBeenCalled()
+    expect(replaceStateSpy).toHaveBeenCalledTimes(1)
+    expect(replaceStateSpy.mock.calls[0][2]).not.toContain('#')
+    expect(fixture.nativeElement.textContent).toContain('Lien de connexion invalide ou expiré.')
+    expect(fixture.nativeElement.querySelector('form')).not.toBeNull()
+  })
+
+  it('ignores a fragment token once the SSO start flag has expired', () => {
+    window.location.hash = '#token=late'
+    sessionStorage.setItem(
+      'artiferris_sso_pending',
+      JSON.stringify({ startedAt: Date.now() - 11 * 60 * 1000, returnUrl: null }),
+    )
+    const auth = TestBed.inject(AuthService)
+
+    const fixture = TestBed.createComponent(LoginPage)
+    fixture.detectChanges()
+    flushSsoConfig()
+
+    expect(auth.token()).toBeNull()
+  })
+
+  it('accepts a fragment token only once', () => {
+    const auth = TestBed.inject(AuthService)
+    auth.beginSsoLogin(null)
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true)
+
+    window.location.hash = '#token=first'
+    TestBed.createComponent(LoginPage).detectChanges()
+    auth.logout()
+    window.location.hash = '#token=replayed'
+    TestBed.createComponent(LoginPage).detectChanges()
+    flushSsoConfig()
+
+    expect(auth.token()).toBeNull()
+  })
+
+  it('records the SSO start right before following the OIDC link', () => {
+    const fixture = TestBed.createComponent(LoginPage)
+    fixture.detectChanges()
+    flushSsoConfig('oidc')
+    fixture.detectChanges()
+
+    const link: HTMLAnchorElement = fixture.nativeElement.querySelector(
+      'a[href="/api/auth/sso/oidc/login"]',
+    )
+    link.addEventListener('click', (event) => event.preventDefault())
+    link.click()
+
+    expect(sessionStorage.getItem('artiferris_sso_pending')).not.toBeNull()
+  })
+
+  it('forgets an abandoned SSO start when the page opens without a return trip', () => {
+    const auth = TestBed.inject(AuthService)
+    auth.beginSsoLogin(null)
+
+    const fixture = TestBed.createComponent(LoginPage)
+    fixture.detectChanges()
+    flushSsoConfig()
+
+    expect(sessionStorage.getItem('artiferris_sso_pending')).toBeNull()
+    expect(auth.completeExternalLogin('late-token')).toBeNull()
+  })
+
+  describe('returning to the requested page after login', () => {
+    function loginAs(fixture: ReturnType<typeof TestBed.createComponent<LoginPage>>): void {
+      fixture.detectChanges()
+      flushSsoConfig()
+      fixture.componentInstance.form.setValue({ username: 'florian', password: 's3cret!' })
+      fixture.componentInstance.submit()
+      httpMock.expectOne('/api/auth/login').flush({
+        token: 'a-jwt-token',
+        mfa_token: null,
+        mfa_setup_required: false,
+        mfa_has_totp: false,
+        mfa_has_passkey: false,
+      })
+    }
+
+    it('goes back to a same-origin deep link', () => {
+      withReturnUrl('/repositories/repo-1?tab=packages')
+      const router = TestBed.inject(Router)
+      vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
+
+      loginAs(TestBed.createComponent(LoginPage))
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/repositories/repo-1?tab=packages')
+    })
+
+    it.each([
+      'https://evil.example/x',
+      '//evil.example/x',
+      '/\\evil.example',
+      'javascript:alert(1)',
+      'repositories',
+      '/login',
+      '/\t/evil.example',
+    ])('falls back to / for %j', (returnUrl) => {
+      withReturnUrl(returnUrl)
+      const router = TestBed.inject(Router)
+      vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
+
+      loginAs(TestBed.createComponent(LoginPage))
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/')
+    })
+
+    it('carries the deep link through the SSO round trip', () => {
+      withReturnUrl('/users/u-1')
+      const fixture = TestBed.createComponent(LoginPage)
+      fixture.detectChanges()
+      flushSsoConfig('oidc')
+      fixture.componentInstance.startSso()
+
+      window.location.hash = '#token=abc'
+      const router = TestBed.inject(Router)
+      vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
+      TestBed.createComponent(LoginPage).detectChanges()
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/users/u-1')
+    })
+  })
+
+  it('does nothing when the URL fragment has no token', () => {
+    window.location.hash = ''
+    const auth = TestBed.inject(AuthService)
+    const router = TestBed.inject(Router)
+    const completeExternalLoginSpy = vi.spyOn(auth, 'completeExternalLogin')
+    const replaceStateSpy = vi.spyOn(history, 'replaceState')
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
+
+    const fixture = TestBed.createComponent(LoginPage)
+    fixture.detectChanges()
+    flushSsoConfig()
+
+    expect(completeExternalLoginSpy).not.toHaveBeenCalled()
+    expect(replaceStateSpy).not.toHaveBeenCalled()
+    expect(router.navigateByUrl).not.toHaveBeenCalled()
   })
 
   it('shows the "Créer un compte" link when registration is enabled', () => {
@@ -58,6 +272,16 @@ describe('LoginPage', () => {
     fixture.detectChanges()
 
     expect(fixture.nativeElement.textContent).not.toContain('Créer un compte')
+  })
+
+  it('links to the public explorer', () => {
+    const fixture = TestBed.createComponent(LoginPage)
+    fixture.detectChanges()
+    flushSsoConfig()
+    fixture.detectChanges()
+
+    const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a[href="/explorer"]')
+    expect(link.textContent).toContain('Explorer les paquets publics')
   })
 
   it('does not send a second login request when submit is called again while one is in flight', () => {
@@ -278,6 +502,25 @@ describe('LoginPage', () => {
     fixture.detectChanges()
 
     expect(fixture.nativeElement.textContent).toContain('Code invalide.')
+  })
+
+  it.each([
+    [503, 'Service momentanément occupé, réessayez'],
+    [429, 'Trop de tentatives, réessayez plus tard.'],
+    [401, 'Identifiants invalides'],
+  ])('shows the right message when the login answers a %i', (status, message) => {
+    const fixture = TestBed.createComponent(LoginPage)
+    const component = fixture.componentInstance
+    fixture.detectChanges()
+    flushSsoConfig()
+    component.form.setValue({ username: 'florian', password: 's3cret!' })
+
+    component.submit()
+    httpMock.expectOne('/api/auth/login').flush({ error: 'x' }, { status, statusText: 'x' })
+    fixture.detectChanges()
+
+    expect(fixture.nativeElement.textContent).toContain(message)
+    expect(component.submitting()).toBe(false)
   })
 
   it('logs in with a passkey when the second factor is a passkey', async () => {

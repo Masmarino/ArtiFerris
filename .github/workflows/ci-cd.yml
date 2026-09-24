@@ -15,7 +15,8 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Only runs that never publish are superseded: a push to main or a tag can be mid-`docker push`, and cancelling it would leave `latest` and `sha-*` pointing at different images.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
@@ -119,9 +120,8 @@ jobs:
       - name: cargo audit
         id: cargo-audit
         continue-on-error: true
-        # Ignoring RUSTSEC-2023-0071 (Marvin Attack, RSA timing side-channel): comes in via openidconnect, which only calls verify() for ID-token checks — the private-key op the
-        # timing attack needs is never exercised. No upstream fix yet; revisit if that changes.
-        run: cargo audit --ignore RUSTSEC-2023-0071
+        # The one accepted advisory (RUSTSEC-2023-0071, RSA Marvin attack) and why is in .cargo/audit.toml.
+        run: cargo audit
 
       - name: Trivy filesystem scan
         id: trivy-fs
@@ -172,13 +172,33 @@ jobs:
           echo "See the job log (cargo audit) and the Security tab (Trivy/Grype) for details."
           exit 1
 
+  # ── Tag guard ───────────────────────────────────────────────────────────
+  # Anyone who can push a tag could otherwise publish any commit, from any branch, under a release tag. Runs before anything is built or pushed.
+
+  verify-tag:
+    name: Require the tagged commit to be on main
+    runs-on: ubuntu-latest
+    # Runs on every push (a no-op outside tags) so that build-and-push can depend on it without being skipped along with it.
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          fetch-depth: 0
+
+      - name: Require the tagged commit to be on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$GITHUB_REF_NAME is not on main, refusing to publish it"; exit 1; }
+
   # ── Build, scan & (conditionally) push the Docker image ────────────────
   # Built once, scanned, then pushed as-is (never rebuilt) if it's main or a version tag. release/* just builds+scans as a release-candidate check, never pushed.
 
   build-and-push:
     name: Build, scan & push Docker image
     runs-on: ubuntu-latest
-    needs: security-scan-source
+    needs: [security-scan-source, verify-tag]
     if: >-
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' ||
@@ -191,6 +211,7 @@ jobs:
       IS_PUBLISHABLE: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
+      image_digest: ${{ steps.digest.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -273,13 +294,26 @@ jobs:
 
       - name: Push the scanned image under all its tags
         if: env.IS_PUBLISHABLE == 'true'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           while IFS= read -r tag; do
             [ -n "$tag" ] && docker push "$tag"
-          done <<< "${{ steps.meta.outputs.tags }}"
+          done <<< "$TAGS"
 
-  # ── Deploy: patch the production Deployment to the just-pushed release image ──
-  # Only on a version tag; main/release builds stop at the registry push above.
+      # The registry's own digest for what was just pushed: the deploy job pins the release to it, so a tag moved afterwards changes nothing.
+      - name: Resolve the pushed image digest
+        id: digest
+        if: env.IS_PUBLISHABLE == 'true'
+        env:
+          FIRST_TAG: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          digest=$(docker buildx imagetools inspect "$FIRST_TAG" --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "unexpected digest: $digest"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+  # ── Deploy: upgrade the production release to the just-pushed image, by digest ──
+  # Only on a version tag, and only when the tagged commit is on main (checked again here, and before the image is published); main/release builds stop at the registry push above.
 
   deploy:
     name: Deploy to Kubernetes
@@ -287,22 +321,46 @@ jobs:
     needs: build-and-push
     if: startsWith(github.ref, 'refs/tags/v')
     environment: production
+    # Two deploys never run at once, and a running one is never cancelled halfway through a helm upgrade.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Anyone who can push a tag could otherwise ship any commit, from any branch, to production.
+      - name: Require the tagged commit to be on main
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$GITHUB_REF_NAME is not on main, refusing to deploy it"; exit 1; }
 
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
 
       - name: Write kubeconfig
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         run: |
           install -m 600 /dev/null "$RUNNER_TEMP/kubeconfig.yaml"
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$RUNNER_TEMP/kubeconfig.yaml"
+          printf '%s' "$KUBE_CONFIG" | base64 -d > "$RUNNER_TEMP/kubeconfig.yaml"
 
       - name: helm upgrade --install
         env:
           KUBECONFIG: ${{ runner.temp }}/kubeconfig.yaml
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
+          # The ingress controller's pod CIDR(s), comma-separated; the chart refuses to render without it.
+          TRUSTED_PROXY_IPS: ${{ vars.TRUSTED_PROXY_IPS }}
         run: |
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no image digest from the build job"; exit 1; }
+          # A values file, not --set: commas in the list would be parsed as separate keys.
+          jq -n --arg ips "$TRUSTED_PROXY_IPS" '{artiferris: {trustedProxyIps: $ips}}' > "$RUNNER_TEMP/values-ci.json"
+          # --atomic rolls the release back when the upgrade fails. Database migrations already applied are not undone: see "Upgrading" in the README.
           helm upgrade --install artiferris ./helm/artiferris \
             --namespace artiferris --create-namespace \
-            --set image.repository="${{ env.DOCKER_IMAGE }}" \
-            --set image.tag="${{ needs.build-and-push.outputs.image_tag }}" \
-            --wait --timeout 5m
+            --values "$RUNNER_TEMP/values-ci.json" \
+            --set image.repository="$DOCKER_IMAGE" \
+            --set image.tag="$IMAGE_TAG" \
+            --set image.digest="$IMAGE_DIGEST" \
+            --atomic --cleanup-on-fail --timeout 10m

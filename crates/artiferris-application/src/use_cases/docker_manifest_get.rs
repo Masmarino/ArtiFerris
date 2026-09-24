@@ -32,12 +32,20 @@ impl GetManifestUseCase {
         Ok(self.manifests.find_manifest_by_tag(repository_id, image_name, reference).await?)
     }
 
-    pub fn execute<'a>(
+    /// `authorize_member` is the caller's read policy, consulted for every group member the
+    /// traversal would descend into — the top-level repository's own access is the caller's
+    /// responsibility, checked once before this is ever called (C-1).
+    pub fn execute<'a, FAuthorize, FutAuthorize>(
         &'a self,
         repository_id: Uuid,
         image_name: &'a DockerImageName,
         reference: &'a str,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<DockerManifest>, ApplicationError>> + Send + 'a>> {
+        authorize_member: FAuthorize,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<DockerManifest>, ApplicationError>> + Send + 'a>>
+    where
+        FAuthorize: Fn(&PackageRepositorySummary) -> FutAuthorize + Clone + Send + 'a,
+        FutAuthorize: std::future::Future<Output = bool> + Send + 'a,
+    {
         resolve_in_group(
             &self.repositories,
             repository_id,
@@ -45,6 +53,7 @@ impl GetManifestUseCase {
             move |repository_id| self.execute_hosted(repository_id, image_name, reference),
             move |repository_id, repo| self.execute_proxy(repository_id, repo, image_name, reference),
             || ApplicationError::DockerManifestNotFound,
+            authorize_member,
         )
     }
 
@@ -60,12 +69,18 @@ impl GetManifestUseCase {
         let Some((bytes, content_type)) = self.remote.fetch_manifest(remote_url, image_name, reference, repo.remote_username.as_deref(), repo.remote_password.as_deref()).await? else {
             return Ok(None);
         };
+        let digest = Digest::of(&bytes);
+        if let Ok(requested) = Digest::parse(reference) {
+            if requested != digest {
+                return Err(ApplicationError::DockerDigestMismatch { expected: requested.as_str().to_string(), computed: digest.as_str().to_string() });
+            }
+        }
         // Caching the fetched manifest locally is the route layer's job, not this use case's.
         Ok(Some(DockerManifest {
             id: Uuid::new_v4(),
             package_repository_id: repository_id,
             image_name: image_name.clone(),
-            digest: Digest::of(&bytes),
+            digest,
             // Trust the remote's Content-Type, or a manifest list gets misread as a single image.
             media_type: artiferris_domain::docker_registry::DockerMediaType::parse(&content_type).unwrap_or(artiferris_domain::docker_registry::DockerMediaType::DockerV2Manifest),
             body: bytes.clone(),
@@ -130,16 +145,39 @@ mod tests {
             remote_url: Some("https://registry-1.docker.io".to_string()),
             remote_username: None,
             remote_password: None,
-            quota_bytes: None, retention_keep_last_n: None, group_members: vec![],
+            quota_bytes: None, retention_keep_last_n: None, is_public: false, group_members: vec![],
         });
         let remote = Arc::new(FakeRemoteDockerRegistry::new());
         *remote.manifest_response.lock().unwrap() = None; // simulates the remote answering 404
         let use_case = GetManifestUseCase::new(Arc::new(FakeDockerManifestRepository::new()), repositories, remote);
 
         let name = DockerImageName::parse("library/alpine").unwrap();
-        let result = use_case.execute(repository_id, &name, "sha256-deadbeef").await;
+        let result = use_case.execute(repository_id, &name, "sha256-deadbeef", |_repo: &PackageRepositorySummary| async { true }).await;
 
         assert!(matches!(result, Ok(None)), "expected Ok(None) for a remote 404, got {result:?}");
+    }
+
+    #[tokio::test]
+    async fn a_proxied_manifest_fetched_by_digest_must_hash_to_that_digest() {
+        let repositories = Arc::new(FakeRepositories::new());
+        let repository_id = Uuid::new_v4();
+        repositories.insert(PackageRepositorySummary {
+            id: repository_id, organization_id: Uuid::new_v4(), name: "proxy-repo".to_string(), format: RepositoryFormat::Docker, repo_type: RepositoryType::Proxy,
+            remote_url: Some("https://registry-1.docker.io".to_string()), remote_username: None, remote_password: None, quota_bytes: None, retention_keep_last_n: None, is_public: false, group_members: vec![],
+        });
+        let remote = Arc::new(FakeRemoteDockerRegistry::new());
+        *remote.manifest_response.lock().unwrap() = Some((b"{\"schemaVersion\":2}".to_vec(), "application/vnd.docker.distribution.manifest.v2+json".to_string()));
+        let use_case = GetManifestUseCase::new(Arc::new(FakeDockerManifestRepository::new()), repositories, remote);
+        let name = DockerImageName::parse("library/alpine").unwrap();
+        let authorize = |_repo: &PackageRepositorySummary| async { true };
+
+        let wrong = Digest::of(b"another manifest");
+        let err = use_case.execute(repository_id, &name, wrong.as_str(), authorize).await.unwrap_err();
+        assert!(matches!(err, ApplicationError::DockerDigestMismatch { .. }), "{err:?}");
+
+        let right = Digest::of(b"{\"schemaVersion\":2}");
+        assert!(use_case.execute(repository_id, &name, right.as_str(), authorize).await.unwrap().is_some());
+        assert!(use_case.execute(repository_id, &name, "latest", authorize).await.unwrap().is_some(), "a tag has no digest to compare with");
     }
 
     #[tokio::test]
@@ -150,18 +188,21 @@ mod tests {
         repositories.insert(PackageRepositorySummary {
             id: repo_a_id,
             organization_id: Uuid::new_v4(), name: "group-a".to_string(), format: RepositoryFormat::Docker,
-            repo_type: RepositoryType::Group, remote_url: None, remote_username: None, remote_password: None, quota_bytes: None, retention_keep_last_n: None, group_members: vec![repo_b_id],
+            repo_type: RepositoryType::Group, remote_url: None, remote_username: None, remote_password: None, quota_bytes: None, retention_keep_last_n: None, is_public: false, group_members: vec![repo_b_id],
         });
         repositories.insert(PackageRepositorySummary {
             id: repo_b_id,
             organization_id: Uuid::new_v4(), name: "group-b".to_string(), format: RepositoryFormat::Docker,
-            repo_type: RepositoryType::Group, remote_url: None, remote_username: None, remote_password: None, quota_bytes: None, retention_keep_last_n: None, group_members: vec![repo_a_id],
+            repo_type: RepositoryType::Group, remote_url: None, remote_username: None, remote_password: None, quota_bytes: None, retention_keep_last_n: None, is_public: false, group_members: vec![repo_a_id],
         });
 
         let use_case = GetManifestUseCase::new(Arc::new(FakeDockerManifestRepository::new()), repositories, Arc::new(FakeRemoteDockerRegistry::new()));
         let name = DockerImageName::parse("myimage").unwrap();
 
-        let result = tokio::time::timeout(std::time::Duration::from_secs(5), use_case.execute(repo_a_id, &name, "latest"))
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            use_case.execute(repo_a_id, &name, "latest", |_repo: &PackageRepositorySummary| async { true }),
+        )
             .await
             .expect("execute() must not hang on a cyclic group configuration");
         assert!(result.unwrap().is_none());

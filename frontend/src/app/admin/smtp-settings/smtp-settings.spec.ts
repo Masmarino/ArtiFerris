@@ -175,6 +175,149 @@ describe('SmtpSettingsAdmin', () => {
     })
   })
 
+  it('tells the admin to re-enter the password, and shows the banner, when the save answers a 409', () => {
+    const { fixture, httpMock } = render(null)
+    fixture.componentInstance.host.set('smtp.example.com')
+    fixture.componentInstance.username.set('artiferris@example.com')
+    fixture.componentInstance.password.set('s3cret')
+    fixture.componentInstance.fromAddress.set('artiferris@example.com')
+
+    fixture.componentInstance.save()
+    httpMock
+      .expectOne('/api/admin/settings/smtp')
+      .flush(
+        { error: 'a secret stored on the server cannot be read' },
+        { status: 409, statusText: 'Conflict' },
+      )
+    fixture.detectChanges()
+
+    expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
+      variant: 'error',
+      message: 'Le secret enregistré est illisible : saisissez-le à nouveau',
+    })
+    expect(fixture.componentInstance.secretUnreadable()).toBe(true)
+  })
+
+  it.each([
+    [429, 'Trop de demandes, réessayez dans un instant'],
+    [503, 'Service momentanément occupé'],
+  ])('words a %i on save in French', (status, message) => {
+    const { fixture, httpMock } = render(null)
+    fixture.componentInstance.host.set('smtp.example.com')
+    fixture.componentInstance.username.set('artiferris@example.com')
+    fixture.componentInstance.password.set('s3cret')
+    fixture.componentInstance.fromAddress.set('artiferris@example.com')
+
+    fixture.componentInstance.save()
+    httpMock
+      .expectOne('/api/admin/settings/smtp')
+      .flush({ error: 'x' }, { status, statusText: 'x' })
+
+    expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({ message })
+  })
+
+  it('shows the same unreadable-secret message when the test e-mail answers a 409', () => {
+    const { fixture, httpMock } = render({
+      host: 'smtp.example.com',
+      port: 587,
+      username: 'artiferris@example.com',
+      from_name: 'ArtiFerris',
+      from_address: 'artiferris@example.com',
+      security: 'start_tls',
+      password_set: true,
+    })
+    fixture.componentInstance.testRecipient.set('admin@example.com')
+
+    fixture.componentInstance.sendTest()
+    httpMock
+      .expectOne('/api/admin/settings/smtp/test')
+      .flush({}, { status: 409, statusText: 'Conflict' })
+
+    expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
+      message: 'Le secret enregistré est illisible : saisissez-le à nouveau',
+    })
+    expect(fixture.componentInstance.secretUnreadable()).toBe(true)
+  })
+
+  it('shows the server message when a kept password is refused because host, port or username changed', () => {
+    const { fixture, httpMock } = render({
+      host: 'smtp.example.com',
+      port: 587,
+      username: 'relay',
+      from_name: 'ArtiFerris',
+      from_address: 'artiferris@example.com',
+      security: 'start_tls',
+      password_set: true,
+    })
+    fixture.componentInstance.host.set('other.example.net')
+
+    fixture.componentInstance.save()
+    httpMock.expectOne('/api/admin/settings/smtp').flush(
+      {
+        error: 're-enter the password when changing the host, port or username',
+      },
+      { status: 400, statusText: 'Bad Request' },
+    )
+
+    expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
+      variant: 'error',
+      message: 're-enter the password when changing the host, port or username',
+    })
+  })
+
+  describe('a stored password that cannot be decrypted', () => {
+    const UNREADABLE = {
+      secret_unreadable: true,
+      error: "the stored SMTP password cannot be read with this server's SECRETS_ENCRYPTION_KEY",
+    }
+    const banner = (fixture: { nativeElement: HTMLElement }) =>
+      fixture.nativeElement.querySelector('gbt-alert')
+
+    it('warns that the password must be typed again, instead of pretending it is set', () => {
+      const { fixture } = render(UNREADABLE)
+
+      expect(fixture.componentInstance.secretUnreadable()).toBe(true)
+      expect(fixture.componentInstance.passwordSet()).toBe(false)
+      expect(banner(fixture)!.textContent).toContain('illisible')
+      expect(banner(fixture)!.textContent).toContain('Saisissez-le à nouveau')
+    })
+
+    it('requires the password again before saving', () => {
+      const { fixture } = render(UNREADABLE)
+      fixture.componentInstance.host.set('smtp.example.com')
+      fixture.componentInstance.username.set('relay')
+      fixture.componentInstance.fromAddress.set('artiferris@example.com')
+
+      fixture.componentInstance.save()
+
+      expect(fixture.componentInstance.hasErrors()).toBe(true)
+    })
+
+    it('drops the warning once the settings are saved with a new password', () => {
+      const { fixture, httpMock } = render(UNREADABLE)
+      fixture.componentInstance.host.set('smtp.example.com')
+      fixture.componentInstance.username.set('relay')
+      fixture.componentInstance.password.set('fresh')
+      fixture.componentInstance.fromAddress.set('artiferris@example.com')
+
+      fixture.componentInstance.save()
+      httpMock
+        .expectOne('/api/admin/settings/smtp')
+        .flush(null, { status: 204, statusText: 'No Content' })
+      fixture.detectChanges()
+
+      expect(fixture.componentInstance.secretUnreadable()).toBe(false)
+      expect(banner(fixture)).toBeNull()
+    })
+
+    it('shows no warning for readable or absent settings', () => {
+      const { fixture } = render(null)
+
+      expect(fixture.componentInstance.secretUnreadable()).toBe(false)
+      expect(banner(fixture)).toBeNull()
+    })
+  })
+
   it('sends a test email to the given recipient', () => {
     const { fixture, httpMock } = render({
       host: 'smtp.example.com',
@@ -263,5 +406,102 @@ describe('SmtpSettingsAdmin', () => {
     expect((tooltip.componentInstance as Tooltip).text()).toBe(
       'Utilise la configuration déjà enregistrée, pas les modifications du formulaire ci-dessus.',
     )
+  })
+
+  describe('switching organizations', () => {
+    const smtp = (host: string) => ({
+      host,
+      port: 587,
+      username: 'u',
+      from_name: 'n',
+      from_address: 'a@b.c',
+      security: 'start_tls',
+      password_set: true,
+    })
+
+    function switchTwice() {
+      const { fixture, httpMock } = render(null)
+      fixture.componentRef.setInput('organizationId', 'org-a')
+      fixture.detectChanges()
+      const forA = httpMock.expectOne('/api/admin/settings/smtp?organization_id=org-a')
+      fixture.componentRef.setInput('organizationId', 'org-b')
+      fixture.detectChanges()
+      const forB = httpMock.expectOne('/api/admin/settings/smtp?organization_id=org-b')
+      return { fixture, forA, forB }
+    }
+
+    it('keeps the current organization when a slower response for the previous one lands last', () => {
+      const { fixture, forA, forB } = switchTwice()
+
+      forB.flush(smtp('b.example.com'))
+      forA.flush(smtp('a.example.com'))
+      fixture.detectChanges()
+
+      expect(fixture.componentInstance.host()).toBe('b.example.com')
+    })
+
+    it('clears a password typed for the previous organization, so saving does not send it to the next one', () => {
+      const { fixture, httpMock } = render(null)
+      fixture.componentRef.setInput('organizationId', 'org-a')
+      fixture.detectChanges()
+      httpMock
+        .expectOne('/api/admin/settings/smtp?organization_id=org-a')
+        .flush(smtp('a.example.com'))
+      fixture.componentInstance.password.set('secret-of-a')
+      fixture.componentInstance.testRecipient.set('a@example.com')
+      fixture.componentInstance.save()
+      httpMock.expectOne('/api/admin/settings/smtp?organization_id=org-a').flush(null)
+      fixture.componentInstance.password.set('typed-again-for-a')
+
+      fixture.componentRef.setInput('organizationId', 'org-b')
+      fixture.detectChanges()
+      httpMock
+        .expectOne('/api/admin/settings/smtp?organization_id=org-b')
+        .flush(smtp('b.example.com'))
+      fixture.detectChanges()
+
+      expect(fixture.componentInstance.password()).toBe('')
+      expect(fixture.componentInstance.testRecipient()).toBe('')
+      expect(fixture.componentInstance.attemptedSave()).toBe(false)
+
+      fixture.componentInstance.save()
+      const put = httpMock.expectOne('/api/admin/settings/smtp?organization_id=org-b')
+      expect(put.request.method).toBe('PUT')
+      expect(put.request.body.password).toBeUndefined()
+      put.flush(null)
+    })
+
+    it('does not mark the next organization as configured when a save for the previous one lands late', () => {
+      const { fixture, httpMock } = render(null)
+      fixture.componentRef.setInput('organizationId', 'org-a')
+      fixture.detectChanges()
+      httpMock.expectOne('/api/admin/settings/smtp?organization_id=org-a').flush(null)
+      fixture.componentInstance.host.set('a.example.com')
+      fixture.componentInstance.username.set('u')
+      fixture.componentInstance.password.set('pw')
+      fixture.componentInstance.fromAddress.set('a@b.c')
+      fixture.componentInstance.save()
+      const lateSave = httpMock.expectOne('/api/admin/settings/smtp?organization_id=org-a')
+
+      fixture.componentRef.setInput('organizationId', 'org-b')
+      fixture.detectChanges()
+      httpMock.expectOne('/api/admin/settings/smtp?organization_id=org-b').flush(null)
+      lateSave.flush(null)
+
+      expect(fixture.componentInstance.passwordSet()).toBe(false)
+    })
+
+    it('shows an error, not an endless spinner, when the load fails', () => {
+      const { fixture, forA, forB } = switchTwice()
+
+      forA.flush(null, { status: 500, statusText: 'boom' })
+      forB.flush(null, { status: 500, statusText: 'boom' })
+      fixture.detectChanges()
+
+      expect(fixture.nativeElement.querySelector('gbt-spinner')).toBeNull()
+      expect(fixture.nativeElement.textContent).toContain(
+        'Échec du chargement des paramètres SMTP.',
+      )
+    })
   })
 })

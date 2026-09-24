@@ -1,0 +1,126 @@
+<section class="catalog-search">
+  <form
+    class="catalog-search__form"
+    role="search"
+    aria-label="Recherche dans le catalogue"
+    (submit)="$event.preventDefault(); searchNow()"
+  >
+    <app-suggest-search-box
+      class="catalog-search__input"
+      label="Rechercher un paquet"
+      placeholder="Nom, description ou mot-clé"
+      [value]="text()"
+      [format]="format()"
+      [owner]="owner()"
+      (valueChange)="onTextChange($event)"
+      (search)="searchNow()"
+    />
+    <gbt-button type="submit" text="Rechercher" iconName="search" />
+  </form>
+
+  <div class="catalog-search__filters">
+    @if (!format()) {
+      <gbt-segmented-control
+        ariaLabel="Format"
+        [options]="formatOptions()"
+        [value]="activeFormat() ?? ''"
+        (valueChange)="setFormat($event)"
+      />
+    }
+    <gbt-segmented-control
+      ariaLabel="Trier par"
+      [options]="sortOptions()"
+      [value]="sort()"
+      (valueChange)="setSort($event)"
+    />
+  </div>
+
+  <div class="catalog-search__summary">
+    <h2 #resultsHeading class="catalog-search__heading" tabindex="-1">
+      @if (searchedText()) {
+        Résultats pour « {{ searchedText() }} »
+      } @else if (sort() === 'popular') {
+        Populaires cette semaine
+      } @else {
+        Récemment mis à jour
+      }
+    </h2>
+    <p class="catalog-search__count" aria-live="polite">{{ resultCount() }}</p>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-state"><gbt-spinner label="Recherche en cours…" /></div>
+  } @else if (failed()) {
+    <p class="gbt-form-error" role="alert">{{ errorMessage() }}</p>
+    <gbt-button text="Réessayer" (clicked)="retry()" />
+  } @else if (result(); as result) {
+    @if (result.total === 0 && !searchedText() && owner()) {
+      <gbt-empty-state
+        illustration="folder"
+        heading="Rien à afficher"
+        message="Ce propriétaire n'a rien de public à afficher ici."
+      >
+        @if (activeFormat() && !format()) {
+          <gbt-button variant="secondary" text="Tous les formats" (clicked)="setFormat('')" />
+        }
+      </gbt-empty-state>
+    } @else if (result.total === 0 && !searchedText()) {
+      <gbt-empty-state
+        illustration="folder"
+        heading="Rien à explorer pour l'instant"
+        message="Aucun contenu public n'est encore publié ici. Rendez un dépôt public pour qu'il apparaisse dans le catalogue."
+      />
+    } @else if (result.total === 0) {
+      <gbt-empty-state
+        illustration="book"
+        heading="Aucun résultat"
+        message="Aucun paquet ne correspond à cette recherche. Essayez un autre nom, un mot-clé, ou une recherche plus courte."
+      >
+        <gbt-button variant="secondary" text="Effacer la recherche" (clicked)="clearSearch()" />
+      </gbt-empty-state>
+    } @else {
+      @if (exactItems().length > 0) {
+        <ol class="catalog-search__results">
+          @for (entry of exactItems(); track entry.repository.name + entry.kind + entry.name) {
+            <li><app-catalog-result-card [entry]="entry" /></li>
+          }
+        </ol>
+      }
+      @if (approximateItems().length > 0) {
+        @if (exactItems().length === 0) {
+          <p class="catalog-search__hint">
+            Aucun résultat exact — voici des résultats approchants.
+          </p>
+        }
+        <h2 class="catalog-search__approximate-heading">Résultats approchants</h2>
+        <ol class="catalog-search__results">
+          @for (
+            entry of approximateItems();
+            track entry.repository.name + entry.kind + entry.name
+          ) {
+            <li><app-catalog-result-card [entry]="entry" /></li>
+          }
+        </ol>
+      }
+      @if (totalPages() > 1) {
+        <nav class="catalog-search__pagination" aria-label="Pagination">
+          <gbt-button
+            variant="secondary"
+            text="Précédent"
+            iconName="chevron-left"
+            [disabled]="page() <= 1"
+            (clicked)="goToPage(page() - 1)"
+          />
+          <span class="catalog-search__page">Page {{ page() }} sur {{ totalPages() }}</span>
+          <gbt-button
+            variant="secondary"
+            text="Suivant"
+            iconName="chevron-right"
+            [disabled]="page() >= totalPages()"
+            (clicked)="goToPage(page() + 1)"
+          />
+        </nav>
+      }
+    }
+  }
+</section>

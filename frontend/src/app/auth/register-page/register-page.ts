@@ -4,6 +4,7 @@ import { Router, RouterLink } from '@angular/router'
 import { Button, Divider, GbtInput } from '@masmarino/gabarit'
 import { AuthService } from '../application/auth.service'
 import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
+import { overloadMessage, rejectionMessage } from '../../shared/api-error'
 
 @Component({
   selector: 'app-register-page',
@@ -54,8 +55,7 @@ export class RegisterPage {
       },
       error: (err: unknown) => {
         this.submitting.set(false)
-        const backendMessage = (err as { error?: { error?: string } })?.error?.error ?? ''
-        this.errorMessage.set(this.messageFor(backendMessage))
+        this.errorMessage.set(overloadMessage(err) ?? this.messageFor(rejectionMessage(err) ?? ''))
       },
     })
   }

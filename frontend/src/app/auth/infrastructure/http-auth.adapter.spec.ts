@@ -32,6 +32,17 @@ describe('HttpAuthAdapter', () => {
     httpMock.verify()
   })
 
+  it('posts to /api/auth/logout-all', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.logoutAll().subscribe()
+
+    const req = httpMock.expectOne('/api/auth/logout-all')
+    expect(req.request.method).toBe('POST')
+    req.flush(null, { status: 204, statusText: 'No Content' })
+    httpMock.verify()
+  })
+
   it('posts the mfa token, code and backup code to /api/auth/mfa/verify', () => {
     const { adapter, httpMock } = setup()
 

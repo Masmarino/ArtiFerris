@@ -94,6 +94,7 @@ mod tests {
                     group_members: Vec::new(),
                     quota_bytes: None,
                     retention_keep_last_n: None,
+                    is_public: false,
                 },
             );
         }
@@ -110,6 +111,10 @@ mod tests {
         }
 
         async fn list_all(&self) -> Result<Vec<PackageRepositorySummary>, EventStoreError> {
+            unreachable!("not exercised by this use case's tests")
+        }
+
+        async fn list_by_organization(&self, _organization_id: Uuid) -> Result<Vec<PackageRepositorySummary>, EventStoreError> {
             unreachable!("not exercised by this use case's tests")
         }
     }
@@ -159,6 +164,22 @@ mod tests {
             unreachable!("not exercised by this use case's tests")
         }
 
+        async fn find_by_ids(&self, _ids: &[Uuid]) -> Result<Vec<User>, DomainError> {
+            unreachable!("not exercised by this use case's tests")
+        }
+
+        async fn count_by_organization(&self, _organization_id: Uuid) -> Result<i64, DomainError> {
+            unreachable!("not exercised by this use case's tests")
+        }
+
+        async fn search_by_organization(&self, _organization_id: Uuid, _query: &str, _limit: i64) -> Result<Vec<User>, DomainError> {
+            unreachable!("not exercised by this use case's tests")
+        }
+
+        async fn search_all_organizations(&self, _query: &str, _limit: i64) -> Result<Vec<User>, DomainError> {
+            unreachable!("not exercised by this use case's tests")
+        }
+
         async fn insert(&self, _user: &User) -> Result<(), DomainError> {
             unreachable!("not exercised by this use case's tests")
         }
@@ -167,7 +188,7 @@ mod tests {
             unreachable!("not exercised by this use case's tests")
         }
 
-        async fn update_password(&self, _id: Uuid, _new_password_hash: String) -> Result<(), DomainError> {
+        async fn update_password(&self, _id: Uuid, _new_password_hash: String, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
             unreachable!("not exercised by this use case's tests")
         }
 
@@ -175,15 +196,15 @@ mod tests {
             unreachable!("not exercised by this use case's tests")
         }
 
-        async fn set_organization_admin(&self, _id: Uuid, _is_organization_admin: bool) -> Result<(), DomainError> {
+        async fn set_organization_admin(&self, _id: Uuid, _is_organization_admin: bool, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             unreachable!("not exercised by this use case's tests")
         }
 
-        async fn delete_unless_last_super_admin(&self, _id: Uuid) -> Result<bool, DomainError> {
+        async fn delete_unless_last_super_admin(&self, _id: Uuid, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<bool, DomainError> {
             unreachable!("not exercised by this use case's tests")
         }
 
-        async fn set_super_admin_unless_last(&self, _id: Uuid, _is_super_admin: bool) -> Result<bool, DomainError> {
+        async fn set_super_admin_unless_last(&self, _id: Uuid, _is_super_admin: bool, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<bool, DomainError> {
             unreachable!("not exercised by this use case's tests")
         }
     }
@@ -260,6 +281,10 @@ mod tests {
         }
 
         async fn count_all(&self) -> Result<usize, EventStoreError> {
+            unreachable!("not exercised by this use case's tests")
+        }
+
+        async fn count_for_repositories(&self, _repository_ids: &[Uuid]) -> Result<usize, EventStoreError> {
             unreachable!("not exercised by this use case's tests")
         }
 

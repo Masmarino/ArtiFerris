@@ -1,5 +1,5 @@
 use axum::RequestPartsExt;
-use axum::extract::FromRequestParts;
+use axum::extract::{FromRequestParts, OptionalFromRequestParts};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 use axum_extra::TypedHeader;
@@ -10,13 +10,16 @@ use uuid::Uuid;
 
 use crate::state::NpmState;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct NpmAuthUser {
     pub id: Uuid,
     pub is_super_admin: bool,
     pub is_organization_admin: bool,
     pub organization_id: Uuid,
 }
+
+/// How stale a token's `last_used_at` may get before a request bothers to write it again.
+const LAST_USED_REFRESH: chrono::Duration = chrono::Duration::minutes(1);
 
 impl FromRequestParts<NpmState> for NpmAuthUser {
     type Rejection = StatusCode;
@@ -34,14 +37,40 @@ impl FromRequestParts<NpmState> for NpmAuthUser {
         if !token.is_active() {
             return Err(StatusCode::UNAUTHORIZED);
         }
-        let _ = state.api_tokens.touch_last_used_at(token.id, Utc::now()).await;
         let user = state
             .users
             .find_by_id(token.user_id)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             .ok_or(StatusCode::UNAUTHORIZED)?;
+        // A password change bumps tokens_valid_after — an API token created before that must not
+        // survive it, same as a session JWT (B-6).
+        if token.created_at < user.tokens_valid_after {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        // Only touch last_used_at once the token has passed every validity check — a
+        // rejected/stale token shouldn't be recorded as "used". At most once a minute, so parallel installs don't all write one row.
+        let now = Utc::now();
+        if token.last_used_at.is_none_or(|last| now - last >= LAST_USED_REFRESH) {
+            let _ = state.api_tokens.touch_last_used_at(token.id, now).await;
+        }
         Ok(NpmAuthUser { id: user.id, is_super_admin: user.is_super_admin, is_organization_admin: user.is_organization_admin, organization_id: user.organization_id })
+    }
+}
+
+/// Since axum 0.8 (axum-core 0.5), `Option<T>` as an extractor no longer falls back to a blanket
+/// `FromRequestParts` impl on any rejection — it needs this trait implemented explicitly. This is
+/// that opt-in: any rejection (no `Authorization` header, a malformed one, a revoked token, ...)
+/// becomes `None` rather than failing the request, so a read-only handler taking
+/// `Option<NpmAuthUser>` can treat every one of those the same way an anonymous caller would.
+impl OptionalFromRequestParts<NpmState> for NpmAuthUser {
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(parts: &mut Parts, state: &NpmState) -> Result<Option<Self>, Self::Rejection> {
+        match <Self as FromRequestParts<NpmState>>::from_request_parts(parts, state).await {
+            Ok(user) => Ok(Some(user)),
+            Err(_) => Ok(None),
+        }
     }
 }
 
@@ -62,6 +91,7 @@ mod tests {
     use artiferris_application::use_cases::npm_publish::PublishNpmPackageUseCase;
     use artiferris_application::use_cases::npm_search::SearchNpmPackagesUseCase;
     use artiferris_application::use_cases::npm_unpublish::UnpublishNpmPackageUseCase;
+    use artiferris_application::use_cases::resolve_personal_repository::ResolvePersonalRepositoryUseCase;
     use artiferris_infrastructure::filesystem_storage::FilesystemStorageBackend;
     use artiferris_infrastructure::http_npm_audit_client::HttpNpmAuditClient;
     use artiferris_infrastructure::http_remote_npm_registry::HttpRemoteNpmRegistry;
@@ -100,9 +130,12 @@ mod tests {
             api_tokens: api_tokens.clone(),
             organizations: organizations.clone(),
             artiferris_base_domain: "artiferris.localhost".to_string(),
-            publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), events.clone())),
+            public_scheme: "http".to_string(),
+            guard: std::sync::Arc::new(artiferris_application::request_guard::RequestGuard::default()),
+            publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), repositories.clone(), events.clone())),
             metadata: Arc::new(GetNpmPackageMetadataUseCase::new(npm_packages.clone(), repositories.clone(), remote_registry.clone())),
             download: Arc::new(DownloadNpmTarballUseCase::new(npm_packages.clone(), storage.clone(), remote_registry.clone(), repositories.clone())),
+            downloads: Arc::new(artiferris_domain::download_stats::NoopDownloadRecorder),
             unpublish: Arc::new(UnpublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), events.clone())),
             deprecate: Arc::new(DeprecateNpmVersionUseCase::new(npm_packages.clone(), events.clone())),
             set_dist_tag: Arc::new(SetDistTagUseCase::new(npm_packages.clone(), events.clone())),
@@ -114,6 +147,7 @@ mod tests {
             create_api_token: Arc::new(CreateApiTokenUseCase::new(api_tokens.clone())),
             list_api_tokens: Arc::new(ListApiTokensUseCase::new(api_tokens.clone())),
             revoke_api_token: Arc::new(RevokeApiTokenUseCase::new(api_tokens.clone())),
+            resolve_personal_repository: Arc::new(ResolvePersonalRepositoryUseCase::new(users.clone(), organizations.clone(), repositories.clone())),
         }
     }
 
@@ -210,6 +244,28 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn last_used_at_is_written_at_most_once_a_minute(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let org_id = seed_organization(&pool).await;
+        let user_id = seed_user_with_active_token(&pool, org_id, "busy-ci-token").await;
+        let last_used = || {
+            let pool = pool.clone();
+            async move { sqlx::query_scalar!("SELECT last_used_at FROM api_tokens WHERE user_id = $1", user_id).fetch_one(&pool).await.unwrap() }
+        };
+
+        request(state.clone(), Some("Bearer busy-ci-token")).await;
+        let first = last_used().await.expect("the first use is recorded");
+        request(state.clone(), Some("Bearer busy-ci-token")).await;
+        assert_eq!(last_used().await, Some(first), "a second use a moment later writes nothing");
+
+        sqlx::query!("UPDATE api_tokens SET last_used_at = now() - interval '2 minutes' WHERE user_id = $1", user_id).execute(&pool).await.unwrap();
+        let stale = last_used().await;
+        request(state, Some("Bearer busy-ci-token")).await;
+        assert!(last_used().await > stale, "a stale value is refreshed");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_missing_authorization_header_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
@@ -251,5 +307,38 @@ mod tests {
         let response = request(state, Some("Bearer revoked-plaintext-token")).await;
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "a revoked token must not authenticate");
+    }
+
+    /// B-6: an API token minted before a password change must not survive it, same as a
+    /// session JWT already does via `tokens_valid_after`.
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_api_token_created_before_a_password_change_is_rejected(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let org_id = seed_organization(&pool).await;
+        let user_id = seed_user_with_active_token(&pool, org_id, "pw-change-token").await;
+
+        let response = request(state.clone(), Some("Bearer pw-change-token")).await;
+        assert_eq!(response.status(), StatusCode::OK, "a fresh token must work before any password change");
+
+        sqlx::query!("UPDATE users SET tokens_valid_after = now() WHERE id = $1", user_id).execute(&pool).await.unwrap();
+
+        let response = request(state, Some("Bearer pw-change-token")).await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "a token created before tokens_valid_after was bumped must be rejected");
+    }
+
+    /// B-6: `ApiToken` previously had no expiry at all — tokens lived forever.
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_expired_api_token_is_rejected(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let org_id = seed_organization(&pool).await;
+        let user_id = seed_user_with_active_token(&pool, org_id, "expired-token").await;
+        // CreateApiTokenUseCase always sets a future expiry, so force it into the past directly.
+        sqlx::query!("UPDATE api_tokens SET expires_at = now() - interval '1 day' WHERE user_id = $1", user_id).execute(&pool).await.unwrap();
+
+        let response = request(state, Some("Bearer expired-token")).await;
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

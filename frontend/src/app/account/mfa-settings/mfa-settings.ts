@@ -6,8 +6,9 @@ import { Button, Card, Divider, GbtInput, Spinner, Tooltip } from '@masmarino/ga
 import { MfaService } from '../application/mfa.service'
 import { MfaStatus } from '../domain/mfa.types'
 import { ToastService } from '../../shared/toast.service'
+import { SessionRevocationService } from '../../auth/application/session-revocation.service'
 
-type ViewState = 'loading' | 'disabled' | 'enrolling' | 'backup-codes' | 'enabled'
+type ViewState = 'loading' | 'load-failed' | 'disabled' | 'enrolling' | 'backup-codes' | 'enabled'
 
 @Component({
   selector: 'app-mfa-settings',
@@ -20,6 +21,7 @@ type ViewState = 'loading' | 'disabled' | 'enrolling' | 'backup-codes' | 'enable
 export class MfaSettings implements OnInit {
   private readonly mfaService = inject(MfaService)
   private readonly toastService = inject(ToastService)
+  private readonly sessionRevocation = inject(SessionRevocationService)
 
   readonly state = signal<ViewState>('loading')
   readonly status = signal<MfaStatus | null>(null)
@@ -40,21 +42,32 @@ export class MfaSettings implements OnInit {
     this.reload()
   }
 
+  retryLoad(): void {
+    this.state.set('loading')
+    this.reload()
+  }
+
   private reload(): void {
-    this.mfaService.getStatus().subscribe((status) => {
-      this.status.set(status)
-      this.state.set(status.totp_enabled ? 'enabled' : 'disabled')
+    this.mfaService.getStatus().subscribe({
+      next: (status) => {
+        this.status.set(status)
+        this.state.set(status.totp_enabled ? 'enabled' : 'disabled')
+      },
+      error: () => this.state.set('load-failed'),
     })
   }
 
   startEnrollment(): void {
     this.errorMessage.set(null)
-    this.mfaService.enrollTotp().subscribe((enrollment) => {
-      this.enrollmentSecret.set(enrollment.secret)
-      QRCode.toDataURL(enrollment.otpauth_url)
-        .then((dataUrl) => this.qrCodeDataUrl.set(dataUrl))
-        .catch(() => this.qrCodeDataUrl.set(null))
-      this.state.set('enrolling')
+    this.mfaService.enrollTotp().subscribe({
+      next: (enrollment) => {
+        this.enrollmentSecret.set(enrollment.secret)
+        QRCode.toDataURL(enrollment.otpauth_url)
+          .then((dataUrl) => this.qrCodeDataUrl.set(dataUrl))
+          .catch(() => this.qrCodeDataUrl.set(null))
+        this.state.set('enrolling')
+      },
+      error: () => this.errorMessage.set("Échec du démarrage de l'activation. Réessayez."),
     })
   }
 
@@ -98,8 +111,7 @@ export class MfaSettings implements OnInit {
       next: () => {
         this.submitting.set(false)
         this.disablePassword.set('')
-        this.reload()
-        this.toastService.success('Double authentification désactivée.')
+        this.sessionRevocation.signOutAndRedirect()
       },
       error: (err: HttpErrorResponse) => {
         this.submitting.set(false)
@@ -120,7 +132,6 @@ export class MfaSettings implements OnInit {
         this.submitting.set(false)
         this.regeneratePassword.set('')
         this.regeneratedCodes.set(result.backup_codes)
-        this.toastService.success('Nouveaux codes de secours générés.')
       },
       error: (err: HttpErrorResponse) => {
         this.submitting.set(false)
@@ -131,8 +142,9 @@ export class MfaSettings implements OnInit {
     })
   }
 
+  /** The backend already revoked this session: the codes had to be shown before signing out. */
   dismissRegeneratedCodes(): void {
     this.regeneratedCodes.set(null)
-    this.reload()
+    this.sessionRevocation.signOutAndRedirect()
   }
 }

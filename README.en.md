@@ -33,11 +33,29 @@ the same binary.
   **proxy** (transparent cache in front of an upstream registry, e.g.
   npmjs.org or Docker Hub), **group** (aggregates several repositories
   behind one endpoint)
-- Per-repository storage quotas
+- Per-repository storage quotas (Docker counts what a repository holds: blobs
+  its manifests reference, blobs uploaded but not yet referenced, manifest
+  bodies, 1 KiB per tag, and the bytes of uploads in progress; at most 32
+  uploads may be open per repository and 10,000 tags). An npm package holds at
+  most 5,000 versions and 32 MiB of version manifests
 - Per-repository retention policy (keep the last N versions/tags per
   package/image; tagged references such as `latest` are never purged) —
-  swept automatically every 6 hours
-- Package/image browser with per-package detail views
+  swept automatically every 6 hours. Docker tags are ranked by when the tag
+  itself was set, so moving a tag back to an old image (a rollback) makes it
+  the newest. In a repository with a policy, manifests that no tag and no
+  manifest list references are also removed 7 days after their last tag moved
+  away (or after their push, if they never had one)
+- Re-publishing an unpublished npm version is refused, whatever its bytes
+- Package/image browser with per-package detail views: npm README (Markdown
+  converted then sanitized on the server, links in a new tab, https-only
+  images), install command, Docker tag sizes
+- Public `artiferris-npm` and `artiferris-docker` catalogs (`/artiferris-npm`,
+  `/artiferris-docker`), no authentication needed: search across every
+  package/image of public hosted repositories, personal and organization
+  alike. A catalog is not an install endpoint: each result points at its
+  owner's own URL. Owner profile pages at `/@user` and `/o/<organization>`.
+  The `artiferris-` prefix is reserved (repositories, users, organizations).
+  Search-engine indexing (off by default)
 
 **Security scanning**
 - npm dependency audit against the public advisory database, auto-triggered
@@ -71,7 +89,13 @@ the same binary.
   with a test-email button
 - Custom branding: replace the default logo/favicon everywhere (UI +
   emails) for white-label / isolated-cluster deployments
-- Configuration export/import for backup and restore
+- Configuration export/import for backup and restore, single-tenant instances
+  only. The export refuses an instance whose users have personal repositories
+  (the file has no owner for a repository). The file may be up to 32 MiB and
+  list at most 100,000 users, repositories and permissions each; invitation
+  emails go out after the commit, eight at a time. The import runs in one
+  transaction: entries it cannot restore are listed and skipped, the rest lands
+  all together or not at all, so a failed import can be run again
 - Transactional HTML emails (account created, password reset, MFA/passkey
   enrolled) with the deployment's branding embedded inline (CID, so it
   renders even with external images blocked)
@@ -128,9 +152,20 @@ npm test --prefix frontend              # frontend
 A single-node deployment (ArtiFerris + Postgres) is one command away:
 
 ```bash
-cp .env.example .env   # fill in POSTGRES_PASSWORD, JWT_SECRET, ARTIFERRIS_BOOTSTRAP_ADMIN_*
+cp .env.example .env   # fill in POSTGRES_PASSWORD, JWT_SECRET, SECRETS_ENCRYPTION_KEY, PUBLIC_URL, ARTIFERRIS_BOOTSTRAP_ADMIN_*
 docker compose up -d --build
 ```
+
+The server refuses to start with a `JWT_SECRET` or `SECRETS_ENCRYPTION_KEY`
+shorter than 32 bytes or still starting with `change-me`, with the same
+placeholder as `ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD`, or with a `PUBLIC_URL`
+pointing at `0.0.0.0`. Generate the secrets with `openssl rand -base64 48`.
+`POSTGRES_PASSWORD` ends up unescaped inside `DATABASE_URL`, so give it only
+URL-safe characters (`openssl rand -hex 24`).
+
+The container's health check calls `/readyz` (the database answers, without
+waiting for a free connection: a fully busy pool still counts as up while a
+recent check succeeded); `/healthz` only says the process is up.
 
 See [Configuration reference](#configuration-reference) below for every
 variable `docker-compose.yml` wires through. The Docker registry protocol's
@@ -139,7 +174,58 @@ request and normally needs no configuration at all — set it explicitly only
 if this deployment sits behind something that doesn't forward the original
 `Host` header and scheme faithfully.
 
-> Kubernetes/Helm deployment: to be documented later.
+### Kubernetes (Helm)
+
+```bash
+helm upgrade --install artiferris ./helm/artiferris \
+  --namespace artiferris --create-namespace \
+  --set image.tag=<release tag> \
+  --set ingress.host=app.example.com --set ingress.wildcardHost='*.example.com' \
+  --set artiferris.baseDomain=example.com
+```
+
+- `image.tag` has no default: pick a release. Set `image.digest` to pin the
+  image by digest (CI does this). A `latest` tag is always pulled.
+- The chart generates the database password, `JWT_SECRET` and
+  `SECRETS_ENCRYPTION_KEY` once, in `<release>-secrets`, using Helm's
+  `lookup` to find them again on upgrade. `lookup` returns nothing under
+  `helm template`, `--dry-run`, Argo CD or Flux, so with those tools set
+  `secrets.postgresPassword`, `secrets.jwtSecret` and
+  `secrets.secretsEncryptionKey` yourself, or every render invents new ones
+  and every stored secret becomes unreadable. The Secret is annotated
+  `helm.sh/resource-policy: keep`, so `helm uninstall` leaves it in place.
+  The two PersistentVolumeClaims (registry data and database) are kept the
+  same way while `persistence.keepOnUninstall` is `true` (the default); delete
+  them by hand to wipe the data, or set it to `false` to have `helm uninstall`
+  delete them.
+  A `secrets.secretsEncryptionKey` you pass replaces the stored one (that is
+  how a rotation supplies the new key), so leave it out of later upgrades
+  unless you mean to change it.
+- Pods run as uid 100 / gid 101 (the ids the image pins), without
+  privilege escalation or capabilities, with a read-only root filesystem
+  and the `RuntimeDefault` seccomp profile. A NetworkPolicy lets only the
+  ArtiFerris pod reach Postgres (`networkPolicy.enabled`; needs a CNI that
+  enforces them).
+- The ingress uses the Traefik middlewares listed in `ingress.middlewares`
+  (`traefik-https`, `traefik-headers`, `traefik-ratelimit`, all in the
+  `traefik` namespace by default). They must already exist; the chart does
+  not create them. Set `ingress.middlewares` to an empty string to use none.
+- Set `artiferris.trustedProxyIps` to the ingress controller's pod network,
+  see `TRUSTED_PROXY_IPS`. With the ingress enabled the chart refuses to
+  render while it is empty (every visitor would share one login throttle
+  bucket and one public-catalog request budget); set
+  `artiferris.allowSharedThrottleBucket=true` to accept that. The server also
+  logs a warning, at most once an hour, when requests carry `X-Forwarded-For`
+  from a private address while `TRUSTED_PROXY_IPS` is empty.
+- A `startupProbe` gives a slow start (migrations, secret check) five minutes
+  before the liveness probe takes over.
+- The CI deploy runs `helm upgrade --install --atomic --cleanup-on-fail`, so a
+  failed upgrade rolls the release back to the previous revision. Database
+  migrations that already ran stay applied: after the first deploy of the
+  release that introduced migrations 0006 to 0010, the previous image cannot
+  start against the database, so the rolled-back release does not become
+  ready either and the backup has to be restored (see "Upgrading and
+  rotating" below).
 
 ## Configuration reference
 
@@ -151,7 +237,14 @@ bare-container deployment or for overriding those defaults.
 | Env var | Required | Default | Description |
 |---|---|---|---|
 | `DATABASE_URL` | **Yes** | — | Postgres connection string, e.g. `postgres://user:pass@host:5432/artiferris`. |
-| `JWT_SECRET` | **Yes** | — | Signs session tokens and Docker registry access tokens. Long, random, secret. Rotating it invalidates every session and every `docker login`. |
+| `JWT_SECRET` | **Yes** | — | Signs session tokens and Docker registry access tokens. At least 32 bytes of random data (`openssl rand -base64 48`); a shorter value or one starting with `change-me` stops the server at startup. Rotating it invalidates every session and every `docker login`. |
+| `SECRETS_ENCRYPTION_KEY` | **Yes** | — | Encrypts what the database stores in recoverable form: SMTP passwords, LDAP and OIDC secrets, proxy-repository credentials and TOTP seeds. Different from `JWT_SECRET`, at least 32 bytes, not starting with `change-me`. It is expanded with HKDF, which does not make a weak value stronger: it must be random (`openssl rand -base64 48`), not a passphrase. See [Rotating `SECRETS_ENCRYPTION_KEY`](#rotating-secrets_encryption_key). |
+| `SECRETS_ENCRYPTION_KEY_PREVIOUS` | No | — | Only while rotating: the key the stored secrets are currently encrypted with. |
+| `SECRETS_REENCRYPT_LEGACY` | No | `false` | `true` lets the startup pass rewrite stored secrets to the current format and, after a rotation, under the new key. Off by default because the previous release cannot read the rewritten values: see [Rotating `SECRETS_ENCRYPTION_KEY`](#rotating-secrets_encryption_key). |
+| `ARTIFERRIS_SSRF_ALLOWED_CIDRS` | No | — | Comma-separated addresses or CIDR ranges (`10.20.0.0/16,192.168.1.5`) that LDAP, SMTP, OIDC and proxy-repository hosts may resolve to even though they are private. Without it every private, loopback and link-local address is refused, which rules out an on-premises directory or mail relay. The OIDC issuer and every endpoint in its discovery document must be `https` and pass the same check. Unencrypted SMTP (`security: none`) is only accepted for hosts in this list. A typo stops the server at startup, and so does a `/0` range (it would switch the guard off). |
+| `TRUSTED_PROXY_IPS` | No | — | Comma-separated addresses or CIDR ranges of the reverse proxies whose `X-Forwarded-For` is believed. A typo stops the server at startup, and so does a `/0` range (it would trust the whole internet). |
+| `DB_MAX_CONNECTIONS` | No | `10` | Size of the Postgres connection pool; one connection is always kept open. A value that is not a positive number stops the server at startup. |
+| `ARTIFERRIS_AUDIT_BACKFILL_FORCE` | No | `false` | The job that stamps the organization on older audit events does not start with `DB_MAX_CONNECTIONS` below 3 (it would compete with requests for the pool). `true` runs it anyway. |
 | `ARTIFERRIS_BASE_DOMAIN` | **Yes** | — | Base domain organizations are resolved as subdomains of (e.g. `artiferris.example`, so `acme.artiferris.example` resolves the `acme` organization). No fallback: a misconfigured deployment must fail at startup rather than silently route every subdomain to the public organization. |
 | `STORAGE_ROOT` | No | `./data` | Filesystem path where npm tarballs and Docker blobs are stored. Must be a persistent volume in any real deployment. |
 | `BIND_ADDR` | No | `0.0.0.0:8080` | Address/port the HTTP server listens on. |
@@ -159,18 +252,78 @@ bare-container deployment or for overriding those defaults.
 | `RUST_LOG` | No | — (no logging without it) | `tracing_subscriber` env-filter, e.g. `info` or `artiferris_api=debug,info`. Without it, the container logs almost nothing. |
 | `CORS_ALLOWED_ORIGIN` | No | permissive (any origin) | Locks CORS to one origin. Leave unset for local dev (`ng serve` on a different port than the backend) or when the frontend is served from the same origin as the API (the shipped image's default setup). |
 | `ARTIFERRIS_DOCKER_TOKEN_REALM` | No | derived per request from that request's own `Host` header and `PUBLIC_URL`'s scheme | Overrides the realm URL embedded in every `WWW-Authenticate` challenge, which the Docker CLI resolves `login`/`push`/`pull` token requests against — normally derived automatically so it's correct for however many organization subdomains this deployment serves. Set it only when the request's `Host`/scheme can't be trusted (e.g. an intermediary that doesn't forward them faithfully); doing so pins every client to this one fixed realm, which then breaks auth for every organization subdomain except whichever one this host happens to resolve to. Must be `https://` for any non-localhost host (`docker` refuses plain `http://` otherwise). |
-| `PUBLIC_URL` | Effectively yes, once invitations are used | derived from `BIND_ADDR` (same unreachable-from-outside caveat) | Base URL account-invitation links are built against. Must be reachable from the recipient's mail client. |
+| `PUBLIC_URL` | Yes, except in local development | derived from `BIND_ADDR` | The instance's external URL: base of invitation links, scheme of the Docker token realm and of HSTS, passkey origin, canonical URLs. The server refuses to start when it resolves to `0.0.0.0` on a base domain that is not `localhost` or `*.localhost`. |
 | `ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME` | No | — | Username for the account auto-created **only when the `users` table is empty**. Safe to leave set across restarts/upgrades. |
-| `ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD` | No, but you need *some* way to get a first admin | — | Password for that same bootstrap account. Must be ≥ 8 characters — a shorter value fails silently (logged, not fatal) and leaves the deployment with no admin at all. |
+| `ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD` | No, but you need *some* way to get a first admin | — | Password for that same bootstrap account. Must be ≥ 8 characters — a shorter value fails silently (logged, not fatal) and leaves the deployment with no admin at all. A value starting with `change-me` (the `.env.example` placeholder) stops the server at startup. |
 
 `PUBLIC_URL` falls back to guessing a URL from `BIND_ADDR`, which is only
-ever correct for a deployment reached directly with no reverse proxy and no
-TLS termination — set it explicitly in every other case. It also supplies
-the scheme (`http`/`https`) `ARTIFERRIS_DOCKER_TOKEN_REALM`'s automatic
-per-request derivation uses.
+ever correct for local development — set it explicitly in every other case.
+It also supplies the scheme (`http`/`https`) `ARTIFERRIS_DOCKER_TOKEN_REALM`'s
+automatic per-request derivation uses.
+
+### Upgrading and rotating `SECRETS_ENCRYPTION_KEY`
+
+Stored secrets (SMTP, LDAP, OIDC and proxy credentials, TOTP seeds) are
+written in a versioned format that releases before this one cannot read. A
+value saved after the upgrade already uses it, and reads accept both formats,
+but existing values are only rewritten when `SECRETS_REENCRYPT_LEGACY=true`
+(Helm: `artiferris.reencryptStoredSecrets`). Without it the server logs a
+warning with the number of values still pending and changes nothing.
+
+To upgrade:
+
+1. Back up the database.
+2. Deploy the new release with `SECRETS_REENCRYPT_LEGACY` unset.
+3. Check that SSO, mail and MFA still work.
+4. Set `SECRETS_REENCRYPT_LEGACY=true` and restart. The log line
+   `re-encrypted stored secrets` gives the count. It can stay set: with
+   nothing left to convert it does nothing.
+
+**Rolling back the image after the first start of this release needs a
+database restore.** The start applies migrations 0006 to 0010, and the previous
+release (0.4.6 and earlier) refuses to start on a database that records
+migrations it does not know ("failed to run migrations"), whether or not
+`SECRETS_REENCRYPT_LEGACY` was ever set. `helm rollback`, `--atomic` and
+redeploying the old tag do not undo migrations; back up before the upgrade and
+restore that backup to go back. From this release on the server ignores
+migrations recorded by a newer release, so rolling back to this one starts; it
+then runs against the newer schema, which only works if that schema change was
+additive (the release notes say when it is not).
+
+The secret format is a second limit: releases before this one cannot read
+values in the new format, so TOTP seeds (MFA logins fail), SMTP, LDAP, OIDC and
+proxy credentials stop working. It applies to every value saved by this
+release, and to the existing ones once `SECRETS_REENCRYPT_LEGACY` rewrites
+them.
+
+To change the key:
+
+1. Back up the database.
+2. Set `SECRETS_ENCRYPTION_KEY` to the new random value,
+   `SECRETS_ENCRYPTION_KEY_PREVIOUS` to the value in use until now, and
+   `SECRETS_REENCRYPT_LEGACY=true`. With Helm:
+   `--set secrets.secretsEncryptionKey=<new> --set secrets.secretsEncryptionKeyPrevious=<old> --set artiferris.reencryptStoredSecrets=true`.
+3. Restart every replica together. A replica still running the old key cannot
+   read a value that another one has already moved to the new key, so a
+   rolling restart with mixed keys is not safe.
+4. The log line `re-encrypted stored secrets` confirms the move; an error
+   line means some values could not be read with either key and were left
+   untouched.
+5. Remove `SECRETS_ENCRYPTION_KEY_PREVIOUS` (with Helm, drop
+   `secretsEncryptionKeyPrevious` and upgrade again: the chart removes it
+   from the Secret and keeps the new key).
+
+A value that cannot be read with the keys the server has (a key that differs
+from the one that sealed it, for instance after a restore) is logged at error
+level with its type and the organization or user it belongs to, and the SSO
+and SMTP settings endpoints report `secret_unreadable: true`. Whatever needs
+it (SSO login, mail, TOTP checks, proxy credentials) stays broken until the
+right key is provided or an admin enters the secret again.
 
 **Not environment-configurable today** (hardcoded): the metrics-snapshot
-sweep (hourly) and the retention-policy sweep (every 6 hours). The Docker
+sweep (hourly), the retention-policy sweep (every 6 hours) and the upload
+sweep (hourly), which removes expired upload sessions, plus Docker blobs
+that no manifest referenced within 48 hours of their upload. The Docker
 image scanner shells out to a `trivy` binary that must be on `PATH` (the
 shipped Dockerfile installs it; a custom image build needs to install it
 too).
@@ -183,8 +336,84 @@ too).
   type, kept deliberately non-interchangeable with a full session token
 - Per-repository RBAC, enforced on every route — not just hidden in the UI
 - Audit log and security-event log for admin review
+- Request bodies (Docker uploads and manifests, npm publish, dist-tag and
+  unpublish documents) are read only after the repository, role and scope
+  checks pass. Docker blobs are streamed to disk; documents held in memory
+  draw on a shared 1 GiB budget that is charged as the body arrives, and a
+  request that does not fit gets a `503`; a client or user with four bodies
+  already in flight gets a `429`
+- Docker access tokens live 2 minutes (`expires_in` says so); a token that is
+  presented but expired, forged or revoked gets a `401` challenge, so the
+  client fetches a new one. Reading through a Docker group requires a `Read`
+  grant on each member, checked live, like npm
+- Blobs and manifests by digest of **public** repositories are sent
+  `Cache-Control: public, max-age=31536000, immutable` (the content behind a
+  digest never changes); npm tarballs of public repositories get
+  `public, max-age=86400` only, because a cache that keeps a copy outlives the
+  repository turning private, and a day is the compromise. A private
+  repository's content is `private, no-store` and `Vary: Authorization`. A
+  blob cached by a CDN can therefore stay there after a repository turns
+  private: put the registry behind a cache that honours purges, or do not
+  cache `/v2/` at the edge, if that matters
+- Every `/api` response is `Cache-Control: no-store` (unless the handler chose
+  its own, as the public catalog and the branding images do) and
+  `Vary: Authorization`, since what it says depends on the caller. Every
+  response also carries `Permissions-Policy` (camera, microphone, geolocation,
+  payment, USB and other sensors denied) and
+  `Cross-Origin-Opener-Policy: same-origin` (sign-in is a full-page redirect,
+  nothing uses `window.opener`); the app, the static files and the JSON API
+  add `Cross-Origin-Resource-Policy: same-origin`, but the npm and Docker
+  registries and the branding images do not (other clients, proxies and link
+  previews fetch them)
+- The JSON API drops a request whose body stalls for 30 seconds or takes more
+  than 120 seconds in total (`408`); the npm and Docker uploads have their own
+  streaming timeouts. Connection counts and body timeouts at the edge remain
+  the job of the ingress or reverse proxy
+- `npm audit` from the UI is limited to 30 runs per minute per signed-in
+  account, waits at most 10 seconds for one of its 4 outbound slots (`503`
+  after that), and makes one call to npm per package at a time. Its results
+  are cached for 10 minutes, with a separate partition for public
+  repositories, the only ones anonymous visitors can read
+- Proxy repositories send their stored credentials only to the configured
+  remote itself (same scheme, host and port, over `https`); a tarball or a
+  token realm on another host is fetched anonymously (so a Docker Hub proxy
+  with credentials pulls public images anonymously), and a remote that would
+  carry credentials over plain `http` is refused
+- Download counters count one client (an IPv4 address, an IPv6 /64) once per
+  package or image per hour, held in memory and never stored. Behind a
+  reverse proxy, set `TRUSTED_PROXY_IPS` so the client is the forwarded
+  address
+- The audit log keeps security and administrative events for 365 days
+  (`AUDIT_RETENTION_DAYS`, `0` keeps everything, at most 36500); a sweep
+  five minutes after startup and then daily deletes older ones. Package,
+  repository and permission events are never deleted. After an upgrade from a
+  release without per-organization audit scoping, a background job stamps the
+  organization on the older events; until it has finished (logged at startup),
+  an organization admin's audit view does not list them yet. One replica works
+  at a time (a lease it renews after every batch; another takes over five
+  minutes after it stops), it holds a pool connection only while a batch runs,
+  and it does not start with `DB_MAX_CONNECTIONS` below 3 unless
+  `ARTIFERRIS_AUDIT_BACKFILL_FORCE=true`. Every stamped row is rewritten, so on a
+  large history the event table and its indexes grow by roughly half until
+  autovacuum reclaims the space (measured: 2 million events, about 13 minutes) Failed logins are
+  recorded with the name that was typed (cut to 64 characters), so a password
+  pasted into the username field can end up there, readable by super-admins for
+  the retention period. They belong to no organization (only super-admins see
+  them), and an access denial is filed under the organization of the person
+  denied, not of the repository they tried
+- The npm dependency scan and `npm audit` relay send package names and
+  versions to `registry.npmjs.org`; packages this repository publishes itself
+  are never looked up by the scan, and the relay is capped in size. Do not
+  point `npm audit` at ArtiFerris if those names must not leave your network
 - Format-sniffed (magic-byte) validation on uploaded assets (branding
   logo/favicon), never trusting a client-supplied `Content-Type`
+
+Package READMEs are sanitized server-side, but their images may be loaded from
+any `https` host (`img-src 'self' data: blob: https:` in the CSP). On public
+pages every visitor therefore reveals their IP address and User-Agent to
+whichever image host the package author picked. This is an accepted risk; to
+tighten it, restrict `img-src` in `crates/artiferris-api/src/main.rs` (for
+example to `'self' data: blob:`, which blocks remote images).
 
 Found a security issue? Please report it privately rather than opening a
 public issue.
@@ -193,6 +422,36 @@ public issue.
 
 - **`POST /api/auth/login`** — authenticates a user with credentials (username + password); returns an MFA-enrollment response on success.
 - **`POST /api/auth/register`** — self-registers a new account in the public organization (disabled on any other organization's subdomain); returns the same MFA-enrollment response as login.
+
+## Search-engine optimisation (SEO)
+
+The public catalog pages (`/explorer`, `/artiferris-npm`, `/artiferris-docker`, `/@user`, `/o/organization` and their repositories, packages and images) are served with their own `<head>`: title, description, canonical URL, Open Graph, Twitter card and schema.org structured data for packages. Page bodies are still rendered in the browser.
+
+**Indexing is off by default.** A super-admin turns it on in Administration, settings of the public organization ("Référencement"). While off, every page sends `noindex`, `robots.txt` disallows everything and the sitemap is empty. Once on, `/robots.txt` disallows the API, the registries and the app, and `/sitemap.xml` (an index of files of at most 40,000 URLs, cached for 10 minutes) lists the public owners, repositories, packages and images, 500,000 of them at most. Search-result pages (`?q=`) stay `noindex`.
+
+The sitemap is rebuilt by one request at a time; the others get the previous copy meanwhile, which is also kept if a rebuild fails. The indexing setting is read at most every 30 seconds and the last known value is used when the database cannot answer; if there never was one, `robots.txt` and the sitemap answer `503` rather than pretending the catalog is closed. A page head that takes more than 300 ms to build is replaced by the generic one, so the app always loads.
+
+Canonical and sitemap URLs are built from `PUBLIC_URL`, which must be the instance's real public address. A private, unknown or deleted repository gets the same generic `<head>` as any app page, so nothing is revealed.
+
+## API Reference — Package and image details
+
+Downloads are counted as they happen: a `GET` of an npm tarball, or a `GET` of a Docker manifest by tag, served straight from a hosted repository (not `HEAD`, not a request by digest, not a proxy or group repository). A client counts once per package or image per hour. Counters are aggregated in memory and written every 30 seconds and on shutdown, per day, with no data about the user; figures are indicative. Days older than 13 months are pruned.
+
+- **`GET /api/repositories/{id}/packages/npm/{name}`** — versions, dist-tags, `downloads_7d` (downloads over the last 7 days), `readme_html` (the latest version's README, converted and sanitized on the server; `null` when there is none. Only the first 128 KB are read, and a README that nests too deeply or holds too much markup is shown as plain escaped text instead) and `registry_url` (the owner's registry, to use with `npm install`).
+- **`GET /api/repositories/{id}/packages/docker/{image}`** — `downloads_7d`, tags (with `size_bytes`: config plus layers, `null` for a multi-architecture index) and `image_reference` (the reference to pull, without a tag).
+
+Both are limited to 60 requests per minute per IP for anonymous callers (429 beyond that); signed-in callers are not limited here.
+
+## API Reference — Public catalog
+
+No authentication, `Cache-Control: no-store`, limited to 60 requests per minute per IP (429 with `Retry-After` beyond that). The landing lists (a search without `q`) and the entry counts are kept in memory for 30 seconds, so a repository made private can stay listed for that long; its content is still protected by the access checks.
+
+- **`GET /api/public/catalogs`** — one catalog per supported format (`format`, `name`, `label`, `entry_count`).
+- **`GET /api/public/search`** — searches the npm packages and Docker images of public hosted repositories. Parameters: `q` (name, description, keywords or tags; 100 characters max), `format` (`npm` or `docker`), `owner` (`personal:<username>` or `organization:<slug>`), `sort` (`relevance`, `updated` or `popular`), `page` (1 to 100), `per_page` (1 to 50, default 20). Search tolerates typos in names (from 3 characters; `match_kind` is then `fuzzy` and those results come last). Each result also carries `downloads_7d`, the downloads over the last 7 days. Each result names its owner, its source repository and its install location (`registry_url` for npm, `image_reference` for Docker).
+- **`GET /api/search`** — the same search for a signed-in user, over everything they can read: their organization's repositories (proxies included: a proxy only contributes what it has already cached), public repositories and those they hold a grant on. Same parameters, ranking and response shape; each `repository` also carries its `id` and `repo_type` (`hosted` or `proxy`). A super-admin searches everywhere. Needs a token (401 otherwise).
+- **`GET /api/public/suggest`** — name suggestions while typing (`q`: 2 to 100 characters). At most 8 results (`kind`, `name`, repository and owner), best first: exact name, prefix, substring, then approximate. Own budget: 120 requests per minute per IP.
+- **`GET /api/public/owners/{kind}/{slug}`** — public summary of an owner (`kind`: `personal` or `organization`): display name and counts of repositories, packages and images. 404 when they have no public repository, which is also the answer for an unknown owner, so the page can't confirm that an account exists.
+- **`GET /api/repositories/by-org/{slug}/{repo_name}`** — a public repository of an organization (404 otherwise), the counterpart of `by-owner` for personal projects. Like `by-owner` and `GET /api/repositories/{id}`, an anonymous caller gets the repository without `quota_bytes`, `retention_keep_last_n` and `organization_id`; a signed-in caller keeps the full shape.
 
 ## Comparison with alternatives
 
@@ -344,7 +603,7 @@ to build next — in rough priority order.
       the organization
 - [ ] Public, unauthenticated read access for public packages
 - [ ] Rate limiting and abuse prevention for anonymous traffic
-- [ ] Public search and package-discovery pages
+- [x] Public search and package-discovery pages
 - [ ] CDN-backed global artifact distribution
 
 ## License

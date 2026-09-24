@@ -1,4 +1,9 @@
-import { ApplicationConfig, LOCALE_ID, provideZonelessChangeDetection } from '@angular/core'
+import {
+  ApplicationConfig,
+  LOCALE_ID,
+  isDevMode,
+  provideZonelessChangeDetection,
+} from '@angular/core'
 import { provideRouter } from '@angular/router'
 import { provideHttpClient, withInterceptors } from '@angular/common/http'
 import { provideTransloco } from '@jsverse/transloco'
@@ -16,8 +21,10 @@ import { repositoryProviders } from './repositories/infrastructure/repository.pr
 import { adminProviders } from './admin/infrastructure/admin.providers'
 import { meProviders } from './shell/infrastructure/me.providers'
 import { versionProviders } from './shell/infrastructure/version.providers'
+import { readableCatalogProviders } from './shell/infrastructure/readable-catalog.providers'
 import { organizationsProviders } from './admin/infrastructure/organizations.providers'
 import { organizationMembersProviders } from './admin/infrastructure/organization-members.providers'
+import { catalogProviders } from './public/catalog/infrastructure/catalog.providers'
 import { provideArtiferrisIcons } from './shared/register-icons'
 registerLocaleData(localeFr)
 
@@ -38,7 +45,7 @@ export const appConfig: ApplicationConfig = {
         availableLangs: ['fr'],
         defaultLang: 'fr',
         reRenderOnLangChange: true,
-        prodMode: false,
+        prodMode: !isDevMode(),
       },
       loader: TranslocoHttpLoader,
     }),
@@ -51,8 +58,10 @@ export const appConfig: ApplicationConfig = {
     ...organizationsProviders,
     ...organizationMembersProviders,
     ...repositoryProviders,
+    ...catalogProviders,
     ...adminProviders,
     ...meProviders,
     ...versionProviders,
+    ...readableCatalogProviders,
   ],
 }

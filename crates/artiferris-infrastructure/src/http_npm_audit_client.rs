@@ -11,14 +11,26 @@ const ADVISORY_BULK_ENDPOINT: &str = "https://registry.npmjs.org/-/npm/v1/securi
 /// A bulk advisory response is normally well under a MB even for a large dependency tree.
 const MAX_ADVISORY_RESPONSE_BYTES: usize = 20 * 1024 * 1024;
 
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Calls the same bulk advisory endpoint the real `npm audit` CLI uses.
 pub struct HttpNpmAuditClient {
     client: reqwest::Client,
+    endpoint: String,
 }
 
 impl HttpNpmAuditClient {
     pub fn new() -> Self {
-        Self { client: reqwest::Client::new() }
+        Self::with_endpoint(ADVISORY_BULK_ENDPOINT.to_string(), REQUEST_TIMEOUT)
+    }
+
+    fn with_endpoint(endpoint: String, timeout: std::time::Duration) -> Self {
+        let client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .timeout(timeout)
+            .build()
+            .expect("reqwest client config is static and always valid");
+        Self { client, endpoint }
     }
 }
 
@@ -48,7 +60,7 @@ impl NpmAuditPort for HttpNpmAuditClient {
 
         let response = self
             .client
-            .post(ADVISORY_BULK_ENDPOINT)
+            .post(&self.endpoint)
             .json(packages)
             .send()
             .await
@@ -56,7 +68,7 @@ impl NpmAuditPort for HttpNpmAuditClient {
         if !response.status().is_success() {
             return Err(DomainError::Infrastructure(format!("npm advisory database returned {}", response.status())));
         }
-        let bytes = read_capped(response, ADVISORY_BULK_ENDPOINT, "npm advisory response", MAX_ADVISORY_RESPONSE_BYTES).await?;
+        let bytes = read_capped(response, &self.endpoint, "npm advisory response", MAX_ADVISORY_RESPONSE_BYTES).await?;
         serde_json::from_slice(&bytes).map_err(|e| DomainError::Infrastructure(format!("parsing npm advisory response: {e}")))
     }
 }
@@ -116,5 +128,24 @@ mod tests {
         let raw = client.check_bulk_raw(&HashMap::new()).await.unwrap();
 
         assert_eq!(raw, serde_json::json!({}));
+    }
+
+    #[tokio::test]
+    async fn a_hung_advisory_service_does_not_hold_the_request_forever() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/advisories", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let (_socket, _) = listener.accept().await.unwrap();
+            // Accepts the connection and never answers.
+            std::future::pending::<()>().await;
+        });
+        let client = HttpNpmAuditClient::with_endpoint(endpoint, std::time::Duration::from_millis(300));
+        let packages = HashMap::from([("minimist".to_string(), vec!["0.0.8".to_string()])]);
+
+        let started = std::time::Instant::now();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(10), client.check_bulk_raw(&packages)).await;
+
+        assert!(result.expect("the client's own timeout must fire first").is_err());
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
     }
 }

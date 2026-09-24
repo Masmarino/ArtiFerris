@@ -1,26 +1,112 @@
 use axum::http::StatusCode;
 use artiferris_domain::audit::SecurityEvent;
-use artiferris_domain::permission::{Role, organization_admin_bypass_role};
+use artiferris_domain::package_repository::PackageRepositorySummary;
+use artiferris_domain::permission::{Role, organization_admin_bypass_role, public_repository_read_bypass};
 use uuid::Uuid;
 
 use crate::auth_middleware::AuthUser;
 use crate::state::AppState;
 
-/// The caller's effective role on a repository: `Admin` for a super-admin or that org's own admin, otherwise whatever was explicitly granted. Single source of truth — every authz
-/// check and every `my_role` response must go through this, not a separate lookup.
-pub async fn effective_repository_role(state: &AppState, user: &AuthUser, repository_id: Uuid) -> Result<Option<Role>, StatusCode> {
+impl artiferris_application::authz_primitives::OrganizationScoped for AuthUser {
+    fn is_super_admin(&self) -> bool {
+        self.is_super_admin
+    }
+    fn organization_id(&self) -> Uuid {
+        self.organization_id
+    }
+}
+
+/// Shared by `effective_repository_role` and `management_repository_role`: super-admin shortcut,
+/// repo fetch, org-admin bypass, and the live explicit-grant lookup. `effective_repository_role`
+/// additionally merges in the public-organization bypass on top of this; `management_repository_role`
+/// does not (#75 — "public" only ever unlocks reading package content, not the permission roster).
+async fn base_repository_role(state: &AppState, user: &AuthUser, repository_id: Uuid) -> Result<(Option<PackageRepositorySummary>, Option<Role>), StatusCode> {
     if user.is_super_admin {
-        return Ok(Some(Role::Admin));
+        return Ok((None, Some(Role::Admin)));
     }
 
-    if user.is_organization_admin {
-        let repo = state.repositories.find_by_id(repository_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        if let Some(role) = repo.and_then(|r| organization_admin_bypass_role(user.is_organization_admin, user.organization_id, r.organization_id)) {
-            return Ok(Some(role));
+    let repo = state.repositories.find_by_id(repository_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let organization_admin_role =
+        repo.as_ref().filter(|_| user.is_organization_admin).and_then(|r| organization_admin_bypass_role(user.is_organization_admin, user.organization_id, r.organization_id));
+    if let Some(role) = organization_admin_role {
+        return Ok((repo, Some(role)));
+    }
+
+    let explicit_role = state.permissions.find_role(user.id, repository_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((repo, explicit_role))
+}
+
+/// The caller's effective role on a repository: `Admin` for a super-admin or that org's own admin,
+/// `Read` for anyone (any organization, including an anonymous caller elsewhere in the stack) on
+/// a public repository, otherwise whatever was explicitly granted. Single source of truth —
+/// every authz check and every `my_role` response must go through this, not a separate lookup.
+pub async fn effective_repository_role(state: &AppState, user: &AuthUser, repository_id: Uuid) -> Result<Option<Role>, StatusCode> {
+    Ok(repository_roles(state, user, repository_id).await?.effective)
+}
+
+/// The effective role plus the part of it that does not come from the repository being public.
+pub struct RepositoryRoles {
+    pub effective: Option<Role>,
+    /// Super-admin, organization admin or an explicit grant; `None` for a caller who only has the implicit public `Read`.
+    pub explicit: Option<Role>,
+}
+
+pub async fn repository_roles(state: &AppState, user: &AuthUser, repository_id: Uuid) -> Result<RepositoryRoles, StatusCode> {
+    let (repo, explicit) = base_repository_role(state, user, repository_id).await?;
+    if user.is_super_admin {
+        return Ok(RepositoryRoles { effective: explicit, explicit });
+    }
+
+    // Unlike the org-admin bypass (always Admin, the ceiling), this one is only ever Read — it
+    // must not shadow a higher explicit grant, so take whichever of the two is stronger rather
+    // than returning early.
+    let public_role = repo.as_ref().and_then(|r| public_repository_read_bypass(r.is_public));
+    let effective = match (explicit, public_role) {
+        (Some(explicit), Some(public)) => Some(if explicit.satisfies(public) { explicit } else { public }),
+        (Some(explicit), None) => Some(explicit),
+        (None, public) => public,
+    };
+    Ok(RepositoryRoles { effective, explicit })
+}
+
+/// Like `effective_repository_role`, but never grants access via the public-organization bypass —
+/// `Admin`/org-admin/explicit-grant paths only. "Public" was only ever meant to unlock reading
+/// package content, not who has access to a repository (#75): a member of the default
+/// public-by-default organization must not be able to enumerate a repository's permission roster
+/// just because that repository happens to be `is_public`, even one owned by their own org.
+async fn management_repository_role(state: &AppState, user: &AuthUser, repository_id: Uuid) -> Result<Option<Role>, StatusCode> {
+    let (_repo, role) = base_repository_role(state, user, repository_id).await?;
+    Ok(role)
+}
+
+/// The `list_permissions` counterpart of `require_repository_access`/`require_repository_role`,
+/// built on `management_repository_role` instead of `effective_repository_role` throughout — so a
+/// public-organization member with no explicit grant is rejected the same way on a public
+/// repository as on a private one (#75).
+pub async fn require_management_access(
+    state: &AppState,
+    user: &AuthUser,
+    repository_organization_id: Uuid,
+    repository_id: Uuid,
+    minimum_role: Role,
+    action: &str,
+) -> Result<(), StatusCode> {
+    if require_same_organization(user, repository_organization_id).is_err() {
+        let organization = state.organizations.find_by_id(repository_organization_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let personal_grant_satisfies = organization.is_some_and(|org| org.is_personal)
+            && management_repository_role(state, user, repository_id).await?.is_some_and(|role| role.satisfies(minimum_role));
+        if !personal_grant_satisfies {
+            return Err(StatusCode::NOT_FOUND);
         }
     }
-
-    state.permissions.find_role(user.id, repository_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+    match management_repository_role(state, user, repository_id).await? {
+        Some(role) if role.satisfies(minimum_role) => Ok(()),
+        _ => {
+            crate::state::record_security_event(state, SecurityEvent::AccessDenied { user_id: user.id, repository_id, action: action.to_string() }, Some(user.id)).await;
+            Err(StatusCode::FORBIDDEN)
+        }
+    }
 }
 
 pub async fn require_repository_role(
@@ -35,10 +121,7 @@ pub async fn require_repository_role(
     match role {
         Some(role) if role.satisfies(minimum_role) => Ok(()),
         _ => {
-            let _ = state
-                .record_security_event
-                .execute(SecurityEvent::AccessDenied { user_id: user.id, repository_id, action: action.to_string() }, Some(user.id))
-                .await;
+            crate::state::record_security_event(state, SecurityEvent::AccessDenied { user_id: user.id, repository_id, action: action.to_string() }, Some(user.id)).await;
             Err(StatusCode::FORBIDDEN)
         }
     }
@@ -53,11 +136,11 @@ pub fn require_super_admin(user: &AuthUser) -> Result<(), StatusCode> {
 }
 
 pub fn require_same_organization(user: &AuthUser, organization_id: Uuid) -> Result<(), StatusCode> {
-    if user.is_super_admin || user.organization_id == organization_id {
-        Ok(())
-    } else {
-        Err(StatusCode::NOT_FOUND)
-    }
+    artiferris_application::authz_primitives::require_same_organization(user, organization_id).map_err(|e| match e {
+        artiferris_application::authz_primitives::RepositoryAccessError::NotFound => StatusCode::NOT_FOUND,
+        artiferris_application::authz_primitives::RepositoryAccessError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
+        artiferris_application::authz_primitives::RepositoryAccessError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+    })
 }
 
 /// Super-admin, or that organization's own admin — the authorization shape shared by every "an organization configures its own X" route (branding, identity provider config).
@@ -75,10 +158,48 @@ pub fn require_organization_admin(user: &AuthUser, organization_id: Uuid) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
+    use artiferris_domain::package_repository::{RepositoryFormat, RepositoryType};
     use chrono::Utc;
 
     fn user(is_super_admin: bool, is_organization_admin: bool, organization_id: Uuid) -> AuthUser {
         AuthUser { id: Uuid::new_v4(), username: "test".to_string(), is_super_admin, is_organization_admin, organization_id, created_at: Utc::now() }
+    }
+
+    fn test_config() -> Config {
+        Config {
+            database_url: String::new(),
+            jwt_secret: "test-secret".to_string(),
+            secrets_encryption_key: "test-secrets-encryption-key".to_string(),
+            storage_root: std::env::temp_dir().to_string_lossy().to_string(),
+            bind_addr: "0.0.0.0:0".to_string(),
+            cors_allowed_origin: None,
+            docker_token_realm_override: None,
+            public_url: "http://localhost:4200".to_string(),
+            db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
+            artiferris_base_domain: "artiferris.localhost".to_string(),
+            trusted_proxy_ips: std::collections::HashSet::new(),
+            audit_retention_days: None,
+        }
+    }
+
+    /// A caller from an organization other than the repository's own (and other than
+    /// `PUBLIC_ORGANIZATION_ID`) must still get implicit `Read` on a public repository —
+    /// `effective_repository_role` must agree with what npm/Docker's data-plane reads already
+    /// enforce (B-43).
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn effective_repository_role_grants_read_on_a_public_repo_to_a_caller_from_any_organization(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let owner_id = state.create_organization.execute("widgets-inc", "Widgets Inc").await.unwrap();
+        let owner_admin_id = state.create_user.execute(owner_id, "widgets-admin", "sup3r-s3cret!", false).await.unwrap();
+        let repo_id = state.create_repository.execute(owner_id, "backend", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, owner_admin_id).await.unwrap();
+        state.set_repository_visibility.execute(repo_id, true, owner_admin_id).await.unwrap();
+
+        let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
+        let caller = user(false, false, acme_id);
+
+        let role = effective_repository_role(&state, &caller, repo_id).await.unwrap();
+        assert_eq!(role, Some(Role::Read), "a caller from ANY organization must get Read on a public repository, not just the public organization's own members");
     }
 
     #[test]

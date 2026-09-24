@@ -4,6 +4,10 @@ metadata:
   name: {{ .Release.Name }}-postgres-data
   labels:
     {{- include "artiferris.labels" . | nindent 4 }}
+  {{- if .Values.persistence.keepOnUninstall }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
 spec:
   accessModes: ["ReadWriteOnce"]
   {{- if .Values.postgres.storage.storageClassName }}
@@ -33,9 +37,14 @@ spec:
         {{- include "artiferris.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: postgres
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.postgres.podSecurityContext | nindent 8 }}
       containers:
         - name: postgres
           image: {{ .Values.postgres.image }}
+          securityContext:
+            {{- toYaml .Values.postgres.securityContext | nindent 12 }}
           env:
             - name: POSTGRES_USER
               value: artiferris
@@ -51,6 +60,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "artiferris"]
@@ -63,6 +76,10 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-postgres-data
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

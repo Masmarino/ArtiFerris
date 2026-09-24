@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO totp_credentials (user_id, encrypted_secret, secret_nonce, confirmed, last_used_step, created_at) VALUES ($1, $2, $3, false, NULL, $4) ON CONFLICT (user_id) DO UPDATE SET encrypted_secret = EXCLUDED.encrypted_secret, secret_nonce = EXCLUDED.secret_nonce, confirmed = false, last_used_step = NULL, created_at = EXCLUDED.created_at WHERE NOT totp_credentials.confirmed",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "468a16c74adf8006e4868ab57b099d32fe55abc0d347fdc043da7b0ee492e636"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (EXISTS (SELECT 1 FROM docker_tags t WHERE t.manifest_id = $1) OR EXISTS ( SELECT 1 FROM docker_manifest_list_members lm JOIN docker_manifests l ON l.id = lm.list_manifest_id WHERE l.package_repository_id = $2 AND l.image_name = $3 AND lm.member_digest = $4 )) AS \"referenced!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "referenced!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "bf5078106e3bbd6891e3d84a52f68de84a0a2e3379b579d9fd7428626b8329ea"
+}

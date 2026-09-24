@@ -20,6 +20,7 @@ import { UserSummary } from '../domain/user.entity'
 import { formatSelectedCount } from '../../shared/format'
 import { MeService } from '../../shell/application/me.service'
 import { ToastService } from '../../shared/toast.service'
+import { ConfirmService } from '../../shared/confirm.service'
 
 @Component({
   selector: 'app-user-detail',
@@ -33,6 +34,7 @@ export class UserDetail {
   private readonly router = inject(Router)
   private readonly usersService = inject(UsersService)
   private readonly toastService = inject(ToastService)
+  private readonly confirmService = inject(ConfirmService)
   private readonly permissionsService = inject(PermissionsService)
   private readonly repositoriesService = inject(RepositoriesService)
   private readonly pageTitle = inject(PageTitleService)
@@ -63,6 +65,7 @@ export class UserDetail {
     effect(() => this.pageTitle.title.set(this.username()))
     effect(() => {
       this.userId = this.routeUserId()
+      this.resetForNewUser()
       this.reload()
       this.repositoriesService
         .list()
@@ -90,6 +93,17 @@ export class UserDetail {
   ]
   readonly permissionRowId = (p: UserPermissionEntry): string => p.repository_id
 
+  // Reused across users: drop the previous one's data.
+  private resetForNewUser(): void {
+    this.user.set(null)
+    this.permissions.set([])
+    this.editingPermission.set(null)
+    this.grantRepositoryIds.set([])
+    this.savingRole.set(false)
+    this.settingSuperAdmin.set(false)
+    this.resendingInvitation.set(false)
+  }
+
   private reload(): void {
     const requestedId = this.userId
     this.loadError.set(false)
@@ -108,10 +122,17 @@ export class UserDetail {
           this.user.set(user)
         }
       })
-    this.permissionsService.listForUser(requestedId).subscribe((permissions) => {
-      if (requestedId === this.userId) {
-        this.permissions.set(permissions)
-      }
+    this.permissionsService.listForUser(requestedId).subscribe({
+      next: (permissions) => {
+        if (requestedId === this.userId) {
+          this.permissions.set(permissions)
+        }
+      },
+      error: () => {
+        if (requestedId === this.userId) {
+          this.loadError.set(true)
+        }
+      },
     })
   }
 
@@ -131,15 +152,21 @@ export class UserDetail {
       return
     }
     this.savingRole.set(true)
-    this.permissionsService.grant(entry.repository_id, this.userId, role).subscribe({
+    const userId = this.userId
+    this.permissionsService.grant(entry.repository_id, userId, role).subscribe({
       next: () => {
+        this.toastService.success("Droit d'accès mis à jour.")
+        if (userId !== this.userId) {
+          return
+        }
         this.savingRole.set(false)
         this.editingPermission.set(null)
         this.reload()
-        this.toastService.success("Droit d'accès mis à jour.")
       },
       error: () => {
-        this.savingRole.set(false)
+        if (userId === this.userId) {
+          this.savingRole.set(false)
+        }
         this.toastService.error("Échec de la mise à jour du droit d'accès.")
       },
     })
@@ -151,15 +178,21 @@ export class UserDetail {
       return
     }
     this.savingRole.set(true)
-    this.permissionsService.revoke(entry.repository_id, this.userId).subscribe({
+    const userId = this.userId
+    this.permissionsService.revoke(entry.repository_id, userId).subscribe({
       next: () => {
+        this.toastService.success("Droit d'accès révoqué.")
+        if (userId !== this.userId) {
+          return
+        }
         this.savingRole.set(false)
         this.editingPermission.set(null)
         this.reload()
-        this.toastService.success("Droit d'accès révoqué.")
       },
       error: () => {
-        this.savingRole.set(false)
+        if (userId === this.userId) {
+          this.savingRole.set(false)
+        }
         this.toastService.error("Échec de la révocation du droit d'accès.")
       },
     })
@@ -171,23 +204,26 @@ export class UserDetail {
       return
     }
     const role = this.grantRole()
-    forkJoin(
-      repositoryIds.map((id) => this.permissionsService.grant(id, this.userId, role)),
-    ).subscribe({
+    const userId = this.userId
+    forkJoin(repositoryIds.map((id) => this.permissionsService.grant(id, userId, role))).subscribe({
       next: () => {
-        this.grantRepositoryIds.set([])
-        this.reload()
         this.toastService.success("Droit d'accès accordé.")
+        if (userId === this.userId) {
+          this.grantRepositoryIds.set([])
+          this.reload()
+        }
       },
       error: () => {
         // forkJoin only surfaces the first failure, but earlier grants in the batch may have landed
         this.toastService.error("Échec de l'attribution sur au moins un dépôt.")
-        this.reload()
+        if (userId === this.userId) {
+          this.reload()
+        }
       },
     })
   }
 
-  setSuperAdmin(): void {
+  async setSuperAdmin(): Promise<void> {
     const user = this.user()
     if (!user || this.settingSuperAdmin()) {
       return
@@ -196,7 +232,15 @@ export class UserDetail {
     const message = next
       ? `Promouvoir "${user.username}" au rang de super-administrateur ?`
       : `Retirer le rang de super-administrateur à "${user.username}" ?`
-    if (!confirm(message)) {
+    const confirmed = await this.confirmService.ask({
+      heading: next
+        ? 'Promouvoir en super-administrateur'
+        : 'Retirer le rang de super-administrateur',
+      message,
+      confirmLabel: next ? 'Promouvoir' : 'Retirer',
+      danger: !next,
+    })
+    if (!confirmed) {
       return
     }
     this.settingSuperAdmin.set(true)
@@ -241,9 +285,19 @@ export class UserDetail {
     })
   }
 
-  deleteUser(): void {
+  async deleteUser(): Promise<void> {
     const user = this.user()
-    if (!user || !confirm(`Supprimer l'utilisateur "${user.username}" ?`)) {
+    if (!user) {
+      return
+    }
+    const confirmed = await this.confirmService.ask({
+      heading: "Supprimer l'utilisateur",
+      message: `Supprimer l'utilisateur "${user.username}" ?`,
+      confirmLabel: 'Supprimer',
+      danger: true,
+      typeToConfirm: user.username,
+    })
+    if (!confirmed) {
       return
     }
     this.usersService.delete(user.id).subscribe({

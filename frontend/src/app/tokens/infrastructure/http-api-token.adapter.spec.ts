@@ -44,6 +44,28 @@ describe('HttpApiTokenAdapter', () => {
     httpMock.verify()
   })
 
+  it('sends the current password only when there is one, for a long-lived token', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.create('laptop', 's3cret!').subscribe()
+
+    const req = httpMock.expectOne('/api/tokens')
+    expect(req.request.body).toEqual({ label: 'laptop', current_password: 's3cret!' })
+    req.flush({ id: '1', token: 'hgr_secret' })
+    httpMock.verify()
+  })
+
+  it('leaves current_password out for an empty password', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.create('laptop', '').subscribe()
+
+    const req = httpMock.expectOne('/api/tokens')
+    expect(req.request.body).toEqual({ label: 'laptop' })
+    req.flush({ id: '1', token: 'hgr_secret' })
+    httpMock.verify()
+  })
+
   it('revokes a token', () => {
     const { adapter, httpMock } = setup()
 

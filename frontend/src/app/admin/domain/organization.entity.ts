@@ -1,3 +1,5 @@
+export const PUBLIC_ORGANIZATION_ID = '00000000-0000-0000-0000-000000000001'
+
 export interface OrganizationSummary {
   id: string
   slug: string
@@ -24,6 +26,9 @@ export interface OidcIdentityProvider {
 
 export interface NoIdentityProvider {
   type: null
+  /** The stored secret can no longer be decrypted by this server: the provider must be configured again. */
+  secret_unreadable?: boolean
+  error?: string
 }
 
 export type IdentityProviderSummary =

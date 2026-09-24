@@ -50,8 +50,11 @@ const REPOSITORIES: RepositorySummary[] = [
     group_members: [],
     quota_bytes: null,
     retention_keep_last_n: null,
+    is_public: false,
     my_role: 'admin',
     organization_id: 'org-acme',
+    owner_name: 'Acme Corp',
+    owner_is_personal: false,
   },
   {
     id: 'r2',
@@ -63,8 +66,11 @@ const REPOSITORIES: RepositorySummary[] = [
     group_members: [],
     quota_bytes: null,
     retention_keep_last_n: null,
+    is_public: false,
     my_role: 'admin',
     organization_id: 'org-acme',
+    owner_name: 'Acme Corp',
+    owner_is_personal: false,
   },
 ]
 
@@ -139,6 +145,22 @@ export const PendingInvitation: Story = {
       ],
     }),
   ],
+}
+
+/** No access rights granted yet: the table shows its specific empty message. */
+export const NoPermissions: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        { provide: PermissionsService, useValue: fakePermissions({ listForUser: () => of([]) }) },
+      ],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    expect(
+      await within(canvasElement).findByText("Aucun droit d'accès accordé"),
+    ).toBeInTheDocument()
+  },
 }
 
 export const OpeningTheRoleEditor: Story = {

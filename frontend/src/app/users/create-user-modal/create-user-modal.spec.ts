@@ -135,4 +135,37 @@ describe('CreateUserModal', () => {
       message: 'ce nom d’utilisateur est déjà pris',
     })
   })
+
+  it('shows a French message, not the server text, when the server fails with a 500', () => {
+    const fixture = TestBed.createComponent(CreateUserModal)
+    fixture.detectChanges()
+
+    fixture.componentInstance.form.patchValue({ username: 'florian', email: 'florian@example.com' })
+    fixture.componentInstance.submit()
+
+    httpMock
+      .expectOne('/api/users')
+      .flush({ error: 'database is down' }, { status: 500, statusText: 'Server Error' })
+
+    expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
+      variant: 'error',
+      message: "Échec de la création de l'utilisateur.",
+    })
+  })
+
+  it('does not print [object Object] when the server sends a non-string error', () => {
+    const fixture = TestBed.createComponent(CreateUserModal)
+    fixture.detectChanges()
+
+    fixture.componentInstance.form.patchValue({ username: 'florian', email: 'florian@example.com' })
+    fixture.componentInstance.submit()
+
+    httpMock
+      .expectOne('/api/users')
+      .flush({ error: { code: 1 } }, { status: 400, statusText: 'Bad Request' })
+
+    expect(TestBed.inject(ToastService).toasts().at(-1)?.message).toBe(
+      "Échec de la création de l'utilisateur.",
+    )
+  })
 })

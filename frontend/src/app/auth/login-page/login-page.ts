@@ -6,12 +6,24 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms'
-import { Router, RouterLink } from '@angular/router'
+import { ActivatedRoute, Router, RouterLink } from '@angular/router'
 import { firstValueFrom } from 'rxjs'
 import { Alert, Button, Divider, GbtInput } from '@masmarino/gabarit'
 import { AuthService } from '../application/auth.service'
+import { safeReturnUrl } from '../domain/return-url'
+import {
+  SESSIONS_ENDED_MESSAGE,
+  SESSIONS_ENDED_QUERY_PARAM,
+  SESSIONS_ENDED_REASON,
+} from '../domain/sessions-ended'
 import { getPasskeyAssertion, passkeysSupported } from '../../shared/webauthn-browser'
 import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
+import { overloadMessage } from '../../shared/api-error'
+
+const LOGIN_OVERLOAD = {
+  busy: 'Service momentanément occupé, réessayez',
+  tooManyRequests: 'Trop de tentatives, réessayez plus tard.',
+}
 
 @Component({
   selector: 'app-login-page',
@@ -33,6 +45,12 @@ import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
 export class LoginPage implements OnInit {
   private readonly auth = inject(AuthService)
   private readonly router = inject(Router)
+  private readonly queryParams = inject(ActivatedRoute).snapshot.queryParamMap
+  private readonly returnUrl = safeReturnUrl(this.queryParams.get('returnUrl'))
+  readonly sessionsEndedMessage =
+    this.queryParams.get(SESSIONS_ENDED_QUERY_PARAM) === SESSIONS_ENDED_REASON
+      ? SESSIONS_ENDED_MESSAGE
+      : null
 
   readonly form = new FormGroup({
     username: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -45,16 +63,22 @@ export class LoginPage implements OnInit {
   // Defaults to visible on a failed/pending check — never hide a legitimate way to sign up
   // just because this one best-effort request didn't come back in time.
   readonly registrationEnabled = signal(true)
+  readonly ssoLinkInvalid = signal(false)
 
   ngOnInit(): void {
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
     const token = hashParams.get('token')
-    if (token) {
-      this.auth.completeExternalLogin(token)
+    if (token !== null) {
       // Clear the fragment so the token never lingers in browser history/bookmarks.
       history.replaceState(null, '', window.location.pathname + window.location.search)
-      this.router.navigateByUrl('/')
-      return
+      const completed = token ? this.auth.completeExternalLogin(token) : null
+      if (completed) {
+        this.navigateAfterLogin(completed.returnUrl)
+        return
+      }
+      this.ssoLinkInvalid.set(true)
+    } else {
+      this.auth.abandonSsoLogin()
     }
 
     this.auth.getSsoConfig().subscribe({
@@ -65,6 +89,10 @@ export class LoginPage implements OnInit {
       // Local login is always a safe fallback — never block the form on this check failing.
       error: () => this.ssoType.set(null),
     })
+  }
+
+  startSso(): void {
+    this.auth.beginSsoLogin(this.returnUrl)
   }
 
   // null until a login response requires a second factor — the template swaps to the MFA
@@ -101,12 +129,12 @@ export class LoginPage implements OnInit {
           this.mfaHasTotp.set(!!outcome.mfaHasTotp)
           this.mfaHasPasskey.set(!!outcome.mfaHasPasskey)
         } else {
-          this.router.navigateByUrl('/')
+          this.navigateAfterLogin()
         }
       },
-      error: () => {
+      error: (error: unknown) => {
         this.submitting.set(false)
-        this.errorMessage.set('Identifiants invalides')
+        this.errorMessage.set(overloadMessage(error, LOGIN_OVERLOAD) ?? 'Identifiants invalides')
       },
     })
   }
@@ -129,7 +157,7 @@ export class LoginPage implements OnInit {
       ? this.auth.verifyMfa(mfaToken, undefined, code)
       : this.auth.verifyMfa(mfaToken, code, undefined)
     verify.subscribe({
-      next: () => this.router.navigateByUrl('/'),
+      next: () => this.navigateAfterLogin(),
       error: () => {
         this.submitting.set(false)
         this.errorMessage.set(this.useBackupCode() ? 'Code de secours invalide.' : 'Code invalide.')
@@ -148,7 +176,7 @@ export class LoginPage implements OnInit {
       const start = await firstValueFrom(this.auth.startMfaPasskey(mfaToken))
       const credential = await getPasskeyAssertion(start.public_key)
       await firstValueFrom(this.auth.finishMfaPasskey(mfaToken, start.challenge_id, credential))
-      this.router.navigateByUrl('/')
+      this.navigateAfterLogin()
     } catch {
       this.submitting.set(false)
       this.errorMessage.set("Échec de l'authentification par clé d'accès.")
@@ -156,6 +184,10 @@ export class LoginPage implements OnInit {
   }
 
   onEnrollmentCompleted(): void {
-    this.router.navigateByUrl('/')
+    this.navigateAfterLogin()
+  }
+
+  private navigateAfterLogin(returnUrl: string | null = this.returnUrl): void {
+    void this.router.navigateByUrl(returnUrl ?? '/')
   }
 }

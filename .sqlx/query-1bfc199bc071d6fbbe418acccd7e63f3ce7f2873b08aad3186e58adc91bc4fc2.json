@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO domain_events (aggregate_type, aggregate_id, event_type, payload, version, actor_id, organization_id) VALUES ('Security', $1, $2, $3, 1, $4, COALESCE($5, (SELECT organization_id FROM users WHERE id = $4)))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Jsonb",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1bfc199bc071d6fbbe418acccd7e63f3ce7f2873b08aad3186e58adc91bc4fc2"
+}

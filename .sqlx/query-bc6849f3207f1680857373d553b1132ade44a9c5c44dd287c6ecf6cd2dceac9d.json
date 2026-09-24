@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_manifests SET untagged_since = now() - interval '8 days' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bc6849f3207f1680857373d553b1132ade44a9c5c44dd287c6ecf6cd2dceac9d"
+}

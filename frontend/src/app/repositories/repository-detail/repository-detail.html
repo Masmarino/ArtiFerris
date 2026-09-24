@@ -34,6 +34,10 @@
         <gbt-card heading="Utilisation" icon="terminal">
           <app-usage-instructions [repository]="repo" />
         </gbt-card>
+
+        <gbt-card heading="Partage" icon="share-2">
+          <app-share-repository-link [repository]="repo" [canManageVisibility]="isAdmin()" />
+        </gbt-card>
       </gbt-tab>
 
       <gbt-tab label="Packages">
@@ -46,12 +50,20 @@
         <gbt-tab label="Dépôts membres">
           <gbt-card>
             @if (repo.group_members.length === 0) {
-              <p>Aucun dépôt membre pour l'instant.</p>
+              <gbt-empty-state
+                illustration="merge"
+                heading="Aucun dépôt membre"
+                [message]="
+                  isAdmin()
+                    ? 'Ajoutez des dépôts membres pour les regrouper derrière ce dépôt.'
+                    : 'Ce groupe ne contient aucun dépôt pour le moment.'
+                "
+              />
             } @else if (isAdmin()) {
               <p>Cliquer sur une ligne pour retirer le dépôt membre du groupe.</p>
               <gbt-table
                 caption="Dépôts membres du groupe"
-                emptyMessage="Aucune donnée disponible"
+                emptyMessage="Aucun dépôt membre"
                 [clickableRows]="true"
                 [data]="groupMemberRows()"
                 [columns]="memberColumns"
@@ -61,7 +73,7 @@
             } @else {
               <gbt-table
                 caption="Dépôts membres du groupe"
-                emptyMessage="Aucune donnée disponible"
+                emptyMessage="Aucun dépôt membre"
                 [data]="groupMemberRows()"
                 [columns]="memberColumns"
                 [trackBy]="memberRowId"
@@ -88,12 +100,16 @@
         <gbt-tab label="Droits d'accès">
           <gbt-card>
             @if (permissions().length === 0) {
-              <p>Personne n'a de droit spécifique sur ce dépôt pour l'instant.</p>
+              <gbt-empty-state
+                illustration="star"
+                heading="Aucun droit spécifique"
+                message="Accordez un rôle à un utilisateur avec le formulaire ci-dessous."
+              />
             } @else {
               <p>Cliquer sur une ligne pour modifier ou révoquer un droit.</p>
               <gbt-table
                 caption="Droits d'accès sur ce dépôt"
-                emptyMessage="Aucune donnée disponible"
+                emptyMessage="Aucun droit"
                 [clickableRows]="true"
                 [data]="permissions()"
                 [columns]="permissionColumns"
@@ -117,7 +133,7 @@
               />
               <gbt-select
                 class="mb-0"
-                style="max-width: 300px;"
+                style="max-width: 300px"
                 label="Rôle"
                 placeholder="Sélectionner…"
                 size="sm"
@@ -149,10 +165,35 @@
         </gbt-tab>
 
         <gbt-tab label="Paramètres">
+          @if (canChangeVisibility()) {
+            <gbt-card heading="Visibilité" icon="globe">
+              <p>
+                Actuellement :
+                <strong>{{ repo.is_public ? 'public' : 'privé' }}</strong>
+              </p>
+              <p class="repository-detail__hint">
+                {{
+                  repo.is_public
+                    ? 'Tout le monde peut consulter et télécharger le contenu de ce dépôt, sans authentification. Publier reste réservé aux utilisateurs autorisés.'
+                    : 'Seuls les utilisateurs autorisés peuvent accéder à ce dépôt.'
+                }}
+              </p>
+              <gbt-button
+                [text]="repo.is_public ? 'Rendre privé' : 'Rendre public'"
+                [variant]="repo.is_public ? 'secondary' : 'primary'"
+                [loading]="changingVisibility()"
+                (clicked)="changeVisibility()"
+                loadingLabel="Chargement en cours"
+              />
+            </gbt-card>
+          }
+
           <gbt-card heading="Quota de stockage" icon="hard-drive">
             <p>
               Actuel :
-              {{ repo.quota_bytes === null ? 'illimité' : (repo.quota_bytes | formatBytes) }}
+              {{
+                (repo.quota_bytes ?? null) === null ? 'illimité' : (repo.quota_bytes | formatBytes)
+              }}
             </p>
             <div class="d-flex align-items-end gap-4">
               <gbt-input
@@ -178,7 +219,7 @@
             <p>
               Actuel :
               {{
-                repo.retention_keep_last_n === null
+                (repo.retention_keep_last_n ?? null) === null
                   ? 'désactivée'
                   : 'conserver les ' + repo.retention_keep_last_n + ' dernières versions/étiquettes'
               }}

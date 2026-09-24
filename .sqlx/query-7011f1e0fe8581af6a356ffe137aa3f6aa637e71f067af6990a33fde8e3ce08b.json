@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM docker_blobs WHERE digest = $1 AND reference_count <= 0 AND NOT EXISTS (SELECT 1 FROM docker_repository_blobs WHERE blob_digest = $1) RETURNING storage_key",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "storage_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_blobs",
+            "name": "storage_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7011f1e0fe8581af6a356ffe137aa3f6aa637e71f067af6990a33fde8e3ce08b"
+}

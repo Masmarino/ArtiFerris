@@ -1,3 +1,6 @@
+@if (loadFailed()) {
+  <p class="gbt-form-error container" role="alert">Échec du chargement des statistiques.</p>
+}
 @if (stats(); as s) {
   <section class="stats-grid container">
     <gbt-card heading="Utilisateurs" icon="users">

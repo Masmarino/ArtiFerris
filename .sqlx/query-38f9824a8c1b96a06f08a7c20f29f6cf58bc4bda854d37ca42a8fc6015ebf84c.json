@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET email_verified = true WHERE id = $1 AND email IS NOT NULL AND NOT email_verified AND NOT EXISTS (SELECT 1 FROM users other WHERE other.organization_id = users.organization_id AND other.id <> users.id AND other.email_verified AND lower(other.email) = lower(users.email))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "38f9824a8c1b96a06f08a7c20f29f6cf58bc4bda854d37ca42a8fc6015ebf84c"
+}

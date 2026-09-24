@@ -1,0 +1,4 @@
+<gbt-modal [isOpen]="true" [heading]="heading()" closeLabel="Fermer" (closed)="cancelled.emit()">
+  <p>{{ message() }}</p>
+  <gbt-button [text]="confirmLabel()" [loading]="confirming()" loadingLabel="Chargement en cours" (clicked)="confirmed.emit()" />
+</gbt-modal>

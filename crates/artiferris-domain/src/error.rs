@@ -7,12 +7,16 @@ pub enum DomainError {
     InvalidUsername(String),
     #[error("email already in use")]
     EmailTaken,
+    #[error("username already in use")]
+    UsernameTaken,
     #[error("password must be at least 8 characters")]
     PasswordTooShort,
     #[error("invalid repository name: {0}")]
     InvalidRepositoryName(String),
     #[error("invalid organization slug: {0}")]
     InvalidOrganizationSlug(String),
+    #[error("names starting with \"artiferris-\" are reserved: {0}")]
+    ReservedName(String),
     #[error("invalid remote url: {0}")]
     InvalidRemoteUrl(String),
     #[error("operation not valid for repository type {0:?}")]
@@ -33,10 +37,57 @@ pub enum DomainError {
     AlreadyDeleted,
     #[error("infrastructure failure: {0}")]
     Infrastructure(String),
+    /// A stored secret that this server's keys cannot open (rotated or wrong `SECRETS_ENCRYPTION_KEY`, corrupted value).
+    #[error("stored secret cannot be read: {0}")]
+    SecretUnreadable(String),
+    /// Nothing is broken: the work was refused or cut short to protect the service, and asking again shortly may work.
+    #[error("temporarily busy: {0}")]
+    Busy(String),
     #[error("chunk offset mismatch: expected {expected}, got {got}")]
     ChunkOffsetMismatch { expected: i64, got: i64 },
     #[error("validation error: {0}")]
     Validation(String),
+    #[error("upload session not found")]
+    UploadSessionNotFound,
+    /// The session was sealed, or changed while a chunk was being written.
+    #[error("upload session cannot take a chunk right now")]
+    UploadInProgress,
+    #[error("upload exceeds the allowed size")]
+    UploadTooLarge,
+    #[error("digest mismatch: expected {expected}, computed {computed}")]
+    DigestMismatch { expected: String, computed: String },
+    /// The client stopped sending, or sent too slowly.
+    #[error("the request body took too long to arrive")]
+    RequestTimeout,
+    #[error("too many uploads are open for this repository")]
+    TooManyUploads,
+    #[error("this repository holds as many tags as it may")]
+    TooManyTags,
+    /// A manifest-referenced blob digest is not reachable from the pushing repository — re-verified
+    /// transactionally at manifest-insert time, not just at the use case's pre-check (B-18).
+    #[error("blob not reachable: {0}")]
+    DockerBlobNotReachable(String),
+    /// The repository's storage quota would be exceeded — re-verified transactionally at
+    /// manifest-insert time so two concurrent pushes can't both read "under quota" (B-18).
+    #[error("storage quota exceeded")]
+    StorageQuotaExceeded,
+    /// `insert_version`'s unique `(npm_package_id, version)` constraint was violated — the losing
+    /// side of two concurrent publishes racing for the same not-yet-existing version (Bug 4b, fix
+    /// rounds 1 and 2). The storage key includes a fresh random component generated on every publish
+    /// attempt, so it is unique per attempt regardless of tarball content — no two attempts, whether
+    /// their bytes are identical or different, ever share a key — and this is the ONLY place the
+    /// race resolves; the application layer maps this to the same `ApplicationError::PackageVersionExists`
+    /// the early existence check already returns.
+    #[error("this package version already exists")]
+    NpmVersionAlreadyExists,
+    #[error("this package version was not found")]
+    NpmVersionNotFound,
+    /// The package holds as many versions, or as many manifest bytes, as one package may.
+    #[error("{0}")]
+    NpmPackageLimit(String),
+    /// The database reported an error on COMMIT, which may or may not have been applied.
+    #[error("commit failed: {0}")]
+    CommitFailed(String),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

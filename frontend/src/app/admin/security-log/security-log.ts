@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   LOCALE_ID,
+  DestroyRef,
   computed,
   effect,
   inject,
@@ -9,22 +10,30 @@ import {
   signal,
 } from '@angular/core'
 import { DatePipe } from '@angular/common'
+import { HttpErrorResponse } from '@angular/common/http'
+import { Subscription, last, tap } from 'rxjs'
 import {
   Button,
   Card,
   DimensionCard,
   type DimensionRow,
+  EmptyState,
   Spinner,
   Table,
   TableColumn,
 } from '@masmarino/gabarit'
 import { AuditService } from '../application/audit.service'
 import { AuditEntry, BlockedAccount } from '../domain/audit.entity'
+import { describeBlockedAccount } from '../domain/blocked-account'
+import { auditEventDetails, auditEventLabel, auditPayload } from '../domain/audit-event-label'
 import { UsersService } from '../../users/application/users.service'
 import { OrganizationMembersService } from '../application/organization-members.service'
 import { RepositoriesService } from '../../repositories/application/repositories.service'
-import { toCsv } from '../../shared/csv'
+import { AUDIT_EXPORT_MAX_ROWS, collectAuditPages, isPartialExport } from '../domain/audit-export'
+import { csvBlob, toCsv } from '../../shared/csv'
 import { downloadBlob } from '../../shared/download'
+import { ConfirmService } from '../../shared/confirm.service'
+import { ToastService } from '../../shared/toast.service'
 
 interface SecurityLogRow {
   occurred_at: string
@@ -38,10 +47,21 @@ interface EventTypeCount {
   count: number
 }
 
+function unlockFailureMessage(error: unknown, username: string): string {
+  switch (error instanceof HttpErrorResponse ? error.status : null) {
+    case 403:
+      return `Vous n'avez pas le droit de débloquer ${username}.`
+    case 404:
+      return `${username} est introuvable : rien à débloquer.`
+    default:
+      return `Échec du déblocage de ${username}.`
+  }
+}
+
 @Component({
   selector: 'app-security-log',
   standalone: true,
-  imports: [Table, DimensionCard, Button, Card, Spinner],
+  imports: [Table, DimensionCard, Button, Card, EmptyState, Spinner],
   providers: [DatePipe],
   templateUrl: './security-log.html',
   styleUrl: './security-log.scss',
@@ -53,6 +73,9 @@ export class SecurityLog {
   private readonly organizationMembersService = inject(OrganizationMembersService)
   private readonly repositoriesService = inject(RepositoriesService)
   private readonly datePipe = inject(DatePipe)
+  private readonly confirmService = inject(ConfirmService)
+  private readonly toastService = inject(ToastService)
+  private exportRun: Subscription | null = null
 
   /** Set only when embedded in an org's own admin page — scopes the view and hides the super-admin-only blocked-accounts panel. */
   readonly organizationId = input<string | undefined>(undefined)
@@ -61,21 +84,27 @@ export class SecurityLog {
   private readonly usernamesById = signal<Map<string, string>>(new Map())
   private readonly repositoryNamesById = signal<Map<string, string>>(new Map())
   readonly blockedAccounts = signal<BlockedAccount[]>([])
+  readonly nextCursor = signal<string | null>(null)
   readonly loading = signal(true)
+  readonly loadFailed = signal(false)
+  readonly loadingMore = signal(false)
+  readonly loadMoreFailed = signal(false)
 
-  readonly rows = computed<SecurityLogRow[]>(() =>
-    this.entries().map((entry) => ({
-      occurred_at: entry.occurred_at,
-      event_type: entry.event_type,
-      actor: this.actorLabel(entry),
-      details: this.detailsLabel(entry),
-    })),
-  )
+  readonly unlocking = signal(false)
+
+  readonly exporting = signal(false)
+  readonly exportedCount = signal(0)
+  readonly exportFailed = signal(false)
+  readonly exportPartial = signal(false)
+  readonly exportMaxRows = AUDIT_EXPORT_MAX_ROWS
+
+  readonly rows = computed<SecurityLogRow[]>(() => this.toRows(this.entries()))
 
   readonly summary = computed<EventTypeCount[]>(() => {
     const counts = new Map<string, number>()
     for (const entry of this.entries()) {
-      counts.set(entry.event_type, (counts.get(entry.event_type) ?? 0) + 1)
+      const label = auditEventLabel(entry.event_type)
+      counts.set(label, (counts.get(label) ?? 0) + 1)
     }
     return Array.from(counts.entries())
       .map(([event_type, count]) => ({ event_type, count }))
@@ -90,7 +119,8 @@ export class SecurityLog {
 
   readonly blockedAccountRows = computed(() =>
     this.blockedAccounts().map((account) => ({
-      username: account.username,
+      key: account.username,
+      ...describeBlockedAccount(account),
       remaining: this.formatRemainingTime(account.remaining_seconds),
     })),
   )
@@ -105,41 +135,153 @@ export class SecurityLog {
     { key: 'actor', label: 'Utilisateur' },
     { key: 'details', label: 'Détails' },
   ]
-  readonly rowId = (r: SecurityLogRow): string => `${r.occurred_at}|${r.event_type}|${r.actor}`
+  readonly rowId = (r: SecurityLogRow): string =>
+    `${r.occurred_at}|${r.event_type}|${r.actor}|${r.details}`
 
   // effect(), not ngOnInit — this component is reused across organizations on the same route.
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.exportRun?.unsubscribe())
     effect(() => {
       const organizationId = this.organizationId()
+      this.cancelExport()
+      this.exportFailed.set(false)
+      this.exportPartial.set(false)
+      this.entries.set([])
+      this.nextCursor.set(null)
       this.loading.set(true)
+      this.loadFailed.set(false)
+      this.loadingMore.set(false)
+      this.loadMoreFailed.set(false)
+      const stillCurrent = () => this.organizationId() === organizationId
+
       this.auditService
         .query({ aggregate_type: 'Security', organization_id: organizationId })
-        .subscribe((entries) => {
-          this.entries.set(entries)
-          this.loading.set(false)
+        .subscribe({
+          next: (page) => {
+            if (!stillCurrent()) {
+              return
+            }
+            this.entries.set(page.entries)
+            this.nextCursor.set(page.next_cursor)
+            this.loading.set(false)
+          },
+          error: () => {
+            if (!stillCurrent()) {
+              return
+            }
+            this.loadFailed.set(true)
+            this.loading.set(false)
+          },
         })
+
       if (organizationId) {
-        this.organizationMembersService
-          .list(organizationId)
-          .subscribe((members) =>
-            this.usernamesById.set(new Map(members.map((m) => [m.id, m.username]))),
-          )
+        this.organizationMembersService.list(organizationId).subscribe({
+          next: (members) => {
+            if (!stillCurrent()) {
+              return
+            }
+            this.usernamesById.set(new Map(members.map((m) => [m.id, m.username])))
+          },
+          error: () => {
+            // Actor names are a display nicety — a failed lookup falls back to raw actor ids.
+          },
+        })
       } else {
-        this.usersService
-          .list()
-          .subscribe((users) =>
-            this.usernamesById.set(new Map(users.map((u) => [u.id, u.username]))),
-          )
-        this.auditService
-          .blockedAccounts()
-          .subscribe((accounts) => this.blockedAccounts.set(accounts))
+        this.usersService.list().subscribe({
+          next: (users) => {
+            if (!stillCurrent()) {
+              return
+            }
+            this.usernamesById.set(new Map(users.map((u) => [u.id, u.username])))
+          },
+          error: () => {
+            // Actor names are a display nicety — a failed lookup falls back to raw actor ids.
+          },
+        })
+        this.loadBlockedAccounts(organizationId)
       }
-      this.repositoriesService
-        .list()
-        .subscribe((repos) =>
-          this.repositoryNamesById.set(new Map(repos.map((r) => [r.id, r.name]))),
-        )
+
+      this.repositoriesService.list().subscribe({
+        next: (repos) => {
+          if (!stillCurrent()) {
+            return
+          }
+          this.repositoryNamesById.set(new Map(repos.map((r) => [r.id, r.name])))
+        },
+        error: () => {
+          // Repository names are a display nicety — a failed lookup falls back to raw ids.
+        },
+      })
     })
+  }
+
+  private loadBlockedAccounts(organizationId: string | undefined): void {
+    this.auditService.blockedAccounts().subscribe({
+      next: (accounts) => {
+        if (this.organizationId() === organizationId) {
+          this.blockedAccounts.set(accounts)
+        }
+      },
+      error: () => {
+        // Best-effort panel — a failed lookup just leaves it empty rather than blocking the page.
+      },
+    })
+  }
+
+  async unlock(username: string): Promise<void> {
+    if (this.unlocking()) {
+      return
+    }
+    const confirmed = await this.confirmService.ask({
+      heading: 'Débloquer le compte',
+      message: `Débloquer ${username} ? Ses tentatives de connexion échouées seront effacées.`,
+      confirmLabel: 'Débloquer',
+    })
+    if (!confirmed) {
+      return
+    }
+    const organizationId = this.organizationId()
+    this.unlocking.set(true)
+    this.auditService.unlockUsername(username).subscribe({
+      next: () => {
+        this.unlocking.set(false)
+        this.toastService.success(`${username} a été débloqué·e.`)
+        this.loadBlockedAccounts(organizationId)
+      },
+      error: (err: unknown) => {
+        this.unlocking.set(false)
+        this.toastService.error(unlockFailureMessage(err, username))
+      },
+    })
+  }
+
+  loadMore(): void {
+    const cursor = this.nextCursor()
+    if (!cursor || this.loadingMore()) {
+      return
+    }
+    const organizationId = this.organizationId()
+    this.loadingMore.set(true)
+    this.loadMoreFailed.set(false)
+    this.auditService
+      .query({ aggregate_type: 'Security', organization_id: organizationId, cursor })
+      .subscribe({
+        next: (page) => {
+          if (this.organizationId() !== organizationId) {
+            return
+          }
+          this.entries.update((entries) => [...entries, ...page.entries])
+          this.nextCursor.set(page.next_cursor)
+          this.loadingMore.set(false)
+        },
+        error: () => {
+          if (this.organizationId() !== organizationId) {
+            return
+          }
+          this.loadMoreFailed.set(true)
+          this.loadingMore.set(false)
+        },
+      })
   }
 
   formatRemainingTime(seconds: number): string {
@@ -147,17 +289,67 @@ export class SecurityLog {
     return minutes <= 1 ? "moins d'une minute" : `${minutes} minutes`
   }
 
-  /** Exports exactly what's currently loaded on screen — no separate export request. */
+  /** Fetches the pages not loaded yet (up to the row bound), then saves the CSV. */
   downloadCsv(): void {
-    const csv = toCsv(this.rows(), this.columns)
-    downloadBlob(
-      new Blob([csv], { type: 'text/csv;charset=utf-8' }),
-      `artiferris-security-${new Date().toISOString().slice(0, 10)}.csv`,
+    if (this.exporting()) {
+      return
+    }
+    this.exportFailed.set(false)
+    this.exportPartial.set(false)
+    const cursor = this.nextCursor()
+    if (!cursor) {
+      this.saveCsv(this.entries())
+      return
+    }
+    const organizationId = this.organizationId()
+    this.exporting.set(true)
+    this.exportedCount.set(this.entries().length)
+    this.exportRun = collectAuditPages(this.entries(), cursor, (next) =>
+      this.auditService.query({
+        aggregate_type: 'Security',
+        organization_id: organizationId,
+        cursor: next,
+      }),
     )
+      .pipe(
+        tap((state) => this.exportedCount.set(state.entries.length)),
+        last(),
+      )
+      .subscribe({
+        next: (state) => {
+          this.exporting.set(false)
+          this.exportPartial.set(isPartialExport(state))
+          this.saveCsv(state.entries.slice(0, AUDIT_EXPORT_MAX_ROWS))
+        },
+        error: () => {
+          this.exporting.set(false)
+          this.exportFailed.set(true)
+        },
+      })
+  }
+
+  cancelExport(): void {
+    this.exportRun?.unsubscribe()
+    this.exportRun = null
+    this.exporting.set(false)
+  }
+
+  private saveCsv(entries: AuditEntry[]): void {
+    const csv = toCsv(this.toRows(entries), this.columns)
+    downloadBlob(csvBlob(csv), `artiferris-security-${new Date().toISOString().slice(0, 10)}.csv`)
+  }
+
+  private toRows(entries: AuditEntry[]): SecurityLogRow[] {
+    return entries.map((entry) => ({
+      occurred_at: entry.occurred_at,
+      event_type: auditEventLabel(entry.event_type),
+      actor: this.actorLabel(entry),
+      details: this.detailsLabel(entry),
+    }))
   }
 
   private actorLabel(entry: AuditEntry): string {
-    const payload = entry.payload as Record<string, unknown>
+    const payload = auditPayload(entry)
     if (typeof payload['username'] === 'string') {
       return payload['username']
     }
@@ -168,7 +360,7 @@ export class SecurityLog {
   }
 
   private detailsLabel(entry: AuditEntry): string {
-    const payload = entry.payload as Record<string, unknown>
+    const payload = auditPayload(entry)
     switch (entry.event_type) {
       case 'LoginFailed':
       case 'PasswordChangeFailed':
@@ -183,7 +375,7 @@ export class SecurityLog {
         return `Action « ${action} » refusée sur ${repositoryName}`
       }
       default:
-        return ''
+        return auditEventDetails(entry)
     }
   }
 }

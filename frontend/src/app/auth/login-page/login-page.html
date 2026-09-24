@@ -2,12 +2,18 @@
   <div class="auth-layout__card">
     <h1 class="sr-only">Connexion à ArtiFerris</h1>
     <img src="/api/branding/logo" alt="ArtiFerris logo" class="auth-layout__logo" />
+    @if (sessionsEndedMessage) {
+      <gbt-alert variant="info">{{ sessionsEndedMessage }}</gbt-alert>
+    }
+    @if (ssoLinkInvalid()) {
+      <gbt-alert variant="error">Lien de connexion invalide ou expiré.</gbt-alert>
+    }
     @if (!mfaToken()) {
       @if (ssoType() === 'oidc') {
         <gbt-alert variant="info"
           >Cette organisation utilise l'authentification unique (OIDC).</gbt-alert
         >
-        <a href="/api/auth/sso/oidc/login" class="auth-layout__link"
+        <a href="/api/auth/sso/oidc/login" class="auth-layout__link" (click)="startSso()"
           >Se connecter avec le fournisseur d'identité</a
         >
       } @else {
@@ -46,6 +52,7 @@
           <a routerLink="/register" class="auth-layout__link">Créer un compte</a>
         }
       }
+      <a routerLink="/explorer" class="auth-layout__link">Explorer les paquets publics</a>
     } @else if (mfaSetupRequired()) {
       <app-mfa-enrollment [mfaToken]="mfaToken()!" (completed)="onEnrollmentCompleted()" />
     } @else {

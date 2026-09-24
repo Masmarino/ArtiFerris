@@ -135,6 +135,20 @@ describe('MfaEnrollmentPage', () => {
     Object.defineProperty(navigator, 'credentials', { configurable: true, value: undefined })
   })
 
+  it('shows the error in the page, without logging the exception, when passkey registration fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    authServiceSpy.startPasskeySetup.mockReturnValue(throwError(() => new Error('boom')))
+
+    component.choosePasskeySetup()
+    component.passkeyName.set('YubiKey')
+    await component.registerSetupPasskey()
+
+    expect(component.errorMessage()).toBe("Échec de l'enregistrement de la clé d'accès. Réessayez.")
+    expect(component.submitting()).toBe(false)
+    expect(consoleError).not.toHaveBeenCalled()
+    consoleError.mockRestore()
+  })
+
   it('shows an error and stays on the choice step when starting TOTP setup fails', () => {
     authServiceSpy.startTotpSetup.mockReturnValue(throwError(() => new Error('boom')))
 

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT reference_count FROM docker_blobs WHERE digest = $1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reference_count",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "docker_blobs",
+            "name": "reference_count"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7599c46c251425fe4d6981010f6dc179f7f37bef98540cb654bdea453b140171"
+}

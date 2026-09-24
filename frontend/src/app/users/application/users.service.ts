@@ -1,27 +1,19 @@
 import { Injectable, inject } from '@angular/core'
-import { Observable, catchError, shareReplay, tap, throwError } from 'rxjs'
+import { Observable, tap } from 'rxjs'
 import { UserSummary } from '../domain/user.entity'
 import { USER_PORT } from './user.port'
+import { TokenScopedCache } from '../../shared/token-scoped-cache'
 
 @Injectable({ providedIn: 'root' })
 export class UsersService {
   private readonly port = inject(USER_PORT)
 
-  private cachedList$: Observable<UserSummary[]> | null = null
+  private readonly listCache = new TokenScopedCache<UserSummary[]>(() => this.port.list())
 
   // cached across callers, cleared by any mutation below — forceRefresh is for the shell's
   // search, which needs to see writes that could've come from another tab
   list(options?: { forceRefresh?: boolean }): Observable<UserSummary[]> {
-    if (!this.cachedList$ || options?.forceRefresh) {
-      this.cachedList$ = this.port.list().pipe(
-        catchError((err: unknown) => {
-          this.cachedList$ = null
-          return throwError(() => err)
-        }),
-        shareReplay(1),
-      )
-    }
-    return this.cachedList$
+    return this.listCache.get(options?.forceRefresh)
   }
 
   get(id: string): Observable<UserSummary> {
@@ -29,17 +21,15 @@ export class UsersService {
   }
 
   create(username: string, email: string, isSuperAdmin: boolean): Observable<UserSummary> {
-    return this.port
-      .create(username, email, isSuperAdmin)
-      .pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.create(username, email, isSuperAdmin).pipe(tap(() => this.listCache.clear()))
   }
 
   delete(id: string): Observable<void> {
-    return this.port.delete(id).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.delete(id).pipe(tap(() => this.listCache.clear()))
   }
 
   setSuperAdmin(id: string, isSuperAdmin: boolean): Observable<void> {
-    return this.port.setSuperAdmin(id, isSuperAdmin).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.setSuperAdmin(id, isSuperAdmin).pipe(tap(() => this.listCache.clear()))
   }
 
   resendInvitation(id: string): Observable<void> {

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_manifests m SET untagged_since = now() WHERE m.id = $1 AND NOT EXISTS (SELECT 1 FROM docker_tags t WHERE t.manifest_id = m.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "35615dbe46bf84d617ffa8cc4d42b01c8caecb1dfdbec670f0d957482d19af85"
+}

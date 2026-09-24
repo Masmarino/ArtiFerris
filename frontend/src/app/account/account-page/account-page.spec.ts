@@ -5,15 +5,20 @@ import { By } from '@angular/platform-browser'
 import { DatePipe } from '@angular/common'
 import { AccountPage } from './account-page'
 import { MeService } from '../../shell/application/me.service'
+import { SessionSettings } from '../session-settings/session-settings'
 import { ApiTokensList } from '../../tokens/api-tokens-list/api-tokens-list'
 import { apiTokenProviders } from '../../tokens/infrastructure/api-token.providers'
 import { mfaProviders } from '../infrastructure/mfa.providers'
 import { meProviders } from '../../shell/infrastructure/me.providers'
 import { authProviders } from '../../auth/infrastructure/auth.providers'
 import { ToastService } from '../../shared/toast.service'
+import { SessionRevocationService } from '../../auth/application/session-revocation.service'
 
 describe('AccountPage', () => {
+  const signOutAndRedirect = vi.fn()
+
   function render() {
+    signOutAndRedirect.mockClear()
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -22,6 +27,7 @@ describe('AccountPage', () => {
         ...mfaProviders,
         ...meProviders,
         ...authProviders,
+        { provide: SessionRevocationService, useValue: { signOutAndRedirect } },
       ],
     })
     const fixture = TestBed.createComponent(AccountPage)
@@ -47,7 +53,7 @@ describe('AccountPage', () => {
     expect(text).toContain(expectedDate)
   })
 
-  it('changes the password on submit and shows a success message', () => {
+  it('changes the password on submit, then signs out since the backend revoked the session', () => {
     const { fixture, httpMock } = render()
 
     fixture.componentInstance.form.setValue({
@@ -62,13 +68,10 @@ describe('AccountPage', () => {
       current_password: 'old-s3cret!',
       new_password: 'new-s3cret!',
     })
+    expect(signOutAndRedirect).not.toHaveBeenCalled()
     req.flush(null)
-    fixture.detectChanges()
 
-    expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
-      variant: 'success',
-      message: 'Mot de passe changé avec succès.',
-    })
+    expect(signOutAndRedirect).toHaveBeenCalledTimes(1)
   })
 
   it('shows an error and keeps the new/confirm fields when the server rejects the change', () => {
@@ -193,5 +196,11 @@ describe('AccountPage', () => {
     const { fixture } = render()
 
     expect(fixture.debugElement.query(By.directive(ApiTokensList))).toBeTruthy()
+  })
+
+  it('offers to sign out everywhere from the security tab', () => {
+    const { fixture } = render()
+
+    expect(fixture.debugElement.query(By.directive(SessionSettings))).toBeTruthy()
   })
 })

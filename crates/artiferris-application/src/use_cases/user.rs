@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
+use artiferris_domain::audit::{AdminAuditEvent, AdminAuditRecord, AuditRecord, SecurityAuditRecord};
 use artiferris_domain::email::EmailPort;
-use artiferris_domain::user::{Password, PasswordHasherPort, TokenIssuerPort, User, UserRepositoryPort, Username};
+use artiferris_domain::user::{Password, PasswordHasherPort, TokenIssuerPort, User, UserRepositoryPort, UserSecurityPort, Username};
 use uuid::Uuid;
 
 use crate::error::ApplicationError;
@@ -20,7 +21,7 @@ impl CreateUserUseCase {
     }
 
     pub async fn execute(&self, organization_id: Uuid, username: &str, password: &str, is_super_admin: bool) -> Result<Uuid, ApplicationError> {
-        let username = Username::parse(username)?;
+        let username = Username::parse_new(username)?;
         let password = Password::parse(password)?;
         if self.users.find_by_username(&username).await?.is_some() {
             return Err(ApplicationError::UsernameTaken);
@@ -65,7 +66,7 @@ impl AuthenticateUserUseCase {
             Err(_) => None,
         };
         let hash = user.as_ref().map_or(DUMMY_HASH_FOR_TIMING, |u| u.password_hash.as_str());
-        let password_matches = self.hasher.verify(password, hash).await;
+        let password_matches = self.hasher.verify(password, hash).await?;
 
         let Some(user) = user else {
             return Err(ApplicationError::InvalidCredentials);
@@ -87,9 +88,10 @@ impl DeleteUserUseCase {
         Self { users }
     }
 
-    pub async fn execute(&self, id: Uuid) -> Result<(), ApplicationError> {
+    /// `audit` goes in the same transaction.
+    pub async fn execute(&self, id: Uuid, audit: Option<&AdminAuditRecord>) -> Result<(), ApplicationError> {
         // Refuses to delete the only super-admin; guard and write are atomic in the repository.
-        if self.users.delete_unless_last_super_admin(id).await? {
+        if self.users.delete_unless_last_super_admin(id, audit).await? {
             Ok(())
         } else {
             Err(ApplicationError::LastSuperAdmin)
@@ -106,9 +108,15 @@ impl SetSuperAdminUseCase {
         Self { users }
     }
 
-    pub async fn execute(&self, id: Uuid, is_super_admin: bool) -> Result<(), ApplicationError> {
+    pub async fn execute(&self, id: Uuid, is_super_admin: bool, actor_id: Uuid) -> Result<(), ApplicationError> {
+        // The audit entry is written with the change itself, and only when the flag actually flips.
+        let audit = self.users.find_by_id(id).await?.filter(|target| target.is_super_admin != is_super_admin).map(|target| {
+            let (user_id, organization_id) = (target.id, target.organization_id);
+            let event = if is_super_admin { AdminAuditEvent::SuperAdminGranted { user_id, organization_id } } else { AdminAuditEvent::SuperAdminRevoked { user_id, organization_id } };
+            AdminAuditRecord { event, actor_id: Some(actor_id) }
+        });
         // Only a demotion of a current super-admin needs the "not the last one" check.
-        if self.users.set_super_admin_unless_last(id, is_super_admin).await? {
+        if self.users.set_super_admin_unless_last(id, is_super_admin, audit.as_ref()).await? {
             Ok(())
         } else {
             Err(ApplicationError::LastSuperAdmin)
@@ -126,36 +134,39 @@ impl SetOrganizationAdminUseCase {
     }
 
     // Unlike SetSuperAdminUseCase, no "unless last" guard: an organization can validly end up with zero org-admins — the super-admin can always still manage it.
-    pub async fn execute(&self, id: Uuid, is_organization_admin: bool) -> Result<(), ApplicationError> {
-        self.users.set_organization_admin(id, is_organization_admin).await?;
+    /// `audit` goes in the same transaction.
+    pub async fn execute(&self, id: Uuid, is_organization_admin: bool, audit: Option<&AdminAuditRecord>) -> Result<(), ApplicationError> {
+        self.users.set_organization_admin(id, is_organization_admin, audit).await?;
         Ok(())
     }
 }
 
 pub struct ChangePasswordUseCase {
     users: Arc<dyn UserRepositoryPort>,
+    security: Arc<dyn UserSecurityPort>,
     hasher: Arc<dyn PasswordHasherPort>,
     email: Arc<dyn EmailPort>,
 }
 
 impl ChangePasswordUseCase {
-    pub fn new(users: Arc<dyn UserRepositoryPort>, hasher: Arc<dyn PasswordHasherPort>, email: Arc<dyn EmailPort>) -> Self {
-        Self { users, hasher, email }
+    pub fn new(users: Arc<dyn UserRepositoryPort>, security: Arc<dyn UserSecurityPort>, hasher: Arc<dyn PasswordHasherPort>, email: Arc<dyn EmailPort>) -> Self {
+        Self { users, security, hasher, email }
     }
 
-    pub async fn execute(&self, user_id: Uuid, current_password: &str, new_password: &str) -> Result<(), ApplicationError> {
+    /// `audit` is written in the same transaction as the new password.
+    pub async fn execute(&self, user_id: Uuid, current_password: &str, new_password: &str, audit: Option<&AuditRecord>) -> Result<(), ApplicationError> {
         let user = self.users.find_by_id(user_id).await?.ok_or(ApplicationError::InvalidCredentials)?;
-        if !self.hasher.verify(current_password, &user.password_hash).await {
+        if !self.hasher.verify(current_password, &user.password_hash).await? {
             return Err(ApplicationError::InvalidCredentials);
         }
         let new_password = Password::parse(new_password)?;
         let new_hash = self.hasher.hash(new_password.as_str()).await?;
-        self.users.update_password(user_id, new_hash).await?;
+        self.users.update_password(user_id, new_hash, audit).await?;
 
         // Best-effort: the password change already succeeded, a delivery failure must not undo it.
-        if let Some(email) = user.email.as_deref() {
+        if let Some(email) = crate::use_cases::mfa::verified_address(self.security.as_ref(), &user).await {
             let content = crate::email_templates::password_changed(user.username.as_str());
-            if let Err(e) = self.email.send(user.organization_id, email, &content.subject, &content.text, &content.html).await {
+            if let Err(e) = self.email.send(user.organization_id, &email, &content.subject, &content.text, &content.html).await {
                 tracing::warn!("failed to send password-change notification email to {email}: {e}");
             }
         }
@@ -163,9 +174,47 @@ impl ChangePasswordUseCase {
     }
 }
 
+/// A fresh password check for an already-signed-in caller, before a sensitive action. Throttling is the caller's job.
+pub struct ConfirmPasswordUseCase {
+    users: Arc<dyn UserRepositoryPort>,
+    hasher: Arc<dyn PasswordHasherPort>,
+}
+
+impl ConfirmPasswordUseCase {
+    pub fn new(users: Arc<dyn UserRepositoryPort>, hasher: Arc<dyn PasswordHasherPort>) -> Self {
+        Self { users, hasher }
+    }
+
+    pub async fn execute(&self, user_id: Uuid, password: &str) -> Result<(), ApplicationError> {
+        let user = self.users.find_by_id(user_id).await?.ok_or(ApplicationError::InvalidCredentials)?;
+        if self.hasher.verify(password, &user.password_hash).await? {
+            Ok(())
+        } else {
+            Err(ApplicationError::InvalidCredentials)
+        }
+    }
+}
+
+/// "Sign out everywhere". Needs no password, so an SSO account can use it too.
+pub struct RevokeUserSessionsUseCase {
+    security: Arc<dyn UserSecurityPort>,
+}
+
+impl RevokeUserSessionsUseCase {
+    pub fn new(security: Arc<dyn UserSecurityPort>) -> Self {
+        Self { security }
+    }
+
+    pub async fn execute(&self, user_id: Uuid, audit: Option<&SecurityAuditRecord>) -> Result<(), ApplicationError> {
+        self.security.revoke_sessions(user_id, audit).await?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::use_cases::verification_test_support::FakeVerification;
     use async_trait::async_trait;
     use artiferris_domain::error::DomainError;
     use std::collections::HashMap;
@@ -192,11 +241,12 @@ mod tests {
 
     struct FakeUserRepository {
         users: Mutex<HashMap<Uuid, User>>,
+        audits: Mutex<Vec<artiferris_domain::audit::AdminAuditRecord>>,
     }
 
     impl FakeUserRepository {
         fn new() -> Self {
-            Self { users: Mutex::new(HashMap::new()) }
+            Self { users: Mutex::new(HashMap::new()), audits: Mutex::new(Vec::new()) }
         }
     }
 
@@ -214,6 +264,34 @@ mod tests {
         async fn list_all(&self) -> Result<Vec<User>, DomainError> {
             Ok(self.users.lock().unwrap().values().cloned().collect())
         }
+        async fn find_by_ids(&self, ids: &[Uuid]) -> Result<Vec<User>, DomainError> {
+            Ok(self.users.lock().unwrap().values().filter(|u| ids.contains(&u.id)).cloned().collect())
+        }
+        async fn count_by_organization(&self, organization_id: Uuid) -> Result<i64, DomainError> {
+            Ok(self.users.lock().unwrap().values().filter(|u| u.organization_id == organization_id).count() as i64)
+        }
+        async fn search_by_organization(&self, organization_id: Uuid, query: &str, limit: i64) -> Result<Vec<User>, DomainError> {
+            let query = query.to_lowercase();
+            let mut matches: Vec<User> = self
+                .users
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|u| u.organization_id == organization_id && u.username.as_str().to_lowercase().contains(&query))
+                .cloned()
+                .collect();
+            matches.sort_by(|a, b| a.username.as_str().cmp(b.username.as_str()));
+            matches.truncate(limit as usize);
+            Ok(matches)
+        }
+        async fn search_all_organizations(&self, query: &str, limit: i64) -> Result<Vec<User>, DomainError> {
+            let query = query.to_lowercase();
+            let mut matches: Vec<User> =
+                self.users.lock().unwrap().values().filter(|u| u.username.as_str().to_lowercase().contains(&query)).cloned().collect();
+            matches.sort_by(|a, b| a.username.as_str().cmp(b.username.as_str()));
+            matches.truncate(limit as usize);
+            Ok(matches)
+        }
         async fn insert(&self, user: &User) -> Result<(), DomainError> {
             self.users.lock().unwrap().insert(user.id, user.clone());
             Ok(())
@@ -222,7 +300,7 @@ mod tests {
             self.users.lock().unwrap().remove(&id);
             Ok(())
         }
-        async fn update_password(&self, id: Uuid, new_password_hash: String) -> Result<(), DomainError> {
+        async fn update_password(&self, id: Uuid, new_password_hash: String, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
             if let Some(user) = self.users.lock().unwrap().get_mut(&id) {
                 user.password_hash = new_password_hash;
             }
@@ -235,7 +313,7 @@ mod tests {
             Ok(())
         }
 
-        async fn delete_unless_last_super_admin(&self, id: Uuid) -> Result<bool, DomainError> {
+        async fn delete_unless_last_super_admin(&self, id: Uuid, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<bool, DomainError> {
             let mut users = self.users.lock().unwrap();
             if users.get(&id).is_some_and(|u| u.is_super_admin)
                 && users.values().filter(|u| u.id != id && u.is_super_admin).count() == 0
@@ -246,7 +324,7 @@ mod tests {
             Ok(true)
         }
 
-        async fn set_super_admin_unless_last(&self, id: Uuid, is_super_admin: bool) -> Result<bool, DomainError> {
+        async fn set_super_admin_unless_last(&self, id: Uuid, is_super_admin: bool, audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<bool, DomainError> {
             let mut users = self.users.lock().unwrap();
             if !is_super_admin
                 && users.get(&id).is_some_and(|u| u.is_super_admin)
@@ -257,10 +335,11 @@ mod tests {
             if let Some(user) = users.get_mut(&id) {
                 user.is_super_admin = is_super_admin;
             }
+            self.audits.lock().unwrap().extend(audit.cloned());
             Ok(true)
         }
 
-        async fn set_organization_admin(&self, id: Uuid, is_organization_admin: bool) -> Result<(), DomainError> {
+        async fn set_organization_admin(&self, id: Uuid, is_organization_admin: bool, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             if let Some(user) = self.users.lock().unwrap().get_mut(&id) {
                 user.is_organization_admin = is_organization_admin;
             }
@@ -275,8 +354,8 @@ mod tests {
         async fn hash(&self, plain_password: &str) -> Result<String, DomainError> {
             Ok(format!("hashed:{plain_password}"))
         }
-        async fn verify(&self, plain_password: &str, hash: &str) -> bool {
-            hash == format!("hashed:{plain_password}")
+        async fn verify(&self, plain_password: &str, hash: &str) -> Result<bool, DomainError> {
+            Ok(hash == format!("hashed:{plain_password}"))
         }
     }
 
@@ -300,9 +379,9 @@ mod tests {
         async fn hash(&self, plain_password: &str) -> Result<String, DomainError> {
             Ok(format!("hashed:{plain_password}"))
         }
-        async fn verify(&self, plain_password: &str, hash: &str) -> bool {
+        async fn verify(&self, plain_password: &str, hash: &str) -> Result<bool, DomainError> {
             self.verify_calls.fetch_add(1, Ordering::SeqCst);
-            hash == format!("hashed:{plain_password}")
+            Ok(hash == format!("hashed:{plain_password}"))
         }
     }
 
@@ -329,7 +408,7 @@ mod tests {
         async fn get(&self, _organization_id: Uuid) -> Result<artiferris_domain::system_settings::SystemSettings, DomainError> {
             Ok(artiferris_domain::system_settings::SystemSettings::defaults())
         }
-        async fn update(&self, _organization_id: Uuid, _settings: &artiferris_domain::system_settings::SystemSettings) -> Result<(), DomainError> {
+        async fn update(&self, _organization_id: Uuid, _settings: &artiferris_domain::system_settings::SystemSettings, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             Ok(())
         }
     }
@@ -339,6 +418,13 @@ mod tests {
         let use_case = CreateUserUseCase::new(Arc::new(FakeUserRepository::new()), Arc::new(FakePasswordHasher));
         let id = use_case.execute(Uuid::new_v4(), "florian", "sup3r-s3cret!", false).await.unwrap();
         assert_ne!(id, Uuid::nil());
+    }
+
+    #[tokio::test]
+    async fn rejects_a_username_using_the_reserved_prefix() {
+        let use_case = CreateUserUseCase::new(Arc::new(FakeUserRepository::new()), Arc::new(FakePasswordHasher));
+        let err = use_case.execute(Uuid::new_v4(), "artiferris-npm", "sup3r-s3cret!", false).await.unwrap_err();
+        assert!(matches!(err, ApplicationError::Domain(DomainError::ReservedName(_))));
     }
 
     #[tokio::test]
@@ -425,7 +511,7 @@ mod tests {
         let id = create.execute(Uuid::new_v4(), "florian", "sup3r-s3cret!", false).await.unwrap();
 
         let delete = DeleteUserUseCase::new(users.clone());
-        delete.execute(id).await.unwrap();
+        delete.execute(id, None).await.unwrap();
 
         assert!(users.find_by_id(id).await.unwrap().is_none());
     }
@@ -439,7 +525,7 @@ mod tests {
         create.execute(Uuid::new_v4(), "regular", "sup3r-s3cret!", false).await.unwrap();
 
         let delete = DeleteUserUseCase::new(users.clone());
-        let err = delete.execute(admin_id).await.unwrap_err();
+        let err = delete.execute(admin_id, None).await.unwrap_err();
 
         assert!(matches!(err, ApplicationError::LastSuperAdmin));
         assert!(users.find_by_id(admin_id).await.unwrap().is_some());
@@ -453,7 +539,7 @@ mod tests {
         create.execute(Uuid::new_v4(), "second-admin", "sup3r-s3cret!", true).await.unwrap();
 
         let delete = DeleteUserUseCase::new(users.clone());
-        delete.execute(first_admin).await.unwrap();
+        delete.execute(first_admin, None).await.unwrap();
 
         assert!(users.find_by_id(first_admin).await.unwrap().is_none());
     }
@@ -463,7 +549,7 @@ mod tests {
         let users = Arc::new(FakeUserRepository::new());
         let delete = DeleteUserUseCase::new(users.clone());
 
-        delete.execute(Uuid::new_v4()).await.unwrap();
+        delete.execute(Uuid::new_v4(), None).await.unwrap();
     }
 
     #[tokio::test]
@@ -472,8 +558,8 @@ mod tests {
         let create = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher));
         let id = create.execute(Uuid::new_v4(), "florian", "old-s3cret!", false).await.unwrap();
 
-        let change_password = ChangePasswordUseCase::new(users.clone(), Arc::new(FakePasswordHasher), Arc::new(FakeEmail::new()));
-        change_password.execute(id, "old-s3cret!", "new-s3cret!").await.unwrap();
+        let change_password = ChangePasswordUseCase::new(users.clone(), Arc::new(FakeVerification::nobody()), Arc::new(FakePasswordHasher), Arc::new(FakeEmail::new()));
+        change_password.execute(id, "old-s3cret!", "new-s3cret!", None).await.unwrap();
 
         let authenticate = AuthenticateUserUseCase::new(users, Arc::new(FakePasswordHasher), Arc::new(FakeTokenIssuer), Arc::new(FakeSystemSettings));
         let token = authenticate.execute("florian", "new-s3cret!").await.unwrap();
@@ -481,7 +567,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sends_a_notification_email_when_the_user_has_one_on_file() {
+    async fn sends_a_notification_email_when_the_user_has_a_verified_one_on_file() {
         let users = Arc::new(FakeUserRepository::new());
         let create = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher));
         let id = create.execute(Uuid::new_v4(), "florian", "old-s3cret!", false).await.unwrap();
@@ -490,8 +576,8 @@ mod tests {
         users.insert(&user).await.unwrap();
 
         let email = Arc::new(FakeEmail::new());
-        let change_password = ChangePasswordUseCase::new(users, Arc::new(FakePasswordHasher), email.clone());
-        change_password.execute(id, "old-s3cret!", "new-s3cret!").await.unwrap();
+        let change_password = ChangePasswordUseCase::new(users, Arc::new(FakeVerification::of(&[&user])), Arc::new(FakePasswordHasher), email.clone());
+        change_password.execute(id, "old-s3cret!", "new-s3cret!", None).await.unwrap();
 
         let sent = email.sent.lock().unwrap();
         assert_eq!(sent.len(), 1);
@@ -501,14 +587,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn skips_the_email_when_the_address_on_file_was_never_verified() {
+        let users = Arc::new(FakeUserRepository::new());
+        let create = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher));
+        let id = create.execute(Uuid::new_v4(), "florian", "old-s3cret!", false).await.unwrap();
+        let mut user = users.find_by_id(id).await.unwrap().unwrap();
+        user.email = Some("victim@example.com".to_string());
+        users.insert(&user).await.unwrap();
+
+        let email = Arc::new(FakeEmail::new());
+        let change_password = ChangePasswordUseCase::new(users, Arc::new(FakeVerification::nobody()), Arc::new(FakePasswordHasher), email.clone());
+        change_password.execute(id, "old-s3cret!", "new-s3cret!", None).await.unwrap();
+
+        assert!(email.sent.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
     async fn skips_the_email_when_the_user_has_none_on_file() {
         let users = Arc::new(FakeUserRepository::new());
         let create = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher));
         let id = create.execute(Uuid::new_v4(), "florian", "old-s3cret!", false).await.unwrap();
 
         let email = Arc::new(FakeEmail::new());
-        let change_password = ChangePasswordUseCase::new(users, Arc::new(FakePasswordHasher), email.clone());
-        change_password.execute(id, "old-s3cret!", "new-s3cret!").await.unwrap();
+        let change_password = ChangePasswordUseCase::new(users, Arc::new(FakeVerification::nobody()), Arc::new(FakePasswordHasher), email.clone());
+        change_password.execute(id, "old-s3cret!", "new-s3cret!", None).await.unwrap();
 
         assert!(email.sent.lock().unwrap().is_empty());
     }
@@ -519,8 +621,8 @@ mod tests {
         let create = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher));
         let id = create.execute(Uuid::new_v4(), "florian", "old-s3cret!", false).await.unwrap();
 
-        let change_password = ChangePasswordUseCase::new(users.clone(), Arc::new(FakePasswordHasher), Arc::new(FakeEmail::new()));
-        let err = change_password.execute(id, "wrong", "new-s3cret!").await.unwrap_err();
+        let change_password = ChangePasswordUseCase::new(users.clone(), Arc::new(FakeVerification::nobody()), Arc::new(FakePasswordHasher), Arc::new(FakeEmail::new()));
+        let err = change_password.execute(id, "wrong", "new-s3cret!", None).await.unwrap_err();
 
         assert!(matches!(err, ApplicationError::InvalidCredentials));
         let authenticate = AuthenticateUserUseCase::new(users, Arc::new(FakePasswordHasher), Arc::new(FakeTokenIssuer), Arc::new(FakeSystemSettings));
@@ -533,8 +635,8 @@ mod tests {
         let create = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher));
         let id = create.execute(Uuid::new_v4(), "florian", "old-s3cret!", false).await.unwrap();
 
-        let change_password = ChangePasswordUseCase::new(users.clone(), Arc::new(FakePasswordHasher), Arc::new(FakeEmail::new()));
-        let err = change_password.execute(id, "old-s3cret!", "short").await.unwrap_err();
+        let change_password = ChangePasswordUseCase::new(users.clone(), Arc::new(FakeVerification::nobody()), Arc::new(FakePasswordHasher), Arc::new(FakeEmail::new()));
+        let err = change_password.execute(id, "old-s3cret!", "short", None).await.unwrap_err();
 
         assert!(matches!(err, ApplicationError::Domain(DomainError::PasswordTooShort)), "got {err:?}");
     }
@@ -543,12 +645,18 @@ mod tests {
     async fn promotes_a_regular_user_to_super_admin() {
         let users = Arc::new(FakeUserRepository::new());
         let create = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher));
-        let id = create.execute(Uuid::new_v4(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let organization_id = Uuid::new_v4();
+        let id = create.execute(organization_id, "florian", "sup3r-s3cret!", false).await.unwrap();
+        let actor = Uuid::new_v4();
 
         let use_case = SetSuperAdminUseCase::new(users.clone());
-        use_case.execute(id, true).await.unwrap();
+        use_case.execute(id, true, actor).await.unwrap();
 
         assert!(users.find_by_id(id).await.unwrap().unwrap().is_super_admin);
+        let audits = users.audits.lock().unwrap();
+        assert_eq!(audits.len(), 1);
+        assert_eq!(audits[0].actor_id, Some(actor));
+        assert!(matches!(&audits[0].event, AdminAuditEvent::SuperAdminGranted { user_id, organization_id: org } if *user_id == id && *org == organization_id));
     }
 
     #[tokio::test]
@@ -558,10 +666,11 @@ mod tests {
         let admin_id = create.execute(Uuid::new_v4(), "admin", "sup3r-s3cret!", true).await.unwrap();
 
         let use_case = SetSuperAdminUseCase::new(users.clone());
-        let err = use_case.execute(admin_id, false).await.unwrap_err();
+        let err = use_case.execute(admin_id, false, Uuid::new_v4()).await.unwrap_err();
 
         assert!(matches!(err, ApplicationError::LastSuperAdmin));
         assert!(users.find_by_id(admin_id).await.unwrap().unwrap().is_super_admin);
+        assert!(users.audits.lock().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -572,9 +681,10 @@ mod tests {
         create.execute(Uuid::new_v4(), "second-admin", "sup3r-s3cret!", true).await.unwrap();
 
         let use_case = SetSuperAdminUseCase::new(users.clone());
-        use_case.execute(first_admin, false).await.unwrap();
+        use_case.execute(first_admin, false, Uuid::new_v4()).await.unwrap();
 
         assert!(!users.find_by_id(first_admin).await.unwrap().unwrap().is_super_admin);
+        assert!(matches!(&users.audits.lock().unwrap()[0].event, AdminAuditEvent::SuperAdminRevoked { user_id, .. } if *user_id == first_admin));
     }
 
     #[tokio::test]
@@ -584,9 +694,10 @@ mod tests {
         let admin_id = create.execute(Uuid::new_v4(), "admin", "sup3r-s3cret!", true).await.unwrap();
 
         let use_case = SetSuperAdminUseCase::new(users.clone());
-        use_case.execute(admin_id, true).await.unwrap();
+        use_case.execute(admin_id, true, Uuid::new_v4()).await.unwrap();
 
         assert!(users.find_by_id(admin_id).await.unwrap().unwrap().is_super_admin);
+        assert!(users.audits.lock().unwrap().is_empty(), "no change, nothing to audit");
     }
 
     #[tokio::test]
@@ -596,7 +707,7 @@ mod tests {
         let id = create.execute(Uuid::new_v4(), "florian", "sup3r-s3cret!", false).await.unwrap();
 
         let use_case = SetOrganizationAdminUseCase::new(users.clone());
-        use_case.execute(id, true).await.unwrap();
+        use_case.execute(id, true, None).await.unwrap();
 
         assert!(users.find_by_id(id).await.unwrap().unwrap().is_organization_admin);
     }
@@ -607,10 +718,53 @@ mod tests {
         let create = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher));
         let id = create.execute(Uuid::new_v4(), "florian", "sup3r-s3cret!", false).await.unwrap();
         let use_case = SetOrganizationAdminUseCase::new(users.clone());
-        use_case.execute(id, true).await.unwrap();
+        use_case.execute(id, true, None).await.unwrap();
 
-        use_case.execute(id, false).await.unwrap();
+        use_case.execute(id, false, None).await.unwrap();
 
         assert!(!users.find_by_id(id).await.unwrap().unwrap().is_organization_admin);
+    }
+
+    #[tokio::test]
+    async fn confirming_a_password_accepts_only_the_right_one_for_a_known_user() {
+        let users = Arc::new(FakeUserRepository::new());
+        let id = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher)).execute(Uuid::new_v4(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let confirm = ConfirmPasswordUseCase::new(users, Arc::new(FakePasswordHasher));
+
+        confirm.execute(id, "sup3r-s3cret!").await.unwrap();
+
+        assert!(matches!(confirm.execute(id, "wrong").await, Err(ApplicationError::InvalidCredentials)));
+        assert!(matches!(confirm.execute(Uuid::new_v4(), "sup3r-s3cret!").await, Err(ApplicationError::InvalidCredentials)));
+    }
+
+    struct FakeSecurity {
+        revoked: Mutex<Vec<Uuid>>,
+    }
+
+    #[async_trait]
+    impl UserSecurityPort for FakeSecurity {
+        async fn revoke_sessions(&self, id: Uuid, _audit: Option<&artiferris_domain::audit::SecurityAuditRecord>) -> Result<(), DomainError> {
+            self.revoked.lock().unwrap().push(id);
+            Ok(())
+        }
+        async fn find_by_verified_email(&self, _organization_id: Uuid, _email: &str) -> Result<Option<User>, DomainError> {
+            Ok(None)
+        }
+        async fn insert_with_verified_email(&self, _user: &User) -> Result<(), DomainError> {
+            Ok(())
+        }
+        async fn mark_email_verified(&self, _id: Uuid) -> Result<bool, DomainError> {
+            Ok(false)
+        }
+    }
+
+    #[tokio::test]
+    async fn signing_out_everywhere_revokes_that_users_sessions_only() {
+        let security = Arc::new(FakeSecurity { revoked: Mutex::new(Vec::new()) });
+        let user_id = Uuid::new_v4();
+
+        RevokeUserSessionsUseCase::new(security.clone()).execute(user_id, None).await.unwrap();
+
+        assert_eq!(*security.revoked.lock().unwrap(), vec![user_id]);
     }
 }

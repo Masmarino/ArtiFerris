@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use artiferris_domain::audit::SecurityAuditRecord;
 use artiferris_domain::error::DomainError;
 use crate::error_ext::InfraErr;
 use artiferris_domain::webauthn::{WebauthnCredential, WebauthnCredentialPort};
@@ -25,7 +26,8 @@ impl WebauthnCredentialPort for PostgresWebauthnCredentialRepository {
         Ok(rows.into_iter().map(|r| WebauthnCredential { id: r.id, user_id: r.user_id, name: r.name, passkey_data: r.passkey_data, created_at: r.created_at }).collect())
     }
 
-    async fn insert(&self, credential: &WebauthnCredential) -> Result<(), DomainError> {
+    async fn insert(&self, credential: &WebauthnCredential, audit: Option<&SecurityAuditRecord>) -> Result<(), DomainError> {
+        let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!(
             "INSERT INTO webauthn_credentials (id, user_id, name, passkey_data, created_at) VALUES ($1, $2, $3, $4, $5)",
             credential.id,
@@ -34,9 +36,11 @@ impl WebauthnCredentialPort for PostgresWebauthnCredentialRepository {
             credential.passkey_data,
             credential.created_at,
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .infra_err()?;
+        crate::postgres::event_publisher::insert_security_audit(&mut tx, audit).await?;
+        tx.commit().await.infra_err()?;
         Ok(())
     }
 
@@ -48,8 +52,11 @@ impl WebauthnCredentialPort for PostgresWebauthnCredentialRepository {
         Ok(())
     }
 
-    async fn delete(&self, id: Uuid, user_id: Uuid) -> Result<(), DomainError> {
-        sqlx::query!("DELETE FROM webauthn_credentials WHERE id = $1 AND user_id = $2", id, user_id).execute(&self.pool).await.infra_err()?;
+    async fn delete(&self, id: Uuid, user_id: Uuid, audit: Option<&SecurityAuditRecord>) -> Result<(), DomainError> {
+        let mut tx = self.pool.begin().await.infra_err()?;
+        sqlx::query!("DELETE FROM webauthn_credentials WHERE id = $1 AND user_id = $2", id, user_id).execute(&mut *tx).await.infra_err()?;
+        crate::postgres::event_publisher::insert_security_audit(&mut tx, audit).await?;
+        tx.commit().await.infra_err()?;
         Ok(())
     }
 
@@ -96,7 +103,7 @@ mod tests {
         let user_id = seed_user(&pool, "florian").await;
         let repo = PostgresWebauthnCredentialRepository::new(pool);
         let credential = sample(user_id);
-        repo.insert(&credential).await.unwrap();
+        repo.insert(&credential, None).await.unwrap();
 
         let listed = repo.list_for_user(user_id).await.unwrap();
         assert_eq!(listed.len(), 1);
@@ -111,6 +118,25 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_credential_and_its_audit_entry_are_stored_together_or_not_at_all(pool: sqlx::PgPool) {
+        use artiferris_domain::audit::{SecurityAuditRecord, SecurityEvent};
+        let user_id = seed_user(&pool, "florian").await;
+        let repo = PostgresWebauthnCredentialRepository::new(pool.clone());
+        let credential = sample(user_id);
+        let audit = SecurityAuditRecord { event: SecurityEvent::PasskeyAdded { user_id, organization_id: Uuid::nil(), passkey_id: credential.id }, actor_id: Some(user_id) };
+        repo.insert(&credential, Some(&audit)).await.unwrap();
+        let recorded: i64 = sqlx::query_scalar("SELECT count(*) FROM domain_events WHERE event_type = 'PasskeyAdded'").fetch_one(&pool).await.unwrap();
+        assert_eq!(recorded, 1);
+        sqlx::query("ALTER TABLE domain_events RENAME TO domain_events_gone").execute(&pool).await.unwrap();
+
+        let second = sample(user_id);
+        let refused = repo.insert(&second, Some(&audit)).await;
+
+        assert!(refused.is_err());
+        assert_eq!(repo.count_for_user(user_id).await.unwrap(), 1, "the second credential was not stored without its audit entry");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn list_for_user_returns_empty_when_none_registered(pool: sqlx::PgPool) {
         let user_id = seed_user(&pool, "florian").await;
         let repo = PostgresWebauthnCredentialRepository::new(pool);
@@ -122,7 +148,7 @@ mod tests {
         let user_id = seed_user(&pool, "florian").await;
         let repo = PostgresWebauthnCredentialRepository::new(pool);
         let credential = sample(user_id);
-        repo.insert(&credential).await.unwrap();
+        repo.insert(&credential, None).await.unwrap();
 
         repo.update_passkey_data(credential.id, b"updated-bytes".to_vec()).await.unwrap();
 
@@ -136,12 +162,12 @@ mod tests {
         let other_user_id = seed_user(&pool, "other-user").await;
         let repo = PostgresWebauthnCredentialRepository::new(pool);
         let credential = sample(user_id);
-        repo.insert(&credential).await.unwrap();
+        repo.insert(&credential, None).await.unwrap();
 
-        repo.delete(credential.id, other_user_id).await.unwrap();
+        repo.delete(credential.id, other_user_id, None).await.unwrap();
         assert_eq!(repo.count_for_user(user_id).await.unwrap(), 1, "deleting with the wrong user_id must not remove the credential");
 
-        repo.delete(credential.id, user_id).await.unwrap();
+        repo.delete(credential.id, user_id, None).await.unwrap();
         assert_eq!(repo.count_for_user(user_id).await.unwrap(), 0);
     }
 }

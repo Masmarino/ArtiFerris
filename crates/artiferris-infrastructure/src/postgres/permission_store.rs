@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use artiferris_domain::error::EventStoreError;
 use crate::error_ext::StorageErr;
 use artiferris_domain::permission::{PermissionEvent, PermissionEventStorePort, PermissionQueryPort, Role};
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 pub struct PostgresPermissionStore {
@@ -36,6 +36,101 @@ fn aggregate_id(user_id: Uuid, repository_id: Uuid) -> String {
     format!("{user_id}:{repository_id}")
 }
 
+/// `append`'s write logic, pulled out so `create_with_owner_grant` can reuse it inside its own
+/// transaction instead of keeping a second copy in sync by hand.
+pub(crate) async fn append_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+    repository_id: Uuid,
+    expected_version: u64,
+    events: Vec<PermissionEvent>,
+    actor_id: Uuid,
+) -> Result<(), EventStoreError> {
+    // An empty vector writes no events, so treat it as a genuine no-op rather than falling
+    // through to `latest_role: None`, which would otherwise delete an existing projection row
+    // without ever recording why (B-38). Checked here, not just in `append`, so
+    // `create_with_owner_grant`'s direct call gets the same guarantee.
+    if events.is_empty() {
+        return Ok(());
+    }
+
+    // Advisory lock first: `FOR UPDATE` below takes no lock on a
+    // brand-new aggregate (zero rows), so two first-appends could race.
+    sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", aggregate_id(user_id, repository_id))
+        .execute(&mut **tx)
+        .await
+        .storage_err()?;
+
+    let current_version: i64 = sqlx::query_scalar!(
+        "SELECT version FROM domain_events \
+         WHERE aggregate_type = 'Permission' AND aggregate_id = $1 ORDER BY version DESC LIMIT 1 FOR UPDATE",
+        aggregate_id(user_id, repository_id)
+    )
+    .fetch_optional(&mut **tx)
+    .await
+    .storage_err()?
+    .unwrap_or(0);
+
+    if current_version as u64 != expected_version {
+        return Err(EventStoreError::ConcurrencyConflict { expected: expected_version, actual: current_version as u64 });
+    }
+
+    let mut next_version = current_version;
+    let mut latest_role: Option<Role> = None;
+    for event in &events {
+        next_version += 1;
+        let payload = serde_json::to_value(event).storage_err()?;
+        sqlx::query!(
+            "INSERT INTO domain_events (aggregate_type, aggregate_id, event_type, payload, version, actor_id, organization_id) \
+             VALUES ('Permission', $1, $2, $3, $4, $5, repository_organization($6))",
+            aggregate_id(user_id, repository_id),
+            event.event_type(),
+            payload,
+            next_version,
+            actor_id,
+            repository_id.to_string()
+        )
+        .execute(&mut **tx)
+        .await
+        .storage_err()?;
+
+        latest_role = match event {
+            PermissionEvent::Granted { role, .. } => Some(*role),
+            PermissionEvent::Revoked { .. } => None,
+        };
+    }
+
+    match latest_role {
+        Some(role) => {
+            sqlx::query!(
+                "INSERT INTO permission_projections (user_id, repository_id, role, version, updated_at) \
+                 VALUES ($1, $2, $3, $4, now()) \
+                 ON CONFLICT (user_id, repository_id) \
+                 DO UPDATE SET role = EXCLUDED.role, version = EXCLUDED.version, updated_at = now()",
+                user_id,
+                repository_id,
+                role_to_str(role),
+                next_version
+            )
+            .execute(&mut **tx)
+            .await
+            .storage_err()?;
+        }
+        None => {
+            sqlx::query!(
+                "DELETE FROM permission_projections WHERE user_id = $1 AND repository_id = $2",
+                user_id,
+                repository_id
+            )
+            .execute(&mut **tx)
+            .await
+            .storage_err()?;
+        }
+    }
+
+    Ok(())
+}
+
 #[async_trait]
 impl PermissionEventStorePort for PostgresPermissionStore {
     async fn load(&self, user_id: Uuid, repository_id: Uuid) -> Result<(u64, Vec<PermissionEvent>), EventStoreError> {
@@ -66,80 +161,7 @@ impl PermissionEventStorePort for PostgresPermissionStore {
         actor_id: Uuid,
     ) -> Result<(), EventStoreError> {
         let mut tx = self.pool.begin().await.storage_err()?;
-
-        // Advisory lock first: `FOR UPDATE` below takes no lock on a
-        // brand-new aggregate (zero rows), so two first-appends could race.
-        sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", aggregate_id(user_id, repository_id))
-            .execute(&mut *tx)
-            .await
-            .storage_err()?;
-
-        let current_version: i64 = sqlx::query_scalar!(
-            "SELECT version FROM domain_events \
-             WHERE aggregate_type = 'Permission' AND aggregate_id = $1 ORDER BY version DESC LIMIT 1 FOR UPDATE",
-            aggregate_id(user_id, repository_id)
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .storage_err()?
-        .unwrap_or(0);
-
-        if current_version as u64 != expected_version {
-            return Err(EventStoreError::ConcurrencyConflict { expected: expected_version, actual: current_version as u64 });
-        }
-
-        let mut next_version = current_version;
-        let mut latest_role: Option<Role> = None;
-        for event in &events {
-            next_version += 1;
-            let payload = serde_json::to_value(event).storage_err()?;
-            sqlx::query!(
-                "INSERT INTO domain_events (aggregate_type, aggregate_id, event_type, payload, version, actor_id) \
-                 VALUES ('Permission', $1, $2, $3, $4, $5)",
-                aggregate_id(user_id, repository_id),
-                event.event_type(),
-                payload,
-                next_version,
-                actor_id
-            )
-            .execute(&mut *tx)
-            .await
-            .storage_err()?;
-
-            latest_role = match event {
-                PermissionEvent::Granted { role, .. } => Some(*role),
-                PermissionEvent::Revoked { .. } => None,
-            };
-        }
-
-        match latest_role {
-            Some(role) => {
-                sqlx::query!(
-                    "INSERT INTO permission_projections (user_id, repository_id, role, version, updated_at) \
-                     VALUES ($1, $2, $3, $4, now()) \
-                     ON CONFLICT (user_id, repository_id) \
-                     DO UPDATE SET role = EXCLUDED.role, version = EXCLUDED.version, updated_at = now()",
-                    user_id,
-                    repository_id,
-                    role_to_str(role),
-                    next_version
-                )
-                .execute(&mut *tx)
-                .await
-                .storage_err()?;
-            }
-            None => {
-                sqlx::query!(
-                    "DELETE FROM permission_projections WHERE user_id = $1 AND repository_id = $2",
-                    user_id,
-                    repository_id
-                )
-                .execute(&mut *tx)
-                .await
-                .storage_err()?;
-            }
-        }
-
+        append_in_tx(&mut tx, user_id, repository_id, expected_version, events, actor_id).await?;
         tx.commit().await.storage_err()?;
         Ok(())
     }
@@ -185,6 +207,15 @@ impl PermissionQueryPort for PostgresPermissionStore {
 
     async fn count_all(&self) -> Result<usize, EventStoreError> {
         let count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM permission_projections")
+            .fetch_one(&self.pool)
+            .await
+            .storage_err()?
+            .unwrap_or(0);
+        Ok(count as usize)
+    }
+
+    async fn count_for_repositories(&self, repository_ids: &[Uuid]) -> Result<usize, EventStoreError> {
+        let count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM permission_projections WHERE repository_id = ANY($1)", repository_ids)
             .fetch_one(&self.pool)
             .await
             .storage_err()?
@@ -298,6 +329,32 @@ mod tests {
         let mut expected = vec![(repo_a, Role::Read), (repo_b, Role::Admin)];
         expected.sort_by_key(|(repo_id, _)| *repo_id);
         assert_eq!(entries, expected);
+    }
+
+    #[sqlx::test]
+    async fn appending_an_empty_event_vector_does_not_touch_the_projection_or_the_journal(pool: sqlx::PgPool) {
+        let store = PostgresPermissionStore::new(pool);
+        let user_id = Uuid::new_v4();
+        let repository_id = Uuid::new_v4();
+        store
+            .append(user_id, repository_id, 0, vec![PermissionEvent::Granted { user_id, repository_id, role: Role::Write }], Uuid::new_v4())
+            .await
+            .unwrap();
+
+        let (version_before, _) = store.load(user_id, repository_id).await.unwrap();
+
+        let result = store.append(user_id, repository_id, version_before, vec![], Uuid::new_v4()).await;
+        assert!(result.is_ok(), "an empty event vector should be a genuine no-op, got: {result:?}");
+
+        assert_eq!(
+            store.find_role(user_id, repository_id).await.unwrap(),
+            Some(Role::Write),
+            "the projection row must survive an empty-vector append"
+        );
+
+        let (version_after, events_after) = store.load(user_id, repository_id).await.unwrap();
+        assert_eq!(version_after, version_before, "no new domain_events row should be written for an empty vector");
+        assert_eq!(events_after.len(), 1);
     }
 
     #[sqlx::test]

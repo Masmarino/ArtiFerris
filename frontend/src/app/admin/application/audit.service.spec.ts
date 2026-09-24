@@ -10,7 +10,7 @@ describe('AuditService', () => {
   }
 
   it('delegates query() to the port, defaulting the filter to an empty object', () => {
-    const query = vi.fn().mockReturnValue(of([]))
+    const query = vi.fn().mockReturnValue(of({ entries: [], next_cursor: null }))
     setup({ query }).query()
 
     expect(query).toHaveBeenCalledWith({})
@@ -21,5 +21,12 @@ describe('AuditService', () => {
     setup({ blockedAccounts }).blockedAccounts()
 
     expect(blockedAccounts).toHaveBeenCalled()
+  })
+
+  it('delegates unlockUsername() to the port', () => {
+    const unlockUsername = vi.fn().mockReturnValue(of(undefined))
+    setup({ unlockUsername }).unlockUsername('alice')
+
+    expect(unlockUsername).toHaveBeenCalledWith('alice')
   })
 })

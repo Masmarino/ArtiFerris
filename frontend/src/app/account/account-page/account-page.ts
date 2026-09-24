@@ -13,7 +13,9 @@ import { MeService } from '../../shell/application/me.service'
 import { DatePipe } from '@angular/common'
 import { MfaSettings } from '../mfa-settings/mfa-settings'
 import { PasskeySettings } from '../passkey-settings/passkey-settings'
+import { SessionSettings } from '../session-settings/session-settings'
 import { ToastService } from '../../shared/toast.service'
+import { SessionRevocationService } from '../../auth/application/session-revocation.service'
 
 function passwordsMatch(group: AbstractControl): ValidationErrors | null {
   const newPassword = group.get('newPassword')?.value
@@ -33,6 +35,7 @@ function passwordsMatch(group: AbstractControl): ValidationErrors | null {
     DatePipe,
     MfaSettings,
     PasskeySettings,
+    SessionSettings,
     Tabs,
     Tab,
   ],
@@ -42,6 +45,7 @@ function passwordsMatch(group: AbstractControl): ValidationErrors | null {
 export class AccountPage {
   readonly me = inject(MeService)
   private readonly toastService = inject(ToastService)
+  private readonly sessionRevocation = inject(SessionRevocationService)
 
   readonly form = new FormGroup(
     {
@@ -85,7 +89,7 @@ export class AccountPage {
       next: () => {
         this.submitting.set(false)
         this.form.reset({ currentPassword: '', newPassword: '', confirmPassword: '' })
-        this.toastService.success('Mot de passe changé avec succès.')
+        this.sessionRevocation.signOutAndRedirect()
       },
       error: () => {
         this.submitting.set(false)

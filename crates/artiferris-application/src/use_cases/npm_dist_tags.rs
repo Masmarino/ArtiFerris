@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use artiferris_domain::audit::{EventPublisherPort, NpmPackageEvent};
-use artiferris_domain::npm_package::{NpmPackageName, NpmPackageRepositoryPort, NpmVersion};
+use artiferris_domain::error::DomainError;
+use artiferris_domain::npm_package::{NpmPackageName, NpmPackageRepositoryPort, NpmVersion, validate_dist_tag};
 use uuid::Uuid;
 
 use crate::error::ApplicationError;
@@ -24,13 +25,18 @@ impl SetDistTagUseCase {
         version: &NpmVersion,
         actor_id: Uuid,
     ) -> Result<(), ApplicationError> {
+        validate_dist_tag(tag).map_err(|e| ApplicationError::InvalidNpmPayload(e.to_string()))?;
         let package = self.packages.find_package(repository_id, name).await?.ok_or(ApplicationError::NpmPackageNotFound)?;
         self.packages.find_version(package.id, version).await?.ok_or(ApplicationError::NpmVersionNotFound)?;
-        self.packages.set_dist_tag(package.id, tag, version).await?;
+        self.packages.set_dist_tag(package.id, tag, version).await.map_err(|e| match e {
+            DomainError::NpmVersionNotFound => ApplicationError::NpmVersionNotFound,
+            other => other.into(),
+        })?;
         self.events
             .publish_npm_event(
                 NpmPackageEvent::DistTagChanged { package_name: name.as_str().to_string(), tag: tag.to_string(), version: version.as_str() },
                 package.id,
+                repository_id,
                 Some(actor_id),
             )
             .await?;
@@ -63,6 +69,7 @@ impl DeleteDistTagUseCase {
     }
 
     pub async fn execute(&self, repository_id: Uuid, name: &NpmPackageName, tag: &str) -> Result<(), ApplicationError> {
+        validate_dist_tag(tag).map_err(|e| ApplicationError::InvalidNpmPayload(e.to_string()))?;
         let package = self.packages.find_package(repository_id, name).await?.ok_or(ApplicationError::NpmPackageNotFound)?;
         self.packages.delete_dist_tag(package.id, tag).await?;
         Ok(())
@@ -153,5 +160,22 @@ mod tests {
         let use_case = SetDistTagUseCase::new(packages.clone(), Arc::new(FakeEvents::new()));
         let result = use_case.execute(repository_id, &name, "beta", &missing_version, Uuid::new_v4()).await;
         assert!(matches!(result, Err(ApplicationError::NpmVersionNotFound)));
+    }
+
+    #[tokio::test]
+    async fn a_dist_tag_name_that_is_not_a_word_is_rejected() {
+        let packages = Arc::new(FakePackages::new());
+        let repository_id = Uuid::new_v4();
+        let name = NpmPackageName::parse("left-pad").unwrap();
+        let version = NpmVersion::parse("1.0.0").unwrap();
+        seed_package_with_version(&packages, repository_id, &name, &version).await;
+
+        let set = SetDistTagUseCase::new(packages.clone(), Arc::new(FakeEvents::new()));
+        for bad in ["1.0.0", "a b", "a/b", ""] {
+            let err = set.execute(repository_id, &name, bad, &version, Uuid::new_v4()).await.unwrap_err();
+            assert!(matches!(err, ApplicationError::InvalidNpmPayload(_)), "{bad:?}: {err:?}");
+        }
+        let err = DeleteDistTagUseCase::new(packages).execute(repository_id, &name, "1.0.0").await.unwrap_err();
+        assert!(matches!(err, ApplicationError::InvalidNpmPayload(_)), "{err:?}");
     }
 }

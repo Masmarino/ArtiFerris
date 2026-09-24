@@ -1,4 +1,4 @@
-use axum::extract::FromRequestParts;
+use axum::extract::{FromRequestParts, OptionalFromRequestParts};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
 use axum::RequestPartsExt;
@@ -37,8 +37,7 @@ impl FromRequestParts<AppState> for AuthUser {
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             .ok_or(StatusCode::UNAUTHORIZED)?;
 
-        // Second-granularity: JWT `iat` has no sub-second precision, unlike tokens_valid_after.
-        if verified.issued_at.timestamp() < user.tokens_valid_after.timestamp() {
+        if user.has_revoked_tokens_issued_at(verified.issued_at) {
             return Err(StatusCode::UNAUTHORIZED);
         }
 
@@ -50,6 +49,22 @@ impl FromRequestParts<AppState> for AuthUser {
             organization_id: user.organization_id,
             created_at: user.created_at,
         })
+    }
+}
+
+/// Since axum 0.8 (axum-core 0.5), `Option<T>` as an extractor no longer falls back to a blanket
+/// `FromRequestParts` impl on any rejection — it needs this trait implemented explicitly. This is
+/// that opt-in: any rejection (no `Authorization` header, a malformed one, an expired or otherwise
+/// invalid token, ...) becomes `None` rather than failing the request, so a read-only handler taking
+/// `Option<AuthUser>` can treat every one of those the same way an anonymous caller would.
+impl OptionalFromRequestParts<AppState> for AuthUser {
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Option<Self>, Self::Rejection> {
+        match <Self as FromRequestParts<AppState>>::from_request_parts(parts, state).await {
+            Ok(user) => Ok(Some(user)),
+            Err(_) => Ok(None),
+        }
     }
 }
 
@@ -69,7 +84,7 @@ mod tests {
         Config {
             database_url: String::new(),
             jwt_secret: "test-secret".to_string(),
-            secrets_encryption_key: "test-secret".to_string(),
+            secrets_encryption_key: "test-secrets-encryption-key".to_string(),
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
@@ -77,6 +92,8 @@ mod tests {
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),
+            trusted_proxy_ips: std::collections::HashSet::new(),
+            audit_retention_days: None,
         }
     }
 
@@ -153,7 +170,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let user_id = state.create_user.execute(Uuid::parse_str(PUBLIC_ORG).unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
         let token = state.token_issuer.issue(user_id, chrono::Duration::hours(12)).unwrap();
-        state.delete_user.execute(user_id).await.unwrap();
+        state.delete_user.execute(user_id, None).await.unwrap();
         let app = router(state);
 
         let response = app.oneshot(Request::builder().uri("/").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap()).await.unwrap();
@@ -169,7 +186,7 @@ mod tests {
 
         // Force a real gap past iat's whole-second precision, or the ordering is ambiguous.
         tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
-        state.users.update_password(user_id, "new-hash".to_string()).await.unwrap();
+        state.users.update_password(user_id, "new-hash".to_string(), None).await.unwrap();
         let app = router(state);
 
         let response = app.oneshot(Request::builder().uri("/").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap()).await.unwrap();
@@ -182,7 +199,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let user_id = state.create_user.execute(Uuid::parse_str(PUBLIC_ORG).unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
 
-        state.users.update_password(user_id, "new-hash".to_string()).await.unwrap();
+        state.users.update_password(user_id, "new-hash".to_string(), None).await.unwrap();
         let token = state.token_issuer.issue(user_id, chrono::Duration::hours(12)).unwrap();
         let app = router(state);
 

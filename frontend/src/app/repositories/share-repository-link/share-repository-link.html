@@ -1,0 +1,15 @@
+@if (publicLink(); as link) {
+  <p>N'importe qui peut consulter et télécharger ce dépôt, sans compte, à cette adresse :</p>
+  <app-copyable-command [command]="link.url" label="Copier le lien public du dépôt" />
+  <p class="share-repository-link__hint">
+    <a [routerLink]="link.path">Voir la page publique</a> · chaque paquet ou image a aussi sa propre page,
+    depuis l'onglet Packages.
+  </p>
+} @else {
+  <p class="share-repository-link__hint">
+    Ce dépôt est privé : lui et ses paquets ne sont visibles que par les utilisateurs autorisés.
+    @if (canManageVisibility()) {
+      Rendez-le public dans l'onglet Paramètres pour obtenir un lien à partager.
+    }
+  </p>
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO docker_tags (package_repository_id, image_name, tag, manifest_id) VALUES ($1, 'Not A Valid Name', 'v1', $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ccb33f3899ffbfdbbc0bcb1fead7a255a3f5911e9cf3a02c184f3e694975f19f"
+}

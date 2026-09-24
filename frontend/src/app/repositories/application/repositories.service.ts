@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core'
-import { Observable, catchError, shareReplay, tap, throwError } from 'rxjs'
+import { Observable, tap } from 'rxjs'
 import {
   CreateRepositoryOptions,
   DockerImageDetails,
@@ -13,30 +13,30 @@ import {
   RepositoryType,
 } from '../domain/repository.entity'
 import { REPOSITORY_PORT } from './repository.port'
+import { TokenScopedCache } from '../../shared/token-scoped-cache'
 
 @Injectable({ providedIn: 'root' })
 export class RepositoriesService {
   private readonly port = inject(REPOSITORY_PORT)
 
-  private cachedList$: Observable<RepositorySummary[]> | null = null
+  private readonly listCache = new TokenScopedCache<RepositorySummary[]>(() => this.port.list())
 
   // cached across callers, cleared by any mutation below — forceRefresh is for the shell's
   // search, which needs to see writes that could've come from another tab
   list(options?: { forceRefresh?: boolean }): Observable<RepositorySummary[]> {
-    if (!this.cachedList$ || options?.forceRefresh) {
-      this.cachedList$ = this.port.list().pipe(
-        catchError((err: unknown) => {
-          this.cachedList$ = null
-          return throwError(() => err)
-        }),
-        shareReplay(1),
-      )
-    }
-    return this.cachedList$
+    return this.listCache.get(options?.forceRefresh)
   }
 
   get(id: string): Observable<RepositorySummary> {
     return this.port.get(id)
+  }
+
+  getByOwner(username: string, repoName: string): Observable<RepositorySummary> {
+    return this.port.getByOwner(username, repoName)
+  }
+
+  getByOrg(slug: string, repoName: string): Observable<RepositorySummary> {
+    return this.port.getByOrg(slug, repoName)
   }
 
   create(
@@ -48,37 +48,41 @@ export class RepositoriesService {
   ): Observable<RepositorySummary> {
     return this.port
       .create(name, format, repoType, remoteUrl, options)
-      .pipe(tap(() => (this.cachedList$ = null)))
+      .pipe(tap(() => this.listCache.clear()))
   }
 
   rename(id: string, name: string): Observable<void> {
-    return this.port.rename(id, name).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.rename(id, name).pipe(tap(() => this.listCache.clear()))
   }
 
   setQuota(id: string, quotaBytes: number | null): Observable<void> {
-    return this.port.setQuota(id, quotaBytes).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.setQuota(id, quotaBytes).pipe(tap(() => this.listCache.clear()))
   }
 
   setRetentionPolicy(id: string, keepLastN: number | null): Observable<void> {
-    return this.port.setRetentionPolicy(id, keepLastN).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.setRetentionPolicy(id, keepLastN).pipe(tap(() => this.listCache.clear()))
+  }
+
+  setVisibility(id: string, isPublic: boolean): Observable<void> {
+    return this.port.setVisibility(id, isPublic).pipe(tap(() => this.listCache.clear()))
   }
 
   delete(id: string): Observable<void> {
-    return this.port.delete(id).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.delete(id).pipe(tap(() => this.listCache.clear()))
   }
 
   addGroupMember(groupId: string, memberRepositoryId: string, position: number): Observable<void> {
     return this.port
       .addGroupMember(groupId, memberRepositoryId, position)
-      .pipe(tap(() => (this.cachedList$ = null)))
+      .pipe(tap(() => this.listCache.clear()))
   }
 
   removeGroupMember(groupId: string, memberId: string): Observable<void> {
-    return this.port.removeGroupMember(groupId, memberId).pipe(tap(() => (this.cachedList$ = null)))
+    return this.port.removeGroupMember(groupId, memberId).pipe(tap(() => this.listCache.clear()))
   }
 
-  packages(id: string): Observable<RepositoryPackages> {
-    return this.port.packages(id)
+  packages(id: string, after?: string | null): Observable<RepositoryPackages> {
+    return this.port.packages(id, after)
   }
 
   npmPackageDetails(id: string, name: string): Observable<NpmPackageDetails> {

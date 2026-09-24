@@ -25,18 +25,30 @@ function repo(overrides: Partial<RepositorySummary>): RepositorySummary {
     group_members: [],
     quota_bytes: null,
     retention_keep_last_n: null,
+    is_public: false,
     my_role: 'admin',
     organization_id: 'org-1',
+    owner_name: 'Acme Corp',
+    owner_is_personal: false,
     ...overrides,
   }
 }
 
-function render(repository: RepositorySummary) {
+function render(
+  repository: RepositorySummary,
+  overrides: { apiTokenLink?: string; apiTokenLinkLabel?: string } = {},
+) {
   TestBed.configureTestingModule({
     providers: [provideRouter([]), { provide: DOCUMENT, useValue: FAKE_DOCUMENT }],
   })
   const fixture = TestBed.createComponent(UsageInstructions)
   fixture.componentRef.setInput('repository', repository)
+  if (overrides.apiTokenLink !== undefined) {
+    fixture.componentRef.setInput('apiTokenLink', overrides.apiTokenLink)
+  }
+  if (overrides.apiTokenLinkLabel !== undefined) {
+    fixture.componentRef.setInput('apiTokenLinkLabel', overrides.apiTokenLinkLabel)
+  }
   fixture.detectChanges()
   return fixture
 }
@@ -82,11 +94,54 @@ describe('UsageInstructions', () => {
     expect(text).not.toContain('npm publish')
   })
 
+  it('prefixes the path with u/{owner} for a personal docker repository', () => {
+    const text = render(
+      repo({
+        name: 'my-images',
+        format: 'docker',
+        repo_type: 'hosted',
+        owner_name: 'florian',
+        owner_is_personal: true,
+      }),
+    ).nativeElement.textContent
+
+    expect(text).toContain(
+      'docker tag mon-image:latest artiferris.test:8080/u/florian/my-images/mon-image:latest',
+    )
+    expect(text).toContain('docker push artiferris.test:8080/u/florian/my-images/')
+    expect(text).toContain('docker pull artiferris.test:8080/u/florian/my-images/')
+  })
+
+  it('prefixes the path with u/{owner} for a personal npm repository', () => {
+    const text = render(
+      repo({
+        name: 'my-packages',
+        format: 'npm',
+        repo_type: 'hosted',
+        owner_name: 'florian',
+        owner_is_personal: true,
+      }),
+    ).nativeElement.textContent
+
+    expect(text).toContain('registry=http://artiferris.test:8080/npm/u/florian/my-packages/')
+    expect(text).toContain(
+      '//artiferris.test:8080/npm/u/florian/my-packages/:_authToken=<votre-token>',
+    )
+  })
+
   it('links to the API tokens page and never renders a real token', () => {
     const fixture = render(repo({}))
 
     const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a[href="/account"]')
     expect(link).toBeTruthy()
     expect(fixture.nativeElement.textContent).toContain('<votre-token>')
+  })
+
+  it('links elsewhere when apiTokenLink/apiTokenLinkLabel are overridden', () => {
+    const fixture = render(repo({}), { apiTokenLink: '/login', apiTokenLinkLabel: 'Se connecter' })
+
+    const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a')
+    expect(link.getAttribute('href')).toBe('/login')
+    expect(link.textContent).toContain('Se connecter')
   })
 })

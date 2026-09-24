@@ -1,7 +1,17 @@
 <div class="container">
+  @if (loadFailed()) {
+    <p class="gbt-form-error" role="alert">Échec du chargement des jetons.</p>
+  }
+  @if (listTruncated()) {
+    <p class="api-tokens__limit" role="status">La liste est limitée à {{ pageLimit }} jetons.</p>
+  }
   <gbt-card heading="Jetons actifs" icon="key">
     @if (activeTokens().length === 0) {
-      <p>Aucun jeton actif.</p>
+      <gbt-empty-state
+        illustration="star"
+        heading="Aucun jeton actif"
+        message="Les jetons d'accès créés par les utilisateurs apparaîtront ici."
+      />
     } @else {
       <table class="api-tokens__table">
         <thead>

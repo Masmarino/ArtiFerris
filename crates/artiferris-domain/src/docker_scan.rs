@@ -20,14 +20,15 @@ pub struct DockerVulnerability {
 
 #[async_trait]
 pub trait DockerImageScannerPort: Send + Sync {
-    /// `registry_token` is minted for this scan, never a client credential.
+    /// `mint_registry_token` is called once the scan actually starts, not before it waits for a slot, so the token's short life
+    /// isn't spent in the queue. The token is minted for this scan, never a client credential.
     async fn scan(
         &self,
         repository_name: &str,
         image_name: &str,
         reference: &str,
         platform: Option<&str>,
-        registry_token: &str,
+        mint_registry_token: &(dyn Fn() -> Result<String, DomainError> + Send + Sync),
     ) -> Result<Vec<DockerVulnerability>, DomainError>;
 }
 

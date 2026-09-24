@@ -100,6 +100,10 @@
       [errorMessage]="retentionError"
     />
 
+    @if (isSuperAdmin() && canBePublic()) {
+      <gbt-checkbox label="Rendre public" formControlName="isPublic" />
+    }
+
     <gbt-button
       text="Créer"
       type="submit"

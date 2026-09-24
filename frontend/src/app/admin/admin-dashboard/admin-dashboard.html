@@ -1,4 +1,10 @@
 <div class="container">
+  @if (loadFailed()) {
+    <div role="alert">
+      <p class="gbt-form-error">Échec du chargement d'une partie du tableau de bord.</p>
+      <gbt-button text="Réessayer" variant="secondary" (clicked)="retry()" />
+    </div>
+  }
   @if (stats(); as s) {
     <section>
       <gbt-card heading="Utilisateurs" icon="users">
@@ -15,12 +21,18 @@
 
   <section class="admin-dashboard__charts">
     <gbt-card heading="Activité (7 derniers jours)" icon="activity">
+      @if (activityTruncated()) {
+        <p class="partial-note">
+          Basé sur les {{ activityEvents().length }} événements les plus récents : les jours plus
+          anciens sont sous-estimés.
+        </p>
+      }
       <gbt-dimension-card
         [rows]="activityChartData()"
         caption="Événements par jour"
         labelColumn="Jour"
         valueColumn="Événements"
-        emptyMessage="Aucune activité."
+        emptyMessage="Aucun événement ces 7 derniers jours."
         [locale]="locale"
       />
     </gbt-card>
@@ -30,7 +42,7 @@
         caption="Dépôts par format"
         labelColumn="Format"
         valueColumn="Dépôts"
-        emptyMessage="Aucun dépôt."
+        emptyMessage="Aucun dépôt à répartir par format."
         [locale]="locale"
       />
     </gbt-card>
@@ -88,10 +100,14 @@
     ) {
       <p>
         {{ event.occurred_at | date: 'short' }} · {{ event.aggregate_type }} ·
-        {{ event.event_type }}
+        {{ eventLabel(event.event_type) }}
       </p>
     } @empty {
-      <p>Aucune activité récente.</p>
+      <gbt-empty-state
+        illustration="checklist"
+        heading="Aucune activité récente"
+        message="Les événements du registre apparaîtront ici dès qu'il y en aura."
+      />
     }
   </gbt-card>
 </div>

@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::audit::AdminAuditRecord;
 use crate::error::DomainError;
 
 /// Singleton, admin-editable at runtime.
@@ -15,6 +16,10 @@ pub struct SystemSettings {
     /// export/import bundle from before this field existed still enables registration.
     #[serde(default = "default_registration_enabled")]
     pub registration_enabled: bool,
+    /// Whether search engines may index the public catalog (robots.txt, sitemap, meta robots). Only the public
+    /// organization's row counts. Off by default, and off for a bundle saved before the field existed.
+    #[serde(default)]
+    pub seo_indexing_enabled: bool,
 }
 
 fn default_registration_enabled() -> bool {
@@ -23,14 +28,15 @@ fn default_registration_enabled() -> bool {
 
 impl SystemSettings {
     pub const fn defaults() -> Self {
-        Self { max_login_attempts: 10, login_attempt_window_seconds: 300, session_ttl_hours: 12, registration_enabled: true }
+        Self { max_login_attempts: 10, login_attempt_window_seconds: 300, session_ttl_hours: 12, registration_enabled: true, seo_indexing_enabled: false }
     }
 }
 
 #[async_trait]
 pub trait SystemSettingsPort: Send + Sync {
     async fn get(&self, organization_id: Uuid) -> Result<SystemSettings, DomainError>;
-    async fn update(&self, organization_id: Uuid, settings: &SystemSettings) -> Result<(), DomainError>;
+    /// `audit` is written in the same transaction as the change.
+    async fn update(&self, organization_id: Uuid, settings: &SystemSettings, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError>;
 }
 
 #[cfg(test)]
@@ -44,6 +50,13 @@ mod tests {
         assert_eq!(defaults.login_attempt_window_seconds, 300);
         assert_eq!(defaults.session_ttl_hours, 12);
         assert!(defaults.registration_enabled);
+        assert!(!defaults.seo_indexing_enabled);
+    }
+
+    #[test]
+    fn deserializing_without_seo_indexing_enabled_keeps_indexing_off() {
+        let json = r#"{"max_login_attempts":10,"login_attempt_window_seconds":300,"session_ttl_hours":12,"registration_enabled":true}"#;
+        assert!(!serde_json::from_str::<SystemSettings>(json).unwrap().seo_indexing_enabled);
     }
 
     /// An export bundle saved before this field existed must still deserialize — and

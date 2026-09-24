@@ -1,16 +1,17 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { firstValueFrom } from 'rxjs'
-import { Button, Card, GbtInput, Spinner } from '@masmarino/gabarit'
+import { Button, Card, EmptyState, GbtInput, Spinner } from '@masmarino/gabarit'
 import { MfaService } from '../application/mfa.service'
 import { PasskeySummary } from '../domain/mfa.types'
 import { createPasskeyCredential, passkeysSupported } from '../../shared/webauthn-browser'
 import { ToastService } from '../../shared/toast.service'
+import { SessionRevocationService } from '../../auth/application/session-revocation.service'
 
 @Component({
   selector: 'app-passkey-settings',
   standalone: true,
-  imports: [Button, Card, GbtInput, FormsModule, Spinner],
+  imports: [Button, Card, EmptyState, GbtInput, FormsModule, Spinner],
   templateUrl: './passkey-settings.html',
   styleUrl: './passkey-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -18,6 +19,7 @@ import { ToastService } from '../../shared/toast.service'
 export class PasskeySettings implements OnInit {
   private readonly mfaService = inject(MfaService)
   private readonly toastService = inject(ToastService)
+  private readonly sessionRevocation = inject(SessionRevocationService)
 
   readonly supported = passkeysSupported()
   readonly loading = signal(true)
@@ -75,8 +77,7 @@ export class PasskeySettings implements OnInit {
       this.addingName.set(false)
       this.reload()
       this.toastService.success('Clé d’accès enregistrée.')
-    } catch (err) {
-      console.error('Passkey registration failed:', err)
+    } catch {
       this.toastService.error("Échec de l'enregistrement de la clé d'accès. Réessayez.")
     } finally {
       this.registering.set(false)
@@ -101,8 +102,7 @@ export class PasskeySettings implements OnInit {
       next: () => {
         this.stopDeleting(id)
         this.setPasswordFor(id, '')
-        this.reload()
-        this.toastService.success('Clé d’accès supprimée.')
+        this.sessionRevocation.signOutAndRedirect()
       },
       error: () => {
         this.stopDeleting(id)

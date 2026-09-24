@@ -64,4 +64,14 @@ describe('ToastService', () => {
 
     expect(service.toasts()).toHaveLength(1)
   })
+
+  it('drops every queued toast on clear', () => {
+    const service = setup()
+    service.success('first')
+    service.error('second')
+
+    service.clear()
+
+    expect(service.toasts()).toEqual([])
+  })
 })

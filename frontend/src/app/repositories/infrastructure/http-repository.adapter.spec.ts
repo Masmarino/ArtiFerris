@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
 import { HttpRepositoryAdapter } from './http-repository.adapter'
+import { RepositorySummary } from '../domain/repository.entity'
 
 describe('HttpRepositoryAdapter', () => {
   function setup() {
@@ -85,5 +86,103 @@ describe('HttpRepositoryAdapter', () => {
     expect(req.request.method).toBe('PATCH')
     expect(req.request.body).toEqual({ name: 'renamed-repo' })
     req.flush(null)
+  })
+
+  it('sets visibility via PUT', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.setVisibility('r1', true).subscribe()
+    const req = httpMock.expectOne('/api/repositories/r1/visibility')
+    expect(req.request.method).toBe('PUT')
+    expect(req.request.body).toEqual({ is_public: true })
+    req.flush(null)
+  })
+
+  it('fetches a repository by owner username and repo name', () => {
+    const { adapter, httpMock } = setup()
+
+    let result: RepositorySummary | undefined
+    adapter.getByOwner('alice', 'my-lib').subscribe((r) => (result = r))
+
+    const req = httpMock.expectOne('/api/repositories/by-owner/alice/my-lib')
+    expect(req.request.method).toBe('GET')
+    req.flush({
+      id: 'repo-1',
+      name: 'my-lib',
+      format: 'npm',
+      repo_type: 'hosted',
+      remote_url: null,
+      remote_credentials_set: false,
+      group_members: [],
+      quota_bytes: null,
+      retention_keep_last_n: null,
+      is_public: true,
+      my_role: null,
+      organization_id: 'org-1',
+      owner_name: 'alice',
+      owner_is_personal: true,
+    })
+
+    expect(result?.id).toBe('repo-1')
+  })
+
+  it('URL-encodes the username and repo name', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.getByOwner('a b', 'my lib').subscribe()
+
+    httpMock.expectOne('/api/repositories/by-owner/a%20b/my%20lib').flush(null)
+  })
+
+  it('resolves a public organization repository through by-org', () => {
+    const { adapter, httpMock } = setup()
+
+    let result: RepositorySummary | undefined
+    adapter.getByOrg('acme', 'my-lib').subscribe((r) => (result = r))
+
+    const req = httpMock.expectOne('/api/repositories/by-org/acme/my-lib')
+    expect(req.request.method).toBe('GET')
+    req.flush({ id: 'repo-1', name: 'my-lib' })
+    expect(result?.id).toBe('repo-1')
+  })
+
+  it('URL-encodes the slug and repository name for by-org', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.getByOrg('a b', 'my lib').subscribe()
+
+    httpMock.expectOne('/api/repositories/by-org/a%20b/my%20lib').flush(null)
+  })
+
+  it('keeps a hostile id inside its path segment, and refuses dot segments', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.get('a/../../users').subscribe()
+    httpMock.expectOne('/api/repositories/a%2F..%2F..%2Fusers').flush({})
+
+    expect(() => adapter.get('..')).toThrow(RangeError)
+    expect(() => adapter.delete('..')).toThrow(RangeError)
+    expect(() => adapter.npmPackageDetails('repo-1', '..')).toThrow(RangeError)
+    httpMock.verify()
+  })
+
+  it('fetches the first package page without any query parameter', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.packages('r1').subscribe()
+
+    const req = httpMock.expectOne('/api/repositories/r1/packages')
+    expect(req.request.params.keys()).toEqual([])
+    req.flush({ format: 'npm', packages: [], next_after: null })
+  })
+
+  it('sends the previous next_after as the after parameter', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.packages('r1', '@scope/name').subscribe()
+
+    const req = httpMock.expectOne((r) => r.url === '/api/repositories/r1/packages')
+    expect(req.request.params.get('after')).toBe('@scope/name')
+    req.flush({ format: 'npm', packages: [], next_after: null })
   })
 })

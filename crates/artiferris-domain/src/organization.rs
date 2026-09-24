@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::error::DomainError;
+use crate::reserved_names::reject_reserved_name;
 
 /// Every environment seeds exactly this id as the public organization (see `0001_init.sql`).
 pub const PUBLIC_ORGANIZATION_ID: Uuid = Uuid::from_u128(1);
@@ -23,6 +24,14 @@ impl OrganizationSlug {
         }
     }
 
+    /// For a slug being created. `parse` stays lenient so an organization that predates the
+    /// `artiferris-` reservation can still be looked up and loaded.
+    pub fn parse_new(raw: &str) -> Result<Self, DomainError> {
+        let slug = Self::parse(raw)?;
+        reject_reserved_name(raw)?;
+        Ok(slug)
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -34,6 +43,9 @@ pub struct Organization {
     pub slug: OrganizationSlug,
     pub display_name: String,
     pub is_public: bool,
+    /// A personal namespace's own hidden organization — filtered out of every organization
+    /// listing/picker; see `docs/superpowers/specs/2026-09-18-user-repositories-design.md`.
+    pub is_personal: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -51,6 +63,17 @@ pub trait OrganizationRepositoryPort: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_slug_cannot_use_the_reserved_prefix() {
+        assert_eq!(OrganizationSlug::parse_new("ArtiFerris-npm"), Err(DomainError::ReservedName("ArtiFerris-npm".to_string())));
+        assert!(OrganizationSlug::parse_new("acme").is_ok());
+    }
+
+    #[test]
+    fn an_existing_slug_with_the_reserved_prefix_can_still_be_looked_up() {
+        assert!(OrganizationSlug::parse("artiferris-legacy").is_ok());
+    }
 
     #[test]
     fn a_valid_slug_parses() {
@@ -79,5 +102,18 @@ mod tests {
     #[test]
     fn public_organization_id_matches_the_seeded_migration_row() {
         assert_eq!(PUBLIC_ORGANIZATION_ID, Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap());
+    }
+
+    #[test]
+    fn a_personal_organization_is_constructed_with_the_flag_set() {
+        let org = Organization {
+            id: Uuid::new_v4(),
+            slug: OrganizationSlug::parse("u-abc123").unwrap(),
+            display_name: "alice".to_string(),
+            is_public: false,
+            is_personal: true,
+            created_at: Utc::now(),
+        };
+        assert!(org.is_personal);
     }
 }

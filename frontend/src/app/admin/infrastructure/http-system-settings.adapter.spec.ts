@@ -17,12 +17,16 @@ describe('HttpSystemSettingsAdapter', () => {
   it('fetches the current settings', () => {
     const { adapter, httpMock } = setup()
 
-    adapter.get().subscribe((settings) => expect(settings.max_login_attempts).toBe(10))
+    adapter.get().subscribe((settings) => {
+      expect(settings.max_login_attempts).toBe(10)
+      expect(settings.seo_indexing_enabled).toBe(true)
+    })
     httpMock.expectOne('/api/admin/settings').flush({
       max_login_attempts: 10,
       login_attempt_window_seconds: 300,
       session_ttl_hours: 12,
       registration_enabled: true,
+      seo_indexing_enabled: true,
     })
   })
 
@@ -35,6 +39,7 @@ describe('HttpSystemSettingsAdapter', () => {
         login_attempt_window_seconds: 60,
         session_ttl_hours: 1,
         registration_enabled: false,
+        seo_indexing_enabled: true,
       })
       .subscribe()
     const req = httpMock.expectOne('/api/admin/settings')
@@ -44,6 +49,7 @@ describe('HttpSystemSettingsAdapter', () => {
       login_attempt_window_seconds: 60,
       session_ttl_hours: 1,
       registration_enabled: false,
+      seo_indexing_enabled: true,
     })
     req.flush(null)
   })

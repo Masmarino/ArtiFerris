@@ -4,9 +4,12 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
-use artiferris_application::use_cases::smtp::UpdateSmtpSettingsInput;
-use artiferris_domain::audit::{AuditEntry, AuditQueryFilter};
+use artiferris_application::error::ApplicationError;
+use artiferris_application::use_cases::admin::MAX_ADMIN_TOKEN_PAGE;
+use artiferris_application::use_cases::smtp::{SmtpSettingsView, UpdateSmtpSettingsInput};
+use artiferris_domain::audit::{AdminAuditEvent, AdminAuditRecord, AuditCursor, AuditQueryFilter, SecurityAuditRecord, SecurityEvent, SmtpSettingsSummary};
 use artiferris_domain::email::SmtpSecurity;
+use artiferris_domain::error::DomainError;
 use artiferris_domain::health::ComponentHealth;
 use artiferris_domain::package_repository::{RepositoryFormat, RepositoryType};
 use artiferris_domain::permission::Role;
@@ -28,14 +31,18 @@ pub fn router() -> Router<AppState> {
         .route("/api/admin/health", get(get_health))
         .route("/api/admin/stats", get(get_stats))
         .route("/api/admin/security/blocked", get(list_blocked_usernames))
+        .route("/api/admin/login-throttle/{username}", axum::routing::delete(clear_login_throttle))
         .route("/api/admin/tokens", get(list_all_api_tokens))
         .route("/api/admin/tokens/{id}", axum::routing::delete(admin_revoke_api_token))
         .route("/api/admin/settings", get(get_system_settings).put(update_system_settings))
         .route("/api/admin/settings/smtp", get(get_smtp_settings).put(update_smtp_settings))
         .route("/api/admin/settings/smtp/test", axum::routing::post(send_test_email))
         .route("/api/admin/export/configuration", get(export_configuration))
-        .route("/api/admin/import/configuration", axum::routing::post(import_configuration))
+        .route("/api/admin/import/configuration", axum::routing::post(import_configuration).layer(axum::extract::DefaultBodyLimit::max(IMPORT_BODY_LIMIT_BYTES)))
 }
+
+/// A large instance's export outgrows the 10 MiB JSON default.
+const IMPORT_BODY_LIMIT_BYTES: usize = 32 * 1024 * 1024;
 
 /// A super-admin can target any org via `requested`; anyone else always gets their own.
 fn target_organization_id(user: &AuthUser, resolved_org: &ResolvedOrganization, requested: Option<Uuid>) -> Uuid {
@@ -61,6 +68,9 @@ struct AuditQueryParams {
     from: Option<DateTime<Utc>>,
     to: Option<DateTime<Utc>>,
     organization_id: Option<Uuid>,
+    /// The `next_cursor` of the previous page.
+    cursor: Option<String>,
+    limit: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -73,40 +83,48 @@ struct AuditEntryResponse {
     actor_id: Option<Uuid>,
 }
 
+#[derive(Serialize)]
+struct AuditPageResponse {
+    entries: Vec<AuditEntryResponse>,
+    /// Pass back as `cursor` for the next page; `null` on the last one.
+    next_cursor: Option<String>,
+}
+
+/// Opaque to clients: base64url of `<unix micros>.<entry id>`.
+fn encode_audit_cursor(cursor: &AuditCursor) -> String {
+    base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, format!("{}.{}", cursor.occurred_at.timestamp_micros(), cursor.id))
+}
+
+fn decode_audit_cursor(raw: &str) -> Option<AuditCursor> {
+    let bytes = base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, raw).ok()?;
+    let text = String::from_utf8(bytes).ok()?;
+    let (micros, id) = text.split_once('.')?;
+    Some(AuditCursor { occurred_at: DateTime::from_timestamp_micros(micros.parse().ok()?)?, id: Uuid::parse_str(id).ok()? })
+}
+
 fn internal_error<E>(_: E) -> (StatusCode, Json<ErrorResponse>) {
     (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() }))
 }
 
 /// Every repository id belonging to `organization_id` — the "which repos are mine" set metrics scoping filters against.
+/// Scoped at the database level via `list_by_organization` instead of an unbounded `list_all()`
+/// read filtered in application code (M-21, B-7).
 async fn organization_repository_ids(state: &AppState, organization_id: Uuid) -> Result<std::collections::HashSet<Uuid>, artiferris_domain::error::EventStoreError> {
-    Ok(state.repositories.list_all().await?.into_iter().filter(|r| r.organization_id == organization_id).map(|r| r.id).collect())
+    Ok(state.repositories.list_by_organization(organization_id).await?.into_iter().map(|r| r.id).collect())
 }
 
-/// The organization an audit entry pertains to, if any — pre-auth events like `LoginFailed` resolve to `None` and get dropped for an organization admin.
-async fn organization_for_audit_entry(state: &AppState, entry: &AuditEntry) -> Option<Uuid> {
-    let repository_id = match entry.aggregate_type.as_str() {
-        "PackageRepository" | "DockerRegistry" => Uuid::parse_str(&entry.aggregate_id).ok()?,
-        "NpmPackage" => {
-            let npm_package_id = Uuid::parse_str(&entry.aggregate_id).ok()?;
-            state.npm_packages.find_by_id(npm_package_id).await.ok()??.package_repository_id
-        }
-        "Permission" => entry.aggregate_id.split(':').nth(1).and_then(|s| Uuid::parse_str(s).ok())?,
-        "Security" => {
-            let user = state.users.find_by_id(entry.actor_id?).await.ok()??;
-            return Some(user.organization_id);
-        }
-        _ => return None,
-    };
-    Some(state.repositories.find_by_id(repository_id).await.ok()??.organization_id)
-}
-
+/// An organization's view is exactly the entries stored under its id: events with no organization (failed logins before anyone is identified, configuration export/import) appear only in the super-admin's unscoped view.
 async fn list_audit_events(
     State(state): State<AppState>,
     user: AuthUser,
     Query(params): Query<AuditQueryParams>,
-) -> Result<Json<Vec<AuditEntryResponse>>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<AuditPageResponse>, (StatusCode, Json<ErrorResponse>)> {
     let scope = requested_organization_override(&user, params.organization_id);
     require_organization_admin(&user, scope.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    let cursor = match params.cursor.as_deref() {
+        Some(raw) => Some(decode_audit_cursor(raw).ok_or_else(|| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid cursor".to_string() })))?),
+        None => None,
+    };
     let filter = AuditQueryFilter {
         aggregate_type: params.aggregate_type,
         exclude_aggregate_type: params.exclude_aggregate_type,
@@ -114,18 +132,15 @@ async fn list_audit_events(
         actor_id: params.actor_id,
         from: params.from,
         to: params.to,
+        organization_id: scope.or_else(|| (!user.is_super_admin).then_some(user.organization_id)),
+        cursor,
+        limit: params.limit,
     };
-    let entries = state.query_audit_log.execute(filter).await.map_err(|e| application_error_response("failed to query audit log", e))?;
-    let target_org = scope.or_else(|| (!user.is_super_admin).then_some(user.organization_id));
-    let entries = if let Some(target_org) = target_org {
-        // Resolved concurrently — up to 200 entries, one round trip at a time would add up.
-        let organizations = futures::future::join_all(entries.iter().map(|entry| organization_for_audit_entry(&state, entry))).await;
-        entries.into_iter().zip(organizations).filter(|(_, org)| *org == Some(target_org)).map(|(entry, _)| entry).collect()
-    } else {
-        entries
-    };
-    Ok(Json(
-        entries
+    let page = state.query_audit_log.execute(filter).await.map_err(|e| application_error_response("failed to query audit log", e))?;
+    Ok(Json(AuditPageResponse {
+        next_cursor: page.next_cursor.as_ref().map(encode_audit_cursor),
+        entries: page
+            .entries
             .into_iter()
             .map(|e| AuditEntryResponse {
                 aggregate_type: e.aggregate_type,
@@ -136,7 +151,7 @@ async fn list_audit_events(
                 actor_id: e.actor_id,
             })
             .collect(),
-    ))
+    }))
 }
 
 #[derive(Serialize)]
@@ -273,9 +288,13 @@ async fn get_stats(State(state): State<AppState>, user: AuthUser, Query(scope): 
     let target_org = requested_organization_override(&user, scope.organization_id);
     require_organization_admin(&user, target_org.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
     let stats = if let Some(org) = target_org.or_else(|| (!user.is_super_admin).then_some(user.organization_id)) {
-        let total_users = state.users.list_all().await.map_err(internal_error)?.into_iter().filter(|u| u.organization_id == org).count();
+        // Each of these three counts is now pushed to SQL instead of loading an entire table
+        // (users, repositories, or permission grants) and filtering/counting in application code
+        // (M-21, B-7's admin-stats follow-up).
+        let total_users = state.users.count_by_organization(org).await.map_err(internal_error)? as usize;
         let org_repository_ids = organization_repository_ids(&state, org).await.map_err(internal_error)?;
-        let total_active_permissions = state.permissions.list_all().await.map_err(internal_error)?.into_iter().filter(|(_, repository_id, _)| org_repository_ids.contains(repository_id)).count();
+        let repository_ids: Vec<Uuid> = org_repository_ids.iter().copied().collect();
+        let total_active_permissions = state.permissions.count_for_repositories(&repository_ids).await.map_err(internal_error)?;
         artiferris_application::use_cases::admin::AdminStats { total_users, total_repositories: org_repository_ids.len(), total_active_permissions }
     } else {
         state.get_admin_stats.execute().await.map_err(|e| application_error_response("failed to get admin stats", e))?
@@ -295,8 +314,36 @@ struct BlockedUsernameResponse {
 
 async fn list_blocked_usernames(State(state): State<AppState>, user: AuthUser) -> Result<Json<Vec<BlockedUsernameResponse>>, (StatusCode, Json<ErrorResponse>)> {
     require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    let blocked = state.login_throttle.blocked_usernames(crate::login_throttle::MAX_LOGIN_ATTEMPTS, crate::login_throttle::LOGIN_ATTEMPT_WINDOW);
+    let blocked = state.login_throttle.blocked_usernames(artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW);
     Ok(Json(blocked.into_iter().map(|b| BlockedUsernameResponse { username: b.username, remaining_seconds: b.remaining_seconds }).collect()))
+}
+
+/// A super-admin can unlock any name, an organization admin only a non-super-admin member of their own organization.
+async fn clear_login_throttle(State(state): State<AppState>, user: AuthUser, Path(username): Path<String>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    let forbidden = || (StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() }));
+    if !user.is_super_admin && !user.is_organization_admin {
+        return Err(forbidden());
+    }
+    let username = crate::routes::auth::normalized_username(&username);
+    let target = match artiferris_domain::user::Username::parse(&username) {
+        Ok(parsed) => state.users.find_by_username(&parsed).await.map_err(internal_error)?,
+        Err(_) => None,
+    };
+    if !user.is_super_admin {
+        let target = target.as_ref().filter(|target| target.organization_id == user.organization_id).ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "not found".to_string() })))?;
+        if target.is_super_admin {
+            return Err(forbidden());
+        }
+    }
+    state.login_throttle.clear_username(&username);
+    if let Some(target) = &target {
+        for key in [crate::routes::auth::mfa_verify_throttle_key(target.id), crate::routes::auth::mfa_setup_throttle_key(target.id), crate::routes::mfa::manage_throttle_key(target.id)] {
+            state.login_throttle.clear(&key);
+        }
+    }
+    let event = AdminAuditEvent::LoginThrottleCleared { organization_id: target.map(|target| target.organization_id), username: artiferris_domain::audit::recorded_username(&username) };
+    crate::state::record_admin_event(&state, event, Some(user.id)).await;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Serialize)]
@@ -310,14 +357,23 @@ struct AdminApiTokenResponse {
     revoked_at: Option<DateTime<Utc>>,
 }
 
-async fn list_all_api_tokens(State(state): State<AppState>, user: AuthUser, Query(scope): Query<OrgScopeParams>) -> Result<Json<Vec<AdminApiTokenResponse>>, (StatusCode, Json<ErrorResponse>)> {
-    let target_org = requested_organization_override(&user, scope.organization_id);
+#[derive(Deserialize)]
+struct AdminTokenListParams {
+    organization_id: Option<Uuid>,
+    /// At most 500, which is also the default.
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+async fn list_all_api_tokens(State(state): State<AppState>, user: AuthUser, Query(params): Query<AdminTokenListParams>) -> Result<Json<Vec<AdminApiTokenResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    let target_org = requested_organization_override(&user, params.organization_id);
     require_organization_admin(&user, target_org.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    let tokens = state.admin_list_api_tokens.execute().await.map_err(|e| application_error_response("failed to list api tokens", e))?;
-    let tokens = match target_org.or_else(|| (!user.is_super_admin).then_some(user.organization_id)) {
-        Some(org) => tokens.into_iter().filter(|t| t.organization_id == Some(org)).collect(),
-        None => tokens,
-    };
+    let organization = target_org.or_else(|| (!user.is_super_admin).then_some(user.organization_id));
+    let tokens = state
+        .admin_list_api_tokens
+        .execute(organization, params.limit.unwrap_or(MAX_ADMIN_TOKEN_PAGE), params.offset.unwrap_or(0))
+        .await
+        .map_err(|e| application_error_response("failed to list api tokens", e))?;
     Ok(Json(
         tokens
             .into_iter()
@@ -337,13 +393,16 @@ async fn list_all_api_tokens(State(state): State<AppState>, user: AuthUser, Quer
 async fn admin_revoke_api_token(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     if !user.is_super_admin {
         require_organization_admin(&user, user.organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-        let tokens = state.admin_list_api_tokens.execute().await.map_err(|e| application_error_response("failed to list api tokens", e))?;
-        let owned_by_this_organization = tokens.iter().any(|t| t.id == id && t.organization_id == Some(user.organization_id));
-        if !owned_by_this_organization {
-            return Err((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "not found".to_string() })));
+    }
+    let token = state.admin_list_api_tokens.find(id).await.map_err(|e| application_error_response("failed to look up api token", e))?;
+    if !user.is_super_admin {
+        let token = token.as_ref().filter(|t| t.organization_id == user.organization_id).ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "not found".to_string() })))?;
+        if token.owner_is_super_admin {
+            return Err((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() })));
         }
     }
-    state.admin_revoke_api_token.execute(id).await.map_err(|e| application_error_response("failed to revoke api token", e))?;
+    let audit = token.map(|t| SecurityAuditRecord { event: SecurityEvent::ApiTokenRevoked { user_id: t.user_id, organization_id: t.organization_id, token_id: id }, actor_id: Some(user.id) });
+    state.admin_revoke_api_token.execute(id, audit.as_ref()).await.map_err(|e| application_error_response("failed to revoke api token", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -359,11 +418,18 @@ async fn update_system_settings(
     user: AuthUser,
     resolved_org: ResolvedOrganization,
     Query(scope): Query<OrgScopeParams>,
-    Json(settings): Json<SystemSettings>,
+    Json(mut settings): Json<SystemSettings>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
     require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    state.update_system_settings.execute(organization_id, settings).await.map_err(|e| application_error_response("failed to update system settings", e))?;
+    let before = state.get_system_settings.execute(organization_id).await.map_err(|e| application_error_response("failed to get system settings", e))?;
+    // Opening the whole catalog to search engines is an instance-wide decision: an organization admin's save keeps the stored value.
+    if !user.is_super_admin {
+        settings.seo_indexing_enabled = before.seo_indexing_enabled;
+    }
+    let changes = artiferris_domain::audit::system_settings_changes(&before, &settings);
+    let audit = (!changes.is_empty()).then(|| AdminAuditRecord { event: AdminAuditEvent::SystemSettingsChanged { organization_id, changes }, actor_id: Some(user.id) });
+    state.update_system_settings.execute(organization_id, settings, audit.as_ref()).await.map_err(|e| application_error_response("failed to update system settings", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -378,18 +444,34 @@ struct SmtpSettingsResponse {
     password_set: bool,
 }
 
-async fn get_smtp_settings(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>) -> Result<Json<Option<SmtpSettingsResponse>>, (StatusCode, Json<ErrorResponse>)> {
+/// What the settings page gets when the stored password can no longer be decrypted: a flag to show, and no settings to pretend are working.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum SmtpSettingsBody {
+    Settings(SmtpSettingsResponse),
+    Unreadable { secret_unreadable: bool, error: &'static str },
+}
+
+async fn get_smtp_settings(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>) -> Result<Json<Option<SmtpSettingsBody>>, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
     require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    let settings = state.get_smtp_settings.execute(organization_id).await.map_err(|e| application_error_response("failed to get SMTP settings", e))?;
-    Ok(Json(settings.map(|s| SmtpSettingsResponse {
-        host: s.host,
-        port: s.port,
-        username: s.username,
-        from_name: s.from_name,
-        from_address: s.from_address,
-        security: s.security,
-        password_set: s.password_set,
+    let settings = match state.get_smtp_settings.execute(organization_id).await {
+        Ok(settings) => settings,
+        Err(ApplicationError::Domain(DomainError::SecretUnreadable(_))) => {
+            return Ok(Json(Some(SmtpSettingsBody::Unreadable { secret_unreadable: true, error: "the stored SMTP password cannot be read with this server's SECRETS_ENCRYPTION_KEY; enter it again" })));
+        }
+        Err(e) => return Err(application_error_response("failed to get SMTP settings", e)),
+    };
+    Ok(Json(settings.map(|s| {
+        SmtpSettingsBody::Settings(SmtpSettingsResponse {
+            host: s.host,
+            port: s.port,
+            username: s.username,
+            from_name: s.from_name,
+            from_address: s.from_address,
+            security: s.security,
+            password_set: s.password_set,
+        })
     })))
 }
 
@@ -414,9 +496,21 @@ async fn update_smtp_settings(
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
     require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    if body.security == SmtpSecurity::None && !artiferris_infrastructure::ssrf_allowlist::host_is_allow_listed(&body.host, u16::try_from(body.port).unwrap_or_default()).await {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: artiferris_infrastructure::smtp_email_sender::UNENCRYPTED_SMTP_REFUSED.to_string() })));
+    }
+    // A stored config that can no longer be read must stay replaceable, so this lookup is best effort.
+    let before = state.get_smtp_settings.execute(organization_id).await.unwrap_or_else(|e| {
+        tracing::warn!("failed to read the previous SMTP settings for the audit entry: {e}");
+        None
+    });
+    let password_changed = body.password.as_deref().is_some_and(|password| !password.is_empty());
+    let after = SmtpSettingsSummary { host: body.host.clone(), port: body.port, username: body.username.clone(), from_name: body.from_name.clone(), from_address: body.from_address.clone(), security: body.security };
+    let before = before.as_ref().map(SmtpSettingsView::summary);
+    let audit = AdminAuditRecord { event: AdminAuditEvent::SmtpSettingsChanged { organization_id, before, after, password_changed }, actor_id: Some(user.id) };
     state
         .update_smtp_settings
-        .execute(organization_id, UpdateSmtpSettingsInput { host: body.host, port: body.port, username: body.username, password: body.password, from_name: body.from_name, from_address: body.from_address, security: body.security })
+        .execute(organization_id, UpdateSmtpSettingsInput { host: body.host, port: body.port, username: body.username, password: body.password, from_name: body.from_name, from_address: body.from_address, security: body.security }, Some(&audit))
         .await
         .map_err(|e| application_error_response("failed to update SMTP settings", e))?;
     Ok(StatusCode::NO_CONTENT)
@@ -476,6 +570,12 @@ struct ConfigurationExportResponse {
 async fn export_configuration(State(state): State<AppState>, user: AuthUser) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
     let export = state.export_configuration.execute().await.map_err(|e| application_error_response("failed to export configuration", e))?;
+    // Recorded before anything is handed out: an export nobody can account for is not served.
+    state
+        .record_admin_event
+        .execute(AdminAuditEvent::ConfigurationExported { users: export.users.len(), repositories: export.repositories.len(), permissions: export.permissions.len() }, Some(user.id))
+        .await
+        .map_err(|e| application_error_response("failed to record the configuration export", e))?;
     let filename = format!("artiferris-config-{}.json", export.exported_at.format("%Y-%m-%d"));
     let response = ConfigurationExportResponse {
         exported_at: export.exported_at,
@@ -560,6 +660,7 @@ async fn import_configuration(State(state): State<AppState>, user: AuthUser, Jso
             .collect(),
         system_settings: body.system_settings,
     };
+    // Recorded inside the import's own transaction.
     let report = state.import_configuration.execute(import, user.id).await.map_err(|e| application_error_response("failed to import configuration", e))?;
     Ok(Json(ImportReportResponse {
         users_created: report.users_created,
@@ -588,7 +689,7 @@ mod tests {
         Config {
             database_url: String::new(),
             jwt_secret: "test-secret".to_string(),
-            secrets_encryption_key: "test-secret".to_string(),
+            secrets_encryption_key: "test-secrets-encryption-key".to_string(),
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
@@ -596,6 +697,8 @@ mod tests {
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),
+            trusted_proxy_ips: std::collections::HashSet::new(),
+            audit_retention_days: None,
         }
     }
 
@@ -650,7 +753,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert!(json.as_array().unwrap().iter().any(|e| e["event_type"] == "AccessDenied"));
+        assert!(json["entries"].as_array().unwrap().iter().any(|e| e["event_type"] == "AccessDenied"));
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -684,7 +787,7 @@ mod tests {
             .unwrap();
         let body = to_bytes(unfiltered.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert!(json.as_array().unwrap().iter().any(|e| e["aggregate_type"] == "Security"));
+        assert!(json["entries"].as_array().unwrap().iter().any(|e| e["aggregate_type"] == "Security"));
 
         let response = app
             .oneshot(
@@ -700,7 +803,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        let entries = json.as_array().unwrap();
+        let entries = json["entries"].as_array().unwrap();
         assert!(!entries.is_empty());
         assert!(entries.iter().all(|e| e["aggregate_type"] != "Security"));
         assert!(entries.iter().any(|e| e["aggregate_type"] == "PackageRepository"));
@@ -711,7 +814,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         state.create_repository.execute(acme_id, "acme-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, org_admin_id).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
@@ -730,7 +833,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        let entries = json.as_array().unwrap();
+        let entries = json["entries"].as_array().unwrap();
         assert!(entries.iter().any(|e| e["aggregate_type"] == "PackageRepository"), "an organization admin must see audit events for repositories in their own organization");
     }
 
@@ -740,7 +843,7 @@ mod tests {
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let other_id = state.create_organization.execute("other", "Other Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let other_creator = state.create_user.execute(other_id, "other-creator", "sup3r-s3cret!", false).await.unwrap();
         state.create_repository.execute(other_id, "other-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, other_creator).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
@@ -760,7 +863,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert!(json.as_array().unwrap().is_empty(), "an organization admin must not see another organization's audit events");
+        assert!(json["entries"].as_array().unwrap().is_empty(), "an organization admin must not see another organization's audit events");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -787,7 +890,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert!(!json.as_array().unwrap().is_empty(), "must see acme's own RepositoryCreated event when explicitly scoped to acme");
+        assert!(!json["entries"].as_array().unwrap().is_empty(), "must see acme's own RepositoryCreated event when explicitly scoped to acme");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -795,7 +898,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         state.create_repository.execute(acme_id, "acme-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, org_admin_id).await.unwrap();
         // No explicit permission grant — relies on artiferris-npm's own org-admin authz bypass.
         let (_, raw_token) = state.create_api_token.execute(org_admin_id, "ci").await.unwrap();
@@ -836,7 +939,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        let entries = json.as_array().unwrap();
+        let entries = json["entries"].as_array().unwrap();
         assert!(entries.iter().any(|e| e["event_type"] == "PackagePushed"), "an organization admin must see NpmPackage events for their own organization's repository");
     }
 
@@ -845,7 +948,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let repo_id = state.create_repository.execute(acme_id, "secret-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, org_admin_id).await.unwrap();
         // Same org, no grant on this repo — passes require_same_organization, denied by role.
         let acme_member_id = state.create_user.execute(acme_id, "acme-member", "sup3r-s3cret!", false).await.unwrap();
@@ -878,7 +981,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        let entries = json.as_array().unwrap();
+        let entries = json["entries"].as_array().unwrap();
         assert!(entries.iter().any(|e| e["event_type"] == "AccessDenied" && e["actor_id"] == acme_member_id.to_string()), "an organization admin must see AccessDenied events triggered by their own members");
     }
 
@@ -887,7 +990,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         state
             .record_security_event
             .execute(artiferris_domain::audit::SecurityEvent::LoginFailed { username: "flooder".to_string(), ip: "127.0.0.1".to_string() }, None)
@@ -910,7 +1013,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert!(json.as_array().unwrap().is_empty(), "a LoginFailed event has no resolvable organization and must never be shown to an organization admin");
+        assert!(json["entries"].as_array().unwrap().is_empty(), "a LoginFailed event has no resolvable organization and must never be shown to an organization admin");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -974,7 +1077,7 @@ mod tests {
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let other_id = state.create_organization.execute("other", "Other Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         state.create_repository.execute(acme_id, "acme-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, org_admin_id).await.unwrap();
         let other_creator = state.create_user.execute(other_id, "other-creator", "sup3r-s3cret!", false).await.unwrap();
         state.create_repository.execute(other_id, "other-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, other_creator).await.unwrap();
@@ -1074,7 +1177,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
 
@@ -1138,7 +1241,7 @@ mod tests {
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let other_id = state.create_organization.execute("other", "Other Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let acme_member_id = state.create_user.execute(acme_id, "acme-member", "sup3r-s3cret!", false).await.unwrap();
         let acme_repo_id = state.create_repository.execute(acme_id, "acme-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, org_admin_id).await.unwrap();
         state.grant_permission.execute(acme_member_id, acme_repo_id, Role::Write, org_admin_id).await.unwrap();
@@ -1198,7 +1301,7 @@ mod tests {
         let other_id = state.create_organization.execute("other", "Other Corp").await.unwrap();
         state.create_user.execute(other_id, "other-member", "sup3r-s3cret!", false).await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
 
@@ -1239,8 +1342,8 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
         let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
-        for _ in 0..crate::login_throttle::MAX_LOGIN_ATTEMPTS {
-            state.login_throttle.record_failure("victim", crate::login_throttle::MAX_LOGIN_ATTEMPTS, crate::login_throttle::LOGIN_ATTEMPT_WINDOW);
+        for _ in 0..artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS {
+            state.login_throttle.record_failure("victim", artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW);
         }
         let app = build_router(state);
 
@@ -1267,7 +1370,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
         let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
-        state.login_throttle.record_failure("almost", crate::login_throttle::MAX_LOGIN_ATTEMPTS, crate::login_throttle::LOGIN_ATTEMPT_WINDOW);
+        state.login_throttle.record_failure("almost", artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW);
         let app = build_router(state);
 
         let response = app
@@ -1409,7 +1512,7 @@ mod tests {
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let other_id = state.create_organization.execute("other", "Other Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let acme_member_id = state.create_user.execute(acme_id, "acme-member", "sup3r-s3cret!", false).await.unwrap();
         let other_member_id = state.create_user.execute(other_id, "other-member", "sup3r-s3cret!", false).await.unwrap();
         state.create_api_token.execute(acme_member_id, "acme laptop").await.unwrap();
@@ -1464,7 +1567,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let acme_member_id = state.create_user.execute(acme_id, "acme-member", "sup3r-s3cret!", false).await.unwrap();
         let (token_id, _) = state.create_api_token.execute(acme_member_id, "acme laptop").await.unwrap();
         let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
@@ -1491,7 +1594,7 @@ mod tests {
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let other_id = state.create_organization.execute("other", "Other Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let other_member_id = state.create_user.execute(other_id, "other-member", "sup3r-s3cret!", false).await.unwrap();
         let (token_id, _) = state.create_api_token.execute(other_member_id, "other laptop").await.unwrap();
         let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
@@ -1756,6 +1859,103 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn smtp_without_encryption_is_refused_for_a_host_outside_the_allowlist(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/admin/settings/smtp")
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {admin_token}"))
+                    .body(Body::from(r#"{"host":"8.8.8.8","port":25,"username":"artiferris","password":"s3cret","from_name":"ArtiFerris","from_address":"artiferris@example.com","security":"none"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("cleartext"));
+        assert!(state.get_smtp_settings.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()).await.unwrap().is_none());
+    }
+
+    async fn put_smtp(app: &axum::Router, token: &str, body: serde_json::Value) -> (axum::http::StatusCode, String) {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/admin/settings/smtp")
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        (status, String::from_utf8(to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec()).unwrap())
+    }
+
+    fn smtp_body(host: &str, port: i32, username: &str, password: Option<&str>) -> serde_json::Value {
+        let mut body = serde_json::json!({ "host": host, "port": port, "username": username, "from_name": "ArtiFerris", "from_address": "artiferris@example.com", "security": "start_tls" });
+        if let Some(password) = password {
+            body["password"] = password.into();
+        }
+        body
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_kept_smtp_password_is_refused_when_the_host_port_or_username_changes(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        assert_eq!(put_smtp(&app, &admin_token, smtp_body("smtp.example.com", 587, "relay", Some("the-real-password"))).await.0, axum::http::StatusCode::NO_CONTENT);
+
+        for changed in [smtp_body("attacker.example.net", 587, "relay", None), smtp_body("smtp.example.com", 465, "relay", None), smtp_body("smtp.example.com", 587, "someone-else", None)] {
+            let (status, body) = put_smtp(&app, &admin_token, changed).await;
+            assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+            assert!(body.contains("re-enter the password"), "got: {body}");
+        }
+
+        // Unchanged destination (host in another case) keeps the password; the change goes through once it is typed again.
+        assert_eq!(put_smtp(&app, &admin_token, smtp_body("SMTP.Example.com", 587, "relay", None)).await.0, axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(put_smtp(&app, &admin_token, smtp_body("smtp2.example.com", 587, "relay", Some("typed-again"))).await.0, axum::http::StatusCode::NO_CONTENT);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_smtp_password_that_cannot_be_read_is_reported_as_such(pool: sqlx::PgPool) {
+        let state = AppState::build(pool.clone(), &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        assert_eq!(put_smtp(&app, &admin_token, smtp_body("smtp.example.com", 587, "relay", Some("the-real-password"))).await.0, axum::http::StatusCode::NO_CONTENT);
+        // Sealed by a server with another SECRETS_ENCRYPTION_KEY.
+        sqlx::query("UPDATE smtp_settings SET encrypted_password = $1").bind([b"AFS\x01".as_slice(), &[0u8; 4], &[7u8; 40]].concat()).execute(&pool).await.unwrap();
+
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri("/api/admin/settings/smtp").header("authorization", format!("Bearer {admin_token}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert_eq!(json["secret_unreadable"], true);
+        assert!(json.get("password_set").is_none());
+        let (status, body) = put_smtp(&app, &admin_token, smtp_body("smtp.example.com", 587, "relay", None)).await;
+        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+        assert!(body.contains("enter it again"), "got: {body}");
+        assert_eq!(put_smtp(&app, &admin_token, smtp_body("smtp.example.com", 587, "relay", Some("fresh"))).await.0, axum::http::StatusCode::NO_CONTENT);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_non_admin_cannot_update_smtp_settings(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "regular", "sup3r-s3cret!", false).await.unwrap();
@@ -1829,7 +2029,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
 
@@ -1864,7 +2064,7 @@ mod tests {
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         state.create_organization.execute("other", "Other Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state.clone());
 
@@ -1946,7 +2146,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
 
@@ -2027,7 +2227,7 @@ mod tests {
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let other_id = state.create_organization.execute("other", "Other Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state.clone());
 
@@ -2179,6 +2379,35 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_configuration_file_may_exceed_the_default_json_limit_but_not_the_import_limit(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        let import_of_size = |bytes: usize| {
+            let body = serde_json::json!({
+                "users": [],
+                "repositories": [{ "id": Uuid::new_v4(), "name": "padding", "format": "npm", "repo_type": "hosted", "remote_url": "x".repeat(bytes), "group_members": [], "quota_bytes": null, "retention_keep_last_n": null }],
+                "permissions": [],
+                "system_settings": { "max_login_attempts": 10, "login_attempt_window_seconds": 300, "session_ttl_hours": 12 }
+            });
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/import/configuration")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {admin_token}"))
+                .body(Body::from(body.to_string()))
+                .unwrap()
+        };
+
+        let over_the_default = app.clone().oneshot(import_of_size(12 * 1024 * 1024)).await.unwrap();
+        let over_the_import_limit = app.oneshot(import_of_size(33 * 1024 * 1024)).await.unwrap();
+
+        assert_eq!(over_the_default.status(), axum::http::StatusCode::OK);
+        assert_eq!(over_the_import_limit.status(), axum::http::StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_non_admin_cannot_import_a_configuration(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "regular", "sup3r-s3cret!", false).await.unwrap();
@@ -2228,6 +2457,50 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn export_and_import_are_refused_once_a_second_real_organization_exists(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
+        let token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        state
+            .organizations
+            .create(&artiferris_domain::organization::Organization {
+                id: Uuid::new_v4(),
+                slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
+                display_name: "Acme".to_string(),
+                is_public: false,
+                is_personal: false,
+                created_at: chrono::Utc::now(),
+            })
+            .await
+            .unwrap();
+        let app = build_router(state);
+
+        let export = app
+            .clone()
+            .oneshot(Request::builder().uri("/api/admin/export/configuration").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let import = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/admin/import/configuration")
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(r#"{"users":[],"repositories":[],"permissions":[],"system_settings":{"max_login_attempts":10,"login_attempt_window_seconds":300,"session_ttl_hours":12}}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        for response in [export, import] {
+            assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            assert!(String::from_utf8_lossy(&body).contains("single-tenant"), "got: {}", String::from_utf8_lossy(&body));
+        }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn importing_malformed_json_returns_bad_request(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
@@ -2248,5 +2521,53 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+    }
+
+    async fn put_settings(app: axum::Router, token: &str, body: serde_json::Value) -> axum::http::StatusCode {
+        app.oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/admin/settings")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+        .status()
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_super_admin_can_open_the_catalog_to_search_engines(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
+        let token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let public = artiferris_domain::organization::PUBLIC_ORGANIZATION_ID;
+        assert!(!state.get_system_settings.execute(public).await.unwrap().seo_indexing_enabled, "off by default");
+
+        let status = put_settings(build_router(state.clone()), &token, serde_json::json!({ "max_login_attempts": 10, "login_attempt_window_seconds": 300, "session_ttl_hours": 12, "seo_indexing_enabled": true })).await;
+
+        assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+        assert!(state.get_system_settings.execute(public).await.unwrap().seo_indexing_enabled);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_organization_admins_save_never_changes_the_indexing_switch(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public = artiferris_domain::organization::PUBLIC_ORGANIZATION_ID;
+        let org_admin = state.create_user.execute(public, "org-admin", "sup3r-s3cret!", false).await.unwrap();
+        state.set_organization_admin.execute(org_admin, true, None).await.unwrap();
+        let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
+        let mut current = state.get_system_settings.execute(public).await.unwrap();
+        current.seo_indexing_enabled = true;
+        state.update_system_settings.execute(public, current, None).await.unwrap();
+
+        let status = put_settings(build_router(state.clone()), &token, serde_json::json!({ "max_login_attempts": 4, "login_attempt_window_seconds": 300, "session_ttl_hours": 12, "seo_indexing_enabled": false })).await;
+
+        assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+        let saved = state.get_system_settings.execute(public).await.unwrap();
+        assert_eq!(saved.max_login_attempts, 4, "the rest of the save still applies");
+        assert!(saved.seo_indexing_enabled, "the switch keeps its stored value");
     }
 }

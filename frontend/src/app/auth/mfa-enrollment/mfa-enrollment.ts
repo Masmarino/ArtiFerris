@@ -119,8 +119,7 @@ export class MfaEnrollmentPage {
         ),
       )
       this.completed.emit()
-    } catch (err) {
-      console.error('Passkey registration failed:', err)
+    } catch {
       this.submitting.set(false)
       this.errorMessage.set("Échec de l'enregistrement de la clé d'accès. Réessayez.")
     }

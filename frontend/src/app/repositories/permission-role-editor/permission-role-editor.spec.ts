@@ -1,14 +1,18 @@
 import { TestBed } from '@angular/core/testing'
+import { ConfirmService } from '../../shared/confirm.service'
 import { PermissionRoleEditor } from './permission-role-editor'
 
 async function render(
   overrides: {
+    confirmAnswer?: boolean
     isOpen?: boolean
     label?: string
     currentRole?: 'read' | 'write' | 'admin'
     subjectKind?: 'user' | 'repository'
   } = {},
 ) {
+  const ask = vi.fn().mockResolvedValue(overrides.confirmAnswer ?? true)
+  TestBed.configureTestingModule({ providers: [{ provide: ConfirmService, useValue: { ask } }] })
   const fixture = TestBed.createComponent(PermissionRoleEditor)
   fixture.componentRef.setInput('isOpen', overrides.isOpen ?? true)
   fixture.componentRef.setInput('label', overrides.label ?? 'florian')
@@ -20,7 +24,7 @@ async function render(
   // NgModel syncs its initial value one microtask after the first change-detection pass.
   await fixture.whenStable()
   fixture.detectChanges()
-  return fixture
+  return Object.assign(fixture, { ask })
 }
 
 describe('PermissionRoleEditor', () => {
@@ -53,7 +57,6 @@ describe('PermissionRoleEditor', () => {
   })
 
   it('emits revoked exactly once when the revoke button is clicked and confirmed', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const fixture = await render({ label: 'florian' })
     const revoked = vi.fn()
     fixture.componentInstance.revoked.subscribe(revoked)
@@ -62,15 +65,21 @@ describe('PermissionRoleEditor', () => {
       '[data-testid="revoke"] button',
     )
     revokeButton.click()
+    await fixture.whenStable()
 
-    expect(window.confirm).toHaveBeenCalledTimes(1)
-    expect(window.confirm).toHaveBeenCalledWith('Révoquer l\'accès de "florian" ?')
+    expect(fixture.ask).toHaveBeenCalledTimes(1)
+    expect(fixture.ask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        heading: "Révoquer l'accès",
+        message: 'Révoquer l\'accès de "florian" ?',
+        danger: true,
+      }),
+    )
     expect(revoked).toHaveBeenCalledTimes(1)
   })
 
   it('does not emit revoked when the confirmation is cancelled', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const fixture = await render()
+    const fixture = await render({ confirmAnswer: false })
     const revoked = vi.fn()
     fixture.componentInstance.revoked.subscribe(revoked)
 
@@ -78,7 +87,9 @@ describe('PermissionRoleEditor', () => {
       '[data-testid="revoke"] button',
     )
     revokeButton.click()
+    await fixture.whenStable()
 
+    expect(fixture.ask).toHaveBeenCalledTimes(1)
     expect(revoked).not.toHaveBeenCalled()
   })
 
@@ -89,7 +100,6 @@ describe('PermissionRoleEditor', () => {
   })
 
   it('phrases the title and revoke confirmation for a repository subject', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const fixture = await render({ label: 'my-repo', subjectKind: 'repository' })
 
     expect(fixture.nativeElement.textContent).toContain("Modifier l'accès du dépôt my-repo")
@@ -98,8 +108,11 @@ describe('PermissionRoleEditor', () => {
       '[data-testid="revoke"] button',
     )
     revokeButton.click()
+    await fixture.whenStable()
 
-    expect(window.confirm).toHaveBeenCalledWith('Révoquer l\'accès du dépôt "my-repo" ?')
+    expect(fixture.ask).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Révoquer l\'accès du dépôt "my-repo" ?' }),
+    )
   })
 
   it('emits closed when the modal reports closed', async () => {

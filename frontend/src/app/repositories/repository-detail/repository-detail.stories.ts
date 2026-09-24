@@ -1,10 +1,13 @@
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite'
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router'
-import { expect, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test'
 import { of, throwError } from 'rxjs'
 import { RepositoryDetail } from './repository-detail'
 import { RepositoriesService } from '../application/repositories.service'
 import { PermissionsService } from '../application/permissions.service'
+import { signal } from '@angular/core'
+import { ConfirmService } from '../../shared/confirm.service'
+import { MeService } from '../../shell/application/me.service'
 import type { RepositorySummary, RepositoryPackages } from '../domain/repository.entity'
 import type { PermissionEntry, UserLookup } from '../domain/permission.entity'
 
@@ -18,8 +21,11 @@ const HOSTED_REPO: RepositorySummary = {
   group_members: [],
   quota_bytes: 500 * 1024 * 1024,
   retention_keep_last_n: 10,
+  is_public: false,
   my_role: 'admin',
   organization_id: 'org-acme',
+  owner_name: 'Acme Corp',
+  owner_is_personal: false,
 }
 
 const PROXY_REPO: RepositorySummary = {
@@ -61,6 +67,7 @@ const NPM_PACKAGES: RepositoryPackages = {
           deprecated: false,
         },
       ],
+      truncated: false,
       vulnerability_summary: { critical: 0, high: 1, medium: 2, low: 0 },
     },
   ],
@@ -85,6 +92,7 @@ function fakeRepositories(
     setQuota: () => of(undefined),
     setRetentionPolicy: () => of(undefined),
     rename: () => of(undefined),
+    setVisibility: () => of(undefined),
     ...overrides,
   }
 }
@@ -110,6 +118,7 @@ const meta: Meta<RepositoryDetail> = {
         { provide: Router, useValue: { navigate: () => Promise.resolve(true) } },
         { provide: RepositoriesService, useValue: fakeRepositories() },
         { provide: PermissionsService, useValue: fakePermissions() },
+        { provide: MeService, useValue: { isSuperAdmin: signal(false) } },
       ],
     }),
   ],
@@ -150,6 +159,41 @@ export const GroupRepository: Story = {
     const canvas = within(canvasElement)
     await userEvent.click(await canvas.findByRole('tab', { name: 'Dépôts membres' }))
     await waitFor(() => expect(canvas.getByText('acme-docker')).toBeInTheDocument())
+  },
+}
+
+export const GroupWithoutMembers: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        {
+          provide: RepositoriesService,
+          useValue: fakeRepositories({ get: () => of({ ...GROUP_REPO, group_members: [] }) }),
+        },
+      ],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.click(await canvas.findByRole('tab', { name: 'Dépôts membres' }))
+    expect(await canvas.findByText('Aucun dépôt membre')).toBeInTheDocument()
+    expect(canvas.queryByRole('table')).not.toBeInTheDocument()
+  },
+}
+
+export const NoPermissionsGranted: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        { provide: PermissionsService, useValue: fakePermissions({ list: () => of([]) }) },
+      ],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.click(await canvas.findByRole('tab', { name: "Droits d'accès" }))
+    expect(await canvas.findByText('Aucun droit spécifique')).toBeInTheDocument()
+    expect(canvas.queryByRole('table')).not.toBeInTheDocument()
   },
 }
 
@@ -263,5 +307,71 @@ export const LoadFailed: Story = {
         'Échec du chargement du dépôt.',
       ),
     )
+  },
+}
+
+const PERSONAL_REPO: RepositorySummary = {
+  ...HOSTED_REPO,
+  id: 'repo-personal',
+  name: 'my-project',
+  owner_name: 'alice',
+  owner_is_personal: true,
+}
+
+function personalRepoProviders(
+  repository: RepositorySummary,
+  setVisibility = fn(() => of(undefined)),
+) {
+  return moduleMetadata({
+    providers: [
+      {
+        provide: RepositoriesService,
+        useValue: fakeRepositories({ get: () => of(repository), setVisibility }),
+      },
+      { provide: ConfirmService, useValue: { ask: () => Promise.resolve(true) } },
+    ],
+  })
+}
+
+/** A private personal project: its owner can publish it from the settings tab. */
+export const VisibilityOfAPrivatePersonalProject: Story = {
+  decorators: [personalRepoProviders(PERSONAL_REPO)],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.click(await canvas.findByRole('tab', { name: 'Paramètres' }))
+    expect(await canvas.findByText('privé')).toBeInTheDocument()
+    expect(canvas.getByRole('button', { name: 'Rendre public' })).toBeInTheDocument()
+  },
+}
+
+const setVisibility = fn(() => of(undefined))
+
+export const MakingAPersonalProjectPublic: Story = {
+  decorators: [personalRepoProviders(PERSONAL_REPO, setVisibility)],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.click(await canvas.findByRole('tab', { name: 'Paramètres' }))
+    await userEvent.click(await canvas.findByRole('button', { name: 'Rendre public' }))
+    await waitFor(() => expect(setVisibility).toHaveBeenCalledWith('repo-personal', true))
+  },
+}
+
+export const VisibilityOfAPublicPersonalProject: Story = {
+  decorators: [personalRepoProviders({ ...PERSONAL_REPO, is_public: true })],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.click(await canvas.findByRole('tab', { name: 'Paramètres' }))
+    expect(await canvas.findByText('public')).toBeInTheDocument()
+    expect(canvas.getByRole('button', { name: 'Rendre privé' })).toBeInTheDocument()
+  },
+}
+
+/** Organization repositories are only made public by a super-admin, and proxies never. */
+export const NoVisibilityControlForAnOrganizationRepository: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.click(await canvas.findByRole('tab', { name: 'Paramètres' }))
+    await canvas.findByText('Quota de stockage')
+    expect(canvas.queryByText('Visibilité')).not.toBeInTheDocument()
   },
 }

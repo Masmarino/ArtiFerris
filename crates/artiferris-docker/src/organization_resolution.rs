@@ -72,6 +72,7 @@ mod tests {
                 slug: OrganizationSlug::parse(slug).unwrap(),
                 display_name: slug.to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await

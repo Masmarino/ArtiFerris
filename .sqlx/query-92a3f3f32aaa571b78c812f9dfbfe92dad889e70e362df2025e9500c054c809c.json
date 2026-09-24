@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT member_repository_id FROM package_repository_group_members WHERE group_repository_id = $1 AND member_repository_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "member_repository_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "package_repository_group_members",
+            "name": "member_repository_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "92a3f3f32aaa571b78c812f9dfbfe92dad889e70e362df2025e9500c054c809c"
+}

@@ -1,6 +1,6 @@
 [package]
 name = "artiferris-npm"
-version = "0.1.0"
+version = "0.5.0"
 edition.workspace = true
 
 [dependencies]
@@ -20,6 +20,8 @@ chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.23.1"
 
 [dev-dependencies]
+futures-util = "0.3"
 tower = { version = "0.5", features = ["util"] }
 sqlx = { version = "0.9", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate"] }
 tempfile = "3"
+async-trait = "0.1"

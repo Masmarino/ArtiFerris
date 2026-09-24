@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM package_repository_group_members WHERE member_repository_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9d6cd77b7d102d8cc9cfbb75eb50cf9c9c4cf3f79976b5977311a3c6704d065f"
+}

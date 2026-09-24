@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
+use tokio::sync::Semaphore;
+use artiferris_domain::error::DomainError;
 use artiferris_domain::npm_audit::{parse_advisories, DependencyAuditFinding, DependencyAuditRepositoryPort, DependencyAuditResult, NpmAuditPort};
 use artiferris_domain::npm_package::{NpmPackageName, NpmPackageRepositoryPort, NpmVersion};
 use artiferris_domain::npm_remote::RemoteNpmRegistryPort;
@@ -16,12 +19,51 @@ const MAX_DEPTH: usize = 10;
 /// Once hit, the walk stops and the result is marked `truncated`, not silently partial.
 const MAX_PACKAGES: usize = 500;
 
+/// Scans that run at once: each holds packuments in memory, over a dependency list the publisher chooses.
+const MAX_CONCURRENT_SCANS: usize = 2;
+
+/// Limits of one scan. The publisher chooses the dependency names, so every one of them is bounded.
+#[derive(Clone, Copy, Debug)]
+pub struct ScanLimits {
+    /// Requests to the public registry, whatever they come back with: unknown names cost one too.
+    pub max_requests: usize,
+    /// Dependencies read from one manifest; more than this marks the scan truncated.
+    pub max_dependencies_per_manifest: usize,
+    /// Wall-clock time for the walk. Past it the scan audits what it has and is marked truncated.
+    pub deadline: Duration,
+    /// How long a manual rescan waits for a scan slot before it gives up.
+    pub slot_wait: Duration,
+    /// Minimum time between two manual rescans by the same user in the same repository.
+    pub manual_interval: Duration,
+    pub concurrent_scans: usize,
+}
+
+impl Default for ScanLimits {
+    fn default() -> Self {
+        Self {
+            max_requests: 500,
+            max_dependencies_per_manifest: 1000,
+            deadline: Duration::from_secs(120),
+            slot_wait: Duration::from_secs(10),
+            manual_interval: Duration::from_secs(30),
+            concurrent_scans: MAX_CONCURRENT_SCANS,
+        }
+    }
+}
+
+/// Past this many bytes of trimmed packuments, a scan uses them but stops keeping them.
+const MAX_PACKUMENT_CACHE_BYTES: usize = 64 * 1024 * 1024;
+
 /// Walks a published version's `dependencies` transitively against the public npm registry, then audits the whole collected set in one bulk call. Persists the result so a page view never waits for a live, potentially multi-second walk.
 pub struct ScanDependencyTreeUseCase {
     packages: Arc<dyn NpmPackageRepositoryPort>,
     remote_registry: Arc<dyn RemoteNpmRegistryPort>,
     audit: Arc<dyn NpmAuditPort>,
     results: Arc<dyn DependencyAuditRepositoryPort>,
+    scans: Arc<Semaphore>,
+    limits: ScanLimits,
+    /// When each (user, repository) last asked for a manual rescan.
+    manual_scans: Mutex<HashMap<(Uuid, Uuid), Instant>>,
 }
 
 impl ScanDependencyTreeUseCase {
@@ -31,27 +73,66 @@ impl ScanDependencyTreeUseCase {
         audit: Arc<dyn NpmAuditPort>,
         results: Arc<dyn DependencyAuditRepositoryPort>,
     ) -> Self {
-        Self { packages, remote_registry, audit, results }
+        let limits = ScanLimits::default();
+        Self { packages, remote_registry, audit, results, scans: Arc::new(Semaphore::new(limits.concurrent_scans)), limits, manual_scans: Mutex::new(HashMap::new()) }
     }
 
-    pub async fn execute(&self, repository_id: Uuid, name: &NpmPackageName, version: &NpmVersion) -> Result<DependencyAuditResult, ApplicationError> {
+    pub fn with_limits(mut self, limits: ScanLimits) -> Self {
+        self.scans = Arc::new(Semaphore::new(limits.concurrent_scans));
+        self.limits = limits;
+        self
+    }
+
+    /// A rescan asked for by `requested_by`: at most one per `manual_interval` for each user and repository, and it gives up
+    /// after `slot_wait` if all the scan slots stay taken.
+    pub async fn execute(&self, requested_by: Uuid, repository_id: Uuid, name: &NpmPackageName, version: &NpmVersion) -> Result<DependencyAuditResult, ApplicationError> {
+        self.check_rescan_rate(requested_by, repository_id)?;
+        let _turn = match tokio::time::timeout(self.limits.slot_wait, self.scans.acquire()).await {
+            Ok(turn) => turn.map_err(|e| DomainError::Infrastructure(e.to_string()))?,
+            Err(_) => return Err(ApplicationError::DependencyScanBusy),
+        };
+        self.scan(repository_id, name, version).await
+    }
+
+    fn check_rescan_rate(&self, requested_by: Uuid, repository_id: Uuid) -> Result<(), ApplicationError> {
+        let now = Instant::now();
+        let mut recent = self.manual_scans.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        recent.retain(|_, asked_at| now.duration_since(*asked_at) < self.limits.manual_interval);
+        if recent.contains_key(&(requested_by, repository_id)) {
+            return Err(ApplicationError::DependencyScanRateLimited);
+        }
+        recent.insert((requested_by, repository_id), now);
+        Ok(())
+    }
+
+    /// For the scan after a publish: `None`, doing nothing, when scans are already running. The manual rescan covers it.
+    pub async fn execute_unless_busy(&self, repository_id: Uuid, name: &NpmPackageName, version: &NpmVersion) -> Result<Option<DependencyAuditResult>, ApplicationError> {
+        let Ok(_turn) = self.scans.try_acquire() else { return Ok(None) };
+        Ok(Some(self.scan(repository_id, name, version).await?))
+    }
+
+    async fn scan(&self, repository_id: Uuid, name: &NpmPackageName, version: &NpmVersion) -> Result<DependencyAuditResult, ApplicationError> {
         let package = self.packages.find_package(repository_id, name).await?.ok_or(ApplicationError::NpmPackageNotFound)?;
         let root_version = self.packages.find_version(package.id, version).await?.ok_or(ApplicationError::NpmVersionNotFound)?;
 
         let mut visited: HashSet<(String, String)> = HashSet::new();
         let mut to_audit: HashMap<String, Vec<String>> = HashMap::new();
-        let mut packument_cache: HashMap<String, Option<serde_json::Value>> = HashMap::new();
+        let mut packument_cache: HashMap<String, Option<Arc<serde_json::Value>>> = HashMap::new();
+        let mut cached_bytes = 0usize;
         let mut truncated = false;
 
-        let mut queue: VecDeque<(String, String, usize)> =
-            extract_dependencies(&root_version.manifest).into_iter().map(|(dep_name, range)| (dep_name, range, 1)).collect();
+        let deadline = tokio::time::Instant::now() + self.limits.deadline;
+        let mut requests = 0usize;
+        let (root_dependencies, root_overflow) = extract_dependencies(&root_version.manifest, self.limits.max_dependencies_per_manifest);
+        truncated |= root_overflow;
+        let mut queue: VecDeque<(String, String, usize)> = root_dependencies.into_iter().map(|(dep_name, range)| (dep_name, range, 1)).collect();
 
         while let Some((dep_name, range, depth)) = queue.pop_front() {
             if depth > MAX_DEPTH {
                 truncated = true;
                 continue;
             }
-            if visited.len() >= MAX_PACKAGES {
+            if visited.len() >= MAX_PACKAGES || tokio::time::Instant::now() >= deadline {
                 truncated = true;
                 break;
             }
@@ -60,10 +141,33 @@ impl ScanDependencyTreeUseCase {
                 Some(cached) => cached.clone(),
                 None => {
                     let fetched = match NpmPackageName::parse(&dep_name) {
-                        Ok(parsed) => self.remote_registry.fetch_metadata(PUBLIC_REGISTRY_BASE_URL, &parsed, None, None).await.ok(),
+                        // Never look up on the public registry a package this repository publishes itself.
+                        Ok(parsed) if self.packages.find_package(repository_id, &parsed).await?.is_some() => None,
+                        // `.ok()` turns a fetch error into "unresolvable, skip it"; `.flatten()`
+                        // additionally folds a genuine upstream 404 (`Ok(None)`) into the same
+                        // "skip it" outcome, since either way there's no packument to resolve against.
+                        Ok(parsed) => {
+                            if requests >= self.limits.max_requests {
+                                truncated = true;
+                                break;
+                            }
+                            requests += 1;
+                            match tokio::time::timeout_at(deadline, self.remote_registry.fetch_metadata(PUBLIC_REGISTRY_BASE_URL, &parsed, None, None)).await {
+                                Ok(fetched) => fetched.ok().flatten().map(|full| slim_packument(&full)),
+                                Err(_) => {
+                                    truncated = true;
+                                    break;
+                                }
+                            }
+                        }
                         Err(_) => None,
                     };
-                    packument_cache.insert(dep_name.clone(), fetched.clone());
+                    let fetched = fetched.map(Arc::new);
+                    let size = fetched.as_ref().map_or(0, |p| p.to_string().len());
+                    if cached_bytes + size <= MAX_PACKUMENT_CACHE_BYTES {
+                        cached_bytes += size;
+                        packument_cache.insert(dep_name.clone(), fetched.clone());
+                    }
                     fetched
                 }
             };
@@ -77,7 +181,9 @@ impl ScanDependencyTreeUseCase {
 
             to_audit.entry(dep_name.clone()).or_default().push(resolved_version.clone());
 
-            for (child_name, child_range) in extract_dependencies(resolved_manifest) {
+            let (children, overflow) = extract_dependencies(resolved_manifest, self.limits.max_dependencies_per_manifest);
+            truncated |= overflow;
+            for (child_name, child_range) in children {
                 queue.push_back((child_name, child_range, depth + 1));
             }
         }
@@ -136,12 +242,31 @@ impl GetDependencyAuditResultUseCase {
     }
 }
 
-fn extract_dependencies(manifest: &serde_json::Value) -> Vec<(String, String)> {
-    manifest
-        .get("dependencies")
-        .and_then(|d| d.as_object())
-        .map(|deps| deps.iter().filter_map(|(k, v)| v.as_str().map(|range| (k.clone(), range.to_string()))).collect())
-        .unwrap_or_default()
+/// Keeps only each version's `dependencies`, all the walk reads; a full packument can be tens of MB.
+fn slim_packument(packument: &serde_json::Value) -> serde_json::Value {
+    let versions: serde_json::Map<String, serde_json::Value> = packument
+        .get("versions")
+        .and_then(|v| v.as_object())
+        .map(|versions| {
+            versions
+                .iter()
+                .map(|(version, manifest)| {
+                    let dependencies = manifest.get("dependencies").filter(|d| d.is_object()).cloned().unwrap_or(serde_json::Value::Null);
+                    (version.clone(), serde_json::json!({ "dependencies": dependencies }))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    serde_json::json!({ "versions": versions })
+}
+
+/// At most `max` of the manifest's dependencies, and whether it listed more.
+fn extract_dependencies(manifest: &serde_json::Value, max: usize) -> (Vec<(String, String)>, bool) {
+    let Some(deps) = manifest.get("dependencies").and_then(|d| d.as_object()) else {
+        return (Vec::new(), false);
+    };
+    let dependencies = deps.iter().filter_map(|(k, v)| v.as_str().map(|range| (k.clone(), range.to_string()))).take(max).collect();
+    (dependencies, deps.len() > max)
 }
 
 /// node-semver treats a bare `"1.2.3"` as an exact match, not a caret range like Rust's `semver` crate — force an explicit `=` on. `x`/`X` wildcards normalize to `*`.
@@ -278,7 +403,7 @@ mod tests {
         h.remote.set_package("minimist", packument(&[("0.0.8", serde_json::json!({}))]));
         h.audit.set_bulk_response(serde_json::json!({ "minimist": [sample_advisory(1, "<0.2.4")] }));
 
-        let result = h.use_case().execute(h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+        let result = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
 
         assert_eq!(result.packages_scanned, 1);
         assert!(!result.truncated);
@@ -297,7 +422,7 @@ mod tests {
         h.remote.set_package("b", packument(&[("2.0.0", serde_json::json!({}))]));
         h.audit.set_bulk_response(serde_json::json!({ "b": [sample_advisory(2, "<3.0.0")] }));
 
-        let result = h.use_case().execute(h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+        let result = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
 
         assert_eq!(result.packages_scanned, 2);
         assert_eq!(result.findings.len(), 1);
@@ -314,7 +439,7 @@ mod tests {
         h.remote.set_package("a", packument(&[("1.0.0", manifest_with_deps(&[("b", "^1.0.0")]))]));
         h.remote.set_package("b", packument(&[("1.0.0", manifest_with_deps(&[("a", "^1.0.0")]))]));
 
-        let result = h.use_case().execute(h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+        let result = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
 
         assert_eq!(result.packages_scanned, 2);
         assert!(!result.truncated);
@@ -326,7 +451,7 @@ mod tests {
         h.seed_root(manifest_with_deps(&[("a", "^9.0.0")])).await;
         h.remote.set_package("a", packument(&[("1.0.0", serde_json::json!({}))]));
 
-        let result = h.use_case().execute(h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+        let result = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
 
         assert_eq!(result.packages_scanned, 0);
         assert!(result.findings.is_empty());
@@ -338,7 +463,7 @@ mod tests {
         h.seed_root(manifest_with_deps(&[("totally-unpublished-pkg", "^1.0.0")])).await;
         *h.remote.metadata_response.lock().unwrap() = None;
 
-        let result = h.use_case().execute(h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+        let result = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
 
         assert_eq!(result.packages_scanned, 0);
     }
@@ -355,7 +480,7 @@ mod tests {
             h.remote.set_package(&format!("dep-{i}"), packument(&[("1.0.0", manifest)]));
         }
 
-        let result = h.use_case().execute(h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+        let result = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
 
         assert!(result.truncated);
         assert_eq!(result.packages_scanned, MAX_DEPTH as i32);
@@ -372,7 +497,7 @@ mod tests {
             h.remote.set_package(name, packument(&[("1.0.0", serde_json::json!({}))]));
         }
 
-        let result = h.use_case().execute(h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+        let result = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
 
         assert!(result.truncated);
         assert_eq!(result.packages_scanned, MAX_PACKAGES as i32);
@@ -381,7 +506,7 @@ mod tests {
     #[tokio::test]
     async fn scanning_an_unknown_package_fails_with_not_found() {
         let h = Harness::new();
-        let err = h.use_case().execute(h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap_err();
+        let err = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap_err();
         assert!(matches!(err, ApplicationError::NpmPackageNotFound));
     }
 
@@ -389,7 +514,7 @@ mod tests {
     async fn scanning_an_unknown_version_fails_with_not_found() {
         let h = Harness::new();
         h.seed_root(serde_json::json!({})).await;
-        let err = h.use_case().execute(h.repository_id, &h.name, &NpmVersion::parse("9.9.9").unwrap()).await.unwrap_err();
+        let err = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("9.9.9").unwrap()).await.unwrap_err();
         assert!(matches!(err, ApplicationError::NpmVersionNotFound));
     }
 
@@ -410,7 +535,7 @@ mod tests {
         h.seed_root(manifest_with_deps(&[("minimist", "^0.0.8")])).await;
         h.remote.set_package("minimist", packument(&[("0.0.8", serde_json::json!({}))]));
 
-        h.use_case().execute(h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+        h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
         let use_case = GetDependencyAuditResultUseCase::new(h.packages.clone(), h.results.clone());
         let result = use_case.execute(h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
 
@@ -464,5 +589,130 @@ mod tests {
             map.insert(v.to_string(), m.clone());
         }
         map
+    }
+
+    #[tokio::test]
+    async fn a_scan_after_a_publish_gives_way_when_scans_are_already_running() {
+        let h = Harness::new();
+        h.seed_root(manifest_with_deps(&[])).await;
+        let use_case = h.use_case();
+        let version = NpmVersion::parse("1.0.0").unwrap();
+        let running = use_case.scans.clone().try_acquire_many_owned(MAX_CONCURRENT_SCANS as u32).unwrap();
+
+        assert!(use_case.execute_unless_busy(h.repository_id, &h.name, &version).await.unwrap().is_none());
+        assert!(h.results.saved().is_empty());
+
+        drop(running);
+        assert!(use_case.execute_unless_busy(h.repository_id, &h.name, &version).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn a_dependency_this_repository_publishes_itself_is_never_looked_up_on_the_public_registry() {
+        let h = Harness::new();
+        h.seed_root(manifest_with_deps(&[("corp-internal", "^1.0.0")])).await;
+        let internal = NpmPackage { id: Uuid::new_v4(), package_repository_id: h.repository_id, name: NpmPackageName::parse("corp-internal").unwrap(), created_at: Utc::now(), updated_at: Utc::now(), metadata_fetched_at: None, cached_metadata: None };
+        h.packages.create_package(&internal).await.unwrap();
+        // Somebody registered the same name on the public registry.
+        h.remote.set_package("corp-internal", packument(&[("1.0.0", serde_json::json!({}))]));
+
+        let result = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+
+        assert_eq!(result.packages_scanned, 0);
+        assert_eq!(h.audit.checked_packages(), None, "nothing of it goes to the advisory service either");
+    }
+
+    #[test]
+    fn a_trimmed_packument_keeps_the_dependencies_and_drops_the_rest() {
+        let full = serde_json::json!({
+            "name": "a", "readme": "x".repeat(1000),
+            "versions": { "1.0.0": { "name": "a", "description": "big", "dependencies": { "b": "^1" }, "dist": { "tarball": "t" } }, "2.0.0": { "name": "a" } }
+        });
+
+        let slim = slim_packument(&full);
+
+        assert_eq!(slim, serde_json::json!({ "versions": { "1.0.0": { "dependencies": { "b": "^1" } }, "2.0.0": { "dependencies": null } } }));
+    }
+
+    fn many_unknown_dependencies(count: usize) -> serde_json::Value {
+        let names: Vec<String> = (0..count).map(|i| format!("no-such-package-{i}")).collect();
+        let deps: Vec<(&str, &str)> = names.iter().map(|name| (name.as_str(), "^1.0.0")).collect();
+        manifest_with_deps(&deps)
+    }
+
+    fn limits() -> ScanLimits {
+        ScanLimits::default()
+    }
+
+    #[tokio::test]
+    async fn dependency_names_that_resolve_to_nothing_still_count_against_the_request_budget() {
+        let h = Harness::new();
+        h.seed_root(many_unknown_dependencies(200)).await;
+        *h.remote.metadata_response.lock().unwrap() = None;
+        let use_case = h.use_case().with_limits(ScanLimits { max_requests: 25, ..limits() });
+
+        let result = use_case.execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+
+        assert_eq!(h.remote.metadata_fetches.load(std::sync::atomic::Ordering::SeqCst), 25, "one request per unknown name, up to the budget");
+        assert!(result.truncated);
+    }
+
+    #[tokio::test]
+    async fn a_manifest_with_more_dependencies_than_the_cap_is_read_only_up_to_it() {
+        let h = Harness::new();
+        h.seed_root(many_unknown_dependencies(50)).await;
+        *h.remote.metadata_response.lock().unwrap() = None;
+        let use_case = h.use_case().with_limits(ScanLimits { max_dependencies_per_manifest: 10, ..limits() });
+
+        let result = use_case.execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+
+        assert_eq!(h.remote.metadata_fetches.load(std::sync::atomic::Ordering::SeqCst), 10);
+        assert!(result.truncated);
+    }
+
+    #[tokio::test]
+    async fn a_walk_that_outlasts_its_deadline_stops_and_is_marked_truncated() {
+        let h = Harness::new();
+        h.seed_root(many_unknown_dependencies(100)).await;
+        *h.remote.metadata_response.lock().unwrap() = None;
+        *h.remote.metadata_delay.lock().unwrap() = Duration::from_millis(40);
+        let use_case = h.use_case().with_limits(ScanLimits { deadline: Duration::from_millis(150), ..limits() });
+
+        let started = Instant::now();
+        let result = use_case.execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
+
+        assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
+        assert!(h.remote.metadata_fetches.load(std::sync::atomic::Ordering::SeqCst) < 100);
+        assert!(result.truncated);
+        assert_eq!(h.results.saved().len(), 1, "what was found is still saved");
+    }
+
+    #[tokio::test]
+    async fn a_manual_rescan_gives_up_when_every_scan_slot_stays_taken() {
+        let h = Harness::new();
+        h.seed_root(manifest_with_deps(&[])).await;
+        let use_case = h.use_case().with_limits(ScanLimits { slot_wait: Duration::from_millis(50), ..limits() });
+        let _running = use_case.scans.clone().try_acquire_many_owned(MAX_CONCURRENT_SCANS as u32).unwrap();
+
+        let result = use_case.execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await;
+
+        assert!(matches!(result, Err(ApplicationError::DependencyScanBusy)), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn one_user_cannot_ask_for_a_rescan_of_the_same_repository_over_and_over() {
+        let h = Harness::new();
+        h.seed_root(manifest_with_deps(&[])).await;
+        let use_case = h.use_case();
+        let version = NpmVersion::parse("1.0.0").unwrap();
+        let (alice, bob) = (Uuid::new_v4(), Uuid::new_v4());
+
+        use_case.execute(alice, h.repository_id, &h.name, &version).await.unwrap();
+        let again = use_case.execute(alice, h.repository_id, &h.name, &version).await;
+        let someone_else = use_case.execute(bob, h.repository_id, &h.name, &version).await;
+        let other_repository = use_case.execute(alice, Uuid::new_v4(), &h.name, &version).await;
+
+        assert!(matches!(again, Err(ApplicationError::DependencyScanRateLimited)), "{again:?}");
+        assert!(someone_else.is_ok());
+        assert!(!matches!(other_repository, Err(ApplicationError::DependencyScanRateLimited)), "another repository has its own allowance");
     }
 }

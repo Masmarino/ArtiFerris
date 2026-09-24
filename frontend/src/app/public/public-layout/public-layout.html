@@ -1,0 +1,25 @@
+<div class="public-layout">
+  <header class="public-layout__header">
+    <a routerLink="/explorer" aria-label="Explorer les paquets publics" class="public-layout__home">
+      <img src="/api/branding/logo" alt="ArtiFerris logo" class="public-layout__logo" />
+    </a>
+    <div class="public-layout__search" role="search" aria-label="Recherche rapide">
+      <app-suggest-search-box
+        compact
+        labelHidden
+        label="Rechercher un paquet"
+        placeholder="Rechercher un paquet…"
+        [maxLength]="100"
+        (search)="search($event)"
+      />
+    </div>
+    @if (isAuthenticated()) {
+      <a routerLink="/repositories" class="public-layout__login-link">Mes dépôts</a>
+    } @else {
+      <a routerLink="/login" class="public-layout__login-link">Se connecter</a>
+    }
+  </header>
+  <main class="public-layout__content">
+    <ng-content />
+  </main>
+</div>

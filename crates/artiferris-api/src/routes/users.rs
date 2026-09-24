@@ -3,6 +3,7 @@ use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
+use artiferris_domain::audit::{AdminAuditEvent, AdminAuditRecord};
 use uuid::Uuid;
 
 use crate::auth_middleware::AuthUser;
@@ -103,7 +104,7 @@ async fn create_user(
     require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
     let id = state
         .invite_user
-        .execute(resolved_org.0.id, body.is_organization_admin, &body.username, &body.email, body.is_super_admin)
+        .execute(resolved_org.0.id, body.is_organization_admin, &body.username, &body.email, body.is_super_admin, user.id)
         .await
         .map_err(|e| application_error_response("failed to invite user", e))?;
     Ok((
@@ -121,37 +122,41 @@ async fn create_user(
 
 /// Same reach as get_user, but an organization admin can never act on a super-admin account even in their own org — that's a global privilege, not theirs to touch.
 async fn resend_invitation(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    let target = state
+        .users
+        .find_by_id(id)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
     if !user.is_super_admin {
-        let target = state
-            .users
-            .find_by_id(id)
-            .await
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
-            .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() })))?;
+        let target = target.as_ref().ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() })))?;
         require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
         if target.is_super_admin {
             return Err((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() })));
         }
     }
-    state.resend_invitation.execute(id).await.map_err(|e| application_error_response("failed to resend invitation", e))?;
+    state.resend_invitation.execute(id, user.id).await.map_err(|e| application_error_response("failed to resend invitation", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// Same super-admin-target carve-out as resend_invitation.
 async fn delete_user(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    let target = state
+        .users
+        .find_by_id(id)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
     if !user.is_super_admin {
-        let target = state
-            .users
-            .find_by_id(id)
-            .await
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
-            .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() })))?;
+        let target = target.as_ref().ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() })))?;
         require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
         if target.is_super_admin {
             return Err((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() })));
         }
     }
-    state.delete_user.execute(id).await.map_err(|e| application_error_response("failed to delete user", e))?;
+    let audit = target.map(|target| AdminAuditRecord {
+        event: AdminAuditEvent::UserDeleted { user_id: target.id, organization_id: target.organization_id, username: target.username.as_str().to_string() },
+        actor_id: Some(user.id),
+    });
+    state.delete_user.execute(id, audit.as_ref()).await.map_err(|e| application_error_response("failed to delete user", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -167,7 +172,7 @@ async fn set_super_admin(
     Json(body): Json<SetSuperAdminRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    state.set_super_admin.execute(id, body.is_super_admin).await.map_err(|e| application_error_response("failed to change super-admin status", e))?;
+    state.set_super_admin.execute(id, body.is_super_admin, user.id).await.map_err(|e| application_error_response("failed to change super-admin status", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -183,13 +188,11 @@ struct UserLookupResponse {
     username: String,
 }
 
-/// Scoped to the request's resolved organization, not the caller's own — without this, any authenticated user could enumerate other organizations' usernames.
-async fn lookup_user(
-    State(state): State<AppState>,
-    user: AuthUser,
-    resolved_org: ResolvedOrganization,
-    Query(params): Query<LookupQuery>,
-) -> Result<Json<UserLookupResponse>, (StatusCode, Json<ErrorResponse>)> {
+/// Scoped to the caller's OWN organization (`user.organization_id`), never the Host-resolved one —
+/// `ResolvedOrganization` is attacker-controlled (derived from the `Host` header), so scoping on it
+/// let any authenticated user enumerate another organization's usernames by spoofing that
+/// organization's subdomain (audit finding C-3).
+async fn lookup_user(State(state): State<AppState>, user: AuthUser, Query(params): Query<LookupQuery>) -> Result<Json<UserLookupResponse>, (StatusCode, Json<ErrorResponse>)> {
     let not_found = || (StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() }));
     let username = artiferris_domain::user::Username::parse(&params.username).map_err(|_| not_found())?;
     let target = state
@@ -198,7 +201,7 @@ async fn lookup_user(
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
         .ok_or_else(not_found)?;
-    if !user.is_super_admin && target.organization_id != resolved_org.0.id {
+    if !user.is_super_admin && target.organization_id != user.organization_id {
         return Err(not_found());
     }
     Ok(Json(UserLookupResponse { id: target.id, username: target.username.as_str().to_string() }))
@@ -212,27 +215,25 @@ struct SearchQuery {
 const SEARCH_RESULT_LIMIT: usize = 10;
 
 /// Same privacy contract as `lookup_user`. Empty `q` returns no results.
-async fn search_users(
-    State(state): State<AppState>,
-    user: AuthUser,
-    resolved_org: ResolvedOrganization,
-    Query(params): Query<SearchQuery>,
-) -> Result<Json<Vec<UserLookupResponse>>, (StatusCode, Json<ErrorResponse>)> {
+///
+/// Scoped to the caller's OWN organization (`user.organization_id`), never the Host-resolved one —
+/// `ResolvedOrganization` is attacker-controlled (derived from the `Host` header), so scoping on it
+/// let any authenticated user enumerate another organization's usernames by spoofing that
+/// organization's subdomain (audit finding C-3).
+async fn search_users(State(state): State<AppState>, user: AuthUser, Query(params): Query<SearchQuery>) -> Result<Json<Vec<UserLookupResponse>>, (StatusCode, Json<ErrorResponse>)> {
     let query = params.q.trim().to_lowercase();
     if query.is_empty() {
         return Ok(Json(vec![]));
     }
-    let mut matches: Vec<_> = state
-        .users
-        .list_all()
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
-        .into_iter()
-        .filter(|u| user.is_super_admin || u.organization_id == resolved_org.0.id)
-        .filter(|u| u.username.as_str().to_lowercase().contains(&query))
-        .collect();
-    matches.sort_by(|a, b| a.username.as_str().cmp(b.username.as_str()));
-    matches.truncate(SEARCH_RESULT_LIMIT);
+    // Scoped (and, for a super-admin, cross-organization) at the database level instead of
+    // filtering a full-table `list_all()` read in application code (M-21, B-7). A super-admin's
+    // search is intentionally cross-organization — same bypass `list_users` already applies.
+    let matches = if user.is_super_admin {
+        state.users.search_all_organizations(&query, SEARCH_RESULT_LIMIT as i64).await
+    } else {
+        state.users.search_by_organization(user.organization_id, &query, SEARCH_RESULT_LIMIT as i64).await
+    }
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
     Ok(Json(matches.into_iter().map(|u| UserLookupResponse { id: u.id, username: u.username.as_str().to_string() }).collect()))
 }
 
@@ -250,13 +251,13 @@ async fn list_user_permissions(
     user: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<UserPermissionEntryResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    let target = state
+        .users
+        .find_by_id(id)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() })))?;
     if !user.is_super_admin {
-        let target = state
-            .users
-            .find_by_id(id)
-            .await
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
-            .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() })))?;
         require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
     }
     let entries = state
@@ -274,9 +275,11 @@ async fn list_user_permissions(
         .collect();
     let result = entries
         .into_iter()
-        .filter_map(|(repository_id, role)| {
-            repos.get(&repository_id).map(|repo| UserPermissionEntryResponse { repository_id, repository_name: repo.name.clone(), format: repo.format, role })
-        })
+        .filter_map(|(repository_id, role)| repos.get(&repository_id).map(|repo| (repository_id, role, repo)))
+        // A non-super-admin caller only sees the target's grants within the target's own
+        // (non-personal) organization — their personal-namespace projects are theirs alone (B-1).
+        .filter(|(_, _, repo)| user.is_super_admin || repo.organization_id == target.organization_id)
+        .map(|(repository_id, role, repo)| UserPermissionEntryResponse { repository_id, repository_name: repo.name.clone(), format: repo.format, role })
         .collect();
     Ok(Json(result))
 }
@@ -300,6 +303,7 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse(slug).unwrap(),
                 display_name: slug.to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -310,7 +314,7 @@ mod tests {
         Config {
             database_url: String::new(),
             jwt_secret: "test-secret".to_string(),
-            secrets_encryption_key: "test-secret".to_string(),
+            secrets_encryption_key: "test-secrets-encryption-key".to_string(),
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
@@ -318,6 +322,8 @@ mod tests {
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),
+            trusted_proxy_ips: std::collections::HashSet::new(),
+            audit_retention_days: None,
         }
     }
 
@@ -856,6 +862,7 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -892,6 +899,7 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -919,6 +927,84 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn lookup_cannot_find_a_user_in_another_organization_even_via_that_organizations_own_subdomain(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let acme_id = Uuid::new_v4();
+        state
+            .organizations
+            .create(&artiferris_domain::organization::Organization {
+                id: acme_id,
+                slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
+                display_name: "Acme".to_string(),
+                is_public: false,
+                is_personal: false,
+                created_at: chrono::Utc::now(),
+            })
+            .await
+            .unwrap();
+        // Caller belongs to the public organization, not acme.
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "public-regular", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("public-regular", "sup3r-s3cret!").await.unwrap();
+        state.create_user.execute(acme_id, "acme-florian", "sup3r-s3cret!", false).await.unwrap();
+        let app = build_router(state);
+
+        // The caller spoofs acme's own subdomain in Host — without this fix, resolved_org becomes
+        // acme, and since the target also belongs to acme, the lookup would succeed.
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/users/lookup?username=acme-florian")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("host", "acme.artiferris.localhost")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND, "a caller must not be able to reach another organization's users by spoofing Host");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn search_cannot_enumerate_another_organization_via_that_organizations_own_subdomain(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let acme_id = Uuid::new_v4();
+        state
+            .organizations
+            .create(&artiferris_domain::organization::Organization {
+                id: acme_id,
+                slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
+                display_name: "Acme".to_string(),
+                is_public: false,
+                is_personal: false,
+                created_at: chrono::Utc::now(),
+            })
+            .await
+            .unwrap();
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "public-regular", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("public-regular", "sup3r-s3cret!").await.unwrap();
+        state.create_user.execute(acme_id, "acme-florian", "sup3r-s3cret!", false).await.unwrap();
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/users/search?q=flor")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("host", "acme.artiferris.localhost")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let results: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(results.as_array().unwrap().len(), 0, "must not leak a username from another organization via a spoofed Host: {results}");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_super_admin_can_still_look_up_a_user_in_another_organization(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
         let acme_id = Uuid::new_v4();
@@ -929,6 +1015,7 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -1004,6 +1091,114 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::FORBIDDEN);
     }
 
+    /// B-1: an org-admin's reach into a member's permission grants must stop at that member's own
+    /// organization — it must never surface grants inside the member's personal namespace, which
+    /// is theirs alone.
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn list_user_permissions_does_not_leak_a_targets_personal_project_to_their_org_admin(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let acme_id = Uuid::new_v4();
+        create_org(&state, acme_id, "acme").await;
+        let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
+        let admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
+
+        let target_id = state.create_user.execute(acme_id, "target-user", "sup3r-s3cret!", false).await.unwrap();
+        state.reserve_personal_organization.execute(target_id).await.unwrap();
+        state.create_user_project.execute(target_id, "target-secret-lib", RepositoryFormat::Npm, RepositoryType::Hosted).await.unwrap();
+
+        let app = build_router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/users/{target_id}/permissions"))
+                    .header("authorization", format!("Bearer {admin_token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let entries: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(entries.as_array().unwrap().len(), 0, "the target's personal-org project must not be visible to their normal org's admin: {entries}");
+    }
+
+    /// The counterpart to the leak test above: filtering to the target's own organization must
+    /// not over-filter — a grant that genuinely lives in the target's normal org still has to
+    /// show up for that org's admin.
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn list_user_permissions_still_shows_the_targets_own_organization_grants(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let acme_id = Uuid::new_v4();
+        create_org(&state, acme_id, "acme").await;
+        let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
+        let admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
+
+        let target_id = state.create_user.execute(acme_id, "target-user", "sup3r-s3cret!", false).await.unwrap();
+        let repo_id =
+            state.create_repository.execute(acme_id, "acme-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, org_admin_id).await.unwrap();
+        state.grant_permission.execute(target_id, repo_id, Role::Write, org_admin_id).await.unwrap();
+        // Also give the target a personal project, to prove it's filtered out alongside the
+        // normal-org grant being kept.
+        state.reserve_personal_organization.execute(target_id).await.unwrap();
+        state.create_user_project.execute(target_id, "target-secret-lib", RepositoryFormat::Npm, RepositoryType::Hosted).await.unwrap();
+
+        let app = build_router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/users/{target_id}/permissions"))
+                    .header("authorization", format!("Bearer {admin_token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let entries: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let entries = entries.as_array().unwrap();
+        assert_eq!(entries.len(), 1, "the target's normal-org grant must still be visible: {entries:?}");
+        assert_eq!(entries[0]["repository_id"], repo_id.to_string());
+        assert_eq!(entries[0]["repository_name"], "acme-repo");
+    }
+
+    /// A super-admin caller must keep seeing everything, personal-org projects included — the B-1
+    /// scoping only applies to the org-admin path.
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_super_admin_still_sees_a_targets_personal_project_in_their_permissions(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+
+        let target_id = state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "target-user", "sup3r-s3cret!", false).await.unwrap();
+        state.reserve_personal_organization.execute(target_id).await.unwrap();
+        state.create_user_project.execute(target_id, "target-secret-lib", RepositoryFormat::Npm, RepositoryType::Hosted).await.unwrap();
+
+        let app = build_router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/users/{target_id}/permissions"))
+                    .header("authorization", format!("Bearer {admin_token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let entries: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let entries = entries.as_array().unwrap();
+        assert_eq!(entries.len(), 1, "a super-admin must still see the target's personal project: {entries:?}");
+        assert_eq!(entries[0]["repository_name"], "target-secret-lib");
+    }
+
     fn set_super_admin_request(token: &str, id: Uuid, is_super_admin: bool) -> Request<Body> {
         Request::builder()
             .method("PUT")
@@ -1065,6 +1260,7 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -1109,6 +1305,7 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -1143,12 +1340,13 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
             .unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         state.create_user.execute(acme_id, "acme-user", "sup3r-s3cret!", false).await.unwrap();
         // A super-admin in a different organization must never show up in the org-admin's view.
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
@@ -1192,7 +1390,7 @@ mod tests {
         let acme_id = Uuid::new_v4();
         create_org(&state, acme_id, "acme").await;
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let member_id = state.create_user.execute(acme_id, "acme-user", "sup3r-s3cret!", false).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
@@ -1214,7 +1412,7 @@ mod tests {
         let acme_id = Uuid::new_v4();
         create_org(&state, acme_id, "acme").await;
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let other_user_id = state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "other-user", "sup3r-s3cret!", false).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
@@ -1233,7 +1431,7 @@ mod tests {
         let acme_id = Uuid::new_v4();
         create_org(&state, acme_id, "acme").await;
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let member_id = state.create_user.execute(acme_id, "acme-user", "sup3r-s3cret!", false).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state.clone());
@@ -1260,7 +1458,7 @@ mod tests {
         let acme_id = Uuid::new_v4();
         create_org(&state, acme_id, "acme").await;
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let other_user_id = state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "other-user", "sup3r-s3cret!", false).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
@@ -1286,7 +1484,7 @@ mod tests {
         let acme_id = Uuid::new_v4();
         create_org(&state, acme_id, "acme").await;
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let super_admin_in_acme_id = state.create_user.execute(acme_id, "acme-super-admin", "sup3r-s3cret!", true).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state.clone());
@@ -1313,7 +1511,7 @@ mod tests {
         let acme_id = Uuid::new_v4();
         create_org(&state, acme_id, "acme").await;
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let member_id = state.create_user.execute(acme_id, "acme-user", "sup3r-s3cret!", false).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
@@ -1341,7 +1539,7 @@ mod tests {
         let acme_id = Uuid::new_v4();
         create_org(&state, acme_id, "acme").await;
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let super_admin_in_acme_id = state.create_user.execute(acme_id, "acme-super-admin", "sup3r-s3cret!", true).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
@@ -1367,7 +1565,7 @@ mod tests {
         let acme_id = Uuid::new_v4();
         create_org(&state, acme_id, "acme").await;
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let member_id = state.create_user.execute(acme_id, "acme-user", "sup3r-s3cret!", false).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
@@ -1383,7 +1581,7 @@ mod tests {
         let acme_id = Uuid::new_v4();
         create_org(&state, acme_id, "acme").await;
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let member_id = state.create_user.execute(acme_id, "acme-user", "sup3r-s3cret!", false).await.unwrap();
         let repo_id = state.create_repository.execute(acme_id, "acme-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, org_admin_id).await.unwrap();
         state.grant_permission.execute(member_id, repo_id, Role::Write, org_admin_id).await.unwrap();
@@ -1408,7 +1606,7 @@ mod tests {
         let acme_id = Uuid::new_v4();
         create_org(&state, acme_id, "acme").await;
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let other_user_id = state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "other-user", "sup3r-s3cret!", false).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use artiferris_domain::audit::AdminAuditRecord;
 use artiferris_domain::error::DomainError;
 use artiferris_domain::sso::{IdentityProviderConfig, IdentityProviderRepositoryPort, LdapConfig, OidcConfig};
 use serde::{Deserialize, Serialize};
@@ -20,7 +21,7 @@ impl PostgresIdentityProviderRepository {
     }
 }
 
-/// The JSONB row shape — `bind_password_encrypted` is `secret_box::encrypt_packed`'s output, never the plaintext password.
+/// The JSONB row shape — `bind_password_encrypted` is `secret_box::seal_packed`'s output, never the plaintext password.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum StoredConfig {
@@ -45,7 +46,7 @@ impl StoredConfig {
             IdentityProviderConfig::Ldap(ldap) => StoredConfig::Ldap {
                 server_url: ldap.server_url.clone(),
                 bind_dn: ldap.bind_dn.clone(),
-                bind_password_encrypted: secret_box::encrypt_packed(&ldap.bind_password, secrets_encryption_key),
+                bind_password_encrypted: secret_box::seal_packed(&ldap.bind_password, secrets_encryption_key, secret_box::LDAP_BIND_PASSWORD),
                 user_search_base: ldap.user_search_base.clone(),
                 user_search_filter: ldap.user_search_filter.clone(),
                 email_attribute: ldap.email_attribute.clone(),
@@ -53,29 +54,29 @@ impl StoredConfig {
             IdentityProviderConfig::Oidc(oidc) => StoredConfig::Oidc {
                 issuer_url: oidc.issuer_url.clone(),
                 client_id: oidc.client_id.clone(),
-                client_secret_encrypted: secret_box::encrypt_packed(&oidc.client_secret, secrets_encryption_key),
+                client_secret_encrypted: secret_box::seal_packed(&oidc.client_secret, secrets_encryption_key, secret_box::OIDC_CLIENT_SECRET),
             },
         }
     }
 
-    fn into_domain(self, secrets_encryption_key: &str) -> IdentityProviderConfig {
+    fn into_domain(self, secrets_encryption_key: &str) -> Result<IdentityProviderConfig, DomainError> {
         match self {
             StoredConfig::Ldap { server_url, bind_dn, bind_password_encrypted, user_search_base, user_search_filter, email_attribute } => {
-                IdentityProviderConfig::Ldap(LdapConfig {
+                Ok(IdentityProviderConfig::Ldap(LdapConfig {
                     server_url,
                     bind_dn,
-                    bind_password: secret_box::decrypt_packed(&bind_password_encrypted, secrets_encryption_key),
+                    bind_password: secret_box::open_packed(&bind_password_encrypted, secrets_encryption_key, secret_box::LDAP_BIND_PASSWORD)?,
                     user_search_base,
                     user_search_filter,
                     email_attribute,
-                })
+                }))
             }
             StoredConfig::Oidc { issuer_url, client_id, client_secret_encrypted } => {
-                IdentityProviderConfig::Oidc(OidcConfig {
+                Ok(IdentityProviderConfig::Oidc(OidcConfig {
                     issuer_url,
                     client_id,
-                    client_secret: secret_box::decrypt_packed(&client_secret_encrypted, secrets_encryption_key),
-                })
+                    client_secret: secret_box::open_packed(&client_secret_encrypted, secrets_encryption_key, secret_box::OIDC_CLIENT_SECRET)?,
+                }))
             }
         }
     }
@@ -92,29 +93,46 @@ impl IdentityProviderRepositoryPort for PostgresIdentityProviderRepository {
             return Ok(None);
         };
         let stored: StoredConfig = serde_json::from_value(row.config).map_err(|e| DomainError::Infrastructure(e.to_string()))?;
-        Ok(Some(stored.into_domain(&self.secrets_encryption_key)))
+        let kind = match &stored {
+            StoredConfig::Ldap { .. } => "LDAP bind password",
+            StoredConfig::Oidc { .. } => "OIDC client secret",
+        };
+        let config = stored
+            .into_domain(&self.secrets_encryption_key)
+            .inspect_err(|e| tracing::error!(%organization_id, "the stored {kind} cannot be read, SSO login is down until an admin enters it again: {e}"))?;
+        Ok(Some(config))
     }
 
-    async fn set(&self, organization_id: Uuid, config: &IdentityProviderConfig) -> Result<(), DomainError> {
+    async fn set(&self, organization_id: Uuid, config: &IdentityProviderConfig, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError> {
         let stored = StoredConfig::from_domain(config, &self.secrets_encryption_key);
         let json = serde_json::to_value(&stored).map_err(|e| DomainError::Infrastructure(e.to_string()))?;
+        let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!(
             "INSERT INTO organization_identity_providers (organization_id, config, updated_at) VALUES ($1, $2, now()) \
              ON CONFLICT (organization_id) DO UPDATE SET config = EXCLUDED.config, updated_at = now()",
             organization_id,
             json,
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .infra_err()?;
+        if let Some(audit) = audit {
+            crate::postgres::event_publisher::insert_admin_event(&mut *tx, &audit.event, audit.actor_id).await.infra_err()?;
+        }
+        tx.commit().await.infra_err()?;
         Ok(())
     }
 
-    async fn clear(&self, organization_id: Uuid) -> Result<(), DomainError> {
+    async fn clear(&self, organization_id: Uuid, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError> {
+        let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!("DELETE FROM organization_identity_providers WHERE organization_id = $1", organization_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .infra_err()?;
+        if let Some(audit) = audit {
+            crate::postgres::event_publisher::insert_admin_event(&mut *tx, &audit.event, audit.actor_id).await.infra_err()?;
+        }
+        tx.commit().await.infra_err()?;
         Ok(())
     }
 }
@@ -158,7 +176,7 @@ mod tests {
         insert_organization(&pool, organization_id).await;
         let repo = PostgresIdentityProviderRepository::new(pool, "jwt-secret".to_string());
 
-        repo.set(organization_id, &sample()).await.unwrap();
+        repo.set(organization_id, &sample(), None).await.unwrap();
 
         assert_eq!(repo.get(organization_id).await.unwrap(), Some(sample()));
     }
@@ -168,11 +186,11 @@ mod tests {
         let organization_id = Uuid::new_v4();
         insert_organization(&pool, organization_id).await;
         let repo = PostgresIdentityProviderRepository::new(pool, "jwt-secret".to_string());
-        repo.set(organization_id, &sample()).await.unwrap();
+        repo.set(organization_id, &sample(), None).await.unwrap();
 
         let IdentityProviderConfig::Ldap(mut updated) = sample() else { unreachable!("sample() is always Ldap") };
         updated.server_url = "ldaps://dc2.corp.example:636".to_string();
-        repo.set(organization_id, &IdentityProviderConfig::Ldap(updated)).await.unwrap();
+        repo.set(organization_id, &IdentityProviderConfig::Ldap(updated), None).await.unwrap();
 
         let count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM organization_identity_providers WHERE organization_id = $1", organization_id)
             .fetch_one(&repo.pool)
@@ -187,7 +205,7 @@ mod tests {
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn clearing_an_unconfigured_organization_is_a_no_op(pool: PgPool) {
         let repo = PostgresIdentityProviderRepository::new(pool, "jwt-secret".to_string());
-        repo.clear(Uuid::new_v4()).await.unwrap();
+        repo.clear(Uuid::new_v4(), None).await.unwrap();
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -195,9 +213,9 @@ mod tests {
         let organization_id = Uuid::new_v4();
         insert_organization(&pool, organization_id).await;
         let repo = PostgresIdentityProviderRepository::new(pool, "jwt-secret".to_string());
-        repo.set(organization_id, &sample()).await.unwrap();
+        repo.set(organization_id, &sample(), None).await.unwrap();
 
-        repo.clear(organization_id).await.unwrap();
+        repo.clear(organization_id, None).await.unwrap();
 
         assert_eq!(repo.get(organization_id).await.unwrap(), None);
     }
@@ -207,7 +225,7 @@ mod tests {
         let organization_id = Uuid::new_v4();
         insert_organization(&pool, organization_id).await;
         let repo = PostgresIdentityProviderRepository::new(pool, "jwt-secret".to_string());
-        repo.set(organization_id, &sample()).await.unwrap();
+        repo.set(organization_id, &sample(), None).await.unwrap();
 
         let row: (serde_json::Value,) = sqlx::query_as("SELECT config FROM organization_identity_providers WHERE organization_id = $1")
             .bind(organization_id)
@@ -218,15 +236,14 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
-    async fn decrypting_with_the_wrong_secrets_encryption_key_does_not_return_the_original_password(pool: PgPool) {
+    async fn decrypting_with_the_wrong_secrets_encryption_key_fails_loudly(pool: PgPool) {
         let organization_id = Uuid::new_v4();
         insert_organization(&pool, organization_id).await;
         let write_repo = PostgresIdentityProviderRepository::new(pool.clone(), "jwt-secret-a".to_string());
-        write_repo.set(organization_id, &sample()).await.unwrap();
+        write_repo.set(organization_id, &sample(), None).await.unwrap();
 
         let read_repo = PostgresIdentityProviderRepository::new(pool, "jwt-secret-b".to_string());
-        let IdentityProviderConfig::Ldap(found) = read_repo.get(organization_id).await.unwrap().unwrap() else { unreachable!("stored config is Ldap") };
-        assert_ne!(found.bind_password, "s3cret!", "a mismatched key must not silently decrypt to the real password");
+        assert!(read_repo.get(organization_id).await.is_err(), "a mismatched key must be a hard error, not a silent garbled decrypt (M-9)");
     }
 
     fn sample_oidc() -> IdentityProviderConfig {
@@ -243,7 +260,7 @@ mod tests {
         insert_organization(&pool, organization_id).await;
         let repo = PostgresIdentityProviderRepository::new(pool, "jwt-secret".to_string());
 
-        repo.set(organization_id, &sample_oidc()).await.unwrap();
+        repo.set(organization_id, &sample_oidc(), None).await.unwrap();
 
         assert_eq!(repo.get(organization_id).await.unwrap(), Some(sample_oidc()));
     }
@@ -253,7 +270,7 @@ mod tests {
         let organization_id = Uuid::new_v4();
         insert_organization(&pool, organization_id).await;
         let repo = PostgresIdentityProviderRepository::new(pool, "jwt-secret".to_string());
-        repo.set(organization_id, &sample_oidc()).await.unwrap();
+        repo.set(organization_id, &sample_oidc(), None).await.unwrap();
 
         let row: (serde_json::Value,) = sqlx::query_as("SELECT config FROM organization_identity_providers WHERE organization_id = $1")
             .bind(organization_id)
@@ -268,9 +285,9 @@ mod tests {
         let organization_id = Uuid::new_v4();
         insert_organization(&pool, organization_id).await;
         let repo = PostgresIdentityProviderRepository::new(pool, "jwt-secret".to_string());
-        repo.set(organization_id, &sample()).await.unwrap(); // sample() is the existing LDAP fixture already in this file
+        repo.set(organization_id, &sample(), None).await.unwrap(); // sample() is the existing LDAP fixture already in this file
 
-        repo.set(organization_id, &sample_oidc()).await.unwrap();
+        repo.set(organization_id, &sample_oidc(), None).await.unwrap();
 
         assert_eq!(repo.get(organization_id).await.unwrap(), Some(sample_oidc()));
     }

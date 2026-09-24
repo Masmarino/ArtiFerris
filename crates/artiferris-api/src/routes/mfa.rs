@@ -2,6 +2,7 @@ use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
 use artiferris_application::error::ApplicationError;
+use artiferris_domain::audit::{MfaMethod, SecurityAuditRecord, SecurityEvent};
 use serde::{Deserialize, Serialize};
 
 use crate::auth_middleware::AuthUser;
@@ -11,6 +12,11 @@ use axum::extract::State;
 
 fn throttled_response() -> (StatusCode, Json<ErrorResponse>) {
     (StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: "too many failed attempts, try again later".to_string() }))
+}
+
+/// Like a password change, this ends every session, the caller's included.
+async fn revoke_sessions(state: &AppState, user: &AuthUser) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    state.revoke_user_sessions.execute(user.id, None).await.map_err(|e| application_error_response("failed to revoke sessions", e))
 }
 
 pub fn router() -> Router<AppState> {
@@ -44,9 +50,24 @@ struct TotpEnrollmentResponse {
     otpauth_url: String,
 }
 
-async fn enroll_totp(State(state): State<AppState>, user: AuthUser) -> Result<Json<TotpEnrollmentResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let enrollment = state.enroll_totp.execute(user.id, &user.username).await.map_err(|e| application_error_response("failed to enroll TOTP", e))?;
-    Ok(Json(TotpEnrollmentResponse { secret: enrollment.secret_base32, otpauth_url: enrollment.otpauth_url }))
+async fn enroll_totp(State(state): State<AppState>, user: AuthUser, Json(body): Json<CurrentPasswordRequest>) -> Result<Json<TotpEnrollmentResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
+    let throttle_key = manage_throttle_key(user.id);
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+        return Err(throttled_response());
+    }
+    match state.enroll_totp.execute(user.id, &user.username, Some(&body.current_password)).await {
+        Ok(enrollment) => {
+            state.login_throttle.clear(&throttle_key);
+            Ok(Json(TotpEnrollmentResponse { secret: enrollment.secret_base32, otpauth_url: enrollment.otpauth_url }))
+        }
+        Err(e) => {
+            if !matches!(e, ApplicationError::InvalidCredentials) {
+                state.login_throttle.release(&throttle_key);
+            }
+            Err(application_error_response("failed to enroll TOTP", e))
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -60,8 +81,24 @@ struct BackupCodesResponse {
 }
 
 async fn confirm_totp(State(state): State<AppState>, user: AuthUser, Json(body): Json<ConfirmTotpRequest>) -> Result<Json<BackupCodesResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let codes = state.confirm_totp.execute(user.id, &user.username, &body.code).await.map_err(|e| application_error_response("failed to confirm TOTP", e))?;
-    Ok(Json(BackupCodesResponse { backup_codes: codes }))
+    let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
+    let throttle_key = manage_throttle_key(user.id);
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+        return Err(throttled_response());
+    }
+    match state.confirm_totp.execute(user.id, &user.username, &body.code).await {
+        Ok(codes) => {
+            state.login_throttle.clear(&throttle_key);
+            crate::state::record_security_event(&state, SecurityEvent::MfaEnabled { user_id: user.id, organization_id: user.organization_id, method: MfaMethod::Totp }, Some(user.id)).await;
+            Ok(Json(BackupCodesResponse { backup_codes: codes }))
+        }
+        Err(e) => {
+            if !matches!(e, ApplicationError::InvalidMfaCode) {
+                state.login_throttle.release(&throttle_key);
+            }
+            Err(application_error_response("failed to confirm TOTP", e))
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -69,25 +106,27 @@ struct CurrentPasswordRequest {
     current_password: String,
 }
 
-/// Distinct from `/api/auth/login` and `/api/me/password`'s bare-username key, so a stolen bearer token can't lock the real user out of login.
-fn manage_throttle_key(user_id: uuid::Uuid) -> String {
+/// Distinct from `/api/auth/login` and `/api/me/password`'s bare-username key, so a stolen bearer token can't lock the real user out of login. Reserved before the password check, so parallel guesses can't all slip under the limit.
+pub(crate) fn manage_throttle_key(user_id: uuid::Uuid) -> String {
     format!("mfa-manage:{user_id}")
 }
 
 async fn disable_totp(State(state): State<AppState>, user: AuthUser, Json(body): Json<CurrentPasswordRequest>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = manage_throttle_key(user.id);
-    if state.login_throttle.is_throttled(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
         return Err(throttled_response());
     }
     match state.disable_totp.execute(user.id, &body.current_password).await {
         Ok(()) => {
             state.login_throttle.clear(&throttle_key);
+            revoke_sessions(&state, &user).await?;
+            crate::state::record_security_event(&state, SecurityEvent::MfaDisabled { user_id: user.id, organization_id: user.organization_id, method: MfaMethod::Totp }, Some(user.id)).await;
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
-            if matches!(e, ApplicationError::InvalidCredentials) {
-                state.login_throttle.record_failure(&throttle_key, max_attempts, window);
+            if !matches!(e, ApplicationError::InvalidCredentials) {
+                state.login_throttle.release(&throttle_key);
             }
             Err(application_error_response("failed to disable TOTP", e))
         }
@@ -101,17 +140,19 @@ async fn regenerate_backup_codes(
 ) -> Result<Json<BackupCodesResponse>, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = manage_throttle_key(user.id);
-    if state.login_throttle.is_throttled(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
         return Err(throttled_response());
     }
-    match state.regenerate_backup_codes.execute(user.id, &body.current_password).await {
+    let audit = SecurityAuditRecord { event: SecurityEvent::BackupCodesRegenerated { user_id: user.id, organization_id: user.organization_id }, actor_id: Some(user.id) };
+    match state.regenerate_backup_codes.execute(user.id, &body.current_password, Some(&audit)).await {
         Ok(codes) => {
             state.login_throttle.clear(&throttle_key);
+            revoke_sessions(&state, &user).await?;
             Ok(Json(BackupCodesResponse { backup_codes: codes }))
         }
         Err(e) => {
-            if matches!(e, ApplicationError::InvalidCredentials) {
-                state.login_throttle.record_failure(&throttle_key, max_attempts, window);
+            if !matches!(e, ApplicationError::InvalidCredentials) {
+                state.login_throttle.release(&throttle_key);
             }
             Err(application_error_response("failed to regenerate backup codes", e))
         }
@@ -137,9 +178,26 @@ struct PasskeyRegistrationStartResponse {
 }
 
 /// Unwraps `CreationChallengeResponse` down to its inner `public_key` field — it already serializes to `{"publicKey": {...}}`, which would otherwise double-nest here.
-async fn start_passkey_registration(State(state): State<AppState>, user: AuthUser) -> Result<Json<PasskeyRegistrationStartResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let (challenge_id, public_key) = state.start_passkey_registration.execute(user.id, &user.username).await.map_err(|e| application_error_response("failed to start passkey registration", e))?;
-    Ok(Json(PasskeyRegistrationStartResponse { challenge_id, public_key: public_key.public_key }))
+/// Requires the current password, same as `enroll_totp` — this is the step that actually starts a
+/// new registration ceremony, and must not be reachable via a hijacked session token alone (M-7).
+async fn start_passkey_registration(State(state): State<AppState>, user: AuthUser, Json(body): Json<CurrentPasswordRequest>) -> Result<Json<PasskeyRegistrationStartResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
+    let throttle_key = manage_throttle_key(user.id);
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+        return Err(throttled_response());
+    }
+    match state.start_passkey_registration.execute(user.id, &user.username, Some(&body.current_password)).await {
+        Ok((challenge_id, public_key)) => {
+            state.login_throttle.clear(&throttle_key);
+            Ok(Json(PasskeyRegistrationStartResponse { challenge_id, public_key: public_key.public_key }))
+        }
+        Err(e) => {
+            if !matches!(e, ApplicationError::InvalidCredentials) {
+                state.login_throttle.release(&throttle_key);
+            }
+            Err(application_error_response("failed to start passkey registration", e))
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -156,7 +214,7 @@ async fn finish_passkey_registration(
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     state
         .finish_passkey_registration
-        .execute(user.id, body.challenge_id, &body.credential, &body.name)
+        .execute(user.id, user.organization_id, body.challenge_id, &body.credential, &body.name)
         .await
         .map_err(|e| application_error_response("failed to finish passkey registration", e))?;
     Ok(StatusCode::CREATED)
@@ -170,17 +228,19 @@ async fn delete_passkey(
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = manage_throttle_key(user.id);
-    if state.login_throttle.is_throttled(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
         return Err(throttled_response());
     }
-    match state.delete_passkey.execute(user.id, id, &body.current_password).await {
+    let audit = SecurityAuditRecord { event: SecurityEvent::PasskeyDeleted { user_id: user.id, organization_id: user.organization_id, passkey_id: id }, actor_id: Some(user.id) };
+    match state.delete_passkey.execute(user.id, id, &body.current_password, Some(&audit)).await {
         Ok(()) => {
             state.login_throttle.clear(&throttle_key);
+            revoke_sessions(&state, &user).await?;
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
-            if matches!(e, ApplicationError::InvalidCredentials) {
-                state.login_throttle.record_failure(&throttle_key, max_attempts, window);
+            if !matches!(e, ApplicationError::InvalidCredentials) {
+                state.login_throttle.release(&throttle_key);
             }
             Err(application_error_response("failed to delete passkey", e))
         }
@@ -201,7 +261,7 @@ mod tests {
         Config {
             database_url: String::new(),
             jwt_secret: "test-secret".to_string(),
-            secrets_encryption_key: "test-secret".to_string(),
+            secrets_encryption_key: "test-secrets-encryption-key".to_string(),
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
@@ -209,6 +269,8 @@ mod tests {
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),
+            trusted_proxy_ips: std::collections::HashSet::new(),
+            audit_retention_days: None,
         }
     }
 
@@ -226,7 +288,15 @@ mod tests {
         let app = build_router(state);
 
         let response = app
-            .oneshot(Request::builder().method("POST").uri("/api/me/mfa/passkey/register/start").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/me/mfa/passkey/register/start")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"current_password":"sup3r-s3cret!"}"#))
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -266,7 +336,15 @@ mod tests {
         let app = build_router(state);
 
         let response = app
-            .oneshot(Request::builder().method("POST").uri("/api/me/mfa/totp/enroll").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/me/mfa/totp/enroll")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"current_password":"sup3r-s3cret!"}"#))
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -278,6 +356,29 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn enrolling_totp_with_the_wrong_password_is_rejected(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/me/mfa/totp/enroll")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"current_password":"wrong"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn confirming_with_a_valid_code_returns_ten_backup_codes_and_flips_status_to_enabled(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
@@ -286,7 +387,15 @@ mod tests {
 
         let enroll_response = app
             .clone()
-            .oneshot(Request::builder().method("POST").uri("/api/me/mfa/totp/enroll").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/me/mfa/totp/enroll")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"current_password":"sup3r-s3cret!"}"#))
+                    .unwrap(),
+            )
             .await
             .unwrap();
         let body = to_bytes(enroll_response.into_body(), usize::MAX).await.unwrap();
@@ -329,7 +438,15 @@ mod tests {
         let token = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
         app.clone()
-            .oneshot(Request::builder().method("POST").uri("/api/me/mfa/totp/enroll").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/me/mfa/totp/enroll")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"current_password":"sup3r-s3cret!"}"#))
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -350,7 +467,13 @@ mod tests {
     }
 
     async fn enroll_and_confirm(app: axum::Router, token: &str) {
-        let enroll_response = Request::builder().method("POST").uri("/api/me/mfa/totp/enroll").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap();
+        let enroll_response = Request::builder()
+            .method("POST")
+            .uri("/api/me/mfa/totp/enroll")
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"current_password":"sup3r-s3cret!"}"#))
+            .unwrap();
         let response = app.clone().oneshot(enroll_response).await.unwrap();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -426,7 +549,7 @@ mod tests {
                 .body(Body::from(r#"{"current_password":"wrong"}"#))
                 .unwrap()
         };
-        for _ in 0..crate::login_throttle::MAX_LOGIN_ATTEMPTS {
+        for _ in 0..artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS {
             let response = app.clone().oneshot(disable_request()).await.unwrap();
             assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
         }
@@ -491,6 +614,104 @@ mod tests {
         assert_eq!(json["backup_codes"].as_array().unwrap().len(), 10);
     }
 
+    /// Past `iat`'s whole-second precision, or the ordering against a revocation is ambiguous.
+    async fn let_the_clock_tick() {
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    }
+
+    async fn me_status(app: &axum::Router, token: &str) -> axum::http::StatusCode {
+        app.clone().oneshot(Request::builder().uri("/api/me").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap()).await.unwrap().status()
+    }
+
+    fn password_request(method: &str, uri: &str, token: &str) -> Request<Body> {
+        Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(r#"{"current_password":"sup3r-s3cret!"}"#))
+            .unwrap()
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn disabling_totp_ends_every_session(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        enroll_and_confirm(app.clone(), &token).await;
+        assert_eq!(me_status(&app, &token).await, axum::http::StatusCode::OK);
+        let_the_clock_tick().await;
+
+        let response = app.clone().oneshot(password_request("DELETE", "/api/me/mfa/totp", &token)).await.unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(me_status(&app, &token).await, axum::http::StatusCode::UNAUTHORIZED, "a session predating the removal must stop working, like after a password change");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn regenerating_backup_codes_ends_every_session(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        enroll_and_confirm(app.clone(), &token).await;
+        let_the_clock_tick().await;
+
+        let response = app.clone().oneshot(password_request("POST", "/api/me/mfa/backup-codes/regenerate", &token)).await.unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert_eq!(me_status(&app, &token).await, axum::http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn deleting_a_passkey_ends_every_session(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let user_id = state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
+        let passkey_id = Uuid::new_v4();
+        state
+            .webauthn_credentials
+            .insert(&artiferris_domain::webauthn::WebauthnCredential { id: passkey_id, user_id, name: "MacBook".to_string(), passkey_data: b"opaque".to_vec(), created_at: chrono::Utc::now() }, None)
+            .await
+            .unwrap();
+        let app = build_router(state.clone());
+        let_the_clock_tick().await;
+
+        let response = app.clone().oneshot(password_request("DELETE", &format!("/api/me/mfa/passkey/{passkey_id}"), &token)).await.unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(state.webauthn_credentials.count_for_user(user_id).await.unwrap(), 0);
+        assert_eq!(me_status(&app, &token).await, axum::http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_wrong_password_on_disable_totp_keeps_the_session(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        enroll_and_confirm(app.clone(), &token).await;
+        let_the_clock_tick().await;
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/me/mfa/totp")
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(r#"{"current_password":"wrong"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+        assert_eq!(me_status(&app, &token).await, axum::http::StatusCode::OK);
+    }
+
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn passkey_list_starts_empty(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -524,7 +745,15 @@ mod tests {
         let app = build_router(state);
 
         let response = app
-            .oneshot(Request::builder().method("POST").uri("/api/me/mfa/passkey/register/start").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/me/mfa/passkey/register/start")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"current_password":"sup3r-s3cret!"}"#))
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -533,6 +762,29 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(json["challenge_id"].is_string());
         assert_eq!(json["public_key"]["user"]["name"], "florian");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn starting_passkey_registration_with_the_wrong_password_is_rejected(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/me/mfa/passkey/register/start")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"current_password":"wrong"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -582,5 +834,31 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_burst_of_parallel_wrong_passwords_on_a_management_route_lets_only_the_limit_through(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+
+        let handles: Vec<_> = (0..40)
+            .map(|_| {
+                let app = app.clone();
+                let request = Request::builder()
+                    .method("POST")
+                    .uri("/api/me/mfa/totp/enroll")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"current_password":"wrong"}"#))
+                    .unwrap();
+                tokio::spawn(async move { app.oneshot(request).await.unwrap().status() })
+            })
+            .collect();
+        let statuses: Vec<_> = futures::future::join_all(handles).await.into_iter().map(|r| r.unwrap()).collect();
+
+        let guesses = statuses.iter().filter(|s| **s == axum::http::StatusCode::BAD_REQUEST).count();
+        assert_eq!(guesses, artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, "{statuses:?}");
     }
 }

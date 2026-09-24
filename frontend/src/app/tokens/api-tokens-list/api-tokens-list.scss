@@ -13,3 +13,9 @@ pre {
   border-radius: var(--site-border-radius);
   display: inline-block;
 }
+
+.api-tokens-list__hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}

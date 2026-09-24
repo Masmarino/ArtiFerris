@@ -11,6 +11,8 @@ import { FormsModule } from '@angular/forms'
 import { Button, Card, Checkbox, GbtInput, Spinner } from '@masmarino/gabarit'
 import { SystemSettingsService } from '../application/system-settings.service'
 import { ToastService } from '../../shared/toast.service'
+import { MeService } from '../../shell/application/me.service'
+import { PUBLIC_ORGANIZATION_ID } from '../domain/organization.entity'
 
 interface FieldSpec {
   key: 'maxLoginAttempts' | 'loginAttemptWindowSeconds' | 'sessionTtlHours'
@@ -37,6 +39,7 @@ const FIELDS: FieldSpec[] = [
 export class SystemSettingsAdmin {
   private readonly settingsService = inject(SystemSettingsService)
   private readonly toastService = inject(ToastService)
+  private readonly me = inject(MeService)
 
   /** Set only when embedded in an organization's own admin page — scopes read/write to it. */
   readonly organizationId = input<string | undefined>(undefined)
@@ -46,23 +49,46 @@ export class SystemSettingsAdmin {
   readonly loginAttemptWindowSeconds = signal('')
   readonly sessionTtlHours = signal('')
   readonly registrationEnabled = signal(true)
+  readonly seoIndexingEnabled = signal(false)
   readonly loading = signal(true)
+  readonly loadFailed = signal(false)
   readonly saving = signal(false)
 
   // effect(), not ngOnInit — this component is reused across organizations on the same route.
   constructor() {
     effect(() => {
       const organizationId = this.organizationId()
+      const stillCurrent = () => this.organizationId() === organizationId
       this.loading.set(true)
-      this.settingsService.get(organizationId).subscribe((settings) => {
-        this.maxLoginAttempts.set(String(settings.max_login_attempts))
-        this.loginAttemptWindowSeconds.set(String(settings.login_attempt_window_seconds))
-        this.sessionTtlHours.set(String(settings.session_ttl_hours))
-        this.registrationEnabled.set(settings.registration_enabled)
-        this.loading.set(false)
+      this.loadFailed.set(false)
+      this.settingsService.get(organizationId).subscribe({
+        next: (settings) => {
+          if (!stillCurrent()) {
+            return
+          }
+          this.maxLoginAttempts.set(String(settings.max_login_attempts))
+          this.loginAttemptWindowSeconds.set(String(settings.login_attempt_window_seconds))
+          this.sessionTtlHours.set(String(settings.session_ttl_hours))
+          this.registrationEnabled.set(settings.registration_enabled)
+          this.seoIndexingEnabled.set(settings.seo_indexing_enabled)
+          this.loading.set(false)
+        },
+        error: () => {
+          if (stillCurrent()) {
+            this.loadFailed.set(true)
+            this.loading.set(false)
+          }
+        },
       })
     })
   }
+
+  // Only the public organization's row carries the switch, and only a super-admin may change it.
+  readonly showSeoIndexing = computed(
+    () =>
+      this.me.isSuperAdmin() &&
+      (this.organizationId() ?? this.me.organizationId()) === PUBLIC_ORGANIZATION_ID,
+  )
 
   value(key: FieldSpec['key']): string {
     return this[key]()
@@ -107,6 +133,7 @@ export class SystemSettingsAdmin {
           login_attempt_window_seconds: Number(this.loginAttemptWindowSeconds()),
           session_ttl_hours: Number(this.sessionTtlHours()),
           registration_enabled: this.registrationEnabled(),
+          seo_indexing_enabled: this.seoIndexingEnabled(),
         },
         this.organizationId(),
       )

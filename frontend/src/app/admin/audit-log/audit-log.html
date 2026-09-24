@@ -1,9 +1,17 @@
 <div class="container">
   @if (loading()) {
     <gbt-spinner label="Chargement…" />
+  } @else if (loadFailed()) {
+    <p>Impossible de charger le journal d'audit pour le moment. Réessayez plus tard.</p>
   } @else {
     @if (summaryChartData().length > 0) {
       <gbt-card heading="Résumé" icon="history">
+        @if (nextCursor()) {
+          <p class="partial-note">
+            Calculé sur les {{ entries().length }} entrées chargées ; des entrées plus anciennes
+            existent.
+          </p>
+        }
         <gbt-dimension-card
           [rows]="summaryChartData()"
           caption="Entrées par type"
@@ -15,20 +23,54 @@
       </gbt-card>
     }
 
-    <div class="d-flex justify-content-end mb-3">
-      <gbt-button
-        text="Télécharger en CSV"
-        [disabled]="entries().length === 0"
-        (clicked)="downloadCsv()"
-      />
+    <div class="d-flex justify-content-end align-items-center gap-3 mb-3">
+      @if (exporting()) {
+        <span role="status">Export en cours… {{ exportedCount() }} entrées récupérées</span>
+        <gbt-button text="Annuler" variant="secondary" (clicked)="cancelExport()" />
+      } @else {
+        @if (nextCursor()) {
+          <span class="partial-note">
+            {{ entries().length }} entrées chargées ; l'export récupère aussi les suivantes, dans la
+            limite de {{ exportMaxRows }}.
+          </span>
+        }
+        <gbt-button
+          text="Télécharger en CSV"
+          [disabled]="entries().length === 0"
+          (clicked)="downloadCsv()"
+        />
+      }
     </div>
+    @if (exportFailed()) {
+      <p role="alert">L'export a échoué : aucun fichier n'a été produit. Réessayez.</p>
+    }
+    @if (exportPartial()) {
+      <p role="status">
+        Fichier limité aux {{ exportMaxRows }} entrées les plus récentes ; des entrées plus
+        anciennes n'y figurent pas.
+      </p>
+    }
 
-    <gbt-table
-      caption="Journal d'audit"
-      emptyMessage="Aucune donnée disponible"
-      [data]="entries()"
-      [columns]="columns"
-      [trackBy]="rowId"
-    />
+    @if (entries().length === 0) {
+      <gbt-empty-state
+        illustration="checklist"
+        heading="Aucune entrée"
+        message="Les actions enregistrées dans le journal d'audit apparaîtront ici."
+      />
+    } @else {
+      <gbt-table caption="Journal d'audit" [data]="rows()" [columns]="columns" [trackBy]="rowId" />
+      @if (loadMoreFailed()) {
+        <p role="alert">Impossible de charger la suite du journal. Réessayez.</p>
+      }
+      @if (nextCursor()) {
+        <div class="d-flex justify-content-center mt-3">
+          <gbt-button
+            [text]="loadingMore() ? 'Chargement…' : 'Charger plus'"
+            [disabled]="loadingMore()"
+            (clicked)="loadMore()"
+          />
+        </div>
+      }
+    }
   }
 </div>

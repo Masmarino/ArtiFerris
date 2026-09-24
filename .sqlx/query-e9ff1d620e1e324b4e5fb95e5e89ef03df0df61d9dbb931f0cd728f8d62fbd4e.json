@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_blobs SET reference_count = reference_count - counts.cnt FROM (SELECT blob_digest, COUNT(*) AS cnt FROM unnest($1::text[]) AS blob_digest GROUP BY blob_digest) counts WHERE docker_blobs.digest = counts.blob_digest",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e9ff1d620e1e324b4e5fb95e5e89ef03df0df61d9dbb931f0cd728f8d62fbd4e"
+}

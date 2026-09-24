@@ -1,6 +1,6 @@
 [package]
 name = "artiferris-domain"
-version = "0.1.0"
+version = "0.5.0"
 edition.workspace = true
 
 [dependencies]
@@ -15,3 +15,7 @@ sha2 = "0.11.0"
 hex = "0.4.3"
 bytes = "1"
 futures-core = "0.3"
+# Already resolved transitively via reqwest (artiferris-infrastructure) — no new dependency tree
+# added, just a direct edge to a crate that's already pinned by the workspace. Used only for
+# RFC 3986 URL-shape validation (scheme + parseability) at aggregate-definition time; no I/O.
+url = "2"

@@ -1,8 +1,17 @@
 import { inject, provideAppInitializer } from '@angular/core'
 import { IconRegistry } from '@masmarino/gabarit'
 
-/** Icons specific to ArtiFerris — Gabarit's own components provide their own set already. */
-const ARTIFERRIS_ICONS: Record<string, string> = {
+/**
+ * Icons specific to ArtiFerris — Gabarit's own components provide their own set already.
+ *
+ * Every value in this table MUST be a compile-time string literal, never built from a variable,
+ * a template-string interpolation, or (especially) API/server response data. `Icon` in
+ * @masmarino/gabarit renders whatever it's given via bypassSecurityTrustHtml — safe only because
+ * this table is, and stays, fully static (B-32). If a future branding/customization feature ever
+ * needs to register a dynamic icon, that markup must be sanitized (not bypassed) before it
+ * reaches IconRegistry.
+ */
+export const ARTIFERRIS_ICONS: Record<string, string> = {
   package: `<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />
 <path d="M12 22V12" />
 <polyline points="3.29 7 12 12 20.71 7" />
@@ -65,8 +74,17 @@ const ARTIFERRIS_ICONS: Record<string, string> = {
   'triangle-alert': `<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
 <path d="M12 9v4" />
 <path d="M12 17h.01" />`,
+  copy: `<rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />`,
+  'share-2': `<circle cx="18" cy="5" r="3" />
+<circle cx="6" cy="12" r="3" />
+<circle cx="18" cy="19" r="3" />
+<line x1="8.59" x2="15.42" y1="13.51" y2="17.49" />
+<line x1="15.41" x2="8.59" y1="6.51" y2="10.49" />`,
   terminal: `<path d="M12 19h8" />
 <path d="m4 17 6-6-6-6" />`,
+  compass: `<path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" />
+<circle cx="12" cy="12" r="10" />`,
 }
 
 export const provideArtiferrisIcons = () =>

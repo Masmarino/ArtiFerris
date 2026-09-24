@@ -2,7 +2,15 @@
   <gbt-card heading="Serveur mail (SMTP)" icon="mail">
     @if (loading()) {
       <gbt-spinner label="Chargement…" />
+    } @else if (loadFailed()) {
+      <p class="gbt-form-error" role="alert">Échec du chargement des paramètres SMTP.</p>
     } @else {
+      @if (secretUnreadable()) {
+        <gbt-alert variant="warning">
+          Le mot de passe SMTP enregistré est illisible avec la clé de chiffrement de ce serveur.
+          Saisissez-le à nouveau, puis enregistrez.
+        </gbt-alert>
+      }
       <gbt-input
         label="Hôte SMTP"
         [ngModel]="host()"

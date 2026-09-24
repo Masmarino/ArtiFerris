@@ -3,6 +3,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { ActivatedRoute, Router } from '@angular/router'
 import { Button, GbtInput, Alert } from '@masmarino/gabarit'
 import { AuthService } from '../application/auth.service'
+import { overloadMessage } from '../../shared/api-error'
 
 @Component({
   selector: 'app-activate-page',
@@ -45,10 +46,11 @@ export class ActivatePage {
     const { newPassword } = this.form.getRawValue()
     this.auth.activate(this.token, newPassword).subscribe({
       next: () => this.router.navigateByUrl('/login'),
-      error: () => {
+      error: (error: unknown) => {
         this.submitting.set(false)
         this.errorMessage.set(
-          "Ce lien d'activation est invalide ou a expiré. Demandez à un administrateur de vous renvoyer une invitation.",
+          overloadMessage(error) ??
+            "Ce lien d'activation est invalide ou a expiré. Demandez à un administrateur de vous renvoyer une invitation.",
         )
       },
     })

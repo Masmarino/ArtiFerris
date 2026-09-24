@@ -12,7 +12,12 @@
     <gbt-card>
       <div class="stack">
         <h3>Authentification</h3>
-        @if (identityProviderConfigured()) {
+        @if (secretUnreadable()) {
+          <gbt-alert variant="warning">
+            Le secret enregistré pour le fournisseur d'identité est illisible avec la clé de
+            chiffrement de ce serveur. Configurez à nouveau le fournisseur, secret compris.
+          </gbt-alert>
+        } @else if (identityProviderConfigured()) {
           <p>
             {{ selectedProviderType() === 'oidc' ? 'OIDC' : 'LDAP' }} est actuellement configuré
             pour cette organisation.
@@ -76,6 +81,7 @@
             label="URL de l'émetteur (issuer)"
             [ngModel]="issuerUrl()"
             (ngModelChange)="issuerUrl.set($event)"
+            [errorMessage]="issuerError()"
             placeholder="https://accounts.example.com"
           />
           <gbt-input
@@ -102,7 +108,7 @@
           [disabled]="hasErrors() || saving()"
           (clicked)="save()"
         />
-        @if (identityProviderConfigured()) {
+        @if (identityProviderConfigured() || secretUnreadable()) {
           <gbt-tooltip
             text="Supprime la configuration du fournisseur d'identité et repasse cette organisation en comptes locaux."
           >
@@ -126,5 +132,6 @@
     </gbt-card>
   } @else if (errorMessage(); as message) {
     <p class="gbt-form-error" role="alert">{{ message }}</p>
+    <gbt-button text="Réessayer" (clicked)="reload()" />
   }
 </div>

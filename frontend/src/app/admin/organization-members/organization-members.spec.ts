@@ -1,9 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing'
 import { By } from '@angular/platform-browser'
-import { of, throwError } from 'rxjs'
+import { Subject, of, throwError } from 'rxjs'
+import { OrganizationMember } from '../domain/organization-member.entity'
 import { Tooltip } from '@masmarino/gabarit'
 import { OrganizationMembers } from './organization-members'
 import { OrganizationMembersService } from '../application/organization-members.service'
+import { ConfirmService } from '../../shared/confirm.service'
 import { ToastService } from '../../shared/toast.service'
 
 function clickPromoteDemoteButton(fixture: ComponentFixture<OrganizationMembers>): void {
@@ -20,7 +22,10 @@ describe('OrganizationMembers', () => {
     setOrganizationAdmin: ReturnType<typeof vi.fn>
   }
 
+  let askSpy: ReturnType<typeof vi.fn>
+
   function setup() {
+    askSpy = vi.fn().mockResolvedValue(true)
     serviceSpy = { list: vi.fn(), invite: vi.fn(), setOrganizationAdmin: vi.fn() }
     serviceSpy.list.mockReturnValue(
       of([
@@ -35,7 +40,10 @@ describe('OrganizationMembers', () => {
     )
     TestBed.configureTestingModule({
       imports: [OrganizationMembers],
-      providers: [{ provide: OrganizationMembersService, useValue: serviceSpy }],
+      providers: [
+        { provide: OrganizationMembersService, useValue: serviceSpy },
+        { provide: ConfirmService, useValue: { ask: askSpy } },
+      ],
     })
     fixture = TestBed.createComponent(OrganizationMembers)
     component = fixture.componentInstance
@@ -104,13 +112,14 @@ describe('OrganizationMembers', () => {
     })
   })
 
-  it('toggles organization-admin status after confirmation and reloads when the promote/demote button is clicked', () => {
+  it('toggles organization-admin status after confirmation and reloads when the promote/demote button is clicked', async () => {
     setup()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     serviceSpy.setOrganizationAdmin.mockReturnValue(of(undefined))
 
     clickPromoteDemoteButton(fixture)
+    await fixture.whenStable()
 
+    expect(askSpy).toHaveBeenCalledWith(expect.objectContaining({ confirmLabel: 'Promouvoir' }))
     expect(serviceSpy.setOrganizationAdmin).toHaveBeenCalledWith('org-1', 'user-1', true)
     expect(serviceSpy.list).toHaveBeenCalledTimes(2)
     expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
@@ -119,12 +128,14 @@ describe('OrganizationMembers', () => {
     })
   })
 
-  it('does nothing when the toggle confirmation is dismissed', () => {
+  it('does nothing when the toggle confirmation is dismissed', async () => {
     setup()
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    askSpy.mockResolvedValue(false)
 
     clickPromoteDemoteButton(fixture)
+    await fixture.whenStable()
 
+    expect(askSpy).toHaveBeenCalled()
     expect(serviceSpy.setOrganizationAdmin).not.toHaveBeenCalled()
   })
 
@@ -138,11 +149,11 @@ describe('OrganizationMembers', () => {
 
   it('does not react to clicks anywhere else on the member row', () => {
     setup()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     const row = fixture.debugElement.query(By.css('.organization-members__table tbody tr'))
     row.nativeElement.click()
 
+    expect(askSpy).not.toHaveBeenCalled()
     expect(serviceSpy.setOrganizationAdmin).not.toHaveBeenCalled()
   })
 
@@ -171,7 +182,10 @@ describe('OrganizationMembers', () => {
     )
     TestBed.configureTestingModule({
       imports: [OrganizationMembers],
-      providers: [{ provide: OrganizationMembersService, useValue: serviceSpy }],
+      providers: [
+        { provide: OrganizationMembersService, useValue: serviceSpy },
+        { provide: ConfirmService, useValue: { ask: askSpy } },
+      ],
     })
     fixture = TestBed.createComponent(OrganizationMembers)
     fixture.componentRef.setInput('organizationId', 'org-1')
@@ -182,5 +196,75 @@ describe('OrganizationMembers', () => {
     expect((tooltip.componentInstance as Tooltip).text()).toBe(
       "Retire les droits d'administration de cette organisation.",
     )
+  })
+
+  it('keeps the current organization when a slower response for the previous one lands last', () => {
+    setup()
+    const late = new Subject<OrganizationMember[]>()
+    const member = (username: string): OrganizationMember => ({
+      id: username,
+      username,
+      email: `${username}@example.com`,
+      is_organization_admin: false,
+      invitation_pending: false,
+    })
+    serviceSpy.list.mockReturnValueOnce(late).mockReturnValueOnce(of([member('b-user')]))
+
+    fixture.componentRef.setInput('organizationId', 'org-a')
+    fixture.detectChanges()
+    fixture.componentRef.setInput('organizationId', 'org-b')
+    fixture.detectChanges()
+    late.next([member('a-user')])
+    fixture.detectChanges()
+
+    expect(component.members().map((m) => m.username)).toEqual(['b-user'])
+  })
+
+  it('stops the spinner and reports the failure when loading members fails', () => {
+    setup()
+    serviceSpy.list.mockReturnValue(throwError(() => new Error('boom')))
+
+    fixture.componentRef.setInput('organizationId', 'org-c')
+    fixture.detectChanges()
+
+    expect(component.loading()).toBe(false)
+    expect(component.errorMessage()).toBe('Échec du chargement des membres.')
+  })
+
+  it('drops a half-typed invite when switching to another organization', () => {
+    setup()
+    component.startAdding()
+    component.newUsername.set('half-typed')
+    component.newEmail.set('half@example.com')
+    component.newIsOrganizationAdmin.set(true)
+
+    fixture.componentRef.setInput('organizationId', 'org-b')
+    fixture.detectChanges()
+
+    expect(component.addingMember()).toBe(false)
+    expect(component.newUsername()).toBe('')
+    expect(component.newEmail()).toBe('')
+    expect(component.newIsOrganizationAdmin()).toBe(false)
+    component.invite()
+    expect(serviceSpy.invite).not.toHaveBeenCalled()
+  })
+
+  it('does not reopen or reload the new organization when an invite for the previous one finishes late', () => {
+    setup()
+    const pending = new Subject<void>()
+    serviceSpy.invite.mockReturnValue(pending)
+    component.startAdding()
+    component.newUsername.set('alice')
+    component.newEmail.set('alice@example.com')
+    component.invite()
+    fixture.componentRef.setInput('organizationId', 'org-b')
+    fixture.detectChanges()
+    serviceSpy.list.mockClear()
+
+    pending.next()
+    pending.complete()
+
+    expect(serviceSpy.list).not.toHaveBeenCalled()
+    expect(TestBed.inject(ToastService).toasts().at(-1)?.message).toContain('alice')
   })
 })

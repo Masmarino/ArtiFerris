@@ -4,6 +4,7 @@ use axum::http::{header, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
+use artiferris_domain::audit::{AdminAuditEvent, AdminAuditRecord, BrandingAsset};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -67,28 +68,32 @@ async fn get_favicon_scoped(State(state): State<AppState>, user: AuthUser, resol
 async fn set_logo(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>, body: Bytes) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
     require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    state.set_branding_logo.execute(organization_id, body.to_vec()).await.map_err(|e| application_error_response("failed to set branding logo", e))?;
+    let audit = AdminAuditRecord { event: AdminAuditEvent::BrandingChanged { organization_id, asset: BrandingAsset::Logo, cleared: false }, actor_id: Some(user.id) };
+    state.set_branding_logo.execute(organization_id, body.to_vec(), Some(&audit)).await.map_err(|e| application_error_response("failed to set branding logo", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn clear_logo(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
     require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    state.clear_branding_logo.execute(organization_id).await.map_err(|e| application_error_response("failed to clear branding logo", e))?;
+    let audit = AdminAuditRecord { event: AdminAuditEvent::BrandingChanged { organization_id, asset: BrandingAsset::Logo, cleared: true }, actor_id: Some(user.id) };
+    state.clear_branding_logo.execute(organization_id, Some(&audit)).await.map_err(|e| application_error_response("failed to clear branding logo", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn set_favicon(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>, body: Bytes) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
     require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    state.set_branding_favicon.execute(organization_id, body.to_vec()).await.map_err(|e| application_error_response("failed to set branding favicon", e))?;
+    let audit = AdminAuditRecord { event: AdminAuditEvent::BrandingChanged { organization_id, asset: BrandingAsset::Favicon, cleared: false }, actor_id: Some(user.id) };
+    state.set_branding_favicon.execute(organization_id, body.to_vec(), Some(&audit)).await.map_err(|e| application_error_response("failed to set branding favicon", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn clear_favicon(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
     require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    state.clear_branding_favicon.execute(organization_id).await.map_err(|e| application_error_response("failed to clear branding favicon", e))?;
+    let audit = AdminAuditRecord { event: AdminAuditEvent::BrandingChanged { organization_id, asset: BrandingAsset::Favicon, cleared: true }, actor_id: Some(user.id) };
+    state.clear_branding_favicon.execute(organization_id, Some(&audit)).await.map_err(|e| application_error_response("failed to clear branding favicon", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -105,7 +110,7 @@ mod tests {
         Config {
             database_url: String::new(),
             jwt_secret: "test-secret".to_string(),
-            secrets_encryption_key: "test-secret".to_string(),
+            secrets_encryption_key: "test-secrets-encryption-key".to_string(),
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
@@ -113,6 +118,8 @@ mod tests {
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),
+            trusted_proxy_ips: std::collections::HashSet::new(),
+            audit_retention_days: None,
         }
     }
 
@@ -314,7 +321,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
 
@@ -339,7 +346,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
 
@@ -395,7 +402,7 @@ mod tests {
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let other_id = state.create_organization.execute("other", "Other Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state.clone());
 
@@ -456,7 +463,7 @@ mod tests {
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let other_id = state.create_organization.execute("other", "Other Corp").await.unwrap();
         let org_admin_id = state.create_user.execute(acme_id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(org_admin_id, true).await.unwrap();
+        state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state.clone());
 

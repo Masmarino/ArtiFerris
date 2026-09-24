@@ -7,23 +7,26 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error_ext::InfraErr;
+use crate::token_keys::derive_signing_key;
 
-/// `deny_unknown_fields` is load-bearing: shares its secret with `JwtDockerTokenIssuer`, so without it a Docker access token's extra `typ` claim would silently verify as a full session token.
+const SESSION_TOKEN_TYPE: &str = "session";
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Claims {
     sub: Uuid,
     exp: i64,
     iat: i64,
+    typ: String,
 }
 
 pub struct JwtTokenIssuer {
-    secret: String,
+    key: [u8; 32],
 }
 
 impl JwtTokenIssuer {
     pub fn new(secret: String) -> Self {
-        Self { secret }
+        Self { key: derive_signing_key(&secret, SESSION_TOKEN_TYPE) }
     }
 }
 
@@ -31,12 +34,15 @@ impl JwtTokenIssuer {
 impl TokenIssuerPort for JwtTokenIssuer {
     fn issue(&self, user_id: Uuid, ttl: Duration) -> Result<String, DomainError> {
         let now = Utc::now();
-        let claims = Claims { sub: user_id, exp: (now + ttl).timestamp(), iat: now.timestamp() };
-        encode(&Header::default(), &claims, &EncodingKey::from_secret(self.secret.as_bytes())).infra_err()
+        let claims = Claims { sub: user_id, exp: (now + ttl).timestamp(), iat: now.timestamp(), typ: SESSION_TOKEN_TYPE.to_string() };
+        encode(&Header::default(), &claims, &EncodingKey::from_secret(&self.key)).infra_err()
     }
 
     fn verify(&self, token: &str) -> Result<VerifiedToken, DomainError> {
-        let data = decode::<Claims>(token, &DecodingKey::from_secret(self.secret.as_bytes()), &Validation::default()).infra_err()?;
+        let data = decode::<Claims>(token, &DecodingKey::from_secret(&self.key), &Validation::default()).infra_err()?;
+        if data.claims.typ != SESSION_TOKEN_TYPE {
+            return Err(DomainError::Infrastructure("not a session token".to_string()));
+        }
         let issued_at =
             DateTime::from_timestamp(data.claims.iat, 0).ok_or_else(|| DomainError::Infrastructure("invalid token: bad iat".to_string()))?;
         Ok(VerifiedToken { user_id: data.claims.sub, issued_at })
@@ -88,5 +94,22 @@ mod tests {
         let docker_token = artiferris_domain::docker_registry::DockerTokenIssuerPort::issue(&docker_issuer, Uuid::new_v4(), Uuid::new_v4(), false, None).unwrap();
 
         assert!(session_issuer.verify(&docker_token).is_err(), "a docker access token must NOT verify as a session token");
+    }
+
+    #[test]
+    fn a_token_signed_with_the_raw_secret_instead_of_the_derived_key_is_rejected() {
+        let claims = Claims { sub: Uuid::new_v4(), exp: (Utc::now() + Duration::hours(1)).timestamp(), iat: Utc::now().timestamp(), typ: SESSION_TOKEN_TYPE.to_string() };
+        let token = encode(&Header::default(), &claims, &EncodingKey::from_secret(b"test-secret")).unwrap();
+
+        assert!(JwtTokenIssuer::new("test-secret".to_string()).verify(&token).is_err());
+    }
+
+    #[test]
+    fn a_token_with_the_right_key_but_the_wrong_type_is_rejected() {
+        let issuer = JwtTokenIssuer::new("test-secret".to_string());
+        let claims = Claims { sub: Uuid::new_v4(), exp: (Utc::now() + Duration::hours(1)).timestamp(), iat: Utc::now().timestamp(), typ: "mfa-pending".to_string() };
+        let token = encode(&Header::default(), &claims, &EncodingKey::from_secret(&issuer.key)).unwrap();
+
+        assert!(issuer.verify(&token).is_err());
     }
 }

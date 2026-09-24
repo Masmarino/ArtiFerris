@@ -60,4 +60,14 @@ describe('HttpUserAdapter', () => {
     expect(req.request.method).toBe('POST')
     req.flush(null)
   })
+
+  it('keeps a hostile user id inside its path segment', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.setSuperAdmin('a/../b', true).subscribe()
+    httpMock.expectOne('/api/users/a%2F..%2Fb/super-admin').flush(null)
+
+    expect(() => adapter.delete('..')).toThrow(RangeError)
+    httpMock.verify()
+  })
 })

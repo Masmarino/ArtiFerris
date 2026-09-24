@@ -1,7 +1,7 @@
 import { signal } from '@angular/core'
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite'
 import { expect, userEvent, waitFor, within } from 'storybook/test'
-import { of, throwError } from 'rxjs'
+import { NEVER, of, throwError } from 'rxjs'
 import { UsersList } from './users-list'
 import { UsersService } from '../application/users.service'
 import { OrganizationsService } from '../../admin/application/organizations.service'
@@ -108,12 +108,49 @@ export const AsOrganizationAdmin: Story = {
   ],
 }
 
+export const Loading: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [{ provide: UsersService, useValue: fakeUsers({ list: () => NEVER }) }],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    expect(await within(canvasElement).findByRole('status')).toHaveTextContent('Chargement…')
+  },
+}
+
 export const Empty: Story = {
   decorators: [
     moduleMetadata({
       providers: [{ provide: UsersService, useValue: fakeUsers({ list: () => of([]) }) }],
     }),
   ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    expect(await canvas.findByText('Aucun utilisateur')).toBeInTheDocument()
+    expect(canvas.getAllByRole('button', { name: 'Nouvel utilisateur' })).toHaveLength(2)
+  },
+}
+
+/** Users exist, but none in the selected organization. */
+export const EmptyForSelectedOrganization: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        {
+          provide: UsersService,
+          useValue: fakeUsers({
+            list: () => of(USERS.filter((u) => u.organization_id !== 'org-public')),
+          }),
+        },
+      ],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    expect(await canvas.findByText('Aucun résultat')).toBeInTheDocument()
+    expect(canvas.queryByRole('table')).not.toBeInTheDocument()
+  },
 }
 
 export const LoadFailed: Story = {

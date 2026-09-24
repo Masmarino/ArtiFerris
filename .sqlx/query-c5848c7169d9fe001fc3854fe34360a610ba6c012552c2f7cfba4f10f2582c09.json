@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO docker_tags (package_repository_id, image_name, tag, manifest_id) SELECT $1, 'myimage', 't' || n, $2 FROM generate_series(1, $3::int) n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c5848c7169d9fe001fc3854fe34360a610ba6c012552c2f7cfba4f10f2582c09"
+}

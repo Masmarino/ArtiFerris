@@ -47,3 +47,14 @@
     transform: rotate(-90deg);
   }
 }
+
+.package-tree__hint {
+  margin: 0;
+  padding: 0 0.625rem 0.375rem 2.125rem;
+  font-size: 0.75rem;
+  color: var(--text-discret);
+}
+
+.package-tree__more {
+  margin-top: 0.75rem;
+}

@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing'
-import { of } from 'rxjs'
+import { BehaviorSubject, of } from 'rxjs'
+import { signal } from '@angular/core'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router'
@@ -10,10 +11,18 @@ import { UsageInstructions } from '../usage-instructions/usage-instructions'
 import { PermissionRoleEditor } from '../permission-role-editor/permission-role-editor'
 import { PackageTree } from '../package-tree/package-tree'
 import { repositoryProviders } from '../infrastructure/repository.providers'
+import { ConfirmService } from '../../shared/confirm.service'
+import { MeService } from '../../shell/application/me.service'
 import { PageTitleService } from '../../shell/page-title.service'
 import type { UserLookup } from '../domain/permission.entity'
 
 describe('RepositoryDetail', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: MeService, useValue: { isSuperAdmin: signal(false) } }],
+    })
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -233,13 +242,14 @@ describe('RepositoryDetail', () => {
     expect(fixture.componentInstance.repository()?.name).toBe('new-name')
   })
 
-  it('removes a group member and reloads the repository when a member row is clicked', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('removes a group member and reloads the repository when a member row is clicked', async () => {
+    const ask = vi.fn().mockResolvedValue(true)
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
         ...repositoryProviders,
+        { provide: ConfirmService, useValue: { ask } },
         provideRouter([]),
         {
           provide: ActivatedRoute,
@@ -274,8 +284,15 @@ describe('RepositoryDetail', () => {
     // to actually exercise the template's (rowClick)="removeMember($event.id)" binding.
     const tableDebugElement = fixture.debugElement.query(By.directive(Table))
     tableDebugElement.triggerEventHandler('rowClick', { id: 'member-1' })
+    await fixture.whenStable()
 
-    expect(window.confirm).toHaveBeenCalledWith('Retirer "member-repo" du groupe ?')
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        heading: 'Retirer du groupe',
+        message: 'Retirer "member-repo" du groupe ?',
+        danger: true,
+      }),
+    )
     const removeReq = httpMock.expectOne('/api/repositories/group-1/group-members/member-1')
     expect(removeReq.request.method).toBe('DELETE')
     removeReq.flush(null)
@@ -296,13 +313,14 @@ describe('RepositoryDetail', () => {
     expect(fixture.componentInstance.repository()?.group_members).toEqual([])
   })
 
-  it('does not remove a group member when the confirmation is cancelled', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('does not remove a group member when the confirmation is cancelled', async () => {
+    const ask = vi.fn().mockResolvedValue(false)
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
         ...repositoryProviders,
+        { provide: ConfirmService, useValue: { ask } },
         provideRouter([]),
         {
           provide: ActivatedRoute,
@@ -333,18 +351,20 @@ describe('RepositoryDetail', () => {
 
     const tableDebugElement = fixture.debugElement.query(By.directive(Table))
     tableDebugElement.triggerEventHandler('rowClick', { id: 'member-1' })
+    await fixture.whenStable()
 
-    expect(window.confirm).toHaveBeenCalled()
+    expect(ask).toHaveBeenCalled()
     httpMock.expectNone('/api/repositories/group-1/group-members/member-1')
   })
 
-  it('deletes the repository and navigates to the list when the user confirms', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('deletes the repository and navigates to the list when the user confirms', async () => {
+    const ask = vi.fn().mockResolvedValue(true)
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
         ...repositoryProviders,
+        { provide: ConfirmService, useValue: { ask } },
         provideRouter([]),
         {
           provide: ActivatedRoute,
@@ -373,9 +393,11 @@ describe('RepositoryDetail', () => {
       my_role: 'admin',
     })
 
-    fixture.componentInstance.deleteRepository()
+    await fixture.componentInstance.deleteRepository()
 
-    expect(window.confirm).toHaveBeenCalledWith('Supprimer le dépôt "old-name" ?')
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({ heading: 'Supprimer le dépôt', typeToConfirm: 'old-name' }),
+    )
 
     const deleteReq = httpMock.expectOne('/api/repositories/repo-1')
     expect(deleteReq.request.method).toBe('DELETE')
@@ -489,13 +511,14 @@ describe('RepositoryDetail', () => {
     ])
   })
 
-  it('opens the role editor when a permission row is clicked, and revokes on confirmation', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('opens the role editor when a permission row is clicked, and revokes on confirmation', async () => {
+    const ask = vi.fn().mockResolvedValue(true)
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
         ...repositoryProviders,
+        { provide: ConfirmService, useValue: { ask } },
         provideRouter([]),
         {
           provide: ActivatedRoute,
@@ -543,7 +566,7 @@ describe('RepositoryDetail', () => {
     const editorDebugElement = fixture.debugElement.query(By.directive(PermissionRoleEditor))
     editorDebugElement.triggerEventHandler('revoked', undefined)
 
-    expect(window.confirm).not.toHaveBeenCalled() // confirmation now happens inside PermissionRoleEditor, not repository-detail
+    expect(ask).not.toHaveBeenCalled() // confirmation now happens inside PermissionRoleEditor, not repository-detail
     const revokeReq = httpMock.expectOne('/api/repositories/repo-1/permissions/user-2')
     expect(revokeReq.request.method).toBe('DELETE')
     revokeReq.flush(null)
@@ -636,13 +659,14 @@ describe('RepositoryDetail', () => {
     ])
   })
 
-  it('does not delete the repository when the confirmation is cancelled', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('does not delete the repository when the confirmation is cancelled', async () => {
+    const ask = vi.fn().mockResolvedValue(false)
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
         ...repositoryProviders,
+        { provide: ConfirmService, useValue: { ask } },
         provideRouter([]),
         {
           provide: ActivatedRoute,
@@ -671,9 +695,9 @@ describe('RepositoryDetail', () => {
       my_role: 'admin',
     })
 
-    fixture.componentInstance.deleteRepository()
+    await fixture.componentInstance.deleteRepository()
 
-    expect(window.confirm).toHaveBeenCalled()
+    expect(ask).toHaveBeenCalled()
     httpMock.expectNone('/api/repositories/repo-1')
     expect(router.navigate).not.toHaveBeenCalled()
   })
@@ -764,6 +788,53 @@ describe('RepositoryDetail', () => {
     expect(text).not.toContain('Paramètres')
     expect(text).not.toContain('someone')
     expect(fixture.debugElement.query(By.directive(Table))).toBeNull()
+  })
+
+  it('shows the public overview instead of an error for a viewer with only implicit public read', () => {
+    // A public repository's own permissions list is refused (403/404) to a caller with no explicit
+    // grant — the server still reports my_role: 'read' for that implicit bypass, so the frontend
+    // cannot tell this case apart from an explicit read grant by role alone; either way, that
+    // expected refusal must not block the page.
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...repositoryProviders,
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: { paramMap: convertToParamMap({ id: 'repo-1' }) },
+            paramMap: of(convertToParamMap({ id: 'repo-1' })),
+          },
+        },
+      ],
+    })
+    const fixture = TestBed.createComponent(RepositoryDetail)
+    const httpMock = TestBed.inject(HttpTestingController)
+
+    fixture.detectChanges()
+    httpMock.expectOne('/api/repositories/repo-1').flush({
+      id: 'repo-1',
+      name: 'my-repo',
+      format: 'npm',
+      repo_type: 'hosted',
+      remote_url: null,
+      group_members: [],
+      is_public: true,
+      my_role: 'read',
+      owner_name: 'alice',
+      owner_is_personal: true,
+      public_path: '/@alice/my-repo',
+    })
+    httpMock
+      .expectOne('/api/repositories/repo-1/permissions')
+      .flush({}, { status: 404, statusText: 'Not Found' })
+    fixture.detectChanges()
+
+    expect(fixture.componentInstance.loadError()).toBe(false)
+    expect(fixture.nativeElement.textContent).not.toContain('Échec du chargement')
+    expect(fixture.nativeElement.textContent).toContain('/@alice/my-repo')
   })
 
   it('shows rename, delete, and permission-management controls for a repository admin', () => {
@@ -1009,6 +1080,48 @@ describe('RepositoryDetail', () => {
     expect(text).not.toContain('Enregistrer')
   })
 
+  it('treats a repository view without quota or retention fields as unlimited and disabled', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...repositoryProviders,
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: { paramMap: convertToParamMap({ id: 'repo-1' }) },
+            paramMap: of(convertToParamMap({ id: 'repo-1' })),
+          },
+        },
+      ],
+    })
+    const fixture = TestBed.createComponent(RepositoryDetail)
+    const httpMock = TestBed.inject(HttpTestingController)
+
+    fixture.detectChanges()
+    httpMock.expectOne('/api/repositories/repo-1').flush({
+      id: 'repo-1',
+      name: 'my-repo',
+      format: 'npm',
+      repo_type: 'hosted',
+      remote_url: null,
+      group_members: [],
+      my_role: 'admin',
+    })
+    httpMock.expectOne('/api/repositories/repo-1/permissions').flush([])
+    fixture.detectChanges()
+    httpMock.expectOne('/api/repositories/repo-1/packages').flush({ format: 'npm', packages: [] })
+
+    const text = fixture.nativeElement.textContent as string
+    expect(text).toContain('Actuel : illimité')
+    expect(text).toContain('Actuel : désactivée')
+    expect(text).not.toContain('undefined')
+    expect(text).not.toContain('NaN')
+    expect(fixture.componentInstance.quotaMb()).toBe('')
+    expect(fixture.componentInstance.retentionKeepLastN()).toBe('')
+  })
+
   it('loads the current retention policy and saves an updated value', () => {
     TestBed.configureTestingModule({
       providers: [
@@ -1166,5 +1279,223 @@ describe('RepositoryDetail', () => {
 
     httpMock.expectNone('/api/repositories/repo-1/retention')
     expect(fixture.componentInstance.retentionError()).toContain('entier positif')
+  })
+
+  describe('visibility', () => {
+    const REPO = {
+      id: 'repo-1',
+      name: 'my-project',
+      format: 'npm',
+      repo_type: 'hosted',
+      remote_url: null,
+      group_members: [],
+      quota_bytes: null,
+      retention_keep_last_n: null,
+      is_public: false,
+      my_role: 'admin',
+      owner_is_personal: true,
+    }
+
+    function render(repo: object, answer: boolean, superAdmin = false) {
+      const ask = vi.fn().mockResolvedValue(answer)
+      TestBed.configureTestingModule({
+        providers: [
+          provideHttpClient(),
+          provideHttpClientTesting(),
+          ...repositoryProviders,
+          { provide: ConfirmService, useValue: { ask } },
+          { provide: MeService, useValue: { isSuperAdmin: signal(superAdmin) } },
+          provideRouter([]),
+          {
+            provide: ActivatedRoute,
+            useValue: {
+              snapshot: { paramMap: convertToParamMap({ id: 'repo-1' }) },
+              paramMap: of(convertToParamMap({ id: 'repo-1' })),
+            },
+          },
+        ],
+      })
+      const fixture = TestBed.createComponent(RepositoryDetail)
+      const httpMock = TestBed.inject(HttpTestingController)
+      fixture.detectChanges()
+      httpMock.expectOne('/api/repositories/repo-1').flush(repo)
+      httpMock.expectOne('/api/repositories/repo-1/permissions').flush([])
+      return { fixture, httpMock, ask }
+    }
+
+    it('lets the owner of a personal project change its visibility', () => {
+      const { fixture } = render(REPO, true)
+
+      expect(fixture.componentInstance.canChangeVisibility()).toBe(true)
+    })
+
+    it('does not offer it for an organization repository unless the user is a super-admin', () => {
+      const orgRepo = { ...REPO, owner_is_personal: false }
+
+      expect(render(orgRepo, true).fixture.componentInstance.canChangeVisibility()).toBe(false)
+      TestBed.resetTestingModule()
+      expect(render(orgRepo, true, true).fixture.componentInstance.canChangeVisibility()).toBe(true)
+    })
+
+    it('never offers it for a proxy or a group', () => {
+      const { fixture } = render({ ...REPO, repo_type: 'proxy' }, true, true)
+
+      expect(fixture.componentInstance.canChangeVisibility()).toBe(false)
+    })
+
+    it('asks for a danger confirmation, then publishes the repository', async () => {
+      const { fixture, httpMock, ask } = render(REPO, true)
+
+      const done = fixture.componentInstance.changeVisibility()
+      await Promise.resolve()
+
+      expect(ask).toHaveBeenCalledWith(
+        expect.objectContaining({ heading: 'Rendre le dépôt public', danger: true }),
+      )
+      const req = httpMock.expectOne('/api/repositories/repo-1/visibility')
+      expect(req.request.method).toBe('PUT')
+      expect(req.request.body).toEqual({ is_public: true })
+      req.flush(null)
+      await done
+      httpMock.expectOne('/api/repositories/repo-1').flush({ ...REPO, is_public: true })
+      httpMock.expectOne('/api/repositories/repo-1/permissions').flush([])
+      expect(fixture.componentInstance.repository()?.is_public).toBe(true)
+    })
+
+    it('makes a public repository private without a danger confirmation', async () => {
+      const { fixture, httpMock, ask } = render({ ...REPO, is_public: true }, true)
+
+      void fixture.componentInstance.changeVisibility()
+      await Promise.resolve()
+
+      expect(ask).toHaveBeenCalledWith(
+        expect.objectContaining({ heading: 'Rendre le dépôt privé' }),
+      )
+      expect(ask.mock.calls[0][0].danger).toBeUndefined()
+      expect(httpMock.expectOne('/api/repositories/repo-1/visibility').request.body).toEqual({
+        is_public: false,
+      })
+    })
+
+    it('changes nothing when the confirmation is declined', async () => {
+      const { fixture, httpMock } = render(REPO, false)
+
+      await fixture.componentInstance.changeVisibility()
+
+      httpMock.expectNone('/api/repositories/repo-1/visibility')
+    })
+  })
+
+  describe('navigating from one repository to another', () => {
+    const repo = (id: string, name: string, myRole = 'admin') => ({
+      id,
+      name,
+      format: 'npm',
+      repo_type: 'hosted',
+      remote_url: null,
+      group_members: [],
+      quota_bytes: 5 * 1024 * 1024,
+      retention_keep_last_n: 3,
+      is_public: false,
+      my_role: myRole,
+    })
+
+    function setupNavigable() {
+      const paramMap$ = new BehaviorSubject(convertToParamMap({ id: 'repo-a' }))
+      TestBed.configureTestingModule({
+        providers: [
+          provideHttpClient(),
+          provideHttpClientTesting(),
+          ...repositoryProviders,
+          provideRouter([]),
+          {
+            provide: ActivatedRoute,
+            useValue: { snapshot: { paramMap: paramMap$.value }, paramMap: paramMap$ },
+          },
+        ],
+      })
+      const fixture = TestBed.createComponent(RepositoryDetail)
+      const httpMock = TestBed.inject(HttpTestingController)
+      fixture.detectChanges()
+      httpMock.expectOne('/api/repositories/repo-a').flush(repo('repo-a', 'alpha'))
+      httpMock
+        .expectOne('/api/repositories/repo-a/permissions')
+        .flush([{ user_id: 'u1', username: 'alice', role: 'write' }])
+      fixture.detectChanges()
+      const goTo = (id: string) => {
+        paramMap$.next(convertToParamMap({ id }))
+        fixture.detectChanges()
+      }
+      return { fixture, httpMock, goTo }
+    }
+
+    it("drops repository A's data while repository B loads", () => {
+      const { fixture, httpMock, goTo } = setupNavigable()
+      const page = fixture.componentInstance
+      page.openRoleEditor({ user_id: 'u1', username: 'alice', role: 'write' })
+      expect(page.repository()?.name).toBe('alpha')
+      expect(page.quotaMb()).toBe('5')
+
+      goTo('repo-b')
+
+      expect(page.repository()).toBeNull()
+      expect(page.permissions()).toEqual([])
+      expect(page.editingPermission()).toBeNull()
+      expect(page.newName()).toBe('')
+      expect(page.quotaMb()).toBe('')
+      expect(page.retentionKeepLastN()).toBe('')
+      expect(fixture.nativeElement.textContent).not.toContain('alpha')
+      httpMock.match(() => true)
+    })
+
+    it("cannot rename, delete or change repository A through B's page", () => {
+      const { fixture, httpMock, goTo } = setupNavigable()
+      const page = fixture.componentInstance
+      page.newName.set('renamed')
+
+      goTo('repo-b')
+      page.rename()
+      page.saveQuota()
+      page.saveRetentionPolicy()
+      page.changeRole('read')
+      page.revokeFromEditor()
+      void page.deleteRepository()
+      void page.changeVisibility()
+
+      httpMock.expectNone((req) => req.method !== 'GET')
+      httpMock.match(() => true)
+    })
+
+    it("does not show A's quota-saved notice on B when A's write finishes late", () => {
+      const { fixture, httpMock, goTo } = setupNavigable()
+      const page = fixture.componentInstance
+      page.setQuotaMb('9')
+      page.saveQuota()
+      const quotaRequest = httpMock.expectOne('/api/repositories/repo-a/quota')
+
+      goTo('repo-b')
+      httpMock.expectOne('/api/repositories/repo-b').flush(repo('repo-b', 'beta'))
+      httpMock.expectOne('/api/repositories/repo-b/permissions').flush([])
+      quotaRequest.flush(null)
+
+      expect(page.quotaSaved()).toBe(false)
+      httpMock.expectNone('/api/repositories/repo-a')
+      httpMock.expectNone('/api/repositories/repo-a/permissions')
+      expect(page.repository()?.name).toBe('beta')
+    })
+
+    it('shows the load error when the permissions request fails', () => {
+      const { fixture, httpMock, goTo } = setupNavigable()
+
+      goTo('repo-b')
+      httpMock.expectOne('/api/repositories/repo-b').flush(repo('repo-b', 'beta'))
+      httpMock
+        .expectOne('/api/repositories/repo-b/permissions')
+        .flush({}, { status: 500, statusText: 'Error' })
+      fixture.detectChanges()
+
+      expect(fixture.componentInstance.loadError()).toBe(true)
+      expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeTruthy()
+    })
   })
 })

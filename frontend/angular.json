@@ -37,7 +37,7 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "520kB",
+                  "maximumWarning": "650kB",
                   "maximumError": "1MB"
                 },
                 {
@@ -69,7 +69,7 @@
           "options": {
             "proxyConfig": "proxy.conf.json",
             "host": "0.0.0.0",
-            "allowedHosts": true
+            "allowedHosts": [".localhost"]
           },
           "configurations": {
             "production": {

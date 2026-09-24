@@ -2,6 +2,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get};
 use axum::{Json, Router};
+use artiferris_domain::audit::SecurityEvent;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -35,6 +36,8 @@ async fn list_tokens(State(state): State<AppState>, user: AuthUser) -> Result<Js
 #[derive(Deserialize)]
 struct CreateTokenRequest {
     label: String,
+    /// Without it the token lasts 7 days instead of 365, and an SSO account has no password to give.
+    current_password: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -52,12 +55,43 @@ async fn create_token(
     if body.label.trim().is_empty() {
         return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "label must not be empty".to_string() })));
     }
-    let (id, token) = state.create_api_token.execute(user.id, body.label.trim()).await.map_err(|e| application_error_response("failed to create api token", e))?;
+    let label = body.label.trim();
+    let created = match body.current_password.as_deref() {
+        Some(password) => {
+            confirm_password(&state, &user, password).await?;
+            state.create_api_token.execute_reauthenticated(user.id, label).await
+        }
+        None => state.create_api_token.execute(user.id, label).await,
+    };
+    let (id, token) = created.map_err(|e| application_error_response("failed to create api token", e))?;
+    crate::state::record_security_event(
+        &state,
+        SecurityEvent::ApiTokenCreated { user_id: user.id, organization_id: user.organization_id, token_id: id, label: label.to_string() },
+        Some(user.id),
+    )
+    .await;
     Ok((StatusCode::CREATED, Json(CreateTokenResponse { id, token })))
+}
+
+/// Shares the password-management throttle, so a stolen session can't use this to guess the password either.
+async fn confirm_password(state: &AppState, user: &AuthUser, password: &str) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(state, user.organization_id).await;
+    let throttle_key = crate::routes::mfa::manage_throttle_key(user.id);
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+        return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: "too many failed attempts, try again later".to_string() })));
+    }
+    match state.confirm_password.execute(user.id, password).await {
+        Ok(()) => {
+            state.login_throttle.clear(&throttle_key);
+            Ok(())
+        }
+        Err(e) => Err(application_error_response("failed to confirm password", e)),
+    }
 }
 
 async fn revoke_token(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     state.revoke_api_token.execute(id, user.id).await.map_err(|e| application_error_response("failed to revoke api token", e))?;
+    crate::state::record_security_event(&state, SecurityEvent::ApiTokenRevoked { user_id: user.id, organization_id: user.organization_id, token_id: id }, Some(user.id)).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -75,7 +109,7 @@ mod tests {
         Config {
             database_url: String::new(),
             jwt_secret: "test-secret".to_string(),
-            secrets_encryption_key: "test-secret".to_string(),
+            secrets_encryption_key: "test-secrets-encryption-key".to_string(),
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
@@ -83,6 +117,8 @@ mod tests {
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),
+            trusted_proxy_ips: std::collections::HashSet::new(),
+            audit_retention_days: None,
         }
     }
 
@@ -304,5 +340,81 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(revoke_response.status(), StatusCode::NOT_FOUND);
+    }
+
+    fn create_token_request(token: &str, body: serde_json::Value) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri("/api/tokens")
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+
+    async fn expiry_in_days(state: &AppState, user_id: Uuid) -> i64 {
+        let tokens = state.api_tokens.list_for_user(user_id).await.unwrap();
+        (tokens[0].expires_at.unwrap() - chrono::Utc::now()).num_days()
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_token_created_from_a_session_alone_lasts_7_days(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let (user_id, token) = create_user_and_login(&state, "florian").await;
+        let app = build_router(state.clone());
+
+        let response = app.oneshot(create_token_request(&token, serde_json::json!({ "label": "ci" }))).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(expiry_in_days(&state, user_id).await, 6);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_token_created_with_the_password_lasts_365_days(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let (user_id, token) = create_user_and_login(&state, "florian").await;
+        let app = build_router(state.clone());
+
+        let response = app.oneshot(create_token_request(&token, serde_json::json!({ "label": "ci", "current_password": "sup3r-s3cret!" }))).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(expiry_in_days(&state, user_id).await, 364);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_wrong_password_creates_no_token(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let (user_id, token) = create_user_and_login(&state, "florian").await;
+        let app = build_router(state.clone());
+
+        let response = app.oneshot(create_token_request(&token, serde_json::json!({ "label": "ci", "current_password": "wrong" }))).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(state.api_tokens.list_for_user(user_id).await.unwrap().is_empty());
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn guessing_the_password_through_token_creation_is_throttled(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let (_, token) = create_user_and_login(&state, "florian").await;
+        let app = build_router(state);
+
+        let mut last = StatusCode::OK;
+        for _ in 0..=artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS {
+            last = app.clone().oneshot(create_token_request(&token, serde_json::json!({ "label": "ci", "current_password": "wrong" }))).await.unwrap().status();
+        }
+
+        assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_overlong_label_is_rejected(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let (_, token) = create_user_and_login(&state, "florian").await;
+        let app = build_router(state);
+
+        let response = app.oneshot(create_token_request(&token, serde_json::json!({ "label": "x".repeat(101) }))).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

@@ -10,9 +10,11 @@ import {
   type WritableSignal,
 } from '@angular/core'
 import { FormsModule } from '@angular/forms'
+import { Observable } from 'rxjs'
 import { Button, Card, FileUpload, Tooltip } from '@masmarino/gabarit'
 import { BrandingService } from '../application/branding.service'
 import { ToastService } from '../../shared/toast.service'
+import { rejectionMessage } from '../../shared/api-error'
 
 // Kept in sync with MAX_ASSET_BYTES in branding.rs — the maxSizeMb below rejects an oversized file client-side to save the full upload round-trip just to be told no.
 const MAX_ASSET_MB = 2
@@ -54,8 +56,16 @@ export class BrandingSettingsAdmin {
   constructor() {
     effect(() => {
       this.organizationId()
-      this.reloadLogo()
-      this.reloadFavicon()
+      untracked(() => {
+        this.clearPreview(this.logoPreviewUrl)
+        this.clearPreview(this.faviconPreviewUrl)
+        this.selectedLogoFile.set([])
+        this.selectedFaviconFile.set([])
+        this.uploadingLogo.set(false)
+        this.uploadingFavicon.set(false)
+        this.reloadLogo()
+        this.reloadFavicon()
+      })
     })
     this.destroyRef.onDestroy(() => {
       this.revokePreview(this.logoPreviewUrl())
@@ -64,15 +74,32 @@ export class BrandingSettingsAdmin {
   }
 
   private reloadLogo(): void {
-    this.brandingService
-      .getLogo(this.organizationId())
-      .subscribe((blob) => this.setPreview(this.logoPreviewUrl, blob))
+    this.loadPreview((id) => this.brandingService.getLogo(id), this.logoPreviewUrl)
   }
 
   private reloadFavicon(): void {
-    this.brandingService
-      .getFavicon(this.organizationId())
-      .subscribe((blob) => this.setPreview(this.faviconPreviewUrl, blob))
+    this.loadPreview((id) => this.brandingService.getFavicon(id), this.faviconPreviewUrl)
+  }
+
+  private loadPreview(
+    fetch: (organizationId?: string) => Observable<Blob>,
+    target: WritableSignal<string | null>,
+  ): void {
+    const organizationId = this.organizationId()
+    fetch(organizationId).subscribe({
+      next: (blob) => {
+        if (this.organizationId() === organizationId) {
+          this.setPreview(target, blob)
+        }
+      },
+      // Without a preview the upload and reset buttons still work.
+      error: () => undefined,
+    })
+  }
+
+  private clearPreview(target: WritableSignal<string | null>): void {
+    this.revokePreview(target())
+    target.set(null)
   }
 
   private setPreview(target: WritableSignal<string | null>, blob: Blob): void {
@@ -104,7 +131,7 @@ export class BrandingSettingsAdmin {
       },
       error: (err) => {
         this.uploadingLogo.set(false)
-        this.toastService.error(err?.error?.error ?? "Échec de l'import du logo.")
+        this.toastService.error(rejectionMessage(err) ?? "Échec de l'import du logo.")
       },
     })
   }
@@ -140,7 +167,7 @@ export class BrandingSettingsAdmin {
       },
       error: (err) => {
         this.uploadingFavicon.set(false)
-        this.toastService.error(err?.error?.error ?? "Échec de l'import du favicon.")
+        this.toastService.error(rejectionMessage(err) ?? "Échec de l'import du favicon.")
       },
     })
   }

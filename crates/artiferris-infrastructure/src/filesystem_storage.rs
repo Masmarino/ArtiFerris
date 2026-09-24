@@ -6,6 +6,8 @@ use tokio::fs;
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
+use crate::atomic_write::atomic_write;
+
 pub struct FilesystemStorageBackend {
     root: PathBuf,
 }
@@ -45,15 +47,11 @@ impl FilesystemStorageBackend {
 impl StorageBackendPort for FilesystemStorageBackend {
     async fn write(&self, repository_id: Uuid, path: &str, data: &[u8]) -> Result<(), StorageError> {
         let target = self.object_path(repository_id, path)?;
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).await.map_err(|e| StorageError::Io(e.to_string()))?;
-        }
-        // Append a per-write UUID to the full name (not with_extension, which
+        // Use the full name as the temp-file prefix (not with_extension, which
         // would collide "pkg.tgz"/"pkg.sig" on the same "pkg.tmp" staging file).
         let file_name = target.file_name().ok_or_else(|| StorageError::Io(format!("object path has no file name: {path:?}")))?;
-        let tmp_path = target.with_file_name(format!("{}.tmp-{}", file_name.to_string_lossy(), Uuid::new_v4()));
-        fs::write(&tmp_path, data).await.map_err(|e| StorageError::Io(e.to_string()))?;
-        fs::rename(&tmp_path, &target).await.map_err(|e| StorageError::Io(e.to_string()))?;
+        let tmp_name_prefix = file_name.to_string_lossy().into_owned();
+        atomic_write(&target, &tmp_name_prefix, data).await.map_err(|e| StorageError::Io(e.to_string()))?;
         Ok(())
     }
 
@@ -79,9 +77,18 @@ impl StorageBackendPort for FilesystemStorageBackend {
         }
     }
 
+    async fn delete_repository(&self, repository_id: Uuid) -> Result<(), StorageError> {
+        let root = self.repository_root(repository_id);
+        match fs::remove_dir_all(&root).await {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(StorageError::Io(e.to_string())),
+        }
+    }
+
     async fn used_bytes(&self, repository_id: Uuid) -> Result<u64, StorageError> {
         let root = self.repository_root(repository_id);
-        Ok(directory_size(&root).await.unwrap_or(0))
+        directory_size(&root).await.map_err(|e| StorageError::Io(format!("measuring {}: {e}", root.display())))
     }
 
     async fn is_healthy(&self) -> bool {
@@ -117,15 +124,22 @@ fn statvfs(path: &Path) -> Result<VolumeSpace, StorageError> {
     Ok(VolumeSpace { total_bytes: stat.f_blocks as u64 * block_size, free_bytes: stat.f_bavail as u64 * block_size })
 }
 
+/// A missing directory is 0 bytes; any other read error is an error, or a quota check would see an empty repository.
 fn directory_size(dir: &Path) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<u64, std::io::Error>> + Send + '_>> {
     Box::pin(async move {
         let mut total = 0u64;
         let mut entries = match fs::read_dir(dir).await {
             Ok(entries) => entries,
-            Err(_) => return Ok(0),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+            Err(e) => return Err(e),
         };
         while let Some(entry) = entries.next_entry().await? {
-            let metadata = entry.metadata().await?;
+            let metadata = match entry.metadata().await {
+                Ok(metadata) => metadata,
+                // Deleted since the listing.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e),
+            };
             if metadata.is_dir() {
                 total += directory_size(&entry.path()).await?;
             } else {
@@ -205,6 +219,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_repository_that_was_never_written_uses_zero_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = FilesystemStorageBackend::new(dir.path());
+
+        assert_eq!(backend.used_bytes(Uuid::new_v4()).await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn used_bytes_reports_a_read_error_instead_of_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = FilesystemStorageBackend::new(dir.path());
+        let repository_id = Uuid::new_v4();
+        // A regular file where the repository directory should be: listing it fails with something other than NotFound.
+        std::fs::write(dir.path().join(repository_id.to_string()), b"not a directory").unwrap();
+
+        assert!(backend.used_bytes(repository_id).await.is_err());
+    }
+
+    #[tokio::test]
     async fn rejects_a_path_that_escapes_the_repository_directory() {
         let dir = tempfile::tempdir().unwrap();
         let backend = FilesystemStorageBackend::new(dir.path());
@@ -255,6 +288,33 @@ mod tests {
             names.push(entry.file_name().to_string_lossy().into_owned());
         }
         assert_eq!(names, vec!["pkg-1.0.0.tgz".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn delete_repository_removes_every_object_under_the_repository_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = FilesystemStorageBackend::new(dir.path());
+        let repository_id = Uuid::new_v4();
+        let other_repository_id = Uuid::new_v4();
+        backend.write(repository_id, "left-pad/1.0.0.tgz", b"tarball-bytes").await.unwrap();
+        backend.write(repository_id, "left-pad/1.0.1.tgz", b"more-tarball-bytes").await.unwrap();
+        backend.write(other_repository_id, "other-pkg/1.0.0.tgz", b"unrelated-bytes").await.unwrap();
+
+        backend.delete_repository(repository_id).await.unwrap();
+
+        assert!(!dir.path().join(repository_id.to_string()).exists(), "the whole repository directory must be gone, not just individual files");
+        assert_eq!(
+            backend.read(other_repository_id, "other-pkg/1.0.0.tgz").await.unwrap(),
+            b"unrelated-bytes",
+            "another repository's files must be untouched"
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_repository_on_a_repository_with_nothing_on_disk_is_not_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = FilesystemStorageBackend::new(dir.path());
+        backend.delete_repository(Uuid::new_v4()).await.unwrap();
     }
 
     #[tokio::test]

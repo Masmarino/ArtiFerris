@@ -63,6 +63,7 @@ mod tests {
     use artiferris_application::use_cases::npm_publish::PublishNpmPackageUseCase;
     use artiferris_application::use_cases::npm_search::SearchNpmPackagesUseCase;
     use artiferris_application::use_cases::npm_unpublish::UnpublishNpmPackageUseCase;
+    use artiferris_application::use_cases::resolve_personal_repository::ResolvePersonalRepositoryUseCase;
     use artiferris_infrastructure::filesystem_storage::FilesystemStorageBackend;
     use artiferris_infrastructure::http_npm_audit_client::HttpNpmAuditClient;
     use artiferris_infrastructure::http_remote_npm_registry::HttpRemoteNpmRegistry;
@@ -98,9 +99,12 @@ mod tests {
             api_tokens: api_tokens.clone(),
             organizations: organizations.clone(),
             artiferris_base_domain: "artiferris.localhost".to_string(),
-            publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), events.clone())),
+            public_scheme: "http".to_string(),
+            guard: std::sync::Arc::new(artiferris_application::request_guard::RequestGuard::default()),
+            publish: Arc::new(PublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), repositories.clone(), repositories.clone(), events.clone())),
             metadata: Arc::new(GetNpmPackageMetadataUseCase::new(npm_packages.clone(), repositories.clone(), remote_registry.clone())),
             download: Arc::new(DownloadNpmTarballUseCase::new(npm_packages.clone(), storage.clone(), remote_registry.clone(), repositories.clone())),
+            downloads: Arc::new(artiferris_domain::download_stats::NoopDownloadRecorder),
             unpublish: Arc::new(UnpublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), events.clone())),
             deprecate: Arc::new(DeprecateNpmVersionUseCase::new(npm_packages.clone(), events.clone())),
             set_dist_tag: Arc::new(SetDistTagUseCase::new(npm_packages.clone(), events.clone())),
@@ -112,6 +116,7 @@ mod tests {
             create_api_token: Arc::new(CreateApiTokenUseCase::new(api_tokens.clone())),
             list_api_tokens: Arc::new(ListApiTokensUseCase::new(api_tokens.clone())),
             revoke_api_token: Arc::new(RevokeApiTokenUseCase::new(api_tokens.clone())),
+            resolve_personal_repository: Arc::new(ResolvePersonalRepositoryUseCase::new(users.clone(), organizations.clone(), repositories.clone())),
         }
     }
 
@@ -130,6 +135,7 @@ mod tests {
                 slug: OrganizationSlug::parse(slug).unwrap(),
                 display_name: slug.to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await

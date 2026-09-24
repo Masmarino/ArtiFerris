@@ -2,7 +2,15 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } 
 import { Router } from '@angular/router'
 import { FormsModule } from '@angular/forms'
 import { forkJoin } from 'rxjs'
-import { Button, Select, SelectOption, Table, TableColumn } from '@masmarino/gabarit'
+import {
+  Button,
+  EmptyState,
+  Select,
+  SelectOption,
+  Spinner,
+  Table,
+  TableColumn,
+} from '@masmarino/gabarit'
 import { CreateUserModal } from '../create-user-modal/create-user-modal'
 import { UsersService } from '../application/users.service'
 import { UserSummary } from '../domain/user.entity'
@@ -16,7 +24,7 @@ const ALL_ORGANIZATIONS = 'ALL'
 @Component({
   selector: 'app-users-list',
   standalone: true,
-  imports: [Table, Button, Select, FormsModule, CreateUserModal],
+  imports: [Table, Button, Select, FormsModule, CreateUserModal, EmptyState, Spinner],
   templateUrl: './users-list.html',
   styleUrl: './users-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT reference_count, created_at FROM docker_blobs WHERE digest = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reference_count",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "docker_blobs",
+            "name": "reference_count"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "docker_blobs",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "3ec05f1fe5f9955f49a2818f5f094b2a1511b456d3cb995192bf5e00efa4848d"
+}

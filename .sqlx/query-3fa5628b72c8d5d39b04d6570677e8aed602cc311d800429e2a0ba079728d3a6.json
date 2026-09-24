@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET is_super_admin = $1, tokens_valid_after = CASE WHEN $1 THEN tokens_valid_after ELSE $2 END WHERE id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3fa5628b72c8d5d39b04d6570677e8aed602cc311d800429e2a0ba079728d3a6"
+}

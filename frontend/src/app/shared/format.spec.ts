@@ -1,4 +1,11 @@
-import { formatBytes, formatResultsAnnouncement, formatSelectedCount } from './format'
+import {
+  formatBytes,
+  formatRelativeDate,
+  formatResultsAnnouncement,
+  formatSelectedCount,
+  formatSuggestionsAnnouncement,
+  formatWeeklyDownloads,
+} from './format'
 
 describe('formatBytes', () => {
   it('renders zero and negative values as 0 o', () => {
@@ -33,6 +40,20 @@ describe('formatResultsAnnouncement', () => {
   })
 })
 
+describe('formatSuggestionsAnnouncement', () => {
+  it('says there is no suggestion', () => {
+    expect(formatSuggestionsAnnouncement(0)).toBe('Aucune suggestion')
+  })
+
+  it('keeps one suggestion singular', () => {
+    expect(formatSuggestionsAnnouncement(1)).toBe('1 suggestion disponible')
+  })
+
+  it('pluralizes several suggestions', () => {
+    expect(formatSuggestionsAnnouncement(8)).toBe('8 suggestions disponibles')
+  })
+})
+
 // Drives gbt-select's `selectedCountLabel` — same singular/plural boundary, same reason to test it explicitly rather than by inference.
 describe('formatSelectedCount', () => {
   it('pluralizes zero selected', () => {
@@ -46,5 +67,45 @@ describe('formatSelectedCount', () => {
   it('pluralizes several selected', () => {
     expect(formatSelectedCount(2)).toBe('2 sélectionnés')
     expect(formatSelectedCount(9)).toBe('9 sélectionnés')
+  })
+})
+
+describe('formatWeeklyDownloads', () => {
+  it('keeps zero and one singular, as French does', () => {
+    expect(formatWeeklyDownloads(0)).toBe('0 téléchargement cette semaine')
+    expect(formatWeeklyDownloads(1)).toBe('1 téléchargement cette semaine')
+  })
+
+  it('pluralizes from two', () => {
+    expect(formatWeeklyDownloads(2)).toBe('2 téléchargements cette semaine')
+  })
+
+  it('separates thousands with a narrow no-break space', () => {
+    expect(formatWeeklyDownloads(999)).toBe('999 téléchargements cette semaine')
+    expect(formatWeeklyDownloads(1234)).toBe('1\u202f234 téléchargements cette semaine')
+    expect(formatWeeklyDownloads(1_250_000)).toBe(
+      '1\u202f250\u202f000 téléchargements cette semaine',
+    )
+  })
+})
+
+describe('formatRelativeDate', () => {
+  const now = new Date('2026-09-24T12:00:00Z')
+
+  it('says "à l\'instant" under a minute, and for a date slightly in the future', () => {
+    expect(formatRelativeDate('2026-09-24T11:59:30Z', now)).toBe("à l'instant")
+    expect(formatRelativeDate('2026-09-24T12:00:20Z', now)).toBe("à l'instant")
+  })
+
+  it('picks the largest fitting unit', () => {
+    expect(formatRelativeDate('2026-09-24T11:55:00Z', now)).toBe('il y a 5 minutes')
+    expect(formatRelativeDate('2026-09-24T09:00:00Z', now)).toBe('il y a 3 heures')
+    expect(formatRelativeDate('2026-09-21T12:00:00Z', now)).toBe('il y a 3 jours')
+    expect(formatRelativeDate('2026-06-24T12:00:00Z', now)).toBe('il y a 3 mois')
+    expect(formatRelativeDate('2024-09-24T12:00:00Z', now)).toBe('il y a 2 ans')
+  })
+
+  it('uses the natural wording for yesterday', () => {
+    expect(formatRelativeDate('2026-09-23T12:00:00Z', now)).toBe('hier')
   })
 })

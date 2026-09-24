@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
+use artiferris_domain::audit::AdminAuditRecord;
 use artiferris_domain::email::{EmailPort, SmtpSecurity, SmtpSettings, SmtpSettingsPort};
+use artiferris_domain::error::DomainError;
 
 use crate::error::ApplicationError;
 
@@ -14,6 +16,19 @@ pub struct SmtpSettingsView {
     pub from_address: String,
     pub security: SmtpSecurity,
     pub password_set: bool,
+}
+
+impl SmtpSettingsView {
+    pub fn summary(&self) -> artiferris_domain::audit::SmtpSettingsSummary {
+        artiferris_domain::audit::SmtpSettingsSummary {
+            host: self.host.clone(),
+            port: self.port,
+            username: self.username.clone(),
+            from_name: self.from_name.clone(),
+            from_address: self.from_address.clone(),
+            security: self.security,
+        }
+    }
 }
 
 pub struct GetSmtpSettingsUseCase {
@@ -61,7 +76,7 @@ impl UpdateSmtpSettingsUseCase {
         Self { settings }
     }
 
-    pub async fn execute(&self, organization_id: uuid::Uuid, input: UpdateSmtpSettingsInput) -> Result<(), ApplicationError> {
+    pub async fn execute(&self, organization_id: uuid::Uuid, input: UpdateSmtpSettingsInput, audit: Option<&AdminAuditRecord>) -> Result<(), ApplicationError> {
         if input.host.trim().is_empty() {
             return Err(ApplicationError::InvalidSmtpSettings("host must not be empty".to_string()));
         }
@@ -81,16 +96,22 @@ impl UpdateSmtpSettingsUseCase {
         let password = match input.password {
             Some(password) if !password.is_empty() => password,
             _ => {
-                let existing = self.settings.get(organization_id).await?;
+                let existing = match self.settings.get(organization_id).await {
+                    Ok(existing) => existing,
+                    Err(DomainError::SecretUnreadable(_)) => return Err(ApplicationError::InvalidSmtpSettings("the stored password cannot be read by this server; enter it again".to_string())),
+                    Err(e) => return Err(e.into()),
+                };
                 match existing {
-                    Some(existing) => existing.password,
+                    // A kept password is only ever sent to the server it was entered for.
+                    Some(existing) if existing.host.trim().eq_ignore_ascii_case(input.host.trim()) && existing.port == input.port && existing.username == input.username => existing.password,
+                    Some(_) => return Err(ApplicationError::InvalidSmtpSettings("re-enter the password when changing the host, port or username".to_string())),
                     None => return Err(ApplicationError::InvalidSmtpSettings("password is required when configuring SMTP for the first time".to_string())),
                 }
             }
         };
 
         self.settings
-            .update(organization_id, &SmtpSettings { host: input.host, port: input.port, username: input.username, password, from_name: input.from_name, from_address: input.from_address, security: input.security })
+            .update(organization_id, &SmtpSettings { host: input.host, port: input.port, username: input.username, password, from_name: input.from_name, from_address: input.from_address, security: input.security }, audit)
             .await?;
         Ok(())
     }
@@ -130,7 +151,7 @@ mod tests {
         async fn get(&self, organization_id: uuid::Uuid) -> Result<Option<SmtpSettings>, DomainError> {
             Ok(self.settings.lock().unwrap().get(&organization_id).cloned())
         }
-        async fn update(&self, organization_id: uuid::Uuid, settings: &SmtpSettings) -> Result<(), DomainError> {
+        async fn update(&self, organization_id: uuid::Uuid, settings: &SmtpSettings, _audit: Option<&AdminAuditRecord>) -> Result<(), DomainError> {
             self.settings.lock().unwrap().insert(organization_id, settings.clone());
             Ok(())
         }
@@ -172,7 +193,7 @@ mod tests {
     async fn get_never_exposes_the_password() {
         let org_id = uuid::Uuid::new_v4();
         let settings = Arc::new(FakeSmtpSettings { settings: Mutex::new(std::collections::HashMap::new()) });
-        UpdateSmtpSettingsUseCase::new(settings.clone()).execute(org_id, sample_input()).await.unwrap();
+        UpdateSmtpSettingsUseCase::new(settings.clone()).execute(org_id, sample_input(), None).await.unwrap();
 
         let view = GetSmtpSettingsUseCase::new(settings).execute(org_id).await.unwrap().unwrap();
         assert_eq!(view.host, "smtp.example.com");
@@ -184,7 +205,7 @@ mod tests {
         let org_id = uuid::Uuid::new_v4();
         let settings = Arc::new(FakeSmtpSettings { settings: Mutex::new(std::collections::HashMap::new()) });
         let use_case = UpdateSmtpSettingsUseCase::new(settings);
-        let err = use_case.execute(org_id, UpdateSmtpSettingsInput { password: None, ..sample_input() }).await.unwrap_err();
+        let err = use_case.execute(org_id, UpdateSmtpSettingsInput { password: None, ..sample_input() }, None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidSmtpSettings(_)));
     }
 
@@ -193,13 +214,46 @@ mod tests {
         let org_id = uuid::Uuid::new_v4();
         let settings = Arc::new(FakeSmtpSettings { settings: Mutex::new(std::collections::HashMap::new()) });
         let use_case = UpdateSmtpSettingsUseCase::new(settings.clone());
-        use_case.execute(org_id, sample_input()).await.unwrap();
+        use_case.execute(org_id, sample_input(), None).await.unwrap();
 
-        use_case.execute(org_id, UpdateSmtpSettingsInput { host: "smtp2.example.com".to_string(), password: None, ..sample_input() }).await.unwrap();
+        use_case.execute(org_id, UpdateSmtpSettingsInput { from_name: "Renamed".to_string(), host: "SMTP.Example.com".to_string(), password: None, ..sample_input() }, None).await.unwrap();
 
         let stored = settings.get(org_id).await.unwrap().unwrap();
-        assert_eq!(stored.host, "smtp2.example.com");
+        assert_eq!(stored.from_name, "Renamed");
         assert_eq!(stored.password, "s3cret");
+    }
+
+    #[tokio::test]
+    async fn a_kept_password_is_refused_when_the_host_port_or_username_changes() {
+        let org_id = uuid::Uuid::new_v4();
+        let settings = Arc::new(FakeSmtpSettings { settings: Mutex::new(std::collections::HashMap::new()) });
+        let use_case = UpdateSmtpSettingsUseCase::new(settings.clone());
+        use_case.execute(org_id, sample_input(), None).await.unwrap();
+
+        for changed in [
+            UpdateSmtpSettingsInput { host: "evil.example.net".to_string(), password: None, ..sample_input() },
+            UpdateSmtpSettingsInput { port: 465, password: None, ..sample_input() },
+            UpdateSmtpSettingsInput { username: "someone-else@example.com".to_string(), password: None, ..sample_input() },
+        ] {
+            let err = use_case.execute(org_id, changed, None).await.unwrap_err();
+            assert!(matches!(&err, ApplicationError::InvalidSmtpSettings(m) if m.contains("re-enter the password")), "got: {err}");
+        }
+        let stored = settings.get(org_id).await.unwrap().unwrap();
+        assert_eq!(stored.host, "smtp.example.com");
+        assert_eq!(stored.port, 587);
+    }
+
+    #[tokio::test]
+    async fn a_new_password_may_come_with_a_new_destination() {
+        let org_id = uuid::Uuid::new_v4();
+        let settings = Arc::new(FakeSmtpSettings { settings: Mutex::new(std::collections::HashMap::new()) });
+        let use_case = UpdateSmtpSettingsUseCase::new(settings.clone());
+        use_case.execute(org_id, sample_input(), None).await.unwrap();
+
+        use_case.execute(org_id, UpdateSmtpSettingsInput { host: "smtp2.example.com".to_string(), password: Some("new-secret".to_string()), ..sample_input() }, None).await.unwrap();
+
+        let stored = settings.get(org_id).await.unwrap().unwrap();
+        assert_eq!((stored.host.as_str(), stored.password.as_str()), ("smtp2.example.com", "new-secret"));
     }
 
     #[tokio::test]
@@ -207,7 +261,7 @@ mod tests {
         let org_id = uuid::Uuid::new_v4();
         let settings = Arc::new(FakeSmtpSettings { settings: Mutex::new(std::collections::HashMap::new()) });
         let use_case = UpdateSmtpSettingsUseCase::new(settings);
-        let err = use_case.execute(org_id, UpdateSmtpSettingsInput { host: "  ".to_string(), ..sample_input() }).await.unwrap_err();
+        let err = use_case.execute(org_id, UpdateSmtpSettingsInput { host: "  ".to_string(), ..sample_input() }, None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidSmtpSettings(_)));
     }
 
@@ -216,7 +270,7 @@ mod tests {
         let org_id = uuid::Uuid::new_v4();
         let settings = Arc::new(FakeSmtpSettings { settings: Mutex::new(std::collections::HashMap::new()) });
         let use_case = UpdateSmtpSettingsUseCase::new(settings);
-        let err = use_case.execute(org_id, UpdateSmtpSettingsInput { port: 0, ..sample_input() }).await.unwrap_err();
+        let err = use_case.execute(org_id, UpdateSmtpSettingsInput { port: 0, ..sample_input() }, None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidSmtpSettings(_)));
     }
 
@@ -225,7 +279,7 @@ mod tests {
         let org_id = uuid::Uuid::new_v4();
         let settings = Arc::new(FakeSmtpSettings { settings: Mutex::new(std::collections::HashMap::new()) });
         let use_case = UpdateSmtpSettingsUseCase::new(settings);
-        let err = use_case.execute(org_id, UpdateSmtpSettingsInput { from_address: "not-an-email".to_string(), ..sample_input() }).await.unwrap_err();
+        let err = use_case.execute(org_id, UpdateSmtpSettingsInput { from_address: "not-an-email".to_string(), ..sample_input() }, None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidSmtpSettings(_)));
     }
 
@@ -234,7 +288,7 @@ mod tests {
         let org_id = uuid::Uuid::new_v4();
         let settings = Arc::new(FakeSmtpSettings { settings: Mutex::new(std::collections::HashMap::new()) });
         let use_case = UpdateSmtpSettingsUseCase::new(settings);
-        let err = use_case.execute(org_id, UpdateSmtpSettingsInput { from_name: "  ".to_string(), ..sample_input() }).await.unwrap_err();
+        let err = use_case.execute(org_id, UpdateSmtpSettingsInput { from_name: "  ".to_string(), ..sample_input() }, None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidSmtpSettings(_)));
     }
 
@@ -242,7 +296,7 @@ mod tests {
     async fn from_name_round_trips_through_get() {
         let org_id = uuid::Uuid::new_v4();
         let settings = Arc::new(FakeSmtpSettings { settings: Mutex::new(std::collections::HashMap::new()) });
-        UpdateSmtpSettingsUseCase::new(settings.clone()).execute(org_id, UpdateSmtpSettingsInput { from_name: "Acme Corp".to_string(), ..sample_input() }).await.unwrap();
+        UpdateSmtpSettingsUseCase::new(settings.clone()).execute(org_id, UpdateSmtpSettingsInput { from_name: "Acme Corp".to_string(), ..sample_input() }, None).await.unwrap();
 
         let view = GetSmtpSettingsUseCase::new(settings).execute(org_id).await.unwrap().unwrap();
         assert_eq!(view.from_name, "Acme Corp");

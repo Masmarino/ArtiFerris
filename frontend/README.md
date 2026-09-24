@@ -54,6 +54,12 @@ ng e2e
 
 Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
 
+## Known issues
+
+### npm audit — devDependency-only UUID vulnerability (B-44)
+
+`npm audit` reports 5 moderate findings in a devDependency chain (`uuid <11.1.1` via `sockjs` → `webpack-dev-server` → `@angular-devkit/build-angular`). These never reach production (`npm audit --omit=dev` reports 0 findings). No fix is currently available upstream: `sockjs` has not released a version compatible with `uuid ≥ 11.1.1`, and `@angular-devkit/build-angular` still pins `webpack-dev-server` to the `5.2.x` line. This is accepted as a monitored risk — Dependabot runs weekly and will open a PR automatically once an upstream fix ships. Do not force an `npm overrides` entry for `uuid`, as that would deviate from `sockjs`'s own tested dependency contract for no production benefit.
+
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.

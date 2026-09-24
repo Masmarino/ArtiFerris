@@ -1,0 +1,113 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.id AS \"id!\", v.npm_package_id AS \"npm_package_id!\", v.version AS \"version!\", v.shasum AS \"shasum!\", v.tarball_size_bytes AS \"tarball_size_bytes!\", v.deprecated AS \"deprecated!\", v.deprecated_message, v.published_at AS \"published_at!\" FROM unnest($1::uuid[]) AS p(id) CROSS JOIN LATERAL (SELECT id, npm_package_id, version, shasum, tarball_size_bytes, deprecated, deprecated_message, published_at FROM npm_package_versions WHERE npm_package_id = p.id ORDER BY published_at DESC, id LIMIT $2) v ORDER BY v.npm_package_id, v.published_at DESC, v.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "npm_package_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "npm_package_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "shasum!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "shasum"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tarball_size_bytes!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "tarball_size_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "deprecated!",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "deprecated"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "deprecated_message",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "deprecated_message"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "published_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "npm_package_versions",
+            "name": "published_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "f770b7c9cde7bed29fd1b62032e4499bbf2e2190b473d2d02ece111420c69e5d"
+}

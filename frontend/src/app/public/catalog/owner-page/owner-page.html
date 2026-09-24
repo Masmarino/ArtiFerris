@@ -1,0 +1,25 @@
+<app-public-layout>
+  @if (loading()) {
+    <div class="loading-state"><gbt-spinner size="lg" label="Chargement…" /></div>
+  } @else if (failed()) {
+    <p class="gbt-form-error" role="alert">{{ errorMessage() }}</p>
+    <gbt-button text="Réessayer" (clicked)="retry()" />
+  } @else if (notFound()) {
+    <gbt-empty-state
+      illustration="folder"
+      heading="Propriétaire introuvable"
+      message="Il n'y a rien de public à cette adresse."
+    >
+      <a class="owner-page__back" routerLink="/explorer">Parcourir le catalogue public</a>
+    </gbt-empty-state>
+  } @else if (summary(); as owner) {
+    <header class="owner-page__header">
+      <h1>{{ owner.display_name }}</h1>
+      <p>{{ owner.kind === 'personal' ? '@' + owner.slug : 'Organisation' }}</p>
+      @if (counts()) {
+        <p class="owner-page__counts">{{ counts() }}</p>
+      }
+    </header>
+    <app-catalog-search [owner]="ownerRef()" />
+  }
+</app-public-layout>

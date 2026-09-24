@@ -2,6 +2,8 @@
   <gbt-card heading="Paramètres système" icon="settings">
     @if (loading()) {
       <gbt-spinner label="Chargement…" />
+    } @else if (loadFailed()) {
+      <p class="gbt-form-error" role="alert">Échec du chargement des paramètres.</p>
     } @else {
       @for (field of fields; track field.key) {
         <gbt-input
@@ -17,6 +19,21 @@
         [ngModel]="registrationEnabled()"
         (ngModelChange)="registrationEnabled.set($event)"
       />
+
+      @if (showSeoIndexing()) {
+        <section class="seo">
+          <h3>Référencement</h3>
+          <gbt-checkbox
+            label="Autoriser l'indexation par les moteurs de recherche"
+            [ngModel]="seoIndexingEnabled()"
+            (ngModelChange)="seoIndexingEnabled.set($event)"
+          />
+          <p class="seo__hint">
+            Désactivée, le catalogue public envoie « noindex », le robots.txt interdit tout et le
+            plan du site est vide.
+          </p>
+        </section>
+      }
 
       <gbt-button
         text="Enregistrer"

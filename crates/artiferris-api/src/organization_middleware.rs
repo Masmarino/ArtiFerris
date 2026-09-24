@@ -67,7 +67,7 @@ mod tests {
         Config {
             database_url: String::new(),
             jwt_secret: "test-secret".to_string(),
-            secrets_encryption_key: "test-secret".to_string(),
+            secrets_encryption_key: "test-secrets-encryption-key".to_string(),
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
@@ -75,6 +75,8 @@ mod tests {
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),
+            trusted_proxy_ips: std::collections::HashSet::new(),
+            audit_retention_days: None,
         }
     }
 
@@ -150,6 +152,7 @@ mod tests {
                 slug: OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -216,6 +219,7 @@ mod tests {
                 slug: OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await

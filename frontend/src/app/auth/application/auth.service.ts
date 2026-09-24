@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core'
+import { Injectable, computed, inject } from '@angular/core'
 import { Observable, map, tap } from 'rxjs'
 import {
   LoginOutcome,
@@ -8,14 +8,20 @@ import {
   TotpSetupEnrollment,
 } from '../domain/auth.types'
 import { AUTH_PORT } from './auth.port'
-
-const TOKEN_STORAGE_KEY = 'artiferris_token'
+import { SessionToken } from './session-token'
+import { consumeSsoStart, discardSsoStart, markSsoStarted } from './sso-handshake'
+import { safeReturnUrl } from '../domain/return-url'
+import { PageTitleService } from '../../shell/page-title.service'
+import { ToastService } from '../../shared/toast.service'
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly port = inject(AUTH_PORT)
+  private readonly session = inject(SessionToken)
+  private readonly pageTitle = inject(PageTitleService)
+  private readonly toasts = inject(ToastService)
 
-  readonly token = signal<string | null>(sessionStorage.getItem(TOKEN_STORAGE_KEY))
+  readonly token = this.session.value
   readonly isAuthenticated = computed(() => this.token() !== null)
 
   login(username: string, password: string): Observable<LoginOutcome> {
@@ -104,18 +110,38 @@ export class AuthService {
     return this.port.activate(token, newPassword)
   }
 
-  logout(): void {
-    this.token.set(null)
-    sessionStorage.removeItem(TOKEN_STORAGE_KEY)
+  /** Ends every session server-side; the caller then drops its own token. */
+  logoutEverywhere(): Observable<void> {
+    return this.port.logoutAll()
   }
 
-  /** For the OIDC redirect flow — the token arrives via a URL fragment, not an HTTP response. */
-  completeExternalLogin(token: string): void {
+  logout(): void {
+    this.session.clear()
+    // A private page name or toast must not outlive the session.
+    this.pageTitle.title.set('')
+    this.toasts.clear()
+  }
+
+  beginSsoLogin(returnUrl: string | null): void {
+    markSsoStarted(returnUrl)
+  }
+
+  /** The login page opened with no return trip, so an earlier SSO start was abandoned. */
+  abandonSsoLogin(): void {
+    discardSsoStart()
+  }
+
+  /** OIDC return trip. Refused unless this tab started the SSO login, so a pasted `#token=` link signs nobody in. */
+  completeExternalLogin(token: string): { returnUrl: string | null } | null {
+    const start = consumeSsoStart()
+    if (!start) {
+      return null
+    }
     this.setToken(token)
+    return { returnUrl: safeReturnUrl(start.returnUrl) }
   }
 
   private setToken(token: string): void {
-    this.token.set(token)
-    sessionStorage.setItem(TOKEN_STORAGE_KEY, token)
+    this.session.set(token)
   }
 }

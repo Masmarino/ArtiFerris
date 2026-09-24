@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE package_repository_projections SET deleted_at = now() - ($1 || ' days')::interval WHERE id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "42cb29011e112f70f58d1efe538100f8c96859c0ee58610d37e2fc19753b8ff8"
+}

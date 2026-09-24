@@ -32,7 +32,11 @@
           }
         </ul>
       } @else {
-        <p>Aucune clé d'accès enregistrée.</p>
+        <gbt-empty-state
+          illustration="star"
+          heading="Aucune clé d'accès"
+          message="Ajoutez une clé d'accès pour vous connecter sans mot de passe."
+        />
       }
 
       @if (errorMessage(); as message) {

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_tags SET updated_at = now() - make_interval(hours => $2) WHERE package_repository_id = $1 AND tag = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ad16809f34ca09cb7f218c08616d92b8ec4f0364517567b88b61b91463af25b8"
+}

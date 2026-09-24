@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core'
 import { Router } from '@angular/router'
-import { Button, Table, TableColumn } from '@masmarino/gabarit'
+import { Button, EmptyState, Spinner, Table, TableColumn } from '@masmarino/gabarit'
 import { CreateOrganizationModal } from '../create-organization-modal/create-organization-modal'
 import { OrganizationsService } from '../application/organizations.service'
 import { OrganizationSummary } from '../domain/organization.entity'
@@ -8,7 +8,7 @@ import { OrganizationSummary } from '../domain/organization.entity'
 @Component({
   selector: 'app-organizations-list',
   standalone: true,
-  imports: [Table, Button, CreateOrganizationModal],
+  imports: [Table, Button, CreateOrganizationModal, EmptyState, Spinner],
   templateUrl: './organizations-list.html',
   styleUrl: './organizations-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

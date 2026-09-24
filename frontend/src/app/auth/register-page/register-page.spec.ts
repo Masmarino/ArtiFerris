@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing'
 import { provideRouter } from '@angular/router'
+import { HttpErrorResponse } from '@angular/common/http'
 import { of, throwError } from 'rxjs'
 import { RegisterPage } from './register-page'
 import { AuthService } from '../application/auth.service'
@@ -52,7 +53,9 @@ describe('RegisterPage', () => {
 
   it('surfaces a duplicate-username error', () => {
     authServiceSpy.register.mockReturnValue(
-      throwError(() => ({ error: { error: 'username already taken' } })),
+      throwError(
+        () => new HttpErrorResponse({ status: 400, error: { error: 'username already taken' } }),
+      ),
     )
     component.form.setValue({
       username: 'florian',
@@ -67,9 +70,13 @@ describe('RegisterPage', () => {
 
   it('surfaces a registration-disabled error', () => {
     authServiceSpy.register.mockReturnValue(
-      throwError(() => ({
-        error: { error: 'public self-registration is not available on this organization' },
-      })),
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 400,
+            error: { error: 'public self-registration is not available on this organization' },
+          }),
+      ),
     )
     component.form.setValue({
       username: 'florian',
@@ -84,9 +91,13 @@ describe('RegisterPage', () => {
 
   it('surfaces an admin-disabled registration error distinctly from the org-level one', () => {
     authServiceSpy.register.mockReturnValue(
-      throwError(() => ({
-        error: { error: 'public self-registration is currently disabled' },
-      })),
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 400,
+            error: { error: 'public self-registration is currently disabled' },
+          }),
+      ),
     )
     component.form.setValue({
       username: 'florian',
@@ -101,7 +112,9 @@ describe('RegisterPage', () => {
 
   it('surfaces an invalid-username error', () => {
     authServiceSpy.register.mockReturnValue(
-      throwError(() => ({ error: { error: 'invalid username: 1a' } })),
+      throwError(
+        () => new HttpErrorResponse({ status: 400, error: { error: 'invalid username: 1a' } }),
+      ),
     )
     component.form.setValue({
       username: 'florian',
@@ -112,5 +125,41 @@ describe('RegisterPage', () => {
     component.submit()
 
     expect(component.errorMessage()).toContain("Nom d'utilisateur invalide")
+  })
+
+  it('says the server is busy on a 503', () => {
+    authServiceSpy.register.mockReturnValue(
+      throwError(() => new HttpErrorResponse({ status: 503, error: { error: 'busy' } })),
+    )
+    component.form.setValue({
+      username: 'florian',
+      email: 'florian@example.com',
+      password: 'sup3r-s3cret!',
+    })
+
+    component.submit()
+
+    expect(component.errorMessage()).toBe('Service momentanément occupé')
+  })
+
+  it('never shows the raw server text of a 500', () => {
+    authServiceSpy.register.mockReturnValue(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 500,
+            error: { error: 'invalid username: db exploded' },
+          }),
+      ),
+    )
+    component.form.setValue({
+      username: 'florian',
+      email: 'florian@example.com',
+      password: 'sup3r-s3cret!',
+    })
+
+    component.submit()
+
+    expect(component.errorMessage()).toBe('Impossible de créer le compte. Réessayez.')
   })
 })

@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing'
+import { SessionToken } from '../../auth/application/session-token'
 import { of, throwError } from 'rxjs'
 import { UsersService } from './users.service'
 import { USER_PORT, UserPort } from './user.port'
@@ -101,5 +102,36 @@ describe('UsersService', () => {
     setup({ resendInvitation }).resendInvitation('user-1')
 
     expect(resendInvitation).toHaveBeenCalledWith('user-1')
+  })
+
+  it("does not hand the previous user's list to the next user signed in on the same tab", () => {
+    const list = vi
+      .fn()
+      .mockReturnValueOnce(of([{ id: 'alice-item' }]))
+      .mockReturnValueOnce(of([{ id: 'bob-item' }]))
+    const service = setup({ list })
+    const session = TestBed.inject(SessionToken)
+
+    session.set('alice-token')
+    service.list().subscribe()
+    session.set('bob-token')
+    let seen: unknown
+    service.list().subscribe((items) => (seen = items))
+
+    expect(list).toHaveBeenCalledTimes(2)
+    expect(seen).toEqual([{ id: 'bob-item' }])
+  })
+
+  it('refetches after logout instead of replaying the cached list', () => {
+    const list = vi.fn().mockReturnValue(of([]))
+    const service = setup({ list })
+    const session = TestBed.inject(SessionToken)
+
+    session.set('alice-token')
+    service.list().subscribe()
+    session.clear()
+    service.list().subscribe()
+
+    expect(list).toHaveBeenCalledTimes(2)
   })
 })

@@ -2,6 +2,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use artiferris_domain::audit::{AdminAuditEvent, AdminAuditRecord, IdentityProviderSummary};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -47,13 +48,20 @@ async fn create_organization(
         .execute(&body.slug, &body.display_name)
         .await
         .map_err(|e| application_error_response("failed to create organization", e))?;
+    let created = AdminAuditEvent::OrganizationCreated { organization_id: id, slug: body.slug.clone(), display_name: body.display_name.clone() };
+    crate::state::record_admin_event(&state, created, Some(user.id)).await;
     Ok((StatusCode::CREATED, Json(OrganizationResponse { id, slug: body.slug, display_name: body.display_name, is_public: false })))
 }
 
 async fn list_organizations(State(state): State<AppState>, user: AuthUser) -> Result<Json<Vec<OrganizationResponse>>, (StatusCode, Json<ErrorResponse>)> {
     require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
     let all = state.organizations.list_all().await.map_err(|e| application_error_response("failed to list organizations", e.into()))?;
-    Ok(Json(all.into_iter().map(|o| OrganizationResponse { id: o.id, slug: o.slug.as_str().to_string(), display_name: o.display_name, is_public: o.is_public }).collect()))
+    Ok(Json(
+        all.into_iter()
+            .filter(|o| !o.is_personal)
+            .map(|o| OrganizationResponse { id: o.id, slug: o.slug.as_str().to_string(), display_name: o.display_name, is_public: o.is_public })
+            .collect(),
+    ))
 }
 
 async fn get_organization(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<Json<OrganizationResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -118,7 +126,7 @@ async fn invite_organization_member(
     // is_super_admin is never read from this request — an org-scoped invite can never grant it.
     let member_id = state
         .invite_user
-        .execute(id, body.is_organization_admin, &body.username, &body.email, false)
+        .execute(id, body.is_organization_admin, &body.username, &body.email, false, user.id)
         .await
         .map_err(|e| application_error_response("failed to invite organization member", e))?;
     Ok((
@@ -150,9 +158,22 @@ async fn set_organization_member_admin(
         // Same privacy stance as require_same_organization: don't confirm this user exists in a different organization.
         return Err(not_found());
     }
+    // Same carve-out as delete_user and resend_invitation: a super-admin is a global account, not the organization admin's to touch.
+    if target.is_super_admin && !user.is_super_admin {
+        return Err((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() })));
+    }
+    // Only a change that actually flips the flag is recorded.
+    let audit = (target.is_organization_admin != body.is_organization_admin).then(|| {
+        let event = if body.is_organization_admin {
+            AdminAuditEvent::OrganizationAdminGranted { user_id, organization_id: id }
+        } else {
+            AdminAuditEvent::OrganizationAdminRevoked { user_id, organization_id: id }
+        };
+        AdminAuditRecord { event, actor_id: Some(user.id) }
+    });
     state
         .set_organization_admin
-        .execute(user_id, body.is_organization_admin)
+        .execute(user_id, body.is_organization_admin, audit.as_ref())
         .await
         .map_err(|e| application_error_response("failed to update organization admin status", e))?;
     Ok(StatusCode::NO_CONTENT)
@@ -160,7 +181,17 @@ async fn set_organization_member_admin(
 
 async fn get_identity_provider(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    let config = state.identity_providers.get(id).await.map_err(|e| application_error_response("failed to get identity provider", e.into()))?;
+    let config = match state.identity_providers.get(id).await {
+        Ok(config) => config,
+        Err(artiferris_domain::error::DomainError::SecretUnreadable(_)) => {
+            return Ok(Json(serde_json::json!({
+                "type": null,
+                "secret_unreadable": true,
+                "error": "the stored secret cannot be read with this server's SECRETS_ENCRYPTION_KEY; configure the provider again",
+            })));
+        }
+        Err(e) => return Err(application_error_response("failed to get identity provider", e.into())),
+    };
     let body = match config {
         None => serde_json::json!({ "type": null }),
         Some(artiferris_domain::sso::IdentityProviderConfig::Ldap(ldap)) => serde_json::json!({
@@ -204,6 +235,36 @@ enum SetIdentityProviderRequest {
     },
 }
 
+async fn previous_identity_provider(state: &AppState, organization_id: Uuid) -> Option<IdentityProviderSummary> {
+    match state.identity_providers.get(organization_id).await {
+        Ok(config) => config.as_ref().map(IdentityProviderSummary::from),
+        Err(e) => {
+            tracing::warn!("failed to read the previous identity provider for the audit entry: {e}");
+            None
+        }
+    }
+}
+
+const KEPT_SECRET_DESTINATION_CHANGED_LDAP: &str = "re-enter the bind password when changing the server URL or the bind DN";
+const KEPT_SECRET_DESTINATION_CHANGED_OIDC: &str = "re-enter the client secret when changing the issuer URL or the client id";
+
+fn bad_request(message: &str) -> (StatusCode, Json<ErrorResponse>) {
+    (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: message.to_string() }))
+}
+
+/// Hosts and DNs compare without regard to case; a stored secret is only kept for the destination it was entered for.
+fn same_text(stored: &str, requested: &str) -> bool {
+    stored.trim().eq_ignore_ascii_case(requested.trim())
+}
+
+async fn load_existing_identity_provider(state: &AppState, organization_id: Uuid) -> Result<Option<artiferris_domain::sso::IdentityProviderConfig>, (StatusCode, Json<ErrorResponse>)> {
+    match state.identity_providers.get(organization_id).await {
+        Ok(existing) => Ok(existing),
+        Err(artiferris_domain::error::DomainError::SecretUnreadable(_)) => Err(bad_request("the stored secret cannot be read by this server; enter it again")),
+        Err(e) => Err(application_error_response("failed to load existing identity provider", e.into())),
+    }
+}
+
 async fn set_identity_provider(
     State(state): State<AppState>,
     user: AuthUser,
@@ -212,20 +273,32 @@ async fn set_identity_provider(
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
 
+    let secret_changed = match &body {
+        SetIdentityProviderRequest::Ldap { bind_password, .. } => bind_password.as_deref().is_some_and(|secret| !secret.trim().is_empty()),
+        SetIdentityProviderRequest::Oidc { client_secret, .. } => client_secret.as_deref().is_some_and(|secret| !secret.trim().is_empty()),
+    };
     let config = match body {
         SetIdentityProviderRequest::Ldap { server_url, bind_dn, bind_password, user_search_base, user_search_filter, email_attribute } => {
             let bind_password = match bind_password {
                 Some(password) if !password.trim().is_empty() => password,
                 _ => {
-                    let existing = state.identity_providers.get(id).await.map_err(|e| application_error_response("failed to load existing identity provider", e.into()))?;
+                    let existing = load_existing_identity_provider(&state, id).await?;
                     match existing {
-                        Some(artiferris_domain::sso::IdentityProviderConfig::Ldap(ldap)) => ldap.bind_password,
-                        _ => return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "bind_password is required when configuring LDAP for the first time".to_string() }))),
+                        Some(artiferris_domain::sso::IdentityProviderConfig::Ldap(ldap)) => {
+                            if !same_text(&ldap.server_url, &server_url) || !same_text(&ldap.bind_dn, &bind_dn) {
+                                return Err(bad_request(KEPT_SECRET_DESTINATION_CHANGED_LDAP));
+                            }
+                            ldap.bind_password
+                        }
+                        _ => return Err(bad_request("bind_password is required when configuring LDAP for the first time")),
                     }
                 }
             };
             if server_url.trim().is_empty() || bind_dn.trim().is_empty() || user_search_base.trim().is_empty() || user_search_filter.trim().is_empty() || email_attribute.trim().is_empty() {
                 return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "all LDAP fields except bind_password (when updating) are required".to_string() })));
+            }
+            if !(server_url.starts_with("ldaps://") || server_url.starts_with("ldap://")) {
+                return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "server_url must start with ldaps:// or ldap:// (ldap:// is upgraded with StartTLS)".to_string() })));
             }
             artiferris_domain::sso::IdentityProviderConfig::Ldap(artiferris_domain::sso::LdapConfig { server_url, bind_dn, bind_password, user_search_base, user_search_filter, email_attribute })
         }
@@ -233,10 +306,15 @@ async fn set_identity_provider(
             let client_secret = match client_secret {
                 Some(secret) if !secret.trim().is_empty() => secret,
                 _ => {
-                    let existing = state.identity_providers.get(id).await.map_err(|e| application_error_response("failed to load existing identity provider", e.into()))?;
+                    let existing = load_existing_identity_provider(&state, id).await?;
                     match existing {
-                        Some(artiferris_domain::sso::IdentityProviderConfig::Oidc(oidc)) => oidc.client_secret,
-                        _ => return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "client_secret is required when configuring OIDC for the first time".to_string() }))),
+                        Some(artiferris_domain::sso::IdentityProviderConfig::Oidc(oidc)) => {
+                            if !same_text(oidc.issuer_url.trim_end_matches('/'), issuer_url.trim_end_matches('/')) || oidc.client_id.trim() != client_id.trim() {
+                                return Err(bad_request(KEPT_SECRET_DESTINATION_CHANGED_OIDC));
+                            }
+                            oidc.client_secret
+                        }
+                        _ => return Err(bad_request("client_secret is required when configuring OIDC for the first time")),
                     }
                 }
             };
@@ -246,13 +324,18 @@ async fn set_identity_provider(
             artiferris_domain::sso::IdentityProviderConfig::Oidc(artiferris_domain::sso::OidcConfig { issuer_url, client_id, client_secret })
         }
     };
-    state.identity_providers.set(id, &config).await.map_err(|e| application_error_response("failed to set identity provider", e.into()))?;
+    // Best effort: an unreadable stored config must stay replaceable.
+    let before = previous_identity_provider(&state, id).await;
+    let audit = AdminAuditRecord { event: AdminAuditEvent::IdentityProviderSet { organization_id: id, before, after: IdentityProviderSummary::from(&config), secret_changed }, actor_id: Some(user.id) };
+    state.identity_providers.set(id, &config, Some(&audit)).await.map_err(|e| application_error_response("failed to set identity provider", e.into()))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn clear_identity_provider(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    state.identity_providers.clear(id).await.map_err(|e| application_error_response("failed to clear identity provider", e.into()))?;
+    let before = previous_identity_provider(&state, id).await;
+    let audit = AdminAuditRecord { event: AdminAuditEvent::IdentityProviderCleared { organization_id: id, before }, actor_id: Some(user.id) };
+    state.identity_providers.clear(id, Some(&audit)).await.map_err(|e| application_error_response("failed to clear identity provider", e.into()))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -269,7 +352,7 @@ mod tests {
         Config {
             database_url: String::new(),
             jwt_secret: "test-secret".to_string(),
-            secrets_encryption_key: "test-secret".to_string(),
+            secrets_encryption_key: "test-secrets-encryption-key".to_string(),
             storage_root: std::env::temp_dir().to_string_lossy().to_string(),
             bind_addr: "0.0.0.0:0".to_string(),
             cors_allowed_origin: None,
@@ -277,6 +360,8 @@ mod tests {
             public_url: "http://localhost:4200".to_string(),
             db_max_connections: artiferris_infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS,
             artiferris_base_domain: "artiferris.localhost".to_string(),
+            trusted_proxy_ips: std::collections::HashSet::new(),
+            audit_retention_days: None,
         }
     }
 
@@ -416,7 +501,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let public_org = state.organizations.find_public().await.unwrap();
         let admin_id = state.create_user.execute(public_org.id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(admin_id, true).await.unwrap();
+        state.users.set_organization_admin(admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = crate::build_router(state);
 
@@ -461,7 +546,7 @@ mod tests {
         let public_org = state.organizations.find_public().await.unwrap();
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let admin_id = state.create_user.execute(public_org.id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(admin_id, true).await.unwrap();
+        state.users.set_organization_admin(admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = crate::build_router(state);
 
@@ -540,6 +625,32 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_ldap_server_url_with_a_scheme_other_than_ldap_or_ldaps_is_rejected(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public_org = state.organizations.find_public().await.unwrap();
+        let token = bearer(&state, public_org.id, "admin", "sup3r-s3cret!", true).await;
+        let app = crate::build_router(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/organizations/{}/identity-provider", public_org.id))
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(
+                        r#"{"type":"ldap","server_url":"dc.corp.example:389","bind_dn":"cn=service,dc=corp,dc=example","bind_password":"s3cret!","user_search_base":"ou=people,dc=corp,dc=example","user_search_filter":"(uid={username})","email_attribute":"mail"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(state.identity_providers.get(public_org.id).await.unwrap(), None);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_super_admin_can_configure_oidc_for_any_organization(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
         let public_org = state.organizations.find_public().await.unwrap();
@@ -596,6 +707,7 @@ mod tests {
                     user_search_filter: "(uid={username})".to_string(),
                     email_attribute: "mail".to_string(),
                 }),
+                None,
             )
             .await
             .unwrap();
@@ -684,6 +796,7 @@ mod tests {
                     user_search_filter: "(uid={username})".to_string(),
                     email_attribute: "mail".to_string(),
                 }),
+                None,
             )
             .await
             .unwrap();
@@ -761,7 +874,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let public_org = state.organizations.find_public().await.unwrap();
         let admin_id = state.create_user.execute(public_org.id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(admin_id, true).await.unwrap();
+        state.users.set_organization_admin(admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = crate::build_router(state.clone());
 
@@ -785,7 +898,7 @@ mod tests {
         let public_org = state.organizations.find_public().await.unwrap();
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let admin_id = state.create_user.execute(public_org.id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(admin_id, true).await.unwrap();
+        state.users.set_organization_admin(admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = crate::build_router(state);
 
@@ -808,7 +921,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let public_org = state.organizations.find_public().await.unwrap();
         let admin_id = state.create_user.execute(public_org.id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(admin_id, true).await.unwrap();
+        state.users.set_organization_admin(admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = crate::build_router(state.clone());
 
@@ -836,7 +949,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let public_org = state.organizations.find_public().await.unwrap();
         let admin_id = state.create_user.execute(public_org.id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(admin_id, true).await.unwrap();
+        state.users.set_organization_admin(admin_id, true, None).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = crate::build_router(state.clone());
 
@@ -864,7 +977,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let public_org = state.organizations.find_public().await.unwrap();
         let admin_id = state.create_user.execute(public_org.id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
-        state.users.set_organization_admin(admin_id, true).await.unwrap();
+        state.users.set_organization_admin(admin_id, true, None).await.unwrap();
         let member_id = state.create_user.execute(public_org.id, "member", "sup3r-s3cret!", false).await.unwrap();
         let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
         let app = crate::build_router(state.clone());
@@ -884,6 +997,52 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
         assert!(state.users.find_by_id(member_id).await.unwrap().unwrap().is_organization_admin);
+    }
+
+    fn set_admin_request(organization_id: Uuid, target_id: Uuid, token: &str, is_organization_admin: bool) -> Request<Body> {
+        Request::builder()
+            .method("PUT")
+            .uri(format!("/api/organizations/{organization_id}/users/{target_id}/organization-admin"))
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(format!(r#"{{"is_organization_admin":{is_organization_admin}}}"#)))
+            .unwrap()
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_organization_admin_cannot_change_a_super_admins_admin_flag(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public_org = state.organizations.find_public().await.unwrap();
+        let admin_id = state.create_user.execute(public_org.id, "org-admin", "sup3r-s3cret!", false).await.unwrap();
+        state.users.set_organization_admin(admin_id, true, None).await.unwrap();
+        let token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
+        let super_admin_id = state.create_user.execute(public_org.id, "root", "sup3r-s3cret!", true).await.unwrap();
+        state.users.set_organization_admin(super_admin_id, true, None).await.unwrap();
+        let root_token = state.authenticate_user.execute("root", "sup3r-s3cret!").await.unwrap();
+        let app = crate::build_router(state.clone());
+
+        let response = app.clone().oneshot(set_admin_request(public_org.id, super_admin_id, &token, false)).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let target = state.users.find_by_id(super_admin_id).await.unwrap().unwrap();
+        assert!(target.is_organization_admin, "the flag must be untouched");
+        let me = app.oneshot(Request::builder().uri("/api/me").header("authorization", format!("Bearer {root_token}")).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(me.status(), StatusCode::OK, "the super-admin must not have been logged out");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_super_admin_can_still_change_another_super_admins_admin_flag(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public_org = state.organizations.find_public().await.unwrap();
+        let token = bearer(&state, public_org.id, "root", "sup3r-s3cret!", true).await;
+        let other_id = state.create_user.execute(public_org.id, "other-root", "sup3r-s3cret!", true).await.unwrap();
+        state.users.set_organization_admin(other_id, true, None).await.unwrap();
+        let app = crate::build_router(state.clone());
+
+        let response = app.oneshot(set_admin_request(public_org.id, other_id, &token, false)).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert!(!state.users.find_by_id(other_id).await.unwrap().unwrap().is_organization_admin);
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -934,5 +1093,213 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn listing_organizations_excludes_personal_ones(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public_org = state.organizations.find_public().await.unwrap();
+        // Inserted directly against the repository port, since create_organization never sets is_personal.
+        let personal = artiferris_domain::organization::Organization {
+            id: Uuid::new_v4(),
+            slug: artiferris_domain::organization::OrganizationSlug::parse("u-alice").unwrap(),
+            display_name: "alice".to_string(),
+            is_public: false,
+            is_personal: true,
+            created_at: chrono::Utc::now(),
+        };
+        state.organizations.create(&personal).await.unwrap();
+        let token = bearer(&state, public_org.id, "admin", "sup3r-s3cret!", true).await;
+        let app = crate::build_router(state);
+
+        let response = app
+            .oneshot(Request::builder().uri("/api/organizations").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let orgs = json.as_array().unwrap();
+        assert!(orgs.iter().any(|o| o["slug"] == "public"), "non-personal organizations must still be listed");
+        assert!(orgs.iter().all(|o| o["slug"] != "u-alice"), "a personal organization must never appear in the listing");
+    }
+
+    const LDAP_BODY_WITHOUT_SECRET: &str = r#"{"type":"ldap","server_url":"ldaps://dc.corp.example:636","bind_dn":"cn=service,dc=corp,dc=example","user_search_base":"ou=people,dc=corp,dc=example","user_search_filter":"(uid={username})","email_attribute":"mail"}"#;
+
+    async fn put_identity_provider(app: &axum::Router, token: &str, organization_id: Uuid, body: &str) -> (StatusCode, String) {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/organizations/{organization_id}/identity-provider"))
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        (status, String::from_utf8(axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec()).unwrap())
+    }
+
+    async fn seeded_ldap(state: &AppState, organization_id: Uuid) {
+        state
+            .identity_providers
+            .set(
+                organization_id,
+                &artiferris_domain::sso::IdentityProviderConfig::Ldap(artiferris_domain::sso::LdapConfig {
+                    server_url: "ldaps://dc.corp.example:636".to_string(),
+                    bind_dn: "cn=service,dc=corp,dc=example".to_string(),
+                    bind_password: "the-real-bind-password".to_string(),
+                    user_search_base: "ou=people,dc=corp,dc=example".to_string(),
+                    user_search_filter: "(uid={username})".to_string(),
+                    email_attribute: "mail".to_string(),
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn stored_ldap_password(state: &AppState, organization_id: Uuid) -> String {
+        match state.identity_providers.get(organization_id).await.unwrap() {
+            Some(artiferris_domain::sso::IdentityProviderConfig::Ldap(ldap)) => ldap.bind_password,
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_kept_ldap_bind_password_is_refused_when_the_server_or_bind_dn_changes(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public_org = state.organizations.find_public().await.unwrap();
+        let token = bearer(&state, public_org.id, "admin", "sup3r-s3cret!", true).await;
+        seeded_ldap(&state, public_org.id).await;
+        let app = crate::build_router(state.clone());
+
+        for changed in [
+            LDAP_BODY_WITHOUT_SECRET.replace("dc.corp.example:636", "attacker.example.net:636"),
+            LDAP_BODY_WITHOUT_SECRET.replace("cn=service", "cn=someone-else"),
+        ] {
+            let (status, body) = put_identity_provider(&app, &token, public_org.id, &changed).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+            assert!(body.contains("re-enter the bind password"), "got: {body}");
+        }
+        assert_eq!(stored_ldap_password(&state, public_org.id).await, "the-real-bind-password");
+        let untouched = state.identity_providers.get(public_org.id).await.unwrap();
+        assert!(matches!(untouched, Some(artiferris_domain::sso::IdentityProviderConfig::Ldap(ldap)) if ldap.server_url == "ldaps://dc.corp.example:636"));
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_kept_ldap_bind_password_still_works_for_the_same_server_and_a_new_one_moves_with_a_new_server(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public_org = state.organizations.find_public().await.unwrap();
+        let token = bearer(&state, public_org.id, "admin", "sup3r-s3cret!", true).await;
+        seeded_ldap(&state, public_org.id).await;
+        let app = crate::build_router(state.clone());
+
+        let same_server_other_case = LDAP_BODY_WITHOUT_SECRET.replace("dc.corp.example:636", "DC.Corp.Example:636").replace("(uid={username})", "(sAMAccountName={username})");
+        let (status, _) = put_identity_provider(&app, &token, public_org.id, &same_server_other_case).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(stored_ldap_password(&state, public_org.id).await, "the-real-bind-password");
+
+        let moved = LDAP_BODY_WITHOUT_SECRET.replace("dc.corp.example:636", "dc2.corp.example:636").replace("\"type\":\"ldap\"", "\"type\":\"ldap\",\"bind_password\":\"typed-again\"");
+        let (status, _) = put_identity_provider(&app, &token, public_org.id, &moved).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(stored_ldap_password(&state, public_org.id).await, "typed-again");
+    }
+
+    async fn seeded_oidc(state: &AppState, organization_id: Uuid) {
+        state
+            .identity_providers
+            .set(
+                organization_id,
+                &artiferris_domain::sso::IdentityProviderConfig::Oidc(artiferris_domain::sso::OidcConfig {
+                    issuer_url: "https://accounts.example.com".to_string(),
+                    client_id: "artiferris".to_string(),
+                    client_secret: "the-real-client-secret".to_string(),
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
+    async fn stored_oidc_secret(state: &AppState, organization_id: Uuid) -> String {
+        match state.identity_providers.get(organization_id).await.unwrap() {
+            Some(artiferris_domain::sso::IdentityProviderConfig::Oidc(oidc)) => oidc.client_secret,
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_kept_oidc_client_secret_is_refused_when_the_issuer_or_client_id_changes(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public_org = state.organizations.find_public().await.unwrap();
+        let token = bearer(&state, public_org.id, "admin", "sup3r-s3cret!", true).await;
+        seeded_oidc(&state, public_org.id).await;
+        let app = crate::build_router(state.clone());
+
+        for changed in [
+            r#"{"type":"oidc","issuer_url":"https://attacker.example.net","client_id":"artiferris"}"#,
+            r#"{"type":"oidc","issuer_url":"https://accounts.example.com","client_id":"another-client"}"#,
+        ] {
+            let (status, body) = put_identity_provider(&app, &token, public_org.id, changed).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+            assert!(body.contains("re-enter the client secret"), "got: {body}");
+        }
+        assert_eq!(stored_oidc_secret(&state, public_org.id).await, "the-real-client-secret");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_kept_oidc_client_secret_still_works_for_the_same_issuer_and_a_new_one_moves_with_a_new_issuer(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public_org = state.organizations.find_public().await.unwrap();
+        let token = bearer(&state, public_org.id, "admin", "sup3r-s3cret!", true).await;
+        seeded_oidc(&state, public_org.id).await;
+        let app = crate::build_router(state.clone());
+
+        let (status, _) = put_identity_provider(&app, &token, public_org.id, r#"{"type":"oidc","issuer_url":"https://Accounts.Example.com/","client_id":"artiferris"}"#).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(stored_oidc_secret(&state, public_org.id).await, "the-real-client-secret");
+
+        let (status, _) = put_identity_provider(&app, &token, public_org.id, r#"{"type":"oidc","issuer_url":"https://login.example.org","client_id":"artiferris","client_secret":"typed-again"}"#).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(stored_oidc_secret(&state, public_org.id).await, "typed-again");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_identity_provider_whose_secret_cannot_be_read_is_reported_as_such_and_can_be_replaced(pool: sqlx::PgPool) {
+        let state = AppState::build(pool.clone(), &test_config());
+        let public_org = state.organizations.find_public().await.unwrap();
+        let token = bearer(&state, public_org.id, "admin", "sup3r-s3cret!", true).await;
+        seeded_oidc(&state, public_org.id).await;
+        // Sealed by a server with another SECRETS_ENCRYPTION_KEY.
+        sqlx::query("UPDATE organization_identity_providers SET config = jsonb_set(config, '{client_secret_encrypted}', to_jsonb($1::text))")
+            .bind(format!("af1.00000000.{}", "ab".repeat(40)))
+            .execute(&pool)
+            .await
+            .unwrap();
+        let app = crate::build_router(state.clone());
+
+        let read = app
+            .clone()
+            .oneshot(Request::builder().uri(format!("/api/organizations/{}/identity-provider", public_org.id)).header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(read.status(), StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_slice(&axum::body::to_bytes(read.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert_eq!(json["secret_unreadable"], true);
+        assert!(json.get("client_secret_set").is_none());
+
+        let (status, body) = put_identity_provider(&app, &token, public_org.id, r#"{"type":"oidc","issuer_url":"https://accounts.example.com","client_id":"artiferris"}"#).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body.contains("enter it again"), "got: {body}");
+
+        let (status, _) = put_identity_provider(&app, &token, public_org.id, r#"{"type":"oidc","issuer_url":"https://accounts.example.com","client_id":"artiferris","client_secret":"fresh"}"#).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(stored_oidc_secret(&state, public_org.id).await, "fresh");
     }
 }

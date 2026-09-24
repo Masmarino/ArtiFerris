@@ -1,0 +1,52 @@
+<app-public-layout>
+  <header class="explorer-page__header">
+    <h1>Explorer les paquets publics</h1>
+    <p>Les paquets npm et les images Docker publics hébergés sur cette instance.</p>
+  </header>
+
+  <section aria-labelledby="explorer-catalogs-heading">
+    <h2 id="explorer-catalogs-heading" class="sr-only">Catalogues</h2>
+    @if (loading()) {
+      <div class="loading-state"><gbt-spinner label="Chargement des catalogues…" /></div>
+    } @else if (failed()) {
+      <p class="gbt-form-error" role="alert">{{ failedMessage() }}</p>
+      <gbt-button text="Réessayer" (clicked)="retry()" />
+    } @else {
+      <ul class="explorer-page__catalogs">
+        @for (catalog of catalogs(); track catalog.name) {
+          <li>
+            <gbt-card [hoverable]="true">
+              <a class="explorer-page__catalog" [routerLink]="['/', catalog.name]">
+                <span class="explorer-page__catalog-name">{{ catalog.name }}</span>
+                <span class="explorer-page__catalog-label">{{ catalog.label }}</span>
+                <span class="explorer-page__catalog-count">{{ countLabel(catalog) }}</span>
+              </a>
+            </gbt-card>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  @if (showPopular()) {
+    <section class="explorer-page__popular" aria-labelledby="explorer-popular-heading">
+      <h2 id="explorer-popular-heading" class="explorer-page__popular-heading">
+        Populaires cette semaine
+      </h2>
+      @if (popularLoading()) {
+        <div class="loading-state"><gbt-spinner label="Chargement des paquets populaires…" /></div>
+      } @else if (popularFailed()) {
+        <p class="gbt-form-error" role="alert">{{ popularFailedMessage() }}</p>
+        <gbt-button text="Réessayer" (clicked)="retryPopular()" />
+      } @else {
+        <ol class="explorer-page__popular-list">
+          @for (entry of popularEntries(); track entry.repository.name + entry.kind + entry.name) {
+            <li><app-catalog-result-card [entry]="entry" /></li>
+          }
+        </ol>
+      }
+    </section>
+  }
+
+  <app-catalog-search [catalogs]="catalogs()" />
+</app-public-layout>

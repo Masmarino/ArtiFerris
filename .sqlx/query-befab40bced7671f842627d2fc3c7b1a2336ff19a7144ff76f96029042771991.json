@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_blobs b SET reference_count = actual.references FROM ( SELECT blob.digest, count(dmb.manifest_id) AS references FROM docker_blobs blob LEFT JOIN docker_manifest_blobs dmb ON dmb.blob_digest = blob.digest WHERE blob.created_at < $1 GROUP BY blob.digest ) actual WHERE actual.digest = b.digest AND b.reference_count <> actual.references",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "befab40bced7671f842627d2fc3c7b1a2336ff19a7144ff76f96029042771991"
+}

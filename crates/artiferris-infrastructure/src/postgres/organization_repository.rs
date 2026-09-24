@@ -21,6 +21,7 @@ struct OrganizationRow {
     slug: String,
     display_name: String,
     is_public: bool,
+    is_personal: bool,
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -31,6 +32,7 @@ impl OrganizationRow {
             slug: OrganizationSlug::parse(&self.slug)?,
             display_name: self.display_name,
             is_public: self.is_public,
+            is_personal: self.is_personal,
             created_at: self.created_at,
         })
     }
@@ -40,11 +42,12 @@ impl OrganizationRow {
 impl OrganizationRepositoryPort for PostgresOrganizationRepository {
     async fn create(&self, org: &Organization) -> Result<(), DomainError> {
         sqlx::query!(
-            "INSERT INTO organizations (id, slug, display_name, is_public, created_at) VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO organizations (id, slug, display_name, is_public, is_personal, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
             org.id,
             org.slug.as_str(),
             org.display_name,
             org.is_public,
+            org.is_personal,
             org.created_at,
         )
         .execute(&self.pool)
@@ -54,7 +57,7 @@ impl OrganizationRepositoryPort for PostgresOrganizationRepository {
     }
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Organization>, DomainError> {
-        let row = sqlx::query_as!(OrganizationRow, "SELECT id, slug, display_name, is_public, created_at FROM organizations WHERE id = $1", id)
+        let row = sqlx::query_as!(OrganizationRow, "SELECT id, slug, display_name, is_public, is_personal, created_at FROM organizations WHERE id = $1", id)
             .fetch_optional(&self.pool)
             .await
             .infra_err()?;
@@ -62,7 +65,7 @@ impl OrganizationRepositoryPort for PostgresOrganizationRepository {
     }
 
     async fn find_by_slug(&self, slug: &OrganizationSlug) -> Result<Option<Organization>, DomainError> {
-        let row = sqlx::query_as!(OrganizationRow, "SELECT id, slug, display_name, is_public, created_at FROM organizations WHERE slug = $1", slug.as_str())
+        let row = sqlx::query_as!(OrganizationRow, "SELECT id, slug, display_name, is_public, is_personal, created_at FROM organizations WHERE slug = $1", slug.as_str())
             .fetch_optional(&self.pool)
             .await
             .infra_err()?;
@@ -70,7 +73,7 @@ impl OrganizationRepositoryPort for PostgresOrganizationRepository {
     }
 
     async fn find_public(&self) -> Result<Organization, DomainError> {
-        let row = sqlx::query_as!(OrganizationRow, "SELECT id, slug, display_name, is_public, created_at FROM organizations WHERE is_public")
+        let row = sqlx::query_as!(OrganizationRow, "SELECT id, slug, display_name, is_public, is_personal, created_at FROM organizations WHERE is_public")
             .fetch_one(&self.pool)
             .await
             .infra_err()?;
@@ -78,7 +81,7 @@ impl OrganizationRepositoryPort for PostgresOrganizationRepository {
     }
 
     async fn list_all(&self) -> Result<Vec<Organization>, DomainError> {
-        let rows = sqlx::query_as!(OrganizationRow, "SELECT id, slug, display_name, is_public, created_at FROM organizations ORDER BY created_at")
+        let rows = sqlx::query_as!(OrganizationRow, "SELECT id, slug, display_name, is_public, is_personal, created_at FROM organizations ORDER BY created_at")
             .fetch_all(&self.pool)
             .await
             .infra_err()?;
@@ -107,6 +110,7 @@ mod tests {
             slug: OrganizationSlug::parse("acme").unwrap(),
             display_name: "Acme Corp".to_string(),
             is_public: false,
+            is_personal: false,
             created_at: Utc::now(),
         };
         repo.create(&org).await.unwrap();
@@ -130,6 +134,7 @@ mod tests {
             slug: OrganizationSlug::parse("acme").unwrap(),
             display_name: "Acme Corp".to_string(),
             is_public: false,
+            is_personal: false,
             created_at: Utc::now(),
         };
         repo.create(&org).await.unwrap();
@@ -138,5 +143,25 @@ mod tests {
         assert_eq!(all.len(), 2);
         assert!(all.iter().any(|o| o.is_public));
         assert!(all.iter().any(|o| o.id == org.id));
+    }
+
+    #[sqlx::test]
+    async fn creating_a_personal_organization_round_trips_the_flag(pool: PgPool) {
+        let repo = PostgresOrganizationRepository::new(pool);
+        let org = Organization {
+            id: Uuid::new_v4(),
+            slug: OrganizationSlug::parse("u-alice").unwrap(),
+            display_name: "alice".to_string(),
+            is_public: false,
+            is_personal: true,
+            created_at: Utc::now(),
+        };
+        repo.create(&org).await.unwrap();
+
+        let found = repo.find_by_id(org.id).await.unwrap().unwrap();
+        assert!(found.is_personal);
+
+        let by_slug = repo.find_by_slug(&OrganizationSlug::parse("u-alice").unwrap()).await.unwrap().unwrap();
+        assert!(by_slug.is_personal);
     }
 }

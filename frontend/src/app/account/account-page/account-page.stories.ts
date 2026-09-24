@@ -1,10 +1,12 @@
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite'
 import { signal } from '@angular/core'
-import { expect, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test'
 import { of } from 'rxjs'
 import { AccountPage } from './account-page'
 import { MeService } from '../../shell/application/me.service'
 import { MfaService } from '../application/mfa.service'
+import { AuthService } from '../../auth/application/auth.service'
+import { SessionRevocationService } from '../../auth/application/session-revocation.service'
 import { ApiTokensApplicationService } from '../../tokens/application/api-tokens.application-service'
 import type { MfaStatus, PasskeySummary } from '../domain/mfa.types'
 import type { ApiToken } from '../../tokens/domain/api-token.entity'
@@ -57,6 +59,8 @@ function fakeTokens(
   return { list: () => of([]), ...overrides }
 }
 
+const signOutAndRedirect = fn()
+
 const meta: Meta<AccountPage> = {
   title: 'Account/AccountPage',
   component: AccountPage,
@@ -66,9 +70,12 @@ const meta: Meta<AccountPage> = {
         { provide: MeService, useValue: fakeMe() },
         { provide: MfaService, useValue: fakeMfa() },
         { provide: ApiTokensApplicationService, useValue: fakeTokens() },
+        { provide: SessionRevocationService, useValue: { signOutAndRedirect } },
+        { provide: AuthService, useValue: { logoutEverywhere: () => of(undefined) } },
       ],
     }),
   ],
+  beforeEach: () => signOutAndRedirect.mockClear(),
 }
 export default meta
 
@@ -105,7 +112,7 @@ export const PasswordMismatch: Story = {
   },
 }
 
-/** Filling in a valid, matching password and submitting resets the form. */
+/** The backend ends every session on a password change, so the user is signed out afterwards. */
 export const ChangingPassword: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -116,7 +123,8 @@ export const ChangingPassword: Story = {
       'correct-horse-1',
     )
     await userEvent.click(canvas.getByRole('button', { name: 'Changer le mot de passe' }))
-    await waitFor(() => expect(canvas.getByLabelText('Mot de passe actuel *')).toHaveValue(''))
+    await waitFor(() => expect(signOutAndRedirect).toHaveBeenCalledTimes(1))
+    expect(canvas.getByLabelText('Mot de passe actuel *')).toHaveValue('')
   },
 }
 
@@ -130,7 +138,7 @@ export const SwitchingToTheSecurityTab: Story = {
         canvas.getByText("La double authentification n'est pas activée sur ce compte."),
       ).toBeInTheDocument(),
     )
-    expect(canvas.getByText("Aucune clé d'accès enregistrée.")).toBeInTheDocument()
+    expect(canvas.getByText("Aucune clé d'accès")).toBeInTheDocument()
   },
 }
 

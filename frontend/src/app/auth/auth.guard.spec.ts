@@ -39,4 +39,24 @@ describe('authGuard', () => {
 
     expect(result).toEqual(router.createUrlTree(['/login']))
   })
+
+  it('remembers the requested page so login can return to it', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        ...authProviders,
+      ],
+    })
+    const router = TestBed.inject(Router)
+
+    const result = TestBed.runInInjectionContext(() =>
+      authGuard({} as never, { url: '/repositories/repo-1' } as never),
+    )
+
+    expect(result).toEqual(
+      router.createUrlTree(['/login'], { queryParams: { returnUrl: '/repositories/repo-1' } }),
+    )
+  })
 })

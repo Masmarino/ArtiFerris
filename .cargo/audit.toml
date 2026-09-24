@@ -1,0 +1,6 @@
+[advisories]
+# RUSTSEC-2023-0071 (Marvin Attack, RSA timing side-channel): `rsa` comes in through openidconnect and
+# jsonwebtoken (rust_crypto), and ArtiFerris only verifies RSA signatures through either, which is a public-key
+# operation. Nothing here touches an RSA private key, and no patched `rsa` release exists yet.
+# Re-check when either dependency's use changes or once a fixed `rsa` ships.
+ignore = ["RUSTSEC-2023-0071"]

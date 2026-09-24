@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing'
-import { of } from 'rxjs'
+import { BehaviorSubject, of } from 'rxjs'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router'
@@ -12,6 +12,7 @@ import { userProviders } from '../infrastructure/user.providers'
 import { repositoryProviders } from '../../repositories/infrastructure/repository.providers'
 import { MeService } from '../../shell/application/me.service'
 import { ToastService } from '../../shared/toast.service'
+import { ConfirmService } from '../../shared/confirm.service'
 
 describe('UserDetail', () => {
   afterEach(() => {
@@ -19,7 +20,8 @@ describe('UserDetail', () => {
   })
 
   // Defaults to a super-admin viewer — org-admin restrictions get their own tests below.
-  function setup(options?: { isSuperAdmin?: boolean }) {
+  function setup(options?: { isSuperAdmin?: boolean; confirmed?: boolean }) {
+    const ask = vi.fn().mockResolvedValue(options?.confirmed ?? true)
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -35,9 +37,11 @@ describe('UserDetail', () => {
           },
         },
         { provide: MeService, useValue: { isSuperAdmin: () => options?.isSuperAdmin ?? true } },
+        { provide: ConfirmService, useValue: { ask } },
       ],
     })
     return {
+      ask,
       fixture: TestBed.createComponent(UserDetail),
       httpMock: TestBed.inject(HttpTestingController),
     }
@@ -128,9 +132,8 @@ describe('UserDetail', () => {
     expect(fixture.componentInstance.permissions()[0].role).toBe('write')
   })
 
-  it('deletes the user and navigates to the users list when confirmed', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const { fixture, httpMock } = setup()
+  it('deletes the user and navigates to the users list when confirmed', async () => {
+    const { fixture, httpMock, ask } = setup()
     const router = TestBed.inject(Router)
     vi.spyOn(router, 'navigate')
 
@@ -141,9 +144,11 @@ describe('UserDetail', () => {
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
-    fixture.componentInstance.deleteUser()
+    await fixture.componentInstance.deleteUser()
 
-    expect(window.confirm).toHaveBeenCalledWith('Supprimer l\'utilisateur "florian" ?')
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({ heading: "Supprimer l'utilisateur", typeToConfirm: 'florian' }),
+    )
     const deleteReq = httpMock.expectOne('/api/users/user-2')
     expect(deleteReq.request.method).toBe('DELETE')
     deleteReq.flush(null)
@@ -151,9 +156,8 @@ describe('UserDetail', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/users'])
   })
 
-  it('does not delete the user when the confirmation is cancelled', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const { fixture, httpMock } = setup()
+  it('does not delete the user when the confirmation is cancelled', async () => {
+    const { fixture, httpMock, ask } = setup({ confirmed: false })
     const router = TestBed.inject(Router)
     vi.spyOn(router, 'navigate')
 
@@ -164,15 +168,14 @@ describe('UserDetail', () => {
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
-    fixture.componentInstance.deleteUser()
+    await fixture.componentInstance.deleteUser()
 
-    expect(window.confirm).toHaveBeenCalled()
+    expect(ask).toHaveBeenCalled()
     httpMock.expectNone('/api/users/user-2')
     expect(router.navigate).not.toHaveBeenCalled()
   })
 
   it('revokes a permission via the editor for the correct repository, keeping the user id fixed', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const { fixture, httpMock } = setup()
 
     fixture.detectChanges()
@@ -217,9 +220,8 @@ describe('UserDetail', () => {
     expect(fixture.componentInstance.permissions()).toEqual([])
   })
 
-  it('promotes a user to super-admin after confirmation', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const { fixture, httpMock } = setup()
+  it('promotes a user to super-admin after confirmation', async () => {
+    const { fixture, httpMock, ask } = setup()
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
@@ -227,10 +229,13 @@ describe('UserDetail', () => {
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
-    fixture.componentInstance.setSuperAdmin()
+    await fixture.componentInstance.setSuperAdmin()
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      'Promouvoir "florian" au rang de super-administrateur ?',
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        heading: 'Promouvoir en super-administrateur',
+        message: 'Promouvoir "florian" au rang de super-administrateur ?',
+      }),
     )
 
     const req = httpMock.expectOne('/api/users/user-2/super-admin')
@@ -246,9 +251,8 @@ describe('UserDetail', () => {
     expect(fixture.componentInstance.user()?.is_super_admin).toBe(true)
   })
 
-  it('shows an error when demoting the last super-admin is rejected', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const { fixture, httpMock } = setup()
+  it('shows an error when demoting the last super-admin is rejected', async () => {
+    const { fixture, httpMock, ask } = setup()
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
@@ -256,10 +260,13 @@ describe('UserDetail', () => {
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
-    fixture.componentInstance.setSuperAdmin()
+    await fixture.componentInstance.setSuperAdmin()
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      'Retirer le rang de super-administrateur à "florian" ?',
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        heading: 'Retirer le rang de super-administrateur',
+        message: 'Retirer le rang de super-administrateur à "florian" ?',
+      }),
     )
 
     const req = httpMock.expectOne('/api/users/user-2/super-admin')
@@ -272,8 +279,7 @@ describe('UserDetail', () => {
     })
   })
 
-  it('shows a generic error when a non-conflict failure occurs while promoting', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('shows a generic error when a non-conflict failure occurs while promoting', async () => {
     const { fixture, httpMock } = setup()
     fixture.detectChanges()
     httpMock
@@ -282,7 +288,7 @@ describe('UserDetail', () => {
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
-    fixture.componentInstance.setSuperAdmin()
+    await fixture.componentInstance.setSuperAdmin()
 
     const req = httpMock.expectOne('/api/users/user-2/super-admin')
     req.flush({ error: 'server error' }, { status: 500, statusText: 'Internal Server Error' })
@@ -294,9 +300,8 @@ describe('UserDetail', () => {
     })
   })
 
-  it('does not change super-admin status when the confirmation is cancelled', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const { fixture, httpMock } = setup()
+  it('does not change super-admin status when the confirmation is cancelled', async () => {
+    const { fixture, httpMock } = setup({ confirmed: false })
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
@@ -304,7 +309,7 @@ describe('UserDetail', () => {
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
-    fixture.componentInstance.setSuperAdmin()
+    await fixture.componentInstance.setSuperAdmin()
 
     httpMock.expectNone('/api/users/user-2/super-admin')
   })
@@ -556,5 +561,106 @@ describe('UserDetail', () => {
       'Donne un accès complet à toutes les organisations et à leur administration.',
     )
     expect(texts).toContain('Suppression définitive du compte.')
+  })
+
+  describe('navigating from one user to another', () => {
+    const PERMISSION_A = {
+      repository_id: 'repo-a',
+      repository_name: 'a-repo',
+      format: 'npm',
+      role: 'write',
+    }
+
+    function setupNavigable() {
+      const paramMap$ = new BehaviorSubject(convertToParamMap({ id: 'user-a' }))
+      TestBed.configureTestingModule({
+        providers: [
+          provideHttpClient(),
+          provideHttpClientTesting(),
+          provideRouter([]),
+          ...userProviders,
+          ...repositoryProviders,
+          {
+            provide: ActivatedRoute,
+            useValue: { snapshot: { paramMap: paramMap$.value }, paramMap: paramMap$ },
+          },
+          { provide: MeService, useValue: { isSuperAdmin: () => true } },
+          { provide: ConfirmService, useValue: { ask: vi.fn().mockResolvedValue(true) } },
+        ],
+      })
+      const fixture = TestBed.createComponent(UserDetail)
+      const httpMock = TestBed.inject(HttpTestingController)
+      fixture.detectChanges()
+      httpMock
+        .expectOne('/api/users/user-a')
+        .flush({ id: 'user-a', username: 'alice', is_super_admin: false })
+      httpMock.expectOne('/api/users/user-a/permissions').flush([PERMISSION_A])
+      httpMock.expectOne('/api/repositories').flush([])
+      fixture.detectChanges()
+      const goTo = (id: string) => {
+        paramMap$.next(convertToParamMap({ id }))
+        fixture.detectChanges()
+      }
+      return { fixture, httpMock, goTo }
+    }
+
+    it("drops user A's data while user B loads", () => {
+      const { fixture, httpMock, goTo } = setupNavigable()
+      fixture.componentInstance.openRoleEditor(PERMISSION_A as never)
+      fixture.componentInstance.grantRepositoryIds.set(['repo-a'])
+
+      goTo('user-b')
+
+      const page = fixture.componentInstance
+      expect(page.user()).toBeNull()
+      expect(page.permissions()).toEqual([])
+      expect(page.editingPermission()).toBeNull()
+      expect(page.grantRepositoryIds()).toEqual([])
+      expect(fixture.nativeElement.textContent).not.toContain('alice')
+      httpMock.match(() => true)
+    })
+
+    it("cannot send B's id with A's permission entry", () => {
+      const { fixture, httpMock, goTo } = setupNavigable()
+      fixture.componentInstance.openRoleEditor(PERMISSION_A as never)
+
+      goTo('user-b')
+      fixture.componentInstance.changeRole('read')
+      fixture.componentInstance.revokeFromEditor()
+
+      httpMock.expectNone((req) => req.url.includes('/permissions/user-b'))
+      httpMock.match(() => true)
+    })
+
+    it("does not let A's late grant answer touch B's page", () => {
+      const { fixture, httpMock, goTo } = setupNavigable()
+      fixture.componentInstance.openRoleEditor(PERMISSION_A as never)
+      fixture.componentInstance.changeRole('read')
+      const grantA = httpMock.expectOne('/api/repositories/repo-a/permissions/user-a')
+
+      goTo('user-b')
+      httpMock.expectOne('/api/users/user-b').flush({ id: 'user-b', username: 'bob' })
+      httpMock.expectOne('/api/users/user-b/permissions').flush([])
+      grantA.flush(null)
+
+      httpMock.expectNone('/api/users/user-a/permissions')
+      httpMock.expectNone('/api/users/user-b/permissions')
+      expect(fixture.componentInstance.permissions()).toEqual([])
+      expect(fixture.componentInstance.savingRole()).toBe(false)
+    })
+
+    it('shows the load error when the permissions request fails', () => {
+      const { fixture, httpMock, goTo } = setupNavigable()
+
+      goTo('user-b')
+      httpMock.expectOne('/api/users/user-b').flush({ id: 'user-b', username: 'bob' })
+      httpMock
+        .expectOne('/api/users/user-b/permissions')
+        .flush({}, { status: 500, statusText: 'Error' })
+      fixture.detectChanges()
+
+      expect(fixture.componentInstance.loadError()).toBe(true)
+      expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeTruthy()
+    })
   })
 })

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT payload->>'ip' FROM domain_events WHERE event_type = 'DockerTokenFailed'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "?column?",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a08e2c95de5e60c0775303aa336d097c44f91fa6ad201e3d934a818741f0f373"
+}

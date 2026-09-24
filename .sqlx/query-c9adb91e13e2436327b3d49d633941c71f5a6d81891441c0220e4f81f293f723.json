@@ -6,22 +6,46 @@
       {
         "ordinal": 0,
         "name": "logo_bytes",
-        "type_info": "Bytea"
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "branding_settings",
+            "name": "logo_bytes"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "logo_content_type",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "branding_settings",
+            "name": "logo_content_type"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "favicon_bytes",
-        "type_info": "Bytea"
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "branding_settings",
+            "name": "favicon_bytes"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "favicon_content_type",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "branding_settings",
+            "name": "favicon_content_type"
+          }
+        }
       }
     ],
     "parameters": {

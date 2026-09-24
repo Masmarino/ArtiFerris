@@ -1,0 +1,37 @@
+@if (confirm.pending(); as pending) {
+  @if (pending.options.typeToConfirm; as text) {
+    <gbt-confirm-danger-modal
+      [isOpen]="true"
+      [heading]="pending.options.heading"
+      [message]="pending.options.message"
+      [confirmText]="text"
+      [confirmInputLabel]="'Saisissez « ' + text + ' » pour confirmer'"
+      [confirmLabel]="pending.options.confirmLabel ?? 'Confirmer'"
+      [cancelLabel]="pending.options.cancelLabel ?? 'Annuler'"
+      closeLabel="Fermer"
+      (confirmed)="confirm.answer(true)"
+      (closed)="confirm.answer(false)"
+    />
+  } @else {
+    <gbt-modal
+      [isOpen]="true"
+      [heading]="pending.options.heading"
+      closeLabel="Fermer"
+      (closed)="confirm.answer(false)"
+    >
+      <p>{{ pending.options.message }}</p>
+      <div class="confirm-host__actions">
+        <gbt-button
+          variant="secondary"
+          [text]="pending.options.cancelLabel ?? 'Annuler'"
+          (clicked)="confirm.answer(false)"
+        />
+        <gbt-button
+          [variant]="pending.options.danger ? 'danger' : 'primary'"
+          [text]="pending.options.confirmLabel ?? 'Confirmer'"
+          (clicked)="confirm.answer(true)"
+        />
+      </div>
+    </gbt-modal>
+  }
+}

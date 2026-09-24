@@ -30,6 +30,12 @@ pub trait StorageBackendPort: Send + Sync {
     /// whole file into memory before the first byte goes out.
     async fn read_stream(&self, repository_id: Uuid, path: &str) -> Result<ByteStream, StorageError>;
     async fn delete(&self, repository_id: Uuid, path: &str) -> Result<(), StorageError>;
+    /// Removes everything stored under `repository_id`'s own root, not just one object at a time —
+    /// used by the repository deletion sweep (B-39) to reclaim a hard-deleted repository's on-disk
+    /// files (npm tarballs) once its DB rows are gone. A repository with nothing on disk (or whose
+    /// directory never existed, e.g. a Docker-format repository, which never uses this backend) is a
+    /// no-op, matching `delete`'s "already gone" semantics.
+    async fn delete_repository(&self, repository_id: Uuid) -> Result<(), StorageError>;
     async fn used_bytes(&self, repository_id: Uuid) -> Result<u64, StorageError>;
     async fn is_healthy(&self) -> bool;
     /// Disk-level total/free — distinct from `used_bytes` (one repository's own usage).

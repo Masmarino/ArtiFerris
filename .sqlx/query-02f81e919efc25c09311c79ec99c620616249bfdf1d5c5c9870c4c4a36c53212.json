@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO npm_unpublished_versions (package_repository_id, package_name, version) VALUES ($1, $2, $3) ON CONFLICT (package_repository_id, package_name, version) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "02f81e919efc25c09311c79ec99c620616249bfdf1d5c5c9870c4c4a36c53212"
+}

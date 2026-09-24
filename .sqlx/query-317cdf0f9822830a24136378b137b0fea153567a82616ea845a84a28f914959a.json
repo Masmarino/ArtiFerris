@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM docker_repository_blobs l USING package_repository_projections r WHERE r.id = l.package_repository_id AND r.repo_type = 'hosted' AND l.created_at < $1 AND NOT EXISTS ( SELECT 1 FROM docker_manifest_blobs dmb JOIN docker_manifests dm ON dm.id = dmb.manifest_id WHERE dm.package_repository_id = l.package_repository_id AND dmb.blob_digest = l.blob_digest )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "317cdf0f9822830a24136378b137b0fea153567a82616ea845a84a28f914959a"
+}

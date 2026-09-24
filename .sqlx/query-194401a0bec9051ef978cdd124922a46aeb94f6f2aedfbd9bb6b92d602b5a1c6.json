@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE docker_blob_uploads SET expires_at = now() + interval '1 hour' WHERE id = $1 RETURNING staging_path, bytes_received, sealed_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "staging_path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_blob_uploads",
+            "name": "staging_path"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "bytes_received",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "docker_blob_uploads",
+            "name": "bytes_received"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "sealed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "docker_blob_uploads",
+            "name": "sealed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "194401a0bec9051ef978cdd124922a46aeb94f6f2aedfbd9bb6b92d602b5a1c6"
+}

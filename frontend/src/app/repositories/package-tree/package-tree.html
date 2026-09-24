@@ -5,7 +5,11 @@
 } @else if (tree(); as t) {
   @if (t.format === 'npm') {
     @if (t.packages.length === 0) {
-      <p>Aucun package publié.</p>
+      <gbt-empty-state
+        illustration="folder"
+        heading="Aucun package"
+        message="Les packages npm publiés dans ce dépôt apparaîtront ici."
+      />
     } @else {
       <ul class="package-tree">
         @for (row of npmRows(); track row.pkg.name) {
@@ -17,13 +21,22 @@
               <app-vulnerability-summary [summary]="row.pkg.vulnerability_summary" />
               <gbt-icon name="chevron-down" class="package-tree__chevron" aria-hidden="true" />
             </a>
+            @if (row.pkg.truncated) {
+              <p class="package-tree__hint" data-testid="truncated-hint">
+                Seules les {{ row.pkg.versions.length }} plus récentes sont listées
+              </p>
+            }
           </li>
         }
       </ul>
     }
   } @else {
     @if (t.images.length === 0) {
-      <p>Aucune image publiée.</p>
+      <gbt-empty-state
+        illustration="tag"
+        heading="Aucune image"
+        message="Les images docker poussées dans ce dépôt apparaîtront ici."
+      />
     } @else {
       <ul class="package-tree">
         @for (row of dockerRows(); track row.image.image_name) {
@@ -35,9 +48,28 @@
               <app-vulnerability-summary [summary]="row.image.vulnerability_summary" />
               <gbt-icon name="chevron-down" class="package-tree__chevron" aria-hidden="true" />
             </a>
+            @if (row.image.truncated) {
+              <p class="package-tree__hint" data-testid="truncated-hint">
+                Seules les {{ row.image.tags.length }} plus récentes sont listées
+              </p>
+            }
           </li>
         }
       </ul>
     }
+  }
+  @if (hasMore()) {
+    <div class="package-tree__more">
+      @if (loadMoreError()) {
+        <p class="gbt-form-error" role="alert">Échec du chargement de la suite.</p>
+      }
+      <gbt-button
+        variant="secondary"
+        text="Charger plus"
+        [loading]="loadingMore()"
+        (clicked)="loadMore()"
+        loadingLabel="Chargement en cours"
+      />
+    </div>
   }
 }

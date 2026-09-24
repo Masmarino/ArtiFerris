@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT image_name FROM docker_tags WHERE package_repository_id = $1 AND ($2::text IS NULL OR image_name COLLATE \"C\" > $2 COLLATE \"C\") GROUP BY image_name ORDER BY image_name COLLATE \"C\" LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "image_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_tags",
+            "name": "image_name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3d45054ba23f98418d63dfb3ab0a9ce5c9bb22900a9bfc84f1534ff525f671c5"
+}

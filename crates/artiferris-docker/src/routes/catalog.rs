@@ -14,7 +14,7 @@ pub fn router() -> Router<DockerState> {
 }
 
 async fn list_catalog(State(state): State<DockerState>, resolved_org: ResolvedOrganization, user: DockerAuthUser) -> Response {
-    match state.list_registry_catalog.execute(resolved_org.0.id, user.user_id).await {
+    match state.list_registry_catalog.execute(resolved_org.0.id, user.user_id, user.is_super_admin).await {
         Ok(names) => Json(json!({ "repositories": names })).into_response(),
         Err(e) => docker_error_response(e).into_response(),
     }
@@ -29,7 +29,7 @@ mod tests {
     use tower::ServiceExt;
     use uuid::Uuid;
 
-    use crate::route_test_support::{issue_test_token, seed_permission, seed_repository, test_state};
+    use crate::route_test_support::{issue_test_token, seed_bare_user, seed_permission, seed_repository, test_state};
 
     async fn push_config_blob(app: &axum::Router, repo_name: &str, push_token: &str, config_bytes: &[u8]) -> Digest {
         let digest = Digest::of(config_bytes);
@@ -85,13 +85,13 @@ mod tests {
         let readable_name = format!("repo-{readable_id}");
         let unreadable_name = format!("repo-{unreadable_id}");
         let state = test_state(pool.clone(), dir.path()).await;
-        let user_id = Uuid::new_v4();
+        let user_id = seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await;
         seed_permission(&pool, user_id, readable_id, "read").await;
         let push_token = issue_test_token(&state, user_id, readable_id, &readable_name, "myimage", &["push"]);
         let app = crate::router(state.clone());
         push_manifest(&app, &readable_name, &push_token, "myimage", b"catalog-config-bytes").await;
 
-        let other_user_id = Uuid::new_v4();
+        let other_user_id = seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await;
         let admin_push_token = issue_test_token(&state, other_user_id, unreadable_id, &unreadable_name, "secretimage", &["push"]);
         push_manifest(&app, &unreadable_name, &admin_push_token, "secretimage", b"unreadable-config-bytes").await;
 
@@ -131,6 +131,7 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -142,6 +143,7 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("other").unwrap(),
                 display_name: "Other".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -150,7 +152,7 @@ mod tests {
         let acme_repo_id = Uuid::new_v4();
         seed_repository(&pool, acme_id, acme_repo_id, "docker", "hosted").await;
         let acme_repo_name = format!("repo-{acme_repo_id}");
-        let acme_user_id = Uuid::new_v4();
+        let acme_user_id = seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await;
         seed_permission(&pool, acme_user_id, acme_repo_id, "read").await;
         let acme_push_token = crate::route_test_support::issue_test_token_for_org(&state, acme_user_id, acme_id, false, acme_repo_id, &acme_repo_name, "myimage", &["push"]);
         let app = crate::router(state.clone());
@@ -199,7 +201,7 @@ mod tests {
 
         // Same super-admin scope query, but hitting the OTHER organization's own subdomain —
         // must not see "acme"'s repository at all, regardless of read permissions.
-        let other_user_id = Uuid::new_v4();
+        let other_user_id = seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await;
         seed_permission(&pool, other_user_id, acme_repo_id, "read").await;
         let catalog_token = state.token_issuer.issue(other_user_id, other_id, false, None).unwrap();
         let response = app
@@ -227,6 +229,34 @@ mod tests {
         let app = crate::router(test_state(pool, dir.path()).await);
 
         let response = app.oneshot(Request::builder().uri("/_catalog").body(Body::empty()).unwrap()).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// `_catalog` takes a non-optional `DockerAuthUser` — an anonymous token (#73) must still be
+    /// rejected here exactly like a missing `Authorization` header, not silently accepted as "some
+    /// user with an empty catalog".
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn catalog_rejects_an_anonymous_token(pool: sqlx::PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let app = crate::router(test_state(pool, dir.path()).await);
+
+        let token_response =
+            app.clone().oneshot(Request::builder().uri("/token").body(Body::empty()).unwrap()).await.unwrap();
+        let token_body = axum::body::to_bytes(token_response.into_body(), usize::MAX).await.unwrap();
+        let token_json: serde_json::Value = serde_json::from_slice(&token_body).unwrap();
+        let anonymous_token = token_json["token"].as_str().unwrap();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_catalog")
+                    .header(axum::http::header::AUTHORIZATION, format!("Bearer {anonymous_token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }

@@ -3,7 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideHttpClient } from '@angular/common/http'
 import { Router, provideRouter } from '@angular/router'
 import { By } from '@angular/platform-browser'
-import { Select, Table } from '@masmarino/gabarit'
+import { EmptyState, Select, Spinner, Table } from '@masmarino/gabarit'
 import { UsersList } from './users-list'
 import { userProviders } from '../infrastructure/user.providers'
 import { organizationsProviders } from '../../admin/infrastructure/organizations.providers'
@@ -73,14 +73,54 @@ describe('UsersList', () => {
 
     fixture.detectChanges()
 
-    expect(fixture.nativeElement.textContent).toContain('Chargement…')
+    expect(fixture.debugElement.query(By.directive(Spinner))).toBeTruthy()
+    expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain(
+      'Chargement…',
+    )
     expect(fixture.debugElement.query(By.directive(Table))).toBeNull()
 
     flushInitialLoad(httpMock)
     fixture.detectChanges()
 
-    expect(fixture.nativeElement.textContent).not.toContain('Chargement…')
+    expect(fixture.debugElement.query(By.directive(Spinner))).toBeNull()
     expect(fixture.debugElement.query(By.directive(Table))).toBeTruthy()
+  })
+
+  it('shows an empty state with a create action when there are no users at all', () => {
+    const { fixture, httpMock } = setup()
+
+    fixture.detectChanges()
+    flushInitialLoad(httpMock, [])
+    fixture.detectChanges()
+
+    const emptyState = fixture.debugElement.query(By.directive(EmptyState))
+    expect(emptyState.nativeElement.textContent).toContain('Aucun utilisateur')
+    expect(emptyState.nativeElement.textContent).toContain('Nouvel utilisateur')
+    expect(fixture.debugElement.query(By.directive(Table))).toBeNull()
+  })
+
+  it('offers no create action in the empty state for an organization admin', () => {
+    const { fixture, httpMock } = setup({ isSuperAdmin: false })
+
+    fixture.detectChanges()
+    httpMock.expectOne('/api/users').flush([])
+    fixture.detectChanges()
+
+    const emptyState = fixture.debugElement.query(By.directive(EmptyState))
+    expect(emptyState.nativeElement.textContent).toContain('Aucun utilisateur')
+    expect(emptyState.nativeElement.textContent).not.toContain('Nouvel utilisateur')
+  })
+
+  it('shows "Aucun résultat" when the organization filter matches no user', () => {
+    const { fixture, httpMock } = setup()
+
+    fixture.detectChanges()
+    flushInitialLoad(httpMock, [ACME_USER])
+    fixture.detectChanges()
+
+    const emptyState = fixture.debugElement.query(By.directive(EmptyState))
+    expect(emptyState.nativeElement.textContent).toContain('Aucun résultat')
+    expect(fixture.debugElement.query(By.directive(Table))).toBeNull()
   })
 
   it('navigates to the user detail page when a table row is clicked', () => {

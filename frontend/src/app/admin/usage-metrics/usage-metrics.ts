@@ -3,12 +3,19 @@ import {
   Component,
   LOCALE_ID,
   computed,
-  effect,
   inject,
   input,
-  signal,
 } from '@angular/core'
-import { Card, DimensionCard, DimensionRow, GaugeBar, Table, TableColumn } from '@masmarino/gabarit'
+import { rxResource } from '@angular/core/rxjs-interop'
+import {
+  Button,
+  Card,
+  DimensionCard,
+  DimensionRow,
+  GaugeBar,
+  Table,
+  TableColumn,
+} from '@masmarino/gabarit'
 import { AdminMetricsService } from '../application/metrics.service'
 import { RepositoryUsage } from '../domain/metrics.entity'
 import { formatBytes } from '../../shared/format'
@@ -19,7 +26,7 @@ const CHART_TOP_N = 15
 @Component({
   selector: 'app-usage-metrics',
   standalone: true,
-  imports: [Table, DimensionCard, Card, GaugeBar],
+  imports: [Table, DimensionCard, Card, GaugeBar, Button],
   templateUrl: './usage-metrics.html',
   styleUrl: './usage-metrics.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,7 +39,18 @@ export class UsageMetrics {
 
   readonly locale = inject(LOCALE_ID)
 
-  readonly usages = signal<RepositoryUsage[]>([])
+  // Switching organization drops the previous answer and cancels its request.
+  private readonly resource = rxResource({
+    params: () => ({ organizationId: this.organizationId() }),
+    stream: ({ params }) => this.metricsService.usage(params.organizationId),
+  })
+
+  readonly usages = computed<RepositoryUsage[]>(() =>
+    !this.resource.isLoading() && this.resource.hasValue() ? this.resource.value() : [],
+  )
+  readonly failed = computed(
+    () => !this.resource.isLoading() && this.resource.error() !== undefined,
+  )
   readonly formatBytes = formatBytes
   readonly quotaFormatter = (value: number, max: number) =>
     `${formatBytes(value)} / ${formatBytes(max)}`
@@ -62,12 +80,7 @@ export class UsageMetrics {
     return data
   })
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
-  constructor() {
-    effect(() => {
-      this.metricsService
-        .usage(this.organizationId())
-        .subscribe((usages) => this.usages.set(usages))
-    })
+  retry(): void {
+    this.resource.reload()
   }
 }

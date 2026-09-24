@@ -1,0 +1,42 @@
+<gbt-card>
+  <article class="result-card">
+    <header class="result-card__header">
+      <span class="result-card__format">
+        <gbt-icon name="package" aria-hidden="true" />
+        {{ formatLabel() }}
+      </span>
+      <h3 class="result-card__name">
+        <a [routerLink]="packagePath()">{{ entry().name }}</a>
+      </h3>
+      @if (entry().latest; as latest) {
+        <gbt-badge>{{ latest }}</gbt-badge>
+      }
+    </header>
+
+    @if (entry().description; as description) {
+      <p class="result-card__description">{{ description }}</p>
+    }
+
+    @if (entry().keywords.length > 0) {
+      <ul class="result-card__keywords" aria-label="Mots-clés">
+        @for (keyword of entry().keywords; track keyword) {
+          <li>{{ keyword }}</li>
+        }
+      </ul>
+    }
+
+    <p class="result-card__meta">
+      par <a [routerLink]="ownerPath()">{{ entry().owner.display_name }}</a> /
+      <a [routerLink]="repositoryPath()">{{ entry().repository.name }}</a>
+      ·
+      <time [attr.datetime]="entry().updated_at" [title]="entry().updated_at | date: 'medium'"
+        >mis à jour {{ updatedAgo() }}</time
+      >
+      @if (weeklyDownloads(); as downloads) {
+        · <span class="result-card__downloads">{{ downloads }}</span>
+      }
+    </p>
+
+    <app-copyable-command [command]="command()" [label]="copyLabel()" />
+  </article>
+</gbt-card>

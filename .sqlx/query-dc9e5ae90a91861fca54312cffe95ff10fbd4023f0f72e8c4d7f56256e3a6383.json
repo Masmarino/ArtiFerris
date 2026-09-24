@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT max_login_attempts, login_attempt_window_seconds, session_ttl_hours, registration_enabled, seo_indexing_enabled FROM system_settings WHERE organization_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max_login_attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "system_settings",
+            "name": "max_login_attempts"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "login_attempt_window_seconds",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "system_settings",
+            "name": "login_attempt_window_seconds"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "session_ttl_hours",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "system_settings",
+            "name": "session_ttl_hours"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "registration_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "system_settings",
+            "name": "registration_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "seo_indexing_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "system_settings",
+            "name": "seo_indexing_enabled"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "dc9e5ae90a91861fca54312cffe95ff10fbd4023f0f72e8c4d7f56256e3a6383"
+}

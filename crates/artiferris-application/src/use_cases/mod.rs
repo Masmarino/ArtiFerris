@@ -8,6 +8,7 @@ pub mod npm_unpublish;
 pub mod npm_deprecate;
 pub mod npm_dist_tags;
 pub mod npm_search;
+pub mod list_readable_repositories;
 pub mod list_repository_packages;
 pub mod npm_audit;
 pub mod npm_dependency_scan;
@@ -16,6 +17,8 @@ pub mod package_repository;
 pub mod permission;
 pub mod user;
 pub mod docker_upload;
+pub mod docker_upload_sweep;
+pub mod repository_deletion_sweep;
 pub mod docker_manifest_put;
 pub mod docker_manifest_get;
 pub mod docker_blob_get;
@@ -31,10 +34,19 @@ pub mod webauthn;
 pub mod smtp;
 pub mod group_resolve;
 pub mod organization;
+pub mod personal_repository;
+pub mod public_catalog;
+pub mod seo;
 pub mod registration;
+pub mod resolve_organization_repository;
+pub mod resolve_personal_repository;
 pub mod sso;
 
 #[cfg(test)]
 pub mod npm_test_support;
 #[cfg(test)]
 pub mod docker_test_support;
+#[cfg(test)]
+pub mod admin_test_support;
+#[cfg(test)]
+pub mod verification_test_support;

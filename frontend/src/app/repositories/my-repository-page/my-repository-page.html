@@ -1,0 +1,23 @@
+@if (loading()) {
+  <div class="loading-state"><gbt-spinner size="lg" label="Chargement…" /></div>
+} @else if (reserved()) {
+  <app-repositories-list mode="personal" />
+} @else {
+  <gbt-empty-state
+    illustration="folder"
+    heading="Aucun dépôt personnel"
+    message="Créez votre dépôt personnel pour y publier vos propres projets npm et docker."
+  >
+    <gbt-button text="Créer son dépôt utilisateur" (clicked)="openReserveModal()" />
+  </gbt-empty-state>
+}
+@if (showConfirmModal()) {
+  <app-confirm-modal
+    heading="Créer son dépôt utilisateur"
+    message="Cette action réserve votre espace personnel afin que vous puissiez y créer vos propres projets npm et docker."
+    confirmLabel="Créer"
+    [confirming]="reserving()"
+    (confirmed)="confirmReserve()"
+    (cancelled)="cancelReserve()"
+  />
+}

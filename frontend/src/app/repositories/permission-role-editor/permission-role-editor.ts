@@ -3,12 +3,14 @@ import {
   Component,
   computed,
   effect,
+  inject,
   input,
   output,
   signal,
 } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Button, Modal, Select } from '@masmarino/gabarit'
+import { ConfirmService } from '../../shared/confirm.service'
 import { ROLE_OPTIONS, Role } from '../domain/permission.entity'
 
 @Component({
@@ -19,6 +21,8 @@ import { ROLE_OPTIONS, Role } from '../domain/permission.entity'
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PermissionRoleEditor {
+  private readonly confirmService = inject(ConfirmService)
+
   readonly isOpen = input.required<boolean>()
   readonly label = input.required<string>()
   readonly currentRole = input.required<Role>()
@@ -55,10 +59,16 @@ export class PermissionRoleEditor {
     this.roleChanged.emit(this.selectedRole())
   }
 
-  revoke(): void {
+  async revoke(): Promise<void> {
     const subject =
       this.subjectKind() === 'repository' ? `du dépôt "${this.label()}"` : `de "${this.label()}"`
-    if (!confirm(`Révoquer l'accès ${subject} ?`)) {
+    const confirmed = await this.confirmService.ask({
+      heading: "Révoquer l'accès",
+      message: `Révoquer l'accès ${subject} ?`,
+      confirmLabel: 'Révoquer',
+      danger: true,
+    })
+    if (!confirmed) {
       return
     }
     this.revoked.emit()

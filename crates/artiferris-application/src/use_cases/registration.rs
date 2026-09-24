@@ -19,7 +19,7 @@ impl RegisterPublicUserUseCase {
     /// The route handler rejects anything but the public organization before calling this.
     /// Unlike `InviteUserUseCase`, hashes the real password immediately — no activation step.
     pub async fn execute(&self, organization_id: Uuid, username: &str, email: &str, password: &str) -> Result<Uuid, ApplicationError> {
-        let username = Username::parse(username)?;
+        let username = Username::parse_new(username)?;
         validate_email(email)?;
         let password = Password::parse(password)?;
         if self.users.find_by_username(&username).await?.is_some() {
@@ -77,6 +77,34 @@ mod tests {
         async fn list_all(&self) -> Result<Vec<User>, DomainError> {
             Ok(self.users.lock().unwrap().values().cloned().collect())
         }
+        async fn find_by_ids(&self, ids: &[Uuid]) -> Result<Vec<User>, DomainError> {
+            Ok(self.users.lock().unwrap().values().filter(|u| ids.contains(&u.id)).cloned().collect())
+        }
+        async fn count_by_organization(&self, organization_id: Uuid) -> Result<i64, DomainError> {
+            Ok(self.users.lock().unwrap().values().filter(|u| u.organization_id == organization_id).count() as i64)
+        }
+        async fn search_by_organization(&self, organization_id: Uuid, query: &str, limit: i64) -> Result<Vec<User>, DomainError> {
+            let query = query.to_lowercase();
+            let mut matches: Vec<User> = self
+                .users
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|u| u.organization_id == organization_id && u.username.as_str().to_lowercase().contains(&query))
+                .cloned()
+                .collect();
+            matches.sort_by(|a, b| a.username.as_str().cmp(b.username.as_str()));
+            matches.truncate(limit as usize);
+            Ok(matches)
+        }
+        async fn search_all_organizations(&self, query: &str, limit: i64) -> Result<Vec<User>, DomainError> {
+            let query = query.to_lowercase();
+            let mut matches: Vec<User> =
+                self.users.lock().unwrap().values().filter(|u| u.username.as_str().to_lowercase().contains(&query)).cloned().collect();
+            matches.sort_by(|a, b| a.username.as_str().cmp(b.username.as_str()));
+            matches.truncate(limit as usize);
+            Ok(matches)
+        }
         async fn insert(&self, user: &User) -> Result<(), DomainError> {
             self.users.lock().unwrap().insert(user.id, user.clone());
             Ok(())
@@ -85,7 +113,7 @@ mod tests {
             self.users.lock().unwrap().remove(&id);
             Ok(())
         }
-        async fn update_password(&self, id: Uuid, new_password_hash: String) -> Result<(), DomainError> {
+        async fn update_password(&self, id: Uuid, new_password_hash: String, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
             if let Some(user) = self.users.lock().unwrap().get_mut(&id) {
                 user.password_hash = new_password_hash;
             }
@@ -97,17 +125,17 @@ mod tests {
             }
             Ok(())
         }
-        async fn set_organization_admin(&self, id: Uuid, is_organization_admin: bool) -> Result<(), DomainError> {
+        async fn set_organization_admin(&self, id: Uuid, is_organization_admin: bool, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<(), DomainError> {
             if let Some(user) = self.users.lock().unwrap().get_mut(&id) {
                 user.is_organization_admin = is_organization_admin;
             }
             Ok(())
         }
-        async fn delete_unless_last_super_admin(&self, id: Uuid) -> Result<bool, DomainError> {
+        async fn delete_unless_last_super_admin(&self, id: Uuid, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<bool, DomainError> {
             self.users.lock().unwrap().remove(&id);
             Ok(true)
         }
-        async fn set_super_admin_unless_last(&self, id: Uuid, is_super_admin: bool) -> Result<bool, DomainError> {
+        async fn set_super_admin_unless_last(&self, id: Uuid, is_super_admin: bool, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<bool, DomainError> {
             if let Some(user) = self.users.lock().unwrap().get_mut(&id) {
                 user.is_super_admin = is_super_admin;
             }
@@ -122,8 +150,8 @@ mod tests {
         async fn hash(&self, plain_password: &str) -> Result<String, DomainError> {
             Ok(format!("hashed:{plain_password}"))
         }
-        async fn verify(&self, plain_password: &str, hash: &str) -> bool {
-            hash == format!("hashed:{plain_password}")
+        async fn verify(&self, plain_password: &str, hash: &str) -> Result<bool, DomainError> {
+            Ok(hash == format!("hashed:{plain_password}"))
         }
     }
 
@@ -144,7 +172,7 @@ mod tests {
         assert_eq!(user.email.as_deref(), Some("florian@example.com"));
         assert!(!user.is_super_admin);
         assert!(!user.is_organization_admin);
-        assert!(hasher.verify("sup3r-s3cret!", &user.password_hash).await, "the real password must work immediately, unlike an invited account's placeholder hash");
+        assert!(hasher.verify("sup3r-s3cret!", &user.password_hash).await.unwrap(), "the real password must work immediately, unlike an invited account's placeholder hash");
     }
 
     #[tokio::test]
@@ -155,6 +183,15 @@ mod tests {
 
         let err = use_case.execute(Uuid::new_v4(), "florian", "b@example.com", "sup3r-s3cret!").await.unwrap_err();
         assert!(matches!(err, ApplicationError::UsernameTaken));
+    }
+
+    #[tokio::test]
+    async fn rejects_a_username_using_the_reserved_prefix() {
+        let (users, hasher) = setup();
+        let use_case = RegisterPublicUserUseCase::new(users, hasher);
+
+        let err = use_case.execute(Uuid::new_v4(), "artiferris-npm", "a@example.com", "sup3r-s3cret!").await.unwrap_err();
+        assert!(matches!(err, ApplicationError::Domain(DomainError::ReservedName(_))));
     }
 
     #[tokio::test]
@@ -185,6 +222,7 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -202,7 +240,8 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
-    async fn registering_with_an_already_used_email_fails_cleanly_instead_of_hitting_the_db_constraint_raw(pool: sqlx::PgPool) {
+    async fn registering_with_an_email_another_account_used_neither_fails_nor_verifies_it(pool: sqlx::PgPool) {
+        use artiferris_domain::user::UserSecurityPort;
         let organizations = Arc::new(artiferris_infrastructure::postgres::organization_repository::PostgresOrganizationRepository::new(pool.clone()));
         let organization_id = Uuid::new_v4();
         organizations
@@ -211,6 +250,7 @@ mod tests {
                 slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
                 display_name: "Acme".to_string(),
                 is_public: false,
+                is_personal: false,
                 created_at: chrono::Utc::now(),
             })
             .await
@@ -220,8 +260,9 @@ mod tests {
         let use_case = RegisterPublicUserUseCase::new(users.clone(), hasher.clone());
         use_case.execute(organization_id, "first-member", "shared@acme.example", "sup3r-s3cret!").await.unwrap();
 
-        let err = use_case.execute(organization_id, "second-member", "shared@acme.example", "sup3r-s3cret!").await.unwrap_err();
+        use_case.execute(organization_id, "second-member", "Shared@Acme.example", "sup3r-s3cret!").await.unwrap();
 
-        assert!(matches!(err, ApplicationError::Domain(DomainError::EmailTaken)), "got {err:?}");
+        // Whether an email is taken must not show in the response, and an unproven address claims nothing.
+        assert!(users.find_by_verified_email(organization_id, "shared@acme.example").await.unwrap().is_none());
     }
 }

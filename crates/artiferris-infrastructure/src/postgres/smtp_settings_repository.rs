@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use artiferris_domain::audit::AdminAuditRecord;
 use artiferris_domain::email::{SmtpSecurity, SmtpSettings, SmtpSettingsPort};
 use artiferris_domain::error::DomainError;
 use crate::error_ext::InfraErr;
@@ -49,13 +50,15 @@ impl SmtpSettingsPort for PostgresSmtpSettingsRepository {
         let Some(row) = row else {
             return Ok(None);
         };
-        let password = secret_box::decrypt(&row.encrypted_password, &row.password_nonce, &self.secrets_encryption_key)?;
+        let password = secret_box::open(&row.encrypted_password, &row.password_nonce, &self.secrets_encryption_key, secret_box::SMTP_PASSWORD)
+            .inspect_err(|e| tracing::error!(%organization_id, "the stored SMTP password cannot be read, mail is not sent until an admin enters it again: {e}"))?;
         let security = security_from_str(&row.security).ok_or_else(|| DomainError::Infrastructure(format!("unknown smtp security {}", row.security)))?;
         Ok(Some(SmtpSettings { host: row.host, port: row.port, username: row.username, password, from_name: row.from_name, from_address: row.from_address, security }))
     }
 
-    async fn update(&self, organization_id: Uuid, settings: &SmtpSettings) -> Result<(), DomainError> {
-        let (encrypted_password, password_nonce) = secret_box::encrypt(&settings.password, &self.secrets_encryption_key);
+    async fn update(&self, organization_id: Uuid, settings: &SmtpSettings, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError> {
+        let mut tx = self.pool.begin().await.infra_err()?;
+        let (encrypted_password, password_nonce) = secret_box::seal(&settings.password, &self.secrets_encryption_key, secret_box::SMTP_PASSWORD);
         sqlx::query!(
             "INSERT INTO smtp_settings (organization_id, host, port, username, encrypted_password, password_nonce, from_name, from_address, security) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
@@ -73,9 +76,13 @@ impl SmtpSettingsPort for PostgresSmtpSettingsRepository {
             settings.from_address,
             security_to_str(settings.security),
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .infra_err()?;
+        if let Some(audit) = audit {
+            crate::postgres::event_publisher::insert_admin_event(&mut *tx, &audit.event, audit.actor_id).await.infra_err()?;
+        }
+        tx.commit().await.infra_err()?;
         Ok(())
     }
 }
@@ -105,7 +112,7 @@ mod tests {
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn update_then_get_round_trips_including_the_password(pool: sqlx::PgPool) {
         let repo = PostgresSmtpSettingsRepository::new(pool, "jwt-secret".to_string());
-        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &sample()).await.unwrap();
+        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &sample(), None).await.unwrap();
 
         assert_eq!(repo.get(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID).await.unwrap(), Some(sample()));
     }
@@ -113,9 +120,9 @@ mod tests {
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_second_update_overwrites_the_first_rather_than_inserting_a_row(pool: sqlx::PgPool) {
         let repo = PostgresSmtpSettingsRepository::new(pool, "jwt-secret".to_string());
-        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &sample()).await.unwrap();
+        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &sample(), None).await.unwrap();
         let updated = SmtpSettings { host: "smtp2.example.com".to_string(), ..sample() };
-        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &updated).await.unwrap();
+        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &updated, None).await.unwrap();
 
         let count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM smtp_settings").fetch_one(&repo.pool).await.unwrap().unwrap();
         assert_eq!(count, 1);
@@ -125,7 +132,7 @@ mod tests {
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn the_password_is_never_stored_in_plaintext(pool: sqlx::PgPool) {
         let repo = PostgresSmtpSettingsRepository::new(pool, "jwt-secret".to_string());
-        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &sample()).await.unwrap();
+        repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &sample(), None).await.unwrap();
 
         let row: (Vec<u8>,) = sqlx::query_as("SELECT encrypted_password FROM smtp_settings WHERE organization_id = $1").bind(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID).fetch_one(&repo.pool).await.unwrap();
         let stored = String::from_utf8_lossy(&row.0);
@@ -142,7 +149,7 @@ mod tests {
         .await
         .unwrap();
 
-        repo.update(other_org_id, &sample()).await.unwrap();
+        repo.update(other_org_id, &sample(), None).await.unwrap();
 
         assert_eq!(repo.get(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID).await.unwrap(), None, "the public organization must still be unconfigured");
         assert!(repo.get(other_org_id).await.unwrap().is_some());

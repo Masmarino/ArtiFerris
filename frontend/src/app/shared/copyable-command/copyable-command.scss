@@ -1,0 +1,22 @@
+:host {
+  display: block;
+}
+
+.copyable-command {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  pre {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    overflow-x: auto;
+    background: var(--bg-panel);
+    border-radius: var(--site-border-radius-sm);
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+  }
+}

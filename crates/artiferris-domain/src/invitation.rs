@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use crate::audit::AdminAuditRecord;
 use crate::error::DomainError;
 
 /// A row's presence means the account hasn't activated yet — it has an unusable placeholder password hash. Deleted once activation succeeds.
@@ -17,10 +18,13 @@ pub struct UserInvitation {
 
 #[async_trait]
 pub trait UserInvitationPort: Send + Sync {
-    async fn upsert(&self, invitation: &UserInvitation) -> Result<(), DomainError>;
+    /// `audit` is written in the same transaction as the invitation.
+    async fn upsert(&self, invitation: &UserInvitation, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError>;
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<UserInvitation>, DomainError>;
     async fn find_by_user_id(&self, user_id: Uuid) -> Result<Option<UserInvitation>, DomainError>;
     /// Batched form of `find_by_user_id`: which of these users have a pending invitation.
     async fn list_pending_user_ids(&self, user_ids: &[Uuid]) -> Result<HashSet<Uuid>, DomainError>;
     async fn delete(&self, user_id: Uuid) -> Result<(), DomainError>;
+    /// Single use: deletes and returns the invitation for this token if it hasn't expired. Of several parallel calls, only one gets `Some`.
+    async fn redeem(&self, token_hash: &str) -> Result<Option<UserInvitation>, DomainError>;
 }

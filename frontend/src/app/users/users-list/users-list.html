@@ -11,14 +11,29 @@
   </div>
 }
 @if (loading()) {
-  <p>Chargement…</p>
+  <div class="loading-state"><gbt-spinner label="Chargement…" /></div>
 } @else if (error(); as message) {
   <p class="gbt-form-error" role="alert">{{ message }}</p>
   <gbt-button text="Réessayer" (clicked)="reload()" />
+} @else if (users().length === 0) {
+  <gbt-empty-state
+    illustration="folder"
+    heading="Aucun utilisateur"
+    message="Les utilisateurs créés ou invités apparaîtront ici."
+  >
+    @if (isSuperAdmin()) {
+      <gbt-button text="Nouvel utilisateur" (clicked)="showCreateModal.set(true)" />
+    }
+  </gbt-empty-state>
+} @else if (filteredUsers().length === 0) {
+  <gbt-empty-state
+    illustration="folder"
+    heading="Aucun résultat"
+    message="Aucun utilisateur dans cette organisation. Changez le filtre pour en voir d'autres."
+  />
 } @else {
   <gbt-table
     caption="Utilisateurs"
-    emptyMessage="Aucune donnée disponible"
     [clickableRows]="true"
     [data]="filteredUsers()"
     [columns]="columns()"

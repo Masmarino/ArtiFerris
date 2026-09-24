@@ -14,11 +14,11 @@ describe('HttpAdminApiTokenAdapter', () => {
     }
   }
 
-  it('fetches tokens across every user', () => {
+  it('fetches tokens across every user, asking for the 500-row page explicitly', () => {
     const { adapter, httpMock } = setup()
 
     adapter.list().subscribe((tokens) => expect(tokens[0].username).toBe('florian'))
-    httpMock.expectOne('/api/admin/tokens').flush([
+    httpMock.expectOne('/api/admin/tokens?limit=500').flush([
       {
         id: 't1',
         user_id: 'u1',
@@ -29,6 +29,13 @@ describe('HttpAdminApiTokenAdapter', () => {
         revoked_at: null,
       },
     ])
+  })
+
+  it('scopes the list to an organization and still sets the limit', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.list('org-1').subscribe()
+    httpMock.expectOne('/api/admin/tokens?organization_id=org-1&limit=500').flush([])
   })
 
   it('revokes a token by id', () => {

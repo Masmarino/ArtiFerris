@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
+use crate::audit::AdminAuditRecord;
 use crate::error::DomainError;
 
 /// `content_type` is sniffed from the bytes, never the client's declared header.
@@ -20,8 +21,9 @@ pub struct BrandingSettings {
 #[async_trait]
 pub trait BrandingPort: Send + Sync {
     async fn get(&self, organization_id: Uuid) -> Result<BrandingSettings, DomainError>;
-    async fn set_logo(&self, organization_id: Uuid, asset: &BrandingAsset) -> Result<(), DomainError>;
-    async fn clear_logo(&self, organization_id: Uuid) -> Result<(), DomainError>;
-    async fn set_favicon(&self, organization_id: Uuid, asset: &BrandingAsset) -> Result<(), DomainError>;
-    async fn clear_favicon(&self, organization_id: Uuid) -> Result<(), DomainError>;
+    /// Each change writes `audit` in the same transaction.
+    async fn set_logo(&self, organization_id: Uuid, asset: &BrandingAsset, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError>;
+    async fn clear_logo(&self, organization_id: Uuid, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError>;
+    async fn set_favicon(&self, organization_id: Uuid, asset: &BrandingAsset, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError>;
+    async fn clear_favicon(&self, organization_id: Uuid, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError>;
 }

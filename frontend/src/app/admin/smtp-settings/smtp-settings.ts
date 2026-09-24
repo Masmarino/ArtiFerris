@@ -8,10 +8,25 @@ import {
   signal,
 } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { Button, Card, GbtInput, Select, SelectOption, Spinner, Tooltip } from '@masmarino/gabarit'
+import {
+  Alert,
+  Button,
+  Card,
+  GbtInput,
+  Select,
+  SelectOption,
+  Spinner,
+  Tooltip,
+} from '@masmarino/gabarit'
 import { SmtpSettingsService } from '../application/smtp-settings.service'
-import { SmtpSecurity } from '../domain/smtp-settings.entity'
+import { SmtpSecurity, isUnreadableSmtpSettings } from '../domain/smtp-settings.entity'
 import { ToastService } from '../../shared/toast.service'
+import {
+  SECRET_UNREADABLE_MESSAGE,
+  isSecretUnreadable,
+  overloadMessage,
+  secretFormFailureMessage,
+} from '../../shared/api-error'
 
 const SECURITY_OPTIONS: SelectOption<SmtpSecurity>[] = [
   { value: 'start_tls', label: 'STARTTLS (port 587 usuellement)' },
@@ -22,7 +37,7 @@ const SECURITY_OPTIONS: SelectOption<SmtpSecurity>[] = [
 @Component({
   selector: 'app-smtp-settings',
   standalone: true,
-  imports: [Button, Card, GbtInput, Select, FormsModule, Spinner, Tooltip],
+  imports: [Alert, Button, Card, GbtInput, Select, FormsModule, Spinner, Tooltip],
   templateUrl: './smtp-settings.html',
   styleUrl: './smtp-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -44,8 +59,11 @@ export class SmtpSettingsAdmin {
   readonly fromAddress = signal('')
   readonly security = signal<SmtpSecurity>('start_tls')
   readonly passwordSet = signal(false)
+  /** The stored password cannot be decrypted by this server: it has to be typed again. */
+  readonly secretUnreadable = signal(false)
 
   readonly loading = signal(true)
+  readonly loadFailed = signal(false)
   readonly saving = signal(false)
 
   readonly testRecipient = signal('')
@@ -55,27 +73,48 @@ export class SmtpSettingsAdmin {
   constructor() {
     effect(() => {
       const organizationId = this.organizationId()
+      const stillCurrent = () => this.organizationId() === organizationId
+      // Nothing typed for the previous organization may end up saved on this one.
+      this.password.set('')
+      this.attemptedSave.set(false)
+      this.testRecipient.set('')
+      this.saving.set(false)
+      this.sendingTest.set(false)
       this.loading.set(true)
-      this.settingsService.get(organizationId).subscribe((settings) => {
-        if (settings) {
-          this.host.set(settings.host)
-          this.port.set(String(settings.port))
-          this.username.set(settings.username)
-          this.fromName.set(settings.from_name)
-          this.fromAddress.set(settings.from_address)
-          this.security.set(settings.security)
-          this.passwordSet.set(settings.password_set)
-        } else {
-          // Reset, or a previous org's SMTP config lingers on screen for one with none.
-          this.host.set('')
-          this.port.set('587')
-          this.username.set('')
-          this.fromName.set('ArtiFerris')
-          this.fromAddress.set('')
-          this.security.set('start_tls')
-          this.passwordSet.set(false)
-        }
-        this.loading.set(false)
+      this.loadFailed.set(false)
+      this.settingsService.get(organizationId).subscribe({
+        next: (settings) => {
+          if (!stillCurrent()) {
+            return
+          }
+          this.secretUnreadable.set(false)
+          if (settings && !isUnreadableSmtpSettings(settings)) {
+            this.host.set(settings.host)
+            this.port.set(String(settings.port))
+            this.username.set(settings.username)
+            this.fromName.set(settings.from_name)
+            this.fromAddress.set(settings.from_address)
+            this.security.set(settings.security)
+            this.passwordSet.set(settings.password_set)
+          } else {
+            this.secretUnreadable.set(settings !== null)
+            // Reset, or a previous org's SMTP config lingers on screen for one with none.
+            this.host.set('')
+            this.port.set('587')
+            this.username.set('')
+            this.fromName.set('ArtiFerris')
+            this.fromAddress.set('')
+            this.security.set('start_tls')
+            this.passwordSet.set(false)
+          }
+          this.loading.set(false)
+        },
+        error: () => {
+          if (stillCurrent()) {
+            this.loadFailed.set(true)
+            this.loading.set(false)
+          }
+        },
       })
     })
   }
@@ -142,6 +181,8 @@ export class SmtpSettingsAdmin {
     if (this.hasErrors()) {
       return
     }
+    const organizationId = this.organizationId()
+    const stillCurrent = () => this.organizationId() === organizationId
     this.saving.set(true)
     this.settingsService
       .update(
@@ -158,14 +199,24 @@ export class SmtpSettingsAdmin {
       )
       .subscribe({
         next: () => {
-          this.saving.set(false)
-          this.passwordSet.set(true)
-          this.password.set('')
+          if (stillCurrent()) {
+            this.saving.set(false)
+            this.passwordSet.set(true)
+            this.secretUnreadable.set(false)
+            this.password.set('')
+          }
           this.toastService.success('Paramètres SMTP enregistrés.')
         },
-        error: () => {
-          this.saving.set(false)
-          this.toastService.error('Échec de la mise à jour des paramètres SMTP.')
+        error: (error: unknown) => {
+          if (stillCurrent()) {
+            this.saving.set(false)
+            if (isSecretUnreadable(error)) {
+              this.secretUnreadable.set(true)
+            }
+          }
+          this.toastService.error(
+            secretFormFailureMessage(error, 'Échec de la mise à jour des paramètres SMTP.'),
+          )
         },
       })
   }
@@ -174,15 +225,29 @@ export class SmtpSettingsAdmin {
     if (this.testRecipient().trim() === '') {
       return
     }
+    const organizationId = this.organizationId()
+    const stillCurrent = () => this.organizationId() === organizationId
     this.sendingTest.set(true)
-    this.settingsService.sendTestEmail(this.testRecipient(), this.organizationId()).subscribe({
+    this.settingsService.sendTestEmail(this.testRecipient(), organizationId).subscribe({
       next: () => {
-        this.sendingTest.set(false)
+        if (stillCurrent()) {
+          this.sendingTest.set(false)
+        }
         this.toastService.success('E-mail de test envoyé.')
       },
-      error: () => {
-        this.sendingTest.set(false)
-        this.toastService.error("Échec de l'envoi de l'e-mail de test. Vérifiez la configuration.")
+      error: (error: unknown) => {
+        if (stillCurrent()) {
+          this.sendingTest.set(false)
+          if (isSecretUnreadable(error)) {
+            this.secretUnreadable.set(true)
+          }
+        }
+        this.toastService.error(
+          isSecretUnreadable(error)
+            ? SECRET_UNREADABLE_MESSAGE
+            : (overloadMessage(error) ??
+                "Échec de l'envoi de l'e-mail de test. Vérifiez la configuration."),
+        )
       },
     })
   }

@@ -3,16 +3,25 @@
   <code>.npmrc</code>.
 </p>
 
-<gbt-button text="Nouveau token" (clicked)="showCreateForm.set(true)" />
-<gbt-table
-  caption="Jetons API"
-  emptyMessage="Aucune donnée disponible"
-  [clickableRows]="true"
-  [data]="tokens()"
-  [columns]="columns"
-  [trackBy]="rowId"
-  (rowClick)="revokeToken($event)"
-/>
+@if (tokens().length === 0) {
+  <gbt-empty-state
+    illustration="star"
+    heading="Aucun token"
+    message="Créez un token pour authentifier vos publications et installations npm."
+  >
+    <gbt-button text="Nouveau token" (clicked)="showCreateForm.set(true)" />
+  </gbt-empty-state>
+} @else {
+  <gbt-button text="Nouveau token" (clicked)="showCreateForm.set(true)" />
+  <gbt-table
+    caption="Jetons API"
+    [clickableRows]="true"
+    [data]="tokens()"
+    [columns]="columns"
+    [trackBy]="rowId"
+    (rowClick)="revokeToken($event)"
+  />
+}
 @if (revokeError(); as message) {
   <p class="gbt-form-error" role="alert">{{ message }}</p>
 }
@@ -22,10 +31,31 @@
     [isOpen]="true"
     heading="Nouveau token API"
     closeLabel="Fermer"
-    (closed)="showCreateForm.set(false)"
+    (closed)="closeCreateForm()"
   >
     <p class="gbt-form-required-note">Les champs marqués d'un astérisque (*) sont obligatoires.</p>
     <gbt-input label="Nom (ex. « mon laptop »)" [formControl]="newLabel" [required]="true" />
+    @if (newLabel.hasError('maxlength')) {
+      <p class="gbt-form-error" role="alert">
+        Le nom ne peut pas dépasser {{ maxLabelLength }} caractères.
+      </p>
+    }
+    <gbt-input
+      label="Mot de passe (pour un jeton de longue durée)"
+      type="password"
+      autocomplete="current-password"
+      showPasswordLabel="Afficher le mot de passe"
+      hidePasswordLabel="Masquer le mot de passe"
+      [formControl]="newPassword"
+    />
+    <p class="api-tokens-list__hint">
+      Ce token expirera dans {{ lifetimeDays() }} jours{{
+        lifetimeDays() === 365 ? '.' : ' : renseignez votre mot de passe pour 365 jours.'
+      }}
+    </p>
+    @if (createError(); as message) {
+      <p class="gbt-form-error" role="alert">{{ message }}</p>
+    }
     <gbt-button
       text="Créer"
       (clicked)="createToken()"
@@ -44,6 +74,7 @@
     (closed)="dismissCreatedToken()"
   >
     <p>Copiez ce token maintenant — il ne sera plus jamais affiché.</p>
+    <p class="api-tokens-list__hint">Il expirera dans {{ createdTokenDays() }} jours.</p>
     <pre>{{ token }}</pre>
     <gbt-button text="J'ai copié le token" (clicked)="dismissCreatedToken()" />
   </gbt-modal>

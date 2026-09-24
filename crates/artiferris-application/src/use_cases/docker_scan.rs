@@ -48,10 +48,10 @@ impl ScanDockerImageUseCase {
             actions: vec!["pull".to_string()],
             granted_repository_id: Some(repository.id),
         };
-        // Internal system-initiated pull — the scanner fetching the image it's about to scan.
-        let token = self.token_issuer.issue(triggered_by, repository.organization_id, false, Some(scope))?;
+        // Internal system-initiated pull — the scanner fetching the image it's about to scan. Minted when the scan starts, which can be a while after this call if it queues.
+        let mint_token = || self.token_issuer.issue(triggered_by, repository.organization_id, false, Some(scope.clone()));
 
-        let vulnerabilities = self.scanner.scan(&repository.name, image_name.as_str(), &scan_reference, platform.as_deref(), &token).await?;
+        let vulnerabilities = self.scanner.scan(&repository.name, image_name.as_str(), &scan_reference, platform.as_deref(), &mint_token).await?;
 
         let result = DockerImageScanResult { id: Uuid::new_v4(), docker_manifest_id: manifest.id, scanned_at: Utc::now(), vulnerabilities };
         self.results.save(&result).await?;
@@ -137,7 +137,7 @@ mod tests {
                 remote_url: None,
                 remote_username: None,
                 remote_password: None,
-                quota_bytes: None, retention_keep_last_n: None, group_members: vec![],
+                quota_bytes: None, retention_keep_last_n: None, is_public: false, group_members: vec![],
             });
             Self {
                 manifests: Arc::new(FakeDockerManifestRepository::new()),
@@ -194,6 +194,24 @@ mod tests {
         let (issued_for, scope) = h.token_issuer.issued.lock().unwrap()[0].clone();
         assert_eq!(issued_for, triggered_by);
         assert_eq!(scope.unwrap().actions, vec!["pull".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn a_scan_waiting_for_a_slot_gets_its_registry_token_when_it_starts_not_before() {
+        let h = Harness::new(vec![]);
+        h.seed_manifest(DockerMediaType::DockerV2Manifest, b"{}", "latest");
+        let gate = Arc::new(tokio::sync::Semaphore::new(0));
+        *h.scanner.slot_gate.lock().unwrap() = Some(gate.clone());
+        let use_case = h.use_case();
+        let (repository_id, image_name) = (h.repository_id, h.image_name.clone());
+        let scan = tokio::spawn(async move { use_case.execute(repository_id, &image_name, "latest", Uuid::new_v4()).await });
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert!(h.token_issuer.issued.lock().unwrap().is_empty(), "the scan is still queued, so no token may have been minted yet");
+
+        gate.add_permits(1);
+        scan.await.unwrap().unwrap();
+        assert_eq!(h.token_issuer.issued.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]
