@@ -1370,7 +1370,12 @@ mod tests {
                 .unwrap()
         };
         let stalled: Vec<_> = (0..artiferris_application::body_budget::MAX_BODIES_PER_CLIENT).map(|_| tokio::spawn(app.clone().oneshot(stalled_request()))).collect();
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        // Each spawned request has to clear real auth/DB work before it registers with the body
+        // budget — on a contended CI runner that can take longer than it does locally. Too short
+        // a wait here lets the probe below arrive while a slot is still free: it then gets
+        // admitted as a 5th stalled body instead of rejected, and the test hangs on its own 30s
+        // idle timeout (408) rather than seeing the 429 this test is actually about.
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
         let response = app.clone().oneshot(stalled_request()).await.unwrap();
 
