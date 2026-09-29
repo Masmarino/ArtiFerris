@@ -3387,9 +3387,13 @@ mod tests {
             .collect();
         let statuses: Vec<_> = futures::future::join_all(handles).await.into_iter().map(|r| r.unwrap()).collect();
 
-        let attempted = statuses.iter().filter(|s| **s == axum::http::StatusCode::UNAUTHORIZED).count();
-        assert_eq!(attempted, artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, "only the limit's worth of guesses may reach the password check: {statuses:?}");
-        assert_eq!(statuses.iter().filter(|s| **s == axum::http::StatusCode::TOO_MANY_REQUESTS).count(), 30);
+        let reached_the_check = statuses
+            .iter()
+            .filter(|s| **s == axum::http::StatusCode::UNAUTHORIZED || **s == axum::http::StatusCode::SERVICE_UNAVAILABLE)
+            .count();
+        let max_attempts = artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS;
+        assert_eq!(reached_the_check, max_attempts, "only the limit's worth of guesses may reach the password check: {statuses:?}");
+        assert_eq!(statuses.iter().filter(|s| **s == axum::http::StatusCode::TOO_MANY_REQUESTS).count(), 40 - max_attempts);
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

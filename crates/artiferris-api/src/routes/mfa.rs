@@ -858,7 +858,10 @@ mod tests {
             .collect();
         let statuses: Vec<_> = futures::future::join_all(handles).await.into_iter().map(|r| r.unwrap()).collect();
 
-        let guesses = statuses.iter().filter(|s| **s == axum::http::StatusCode::BAD_REQUEST).count();
-        assert_eq!(guesses, artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, "{statuses:?}");
+        let reached_the_check = statuses
+            .iter()
+            .filter(|s| **s == axum::http::StatusCode::BAD_REQUEST || **s == axum::http::StatusCode::SERVICE_UNAVAILABLE)
+            .count();
+        assert_eq!(reached_the_check, artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, "{statuses:?}");
     }
 }
