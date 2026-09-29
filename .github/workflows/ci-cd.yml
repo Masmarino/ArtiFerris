@@ -141,7 +141,7 @@ jobs:
         if: always()
         # This upload can fail on its own (e.g. Advanced Security disabled) — not a reason to fail the job; the explicit check below is what actually gates it.
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: trivy-fs-results.sarif
           category: trivy-source
@@ -160,7 +160,7 @@ jobs:
       - name: Upload Grype SARIF
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: ${{ steps.grype-fs.outputs.sarif }}
           category: grype-source
@@ -254,7 +254,7 @@ jobs:
       - name: Upload Trivy image SARIF
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: trivy-image-results.sarif
           category: trivy-image
@@ -273,7 +273,7 @@ jobs:
       - name: Upload Grype image SARIF
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: ${{ steps.grype-image.outputs.sarif }}
           category: grype-image
