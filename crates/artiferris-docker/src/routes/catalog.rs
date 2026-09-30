@@ -115,9 +115,8 @@ mod tests {
         assert!(!repositories.iter().any(|r| r.as_str().unwrap().starts_with(&unreadable_name)));
     }
 
-    /// Repository names are only unique per-organization (Task 7) — without organization
-    /// scoping, `_catalog` would leak another organization's repository existence and could
-    /// even collide two different organizations' same-named repositories into one entry.
+    /// Repository names are unique only per organization: without organization scoping `_catalog` would reveal another
+    /// organization's repositories and merge same-named ones.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn catalog_only_lists_the_resolved_organizations_own_repositories(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -229,9 +228,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// `_catalog` takes a non-optional `DockerAuthUser` — an anonymous token (#73) must still be
-    /// rejected here exactly like a missing `Authorization` header, not silently accepted as "some
-    /// user with an empty catalog".
+    /// `_catalog` takes a non-optional `DockerAuthUser`: an anonymous token must be rejected like a missing
+    /// `Authorization` header, not accepted as a user with an empty catalog.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn catalog_rejects_an_anonymous_token(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();

@@ -11,9 +11,8 @@ use uuid::Uuid;
 
 use crate::error::ApplicationError;
 
-/// Vulnerability counts from the latest scan/audit, bucketed to the 4 severities the UI
-/// surfaces as colored circles. "unknown"/other severities are intentionally dropped rather
-/// than shown — they're rarely actionable and would just add a 5th, noisier circle.
+/// Vulnerability counts from the latest scan or audit, bucketed into the 4 severities the UI shows. Other severities
+/// are dropped.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct VulnerabilitySummary {
     pub critical: i64,
@@ -297,7 +296,7 @@ mod tests {
         let name = DockerImageName::parse("my-app").unwrap();
         let manifest = docker_manifest(repository_id, &name);
         manifests.insert_manifest(&manifest, &[]).await.unwrap();
-        // Two tags on the SAME image must still surface it only once.
+        // Two tags on the same image surface it once.
         manifests.set_tag(repository_id, &name, "latest", manifest.id).await.unwrap();
         manifests.set_tag(repository_id, &name, "1.0.0", manifest.id).await.unwrap();
 

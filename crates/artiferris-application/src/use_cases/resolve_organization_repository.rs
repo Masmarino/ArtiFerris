@@ -6,9 +6,8 @@ use artiferris_domain::package_repository::{PackageRepositoryQueryPort, PackageR
 use crate::error::ApplicationError;
 use crate::use_cases::public_catalog::has_control_character;
 
-/// Looks up a repository by its organization's slug and its own name, the way the public catalog links to
-/// an organization-owned result. Personal organizations are never resolved here: those go through
-/// `ResolvePersonalRepositoryUseCase` by username.
+/// Looks up a repository by organization slug and name. Personal organizations go through
+/// `ResolvePersonalRepositoryUseCase`.
 pub struct ResolveOrganizationRepositoryUseCase {
     organizations: Arc<dyn OrganizationRepositoryPort>,
     repositories: Arc<dyn PackageRepositoryQueryPort>,
@@ -19,8 +18,7 @@ impl ResolveOrganizationRepositoryUseCase {
         Self { organizations, repositories }
     }
 
-    /// `None` for an unknown or malformed slug, a personal organization, or an unknown repository name,
-    /// deliberately indistinguishable to the caller.
+    /// `None` for an unknown slug, a personal organization or an unknown name, indistinguishably.
     pub async fn execute(&self, slug: &str, repo_name: &str) -> Result<Option<PackageRepositorySummary>, ApplicationError> {
         let Ok(slug) = OrganizationSlug::parse(slug) else { return Ok(None) };
         if has_control_character(repo_name) {

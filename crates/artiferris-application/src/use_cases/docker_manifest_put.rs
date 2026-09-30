@@ -29,14 +29,7 @@ impl PutManifestUseCase {
         raw_body: &[u8],
         actor_id: Uuid,
     ) -> Result<Digest, ApplicationError> {
-        // A digest reference (manifest-list members) is already reachable by digest — don't tag it.
-        // Reject a malformed tag (M-16) before any database work starts, not just before it's tagged:
-        // once `insert_manifest_with_checks`/`insert_manifest` commits, the manifest row, its blob
-        // links, and the bumped blob reference counts are permanent — a later rejection can no longer
-        // undo them, leaving an untagged manifest that's invisible to tags/list and the retention sweep
-        // but still consumes quota and blocks blob cleanup forever. Mapped to InvalidDockerPayload (not
-        // left as a bare DomainError via `?`) so it surfaces as a 400 in errors.rs, matching every other
-        // client-input validation in this file.
+        // A digest reference is already reachable by digest: do not tag it.
         if Digest::parse(reference).is_err() {
             parse_docker_tag(reference).map_err(|e| ApplicationError::InvalidDockerPayload(e.to_string()))?;
         }
@@ -69,9 +62,8 @@ impl PutManifestUseCase {
         // Quota is checked at manifest-push time, not at blob upload — a manifest push is what attributes bytes to a repository. The limit itself is static config, read outside the lock below; only the repository's current usage needs re-checking under it.
         let quota_bytes = self.repositories.find_by_id(repository_id).await?.and_then(|repo| repo.quota_bytes);
 
-        // Reachability, the quota sum, the insert, and the blob ref-count bump all happen in one
-        // transaction under a per-repository advisory lock (B-18) — see the port method's doc comment.
-        // The returned id is the row's real one, which differs from `manifest.id` on conflict — every reference below must use it.
+        // Reachability, quota sum, insert and ref-count bump run in one transaction under a per-repository advisory
+        // lock. The returned id is the row's real one, which differs from `manifest.id` on conflict.
         let (manifest_id, _inserted) = match self.manifests.insert_manifest_with_checks(repository_id, &manifest, &blob_digests, quota_bytes).await {
             Err(DomainError::DockerBlobNotReachable(_)) => return Err(ApplicationError::DockerBlobNotFound),
             Err(DomainError::StorageQuotaExceeded) => return Err(ApplicationError::StorageQuotaExceeded),
@@ -81,8 +73,9 @@ impl PutManifestUseCase {
             self.manifests.insert_manifest_list_members(manifest_id, &member_digests).await?;
         }
 
-        // A digest reference (manifest-list members) is already reachable by digest — don't tag it.
-        // Grammar already validated above, before any database work began.
+        // Reject a malformed tag before any database work: once the manifest row commits, a later rejection cannot undo
+        // it and would leave an untagged manifest that still consumes quota. Mapped to `InvalidDockerPayload` so it is
+        // a 400.
         if Digest::parse(reference).is_err() {
             self.manifests.set_tag(repository_id, image_name, reference, manifest_id).await.map_err(|e| match e {
                 DomainError::TooManyTags => ApplicationError::DockerTooManyTags,
@@ -238,10 +231,8 @@ mod tests {
             Vec::<String>::new(),
             "a malformed tag must not be persisted"
         );
-        // The tag grammar is checked before any database work starts, so a rejected push must never
-        // reach insert_manifest_with_checks in the first place — not just leave the tag unset. Proves
-        // the manifest row itself (and its blob ref-count bump) was never committed; the tag-only
-        // assertion above wouldn't have caught the manifest being orphaned but persisted.
+        // A rejected tag must not reach `insert_manifest_with_checks`: the manifest row and its ref-count bump must not
+        // be committed.
         let manifest_digest = Digest::of(&body_bytes);
         assert!(
             manifests.find_manifest_by_digest(repository_id, &name, &manifest_digest).await.unwrap().is_none(),
@@ -409,12 +400,8 @@ mod tests {
         assert!(result.is_ok(), "got {result:?}");
     }
 
-    /// The in-memory fakes above can't model this — the race is across two real database
-    /// connections. Seeds a repository with a tight quota and two individually-under-quota blobs
-    /// already uploaded to it, then races two real pushes (each referencing a different one of those
-    /// blobs) through the real `PostgresDockerManifestRepository`-backed use case. Before B-18's fix,
-    /// this either failed outright (both pushes read "under quota" before either committed) or was
-    /// flaky depending on how the two connections happened to interleave.
+    /// Two real connections race two pushes that each fit the quota but not together, through the real Postgres-backed
+    /// use case.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn two_concurrent_pushes_that_together_exceed_the_quota_do_not_both_succeed(pool: sqlx::PgPool) {
         let repository_id = Uuid::new_v4();
@@ -451,15 +438,8 @@ mod tests {
         let body_a = serde_json::to_vec(&sample_manifest_body(blob_a.as_str())).unwrap();
         let body_b = serde_json::to_vec(&sample_manifest_body(blob_b.as_str())).unwrap();
 
-        // `#[sqlx::test]` drives this whole test on a single-threaded current-thread Tokio runtime, and
-        // on localhost every query round trip resolves fast enough that a plain `tokio::join!` never
-        // actually interleaves the two pushes — one runs to completion (commit included) before the
-        // other's very first query is even polled, so the two transactions never contend regardless of
-        // whether the fix exists. `spawn_blocking` puts each push on its own real OS thread (tokio's
-        // blocking pool) for genuine preemptive concurrency, while `Handle::current().block_on` keeps
-        // both on the SAME runtime as `pool` — a `PgPool` isn't safe to drive from a second, unrelated
-        // runtime (an entirely separate `Runtime::new_current_thread()` per thread was tried first and
-        // reliably deadlocked pool acquisition until the 30s acquire-timeout fired).
+        // `spawn_blocking` gives each push its own OS thread, so they really overlap; `Handle::current().block_on`
+        // keeps both on the test's runtime, which `pool` needs.
         let run_push = |pool: sqlx::PgPool, tag: &'static str, body: Vec<u8>| {
             let name = name.clone();
             let handle = tokio::runtime::Handle::current();
@@ -485,34 +465,10 @@ mod tests {
         assert!(matches!(rejected, Err(ApplicationError::StorageQuotaExceeded)), "the rejected push must fail with StorageQuotaExceeded, got {rejected:?}");
     }
 
-    /// Deterministic companion to the timing-based test above. Mutation-testing that test (batch-2
-    /// follow-up investigation: temporarily removing B-18's lock call, then replacing it with a
-    /// no-op `SELECT 1`, then releasing it in a separate committed transaction before the
-    /// checks/insert run) showed it has the SAME blind spot npm's original timing-based quota-lock
-    /// test had before it was replaced (`npm_publish.rs`): totally removing the lock is caught
-    /// reliably (30/30 runs), but a no-op'd lock is only caught ~23% of the time (7/30) and an
-    /// early-released lock only ~3% of the time (1/30) — on localhost, `#[sqlx::test]` +
-    /// `spawn_blocking` usually lets one push run to completion before the other's first query is
-    /// even polled, regardless of whether the lock actually does anything.
-    ///
-    /// Docker's push has no externally-pausable step like npm's `StorageBackendPort::write` to hook
-    /// a `PausingStorage`-style decorator into: `insert_manifest_with_checks` is a single function,
-    /// entirely SQL, with no port call inside its transaction. Rather than adding a test-only pause
-    /// hook to production code, this reuses a row lock the production code ALREADY takes as part of
-    /// its normal work — the same "compete for a lock production code already takes" technique
-    /// `a_concurrent_link_landing_between_the_guard_and_the_delete_does_not_lose_the_decrement`
-    /// (`filesystem_docker_blob_store.rs`) uses. A bystander connection pre-locks push A's blob row
-    /// in `docker_blobs` with `SELECT ... FOR UPDATE` before A even starts. A then runs all the way
-    /// through the advisory-lock acquire, the reachability check, the quota recheck, and its own
-    /// manifest-row insert — i.e. it is fully "inside" its locked critical section, quota check
-    /// already passed — and only then blocks: the very next statement, inserting into
-    /// `docker_manifest_blobs` (which has an FK to `docker_blobs(digest)`), needs a `FOR KEY SHARE`
-    /// lock on that same blob row to satisfy the FK check, which conflicts with the bystander's
-    /// stronger `FOR UPDATE` lock. That block is confirmed via `pg_stat_activity` (not a sleep)
-    /// before push B is even started; B's own attempt to acquire the SAME per-repository advisory
-    /// lock — still held by A, which hasn't committed — is then confirmed blocked too, before the
-    /// bystander row lock is released and A is allowed to finish and commit. Only then does B
-    /// unblock, see A's now-committed usage, and get correctly rejected for quota.
+    /// Deterministic companion of the timing-based test above, which can miss a no-op or early-released lock. A
+    /// bystander connection locks blob A's row so push A blocks after its checks, inside the lock. Push B is then
+    /// confirmed blocked on the same advisory lock via `pg_stat_activity` before A is released, and must be rejected
+    /// for quota.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_push_blocked_on_the_quota_lock_is_rejected_once_the_holder_commits_over_quota(pool: sqlx::PgPool) {
         let repository_id = Uuid::new_v4();
@@ -529,7 +485,7 @@ mod tests {
         .await
         .unwrap();
 
-        // Two distinct blobs, each 20 bytes — individually under the quota (with their manifest bodies), together over it.
+        // Two 20-byte blobs: each fits the quota with its manifest, both together do not.
         let blob_a = Digest::of(b"blob-content-aaaa");
         let blob_b = Digest::of(b"blob-content-bbbb");
         for digest in [&blob_a, &blob_b] {
@@ -550,9 +506,7 @@ mod tests {
         let body_a = serde_json::to_vec(&sample_manifest_body(blob_a.as_str())).unwrap();
         let body_b = serde_json::to_vec(&sample_manifest_body(blob_b.as_str())).unwrap();
 
-        // Bystander connection: locks blob A's row before push A even starts, so push A runs all the
-        // way through the work `two_concurrent_pushes_...` relies on thread-scheduling luck to
-        // interleave, and only then blocks, deterministically, at the ref-count UPDATE.
+        // Bystander: locks blob A's row so push A blocks at the ref-count step.
         let mut blocker_tx = pool.begin().await.unwrap();
         sqlx::query!("SELECT reference_count FROM docker_blobs WHERE digest = $1 FOR UPDATE", blob_a.as_str())
             .fetch_one(&mut *blocker_tx)
@@ -575,13 +529,7 @@ mod tests {
 
         let handle_a = run_push(pool.clone(), "tag-a", body_a);
 
-        // Wait until push A is genuinely blocked — it has already acquired the advisory lock and
-        // passed its own reachability + quota checks and inserted its manifest row; the bystander's
-        // `FOR UPDATE` lock on blob A's `docker_blobs` row is incompatible with the `FOR KEY SHARE`
-        // lock the very next statement's FK check needs on that same row (inserting into
-        // `docker_manifest_blobs`, which references `docker_blobs(digest)`), so A blocks there —
-        // one statement earlier than the ref-count `UPDATE` itself, but still after every check has
-        // already passed and the manifest row already inserted.
+        // Wait until push A is blocked, after its checks and manifest insert.
         let mut a_blocked = false;
         for _ in 0..500 {
             let blocked: (i64,) = sqlx::query_as(
@@ -601,8 +549,7 @@ mod tests {
 
         let handle_b = run_push(pool.clone(), "tag-b", body_b);
 
-        // Confirm push B is blocked trying to acquire the SAME per-repository advisory lock A still
-        // holds — proving the two pushes genuinely contend on the lock, not merely on timing.
+        // Confirm push B waits on the advisory lock A still holds.
         let mut b_blocked = false;
         for _ in 0..500 {
             let blocked: (i64,) = sqlx::query_as(
@@ -620,9 +567,7 @@ mod tests {
         }
         assert!(b_blocked, "push B never entered a lock wait on pg_advisory_xact_lock — this test isn't exercising the blocking it claims to");
 
-        // Release the bystander lock — only now can A's UPDATE, and then its commit (which releases
-        // the advisory lock), proceed. If B were merely racing rather than genuinely blocked, it
-        // could already have read stale usage and be past its own check by this point.
+        // Release the bystander lock; A commits, then B sees A's usage.
         blocker_tx.rollback().await.unwrap();
 
         let result_a = handle_a.await.unwrap();

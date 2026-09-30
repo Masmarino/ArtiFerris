@@ -45,9 +45,8 @@ impl GetNpmPackageMetadataUseCase {
         Ok(Some(build_metadata_document(name, versions, &dist_tags)))
     }
 
-    /// `authorize_member` is the caller's read policy, consulted for every group member the
-    /// traversal would descend into — the top-level repository's own access is the caller's
-    /// responsibility, checked once before this is ever called (C-1).
+    /// `authorize_member` is the caller's read policy for every group member descended into; the top-level repository
+    /// is checked by the caller.
     pub fn execute<'a, FAuthorize, FutAuthorize>(
         &'a self,
         repository_id: Uuid,
@@ -106,10 +105,9 @@ impl GetNpmPackageMetadataUseCase {
                     self.packages.set_cached_metadata(package_id, document).await?;
                     self.packages.touch_metadata_fetched_at(package_id, Utc::now()).await?;
                 }
-                // Genuinely not found upstream — leave any existing (stale) cache as-is rather
-                // than manufacturing a package entry for something that doesn't exist remotely.
+                // Not found upstream: keep any stale cache rather than invent an entry.
                 Ok(None) => {}
-                // Remote unreachable, but we have a stale cache — serve it rather than fail.
+                // Remote unreachable: serve the stale cache.
                 Err(_e) if existing.is_some() => {}
                 Err(e) => return Err(e.into()),
             }
@@ -239,10 +237,7 @@ mod tests {
         assert_eq!(doc["versions"]["1.0.0"]["deprecated"], json!("use left-pad2 instead"));
     }
 
-    /// B-16 regression: a first-time proxy fetch (no existing cache) whose upstream call
-    /// genuinely 404s (`fetch_metadata` returns `Ok(None)`) must come out the other end of
-    /// `execute_proxy` as "not found" — not an error, and without manufacturing a package entry
-    /// for something that doesn't exist remotely.
+    /// A first proxy fetch that 404s upstream is "not found": no error, no invented entry.
     #[tokio::test]
     async fn a_first_time_proxy_fetch_that_404s_upstream_returns_not_found() {
         let packages = Arc::new(FakePackages::new());
@@ -336,8 +331,7 @@ mod tests {
         assert!(result.unwrap().is_none());
     }
 
-    /// A group member the caller-supplied policy rejects must not be reachable through the group,
-    /// even though it's readable directly — the group's own broader access must not leak into it (C-1).
+    /// A member rejected by the caller's policy stays unreachable through the group.
     #[tokio::test]
     async fn metadata_from_a_group_skips_a_member_the_caller_is_not_authorized_to_read() {
         let packages = Arc::new(FakePackages::new());

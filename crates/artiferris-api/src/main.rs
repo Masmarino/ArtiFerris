@@ -102,7 +102,9 @@ fn configure_ssrf_allowlist() {
     artiferris_infrastructure::ssrf_allowlist::configure(allowed);
 }
 
-/// Reports what is still in the old format, or under the previous key, and only rewrites it when `SECRETS_REENCRYPT_LEGACY=true`. Releases before the versioned format cannot read the result; rolling back past the migrations needs a restore whatever this flag says.
+/// Reports what is still in the old format or under the previous key, and rewrites it only when
+/// `SECRETS_REENCRYPT_LEGACY=true`. Earlier releases cannot read the result; rolling back past the migrations needs a
+/// restore whatever this flag says.
 async fn reencrypt_stored_secrets(pool: &sqlx::PgPool, key: &str) {
     let previous_key = std::env::var("SECRETS_ENCRYPTION_KEY_PREVIOUS").ok().filter(|s| !s.is_empty());
     if let Some(previous) = &previous_key {
@@ -245,9 +247,9 @@ fn spawn_retention_sweep_timer(state: &AppState) {
     });
 }
 
-/// Runs hourly; no immediate run on startup, same as the retention sweep. Reclaims abandoned Docker
-/// upload sessions (M-13) that the lazy sweep in `artiferris_domain::docker_registry::DockerUploadSessionPort::find`
-/// never reaches, since a truly abandoned session is never looked up again, and blobs no manifest ever referenced.
+/// Runs hourly, not at startup. Reclaims abandoned Docker upload sessions that the lazy sweep in
+/// `DockerUploadSessionPort::find` never reaches (a truly abandoned session is never looked up again), and blobs no
+/// manifest ever referenced.
 fn spawn_upload_sweep_timer(state: &AppState) {
     let sweep_expired_uploads = state.sweep_expired_uploads.clone();
     tokio::spawn(async move {
@@ -273,8 +275,7 @@ fn spawn_upload_sweep_timer(state: &AppState) {
     });
 }
 
-/// Runs daily — more appropriate than hourly given the 30-day grace period this sweep enforces
-/// (B-39); no immediate run on startup, same as the other sweep timers.
+/// Runs daily, not at startup: enough for the 30-day grace period this sweep enforces.
 fn spawn_repository_deletion_sweep_timer(state: &AppState) {
     let sweep_repository_deletions = state.sweep_repository_deletions.clone();
     tokio::spawn(async move {
@@ -415,8 +416,9 @@ fn with_security_headers(router: Router, hsts_enabled: bool) -> Router {
         .layer(axum::middleware::from_fn(response_policy::response_policy))
         .layer(SetResponseHeaderLayer::overriding(
             header::CONTENT_SECURITY_POLICY,
-            // style-src needs 'unsafe-inline' — Angular injects per-component <style> tags, no CSP nonces.
-            // img-src allows https: for the images of package READMEs (the sanitizer only keeps https ones); it does not loosen script-src.
+            // style-src needs 'unsafe-inline': Angular injects per-component <style> tags and there are no CSP nonces.
+            // img-src allows https: for package README images (the sanitizer keeps only https ones); script-src is not
+            // loosened.
             HeaderValue::from_static(
                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             ),
@@ -790,16 +792,12 @@ mod tests {
         let img_src = csp.split(';').map(|directive| directive.trim()).find(|directive| directive.starts_with("img-src")).expect("CSP must declare an img-src directive");
         assert!(img_src.split_whitespace().any(|source| source == "https:"), "README images are https-only, so https: must be allowed: {img_src}");
         assert!(!img_src.contains("http:") && !img_src.contains('*'), "plain http and wildcards stay out: {img_src}");
-        // The frontend stores its session JWT in sessionStorage (a deliberate, documented
-        // risk-acceptance — see auth.service.ts's TOKEN_STORAGE_KEY comment) rather than an
-        // HttpOnly cookie. That acceptance is conditioned entirely on script injection being
-        // structurally blocked: a strict script-src with no unsafe-inline/unsafe-eval. If this
-        // assertion ever needs to change, the risk-acceptance in auth.service.ts must be
-        // re-evaluated first, not silently invalidated (M-19).
+        // The frontend keeps its session JWT in sessionStorage, not an HttpOnly cookie, an accepted risk that holds
+        // only while script injection is structurally blocked: a strict script-src without unsafe-inline or
+        // unsafe-eval. If this assertion ever changes, revisit that acceptance first.
         //
-        // style-src legitimately carries 'unsafe-inline' (Angular's per-component <style> tags,
-        // no CSP nonces) — so the unsafe-inline/unsafe-eval check must isolate the script-src
-        // directive rather than scan the whole header, or it would false-fail on style-src today.
+        // style-src legitimately carries 'unsafe-inline' (Angular's per-component styles), so the check must isolate
+        // the script-src directive instead of scanning the whole header.
         let script_src = csp
             .split(';')
             .map(|directive| directive.trim())

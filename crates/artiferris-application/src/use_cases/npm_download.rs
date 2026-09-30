@@ -61,9 +61,8 @@ impl DownloadNpmTarballUseCase {
         Ok(Some(bytes))
     }
 
-    /// `authorize_member` is the caller's read policy, consulted for every group member the
-    /// traversal would descend into — the top-level repository's own access is the caller's
-    /// responsibility, checked once before this is ever called (C-1).
+    /// `authorize_member` is the caller's read policy for every group member descended into; the top-level repository
+    /// is checked by the caller.
     pub fn execute<'a, FAuthorize, FutAuthorize>(
         &'a self,
         repository_id: Uuid,
@@ -184,7 +183,8 @@ impl DownloadNpmTarballUseCase {
             .cloned()
             .unwrap_or(serde_json::json!({}));
 
-        // Computed server-side — never trust the remote's declared shasum/integrity. Hashing is CPU-bound, off the async executor so it doesn't stall other requests.
+        // Hashed server-side, never trusting the remote's shasum or integrity; off the async executor since it is
+        // CPU-bound.
         let (shasum, integrity, tarball_bytes) = tokio::task::spawn_blocking(move || {
             let shasum = hex::encode(Sha1::digest(&tarball_bytes));
             let integrity = format!("sha512-{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, Sha512::digest(&tarball_bytes)));
@@ -431,11 +431,7 @@ mod tests {
         assert_eq!(bytes_again.as_deref(), Some(b"fake-tarball-bytes".as_slice()));
     }
 
-    /// B-16 regression: a first-time proxy fetch of a tarball (metadata already cached — the
-    /// version is known — but the tarball itself was never fetched before) whose upstream call
-    /// genuinely 404s (`fetch_tarball` returns `Ok(None)`) must come out the other end of
-    /// `fill_from_upstream` as "not found" — not an error, and without persisting a version row or
-    /// writing anything to storage for a tarball that doesn't exist remotely.
+    /// A first proxy fetch whose upstream tarball 404s is "not found": no error, no version row, nothing written.
     #[tokio::test]
     async fn a_first_time_tarball_fetch_that_404s_upstream_returns_not_found() {
         let packages = Arc::new(FakePackages::new());

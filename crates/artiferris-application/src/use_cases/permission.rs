@@ -205,9 +205,8 @@ mod tests {
         }
     }
 
-    /// No repository/user registered in either fake, so `execute`'s lookups both come back
-    /// `None` and the organization check is skipped — same behavior the pre-fix use case had
-    /// for every test below, which only exercise the grant/revoke event-sourcing mechanics.
+    /// No repository or user registered: the organization check is skipped. These tests only cover the grant/revoke
+    /// events.
     fn use_case_without_organization_data(store: Arc<FakePermissionStore>) -> GrantPermissionUseCase {
         GrantPermissionUseCase::new(store, Arc::new(FakeRepositories::new()), Arc::new(FakeUsers::new()))
     }

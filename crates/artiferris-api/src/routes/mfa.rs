@@ -177,9 +177,9 @@ struct PasskeyRegistrationStartResponse {
     public_key: webauthn_rs_proto::PublicKeyCredentialCreationOptions,
 }
 
-/// Unwraps `CreationChallengeResponse` down to its inner `public_key` field — it already serializes to `{"publicKey": {...}}`, which would otherwise double-nest here.
-/// Requires the current password, same as `enroll_totp` — this is the step that actually starts a
-/// new registration ceremony, and must not be reachable via a hijacked session token alone (M-7).
+/// Unwraps `CreationChallengeResponse` to its inner `public_key` (it serializes to `{"publicKey": {...}}`, which would
+/// double-nest here). Requires the current password, like `enroll_totp`: this step starts a registration ceremony and
+/// must not be reachable with a hijacked session token alone.
 async fn start_passkey_registration(State(state): State<AppState>, user: AuthUser, Json(body): Json<CurrentPasswordRequest>) -> Result<Json<PasskeyRegistrationStartResponse>, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = manage_throttle_key(user.id);
@@ -274,8 +274,8 @@ mod tests {
         }
     }
 
-    /// An IP-literal `ARTIFERRIS_BASE_DOMAIN` is not a valid WebAuthn relying-party id — the
-    /// webauthn client (built from `artiferris_base_domain`, not `public_url`) fails to construct.
+    /// An IP-literal `ARTIFERRIS_BASE_DOMAIN` is not a valid WebAuthn relying-party id: the webauthn client, built from
+    /// `artiferris_base_domain` and not `public_url`, fails to construct.
     fn ip_literal_base_domain_config() -> Config {
         Config { artiferris_base_domain: "0.0.0.0".to_string(), ..test_config() }
     }

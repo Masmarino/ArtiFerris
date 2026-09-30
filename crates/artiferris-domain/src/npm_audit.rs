@@ -53,8 +53,7 @@ fn parse_one_advisory(value: &serde_json::Value) -> Option<NpmAdvisory> {
 pub trait NpmAuditPort: Send + Sync {
     async fn check(&self, name: &NpmPackageName, versions: &[NpmVersion]) -> Result<Vec<NpmAdvisory>, DomainError>;
 
-    /// Same query for many packages, returned as npm's raw JSON — real
-    /// `npm audit` CLI clients expect this exact shape back.
+    /// Same query for many packages, as npm's raw JSON (the shape `npm audit` clients expect).
     async fn check_bulk_raw(&self, packages: &HashMap<String, Vec<String>>) -> Result<serde_json::Value, DomainError>;
 }
 
@@ -132,8 +131,8 @@ mod tests {
 
     #[test]
     fn advisory_missing_cvss_score_still_parses_with_none() {
-        // `cvss.score` is read with `.and_then`, never `?`, so a missing/absent score
-        // must not drop the whole advisory - only `cvss_score` becomes `None`.
+        // `cvss.score` is read with `and_then`, never `?`: a missing score must not drop the advisory, only
+        // `cvss_score`.
         let mut advisory = well_formed_advisory(1);
         advisory.as_object_mut().unwrap().remove("cvss");
 

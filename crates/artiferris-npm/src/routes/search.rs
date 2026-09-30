@@ -155,9 +155,7 @@ mod tests {
         .unwrap();
     }
 
-    /// Marks a repository public directly against the event store — same approach
-    /// `routes::metadata`'s own tests use, since `SetRepositoryVisibilityUseCase` isn't wired
-    /// into this crate's `NpmState`.
+    /// Marks a repository public through the event store, like `routes::metadata`'s tests.
     async fn mark_repository_public(pool: &PgPool, repository_id: Uuid) {
         use artiferris_domain::package_repository::{PackageRepositoryEvent, PackageRepositoryEventStorePort};
         let store = PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string());

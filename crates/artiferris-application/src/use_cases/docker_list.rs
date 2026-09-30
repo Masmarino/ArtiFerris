@@ -21,10 +21,7 @@ pub struct TagPage {
     pub has_more: bool,
 }
 
-/// A `Group` repository stores no manifests of its own — `manifests.list_tags` against its id
-/// always returns empty (M-18). `ListTagsUseCase` therefore needs to know the repository's
-/// `repo_type` and, for a Group, recurse into its members and UNION their tags rather than query
-/// the group id directly.
+/// A `Group` stores no manifests of its own, so its tags are the union of its members' tags.
 pub struct ListTagsUseCase {
     manifests: Arc<dyn DockerManifestRepositoryPort>,
     repositories: Arc<dyn PackageRepositoryQueryPort>,
@@ -77,9 +74,8 @@ impl ListTagsUseCase {
         Ok(TagPage { tags, has_more })
     }
 
-    /// Same traversal limits as `group_resolve` (one shared visited set, depth and visit caps), but
-    /// unions every member's tags instead of stopping at the first hit. `authorize_member` runs for
-    /// each group member, never for the top-level repository (the caller checked that already).
+    /// Same traversal limits as `group_resolve`, but unions every member's tags. `authorize_member` runs for each
+    /// member, not the top-level repository.
     fn collect_tags<'a, FAuthorize, FutAuthorize>(
         &'a self,
         repo: PackageRepositorySummary,
@@ -164,16 +160,10 @@ impl ListDockerRegistryCatalogUseCase {
         Self { repositories, permissions, manifests }
     }
 
-    /// Repository names are only unique per-organization, so without `organization_id` the
-    /// catalog would leak cross-organization repository existence.
-    ///
-    /// `is_super_admin` and each repository's `is_public` are the same bypasses every other
-    /// Docker route honors (B-11) — unlike `artiferris-api`'s `AuthUser`, `DockerAuthUser` (a
-    /// snapshot baked into the access token at issuance) carries no live org-admin flag, so
-    /// there is no org-admin bypass to apply at this layer.
+    /// Scoped by organization, since names are only unique per organization. `is_super_admin` and `is_public` bypass as
+    /// on every Docker route.
     pub async fn execute(&self, organization_id: Uuid, user_id: Uuid, is_super_admin: bool) -> Result<Vec<String>, ApplicationError> {
-        // Scoped at the database level instead of filtering a full-table `list_all()` read in
-        // application code (M-21, B-7).
+        // Filtered in the database, not from a full `list_all()`.
         let docker_repos: Vec<_> =
             self.repositories.list_by_organization(organization_id).await?.into_iter().filter(|r| r.format == RepositoryFormat::Docker).collect();
         let readable: Vec<_> = if is_super_admin {
@@ -413,9 +403,7 @@ mod tests {
         assert_eq!(tags, vec!["v1".to_string(), "v2".to_string()]);
     }
 
-    /// M-18: a Group repository stores no manifests of its own — listing tags on it must aggregate
-    /// (union) every hosted member's tags instead of querying the group id directly and getting an
-    /// empty list back.
+    /// Listing tags of a group returns the union of its members' tags.
     #[tokio::test]
     async fn listing_tags_on_a_group_repository_aggregates_its_hosted_members() {
         let manifests = Arc::new(FakeDockerManifestRepository::new());
@@ -441,8 +429,7 @@ mod tests {
         assert_eq!(tags, vec!["v1".to_string(), "v2".to_string()]);
     }
 
-    /// A group containing itself (directly) must be caught by the cycle guard and terminate with an
-    /// empty aggregate rather than recursing forever.
+    /// A group containing itself ends with an empty result.
     #[tokio::test]
     async fn a_group_that_contains_itself_terminates_instead_of_looping() {
         let manifests = Arc::new(FakeDockerManifestRepository::new());
@@ -458,8 +445,7 @@ mod tests {
         assert!(tags.is_empty());
     }
 
-    /// Two groups referencing each other transitively must also be caught, not just the direct
-    /// self-reference case.
+    /// Two groups referencing each other end too.
     #[tokio::test]
     async fn two_groups_referencing_each_other_terminate_instead_of_looping() {
         let manifests = Arc::new(FakeDockerManifestRepository::new());
@@ -477,8 +463,7 @@ mod tests {
         assert!(tags.is_empty());
     }
 
-    /// C-1 parity: a caller authorized to read the Group itself must not automatically see tags from
-    /// a member they individually lack access to — `authorize_member` is re-checked per member.
+    /// `authorize_member` is re-checked per member.
     #[tokio::test]
     async fn a_member_the_caller_is_not_authorized_to_read_is_excluded_from_the_aggregate() {
         let manifests = Arc::new(FakeDockerManifestRepository::new());

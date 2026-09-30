@@ -616,7 +616,7 @@ mod tests {
 
     const TEST_BASE_DOMAIN: &str = "artiferris.example.com";
 
-    /// One public org per distinct organization_id already on `users` — tests needing a non-public restore org build their own `FakeOrganizations` instead.
+    /// One public org per distinct organization_id already on `users`.
     fn public_orgs_for(users: &FakeUsers) -> Arc<FakeOrganizations> {
         let organizations = Arc::new(FakeOrganizations::new());
         for organization_id in users.users.lock().unwrap().values().map(|u| u.organization_id).collect::<std::collections::HashSet<_>>() {
@@ -1117,7 +1117,7 @@ mod tests {
         }
     }
 
-    /// Yields after answering, so a second import can run its own emptiness check before the first one has written anything.
+    /// Yields after answering, so a second import can check emptiness before the first has written.
     struct SlowRepositories(Arc<FakePackageRepositoryStore>);
 
     #[async_trait]

@@ -32,9 +32,8 @@ impl GetManifestUseCase {
         Ok(self.manifests.find_manifest_by_tag(repository_id, image_name, reference).await?)
     }
 
-    /// `authorize_member` is the caller's read policy, consulted for every group member the
-    /// traversal would descend into — the top-level repository's own access is the caller's
-    /// responsibility, checked once before this is ever called (C-1).
+    /// `authorize_member` is the caller's read policy for every group member descended into; the top-level repository
+    /// is checked by the caller.
     pub fn execute<'a, FAuthorize, FutAuthorize>(
         &'a self,
         repository_id: Uuid,
@@ -128,8 +127,7 @@ mod tests {
         assert!(result.is_none());
     }
 
-    // `docker pull` probes references that legitimately 404 upstream (e.g. OCI referrers);
-    // that must resolve to Ok(None), not Err, so the pull continues gracefully.
+    // `docker pull` probes references that 404 upstream (OCI referrers): that is `Ok(None)`, not an error.
     #[tokio::test]
     async fn a_proxy_repositorys_remote_404_resolves_to_none_not_an_error() {
         let repositories = Arc::new(FakeRepositories::new());

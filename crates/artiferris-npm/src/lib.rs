@@ -19,10 +19,9 @@ pub fn router(state: NpmState) -> axum::Router {
         .merge(routes::dist_tags::router())
         .merge(routes::search::router())
         .merge(routes::advisories::router())
-        // Real `npm audit` sends its bulk advisory request gzip-compressed
-        // unconditionally — without this, axum rejects it with a 400. Handlers read their bodies
-        // themselves, after authorizing, and cap them at their own limit (`body::read_json`), which
-        // applies to the decompressed bytes.
+        // Real `npm audit` sends its bulk request gzip-compressed, which axum would reject with a 400. Handlers read
+        // their own bodies after authorizing and cap them at their own limit (`body::read_json`), applied to the
+        // decompressed bytes.
         .layer(tower_http::decompression::RequestDecompressionLayer::new())
         .with_state(state)
 }

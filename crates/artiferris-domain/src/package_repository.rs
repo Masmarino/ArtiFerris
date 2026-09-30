@@ -20,11 +20,9 @@ pub enum RepositoryType {
     Group,
 }
 
-/// Definition-time URL-shape validation (M-2) — parseable and http/https only, no embedded credentials (those belong in the separate username/password fields, which are never echoed back), and https when credentials are stored: the
-/// credentials would otherwise cross the network in the clear. This is independent of, and layered on top of, the
-/// Proxy-only type guard already enforced by `create`/`change_remote_url`'s callers below. It does NOT resolve the host or
-/// check for private/reserved addresses — that's `ssrf_guard::ensure_public_host`'s job at fetch time, where DNS is actually
-/// available; this is just rejecting obviously-wrong `remote_url` values as early as possible.
+/// URL shape checks at definition time: parseable, http or https only, no embedded credentials (they belong in the
+/// username and password fields), and https when credentials are stored. It does not resolve the host;
+/// `ssrf_guard::ensure_public_host` does that at fetch time.
 fn validate_remote_url(url: &str, has_credentials: bool) -> Result<(), DomainError> {
     let parsed = url::Url::parse(url).map_err(|e| DomainError::InvalidRemoteUrl(format!("{url} is not a valid URL: {e}")))?;
     if !matches!(parsed.scheme(), "http" | "https") {
@@ -41,8 +39,7 @@ fn validate_remote_url(url: &str, has_credentials: bool) -> Result<(), DomainErr
 
 pub fn parse_repository_name(raw: &str) -> Result<String, DomainError> {
     let len_ok = (2..=64).contains(&raw.len());
-    // "." and ".." pass every char check below, so reject them explicitly too (matches
-    // NpmPackageName::validate_segment's guard for the same reason).
+    // "." and ".." pass every char check below, so reject them explicitly.
     let not_dots = raw != "." && raw != "..";
     let chars_ok = raw
         .chars()
@@ -196,9 +193,8 @@ impl PackageRepository {
                 self.group_members.retain(|(id, _)| id != member_repository_id);
             }
             PackageRepositoryEvent::QuotaSet { quota_bytes, .. } => self.quota_bytes = *quota_bytes,
-            // `set_retention_policy` rejects `Some(n)` with `n < 1` at construction time, but this
-            // replays trusted history unconditionally (B-37) — sanitize here too, in case an event
-            // written before that guard existed still carries a `Some(0)` (or negative) count.
+            // `set_retention_policy` rejects `Some(n)` with `n < 1`, but replay trusts history: sanitize here too, for
+            // events written before that guard.
             PackageRepositoryEvent::RetentionPolicySet { keep_last_n_versions, .. } => {
                 self.retention_keep_last_n = keep_last_n_versions.map(|n| n.max(1))
             }
@@ -301,10 +297,10 @@ impl PackageRepository {
 
     pub fn set_visibility(&self, is_public: bool) -> Result<PackageRepositoryEvent, DomainError> {
         self.ensure_mutable()?;
-        // A public proxy is an anonymous relay to its upstream using the repository's own stored credentials,
-        // and a public group would be served with no token in front of members that are checked one by one.
+        // A public proxy would be an anonymous relay to its upstream with the repository's stored credentials, and a
+        // public group would be served with no token in front of members checked one by one.
         //
-        // Making a repository private again is always allowed, whatever its type.
+        // Making a repository private again is always allowed.
         if is_public && self.repo_type != Some(RepositoryType::Hosted) {
             return Err(DomainError::InvalidForRepositoryType(
                 "only a hosted repository can be made public".to_string(),
@@ -371,9 +367,8 @@ pub trait PackageRepositoryQueryPort: Send + Sync {
     async fn list_by_organization(&self, organization_id: Uuid) -> Result<Vec<PackageRepositorySummary>, EventStoreError>;
 }
 
-/// A held per-repository advisory lock (`pg_advisory_xact_lock(hashtext(repository_id))`, same
-/// convention as Docker's B-18 fix). Serializes concurrent quota-affecting writes to one
-/// repository. Dropping the guard releases it — there's nothing else to commit.
+/// A held per-repository advisory lock (`pg_advisory_xact_lock`). Serializes concurrent quota-affecting writes to one
+/// repository; dropping the guard releases it.
 pub trait RepositoryLockGuard: Send {}
 
 #[async_trait]
@@ -384,51 +379,27 @@ pub trait RepositoryQuotaLockPort: Send + Sync {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HardDeleteSweepResult {
     pub repositories_removed: usize,
-    /// The id of every repository this sweep actually hard-deleted — the use case removes each
-    /// one's on-disk storage directory (npm tarballs; a no-op for a Docker-format repository, which
-    /// never has one) once this has committed (Finding 2, B-39 fix round 1).
+    /// The id of every repository this sweep hard-deleted; the use case removes each one's on-disk directory (npm
+    /// tarballs) after the commit.
     pub swept_repository_ids: Vec<Uuid>,
-    /// Digests of Docker blobs whose `docker_blobs` row was deleted (reference count hit zero, with
-    /// no remaining `docker_repository_blobs` link) as part of the SAME transaction as each
-    /// repository's cascade delete (Finding 3, B-39 fix round 1). Covers both manifest-backed digests
-    /// and digests this repository held only a link to (no manifest ever referenced them — e.g. a
-    /// proxy repository's blob cache) — otherwise a link-only digest's cascade-removed row would
-    /// never become reclaimable by any future sweep. The use case best-effort removes the files
-    /// themselves via `DockerBlobStorePort::remove_reclaimed_blob_files`, which re-acquires each
-    /// digest's advisory lock and re-confirms its row is still absent before touching disk.
+    /// Digests of Docker blobs whose row was deleted in the same transaction as a repository's cascade (reference count
+    /// zero, no remaining link), whether manifest-backed or link-only (e.g. a proxy's blob cache). The use case removes
+    /// the files best effort via `remove_reclaimed_blob_files`, which re-locks and re-checks each digest.
     pub reclaimed_docker_blob_digests: Vec<String>,
 }
 
-/// A narrow, dedicated port (same granularity as `DockerUploadSessionPort`) rather than a new method
-/// on the much-implemented `PackageRepositoryQueryPort` — this keeps the change confined to the one
-/// production adapter plus this use case's own test fake, instead of every other fake across the
-/// codebase that implements the query port.
+/// A narrow port of its own rather than a method on `PackageRepositoryQueryPort`, which many fakes implement.
 #[async_trait]
 pub trait RepositoryDeletionSweepPort: Send + Sync {
-    /// Hard-deletes every repository soft-deleted (`Deleted` event, `deleted_at` set) more than the
-    /// 30-day grace period ago, one repository at a time in its own transaction (not one batched
-    /// statement for the whole set — see the production adapter's implementation for why), letting
-    /// the schema's own `ON DELETE CASCADE` reclaim dependent rows (`npm_packages`, `docker_manifests`,
-    /// `docker_tags`, `docker_repository_blobs`, `docker_blob_uploads`, and the repository's own
-    /// `package_repository_group_members` rows as a group) that a soft delete alone never reaches
-    /// (B-39). It also removes any `package_repository_group_members` row where this repository is
-    /// the MEMBER of some other, still-live group — that FK has no `ON DELETE` action, so without
-    /// this the hard delete would fail outright for any repository still listed as a group member
-    /// (fix round 1, Finding 1).
+    /// Hard-deletes every repository soft-deleted more than 30 days ago, one per transaction, letting `ON DELETE
+    /// CASCADE` reclaim dependent rows (npm packages, Docker manifests, tags, blob links and uploads, group
+    /// membership). It also removes rows where the repository is a member of another live group, which has no `ON
+    /// DELETE` action.
     ///
-    /// The cascade does NOT reach `docker_blobs`: that table is deliberately not FK'd to
-    /// `package_repository_projections` (it's globally content-addressed and deduped across every
-    /// repository — see its schema comment), and its `reference_count` is maintained entirely by
-    /// application code (`insert_manifest_with_checks` increments, `DeleteManifestUseCase` decrements),
-    /// never a DB trigger. So each repository's own transaction also decrements `reference_count` for
-    /// every blob its manifests referenced, and deletes any blob row that reaches zero — including a
-    /// blob this repository only ever held a link to, never a manifest reference — all before that
-    /// transaction commits, so this bookkeeping is never lost even if the process crashes right
-    /// after. The result reports which blobs' on-disk files the caller should now remove (best-effort,
-    /// via `DockerBlobStorePort::remove_reclaimed_blob_files`, which re-locks and re-checks each
-    /// digest before touching its file), and which repositories' own on-disk storage directories it
-    /// should remove (fix round 1, Finding 2, via `StorageBackendPort::delete_repository`) — both
-    /// only meaningful post-commit.
+    /// The cascade does not reach `docker_blobs`, which is deduped across repositories and whose `reference_count` is
+    /// kept by application code. So each transaction also decrements the count of every blob the repository's manifests
+    /// referenced, and deletes blob rows reaching zero (link-only ones included), before committing: the bookkeeping
+    /// survives a crash. The result lists the blob files and repository directories to remove after the commit.
     async fn hard_delete_repositories_past_grace_period(&self) -> Result<HardDeleteSweepResult, DomainError>;
 }
 
@@ -751,11 +722,9 @@ mod tests {
         assert!(matches!(err, DomainError::Validation(_)));
     }
 
-    /// `set_retention_policy` rejects `Some(0)` at construction time, but `apply` replays trusted
-    /// history unconditionally — a `RetentionPolicySet { keep_last_n_versions: Some(0), .. }` event
-    /// written before that guard existed (B-37) must not replay into a live "keep nothing" policy.
-    /// Sanitized to `Some(1)`, the minimum meaningful value, rather than `None` (which would mean
-    /// "no policy, keep everything" — a bigger behavior change than the pre-guard writer intended).
+    /// `set_retention_policy` rejects `Some(0)`, but replay trusts history: a `RetentionPolicySet {
+    /// keep_last_n_versions: Some(0) }` written before that guard must not become a live "keep nothing" policy. It
+    /// becomes `Some(1)`, not `None` ("keep everything"), a bigger change than the old writer meant.
     #[test]
     fn replaying_a_pre_existing_zero_retention_event_does_not_produce_a_destructive_policy() {
         let repository_id = Uuid::new_v4();

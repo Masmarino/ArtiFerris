@@ -21,9 +21,8 @@ use artiferris_domain::user::UserRepositoryPort;
 
 use crate::tokens_valid_after_cache::TokensValidAfterCache;
 
-/// How long a user's `tokens_valid_after` may be served from cache before the data-plane extractor
-/// re-reads it — i.e. the worst-case delay before a revocation stops an already-issued access token
-/// (M-17). Well under the token's own 5-minute TTL, which is what it replaces as the exposure bound.
+/// How long a user's `tokens_valid_after` may be served from cache: the worst-case delay before a revocation stops an
+/// issued access token. Well under the token's own 5-minute TTL.
 pub const TOKENS_VALID_AFTER_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(30);
 
 #[derive(Clone)]
@@ -68,8 +67,8 @@ pub struct DockerState {
 }
 
 impl DockerState {
-    /// Built from the request's own `Host`, matching `ResolvedOrganization`. A `Host` that is not this instance's
-    /// base domain or a subdomain of it is replaced by the base domain.
+    /// Built from the request's `Host`, like `ResolvedOrganization`. A `Host` outside this instance's base domain and
+    /// its subdomains is replaced by the base domain.
     pub fn token_realm(&self, host: &str) -> String {
         match &self.token_realm_override {
             Some(realm) => realm.clone(),

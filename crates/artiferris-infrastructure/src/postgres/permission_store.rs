@@ -36,8 +36,7 @@ fn aggregate_id(user_id: Uuid, repository_id: Uuid) -> String {
     format!("{user_id}:{repository_id}")
 }
 
-/// `append`'s write logic, pulled out so `create_with_owner_grant` can reuse it inside its own
-/// transaction instead of keeping a second copy in sync by hand.
+/// `append`'s write logic, reusable by `create_with_owner_grant`.
 pub(crate) async fn append_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
@@ -46,10 +45,8 @@ pub(crate) async fn append_in_tx(
     events: Vec<PermissionEvent>,
     actor_id: Uuid,
 ) -> Result<(), EventStoreError> {
-    // An empty vector writes no events, so treat it as a genuine no-op rather than falling
-    // through to `latest_role: None`, which would otherwise delete an existing projection row
-    // without ever recording why (B-38). Checked here, not just in `append`, so
-    // `create_with_owner_grant`'s direct call gets the same guarantee.
+    // An empty vector is a no-op: falling through to `latest_role: None` would delete an existing projection row
+    // unrecorded. Checked here too so `create_with_owner_grant` gets the same guarantee.
     if events.is_empty() {
         return Ok(());
     }

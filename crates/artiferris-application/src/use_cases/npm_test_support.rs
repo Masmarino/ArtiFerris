@@ -17,11 +17,8 @@ pub struct FakePackages {
     pub packages: Mutex<HashMap<(Uuid, String), NpmPackage>>,
     pub versions: Mutex<HashMap<(Uuid, String), NpmPackageVersion>>,
     pub dist_tags: Mutex<HashMap<(Uuid, String), NpmVersion>>,
-    /// Test hook: consumed (fired once) right after computing the return value of the FIRST call
-    /// to `list_dist_tags_for_packages`. Lets a test simulate an `npm dist-tag add` landing in the
-    /// window between a stale pre-fetched snapshot and a later re-check, deterministically and
-    /// without real thread concurrency: a caller that queries only once (a snapshot taken up
-    /// front) never observes the mutation; a caller that queries again later does.
+    /// Test hook fired once after the first `list_dist_tags_for_packages` result is computed, to simulate a dist-tag
+    /// landing after a stale snapshot.
     pub after_first_list_dist_tags_for_packages: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     /// How many versions were read together with their full manifest, for tests that assert a listing doesn't load them all.
     pub manifests_read: AtomicUsize,
@@ -438,9 +435,7 @@ impl PackageRepositoryQueryPort for FakeRepositories {
     }
 }
 
-/// A no-op guard: the fake lock never actually serializes anything, since the fakes don't model
-/// real concurrency anyway (see `npm_publish.rs`'s real-Postgres regression test for the case
-/// that does).
+/// A no-op guard: the fakes do not model concurrency.
 struct FakeLockGuard;
 impl RepositoryLockGuard for FakeLockGuard {}
 

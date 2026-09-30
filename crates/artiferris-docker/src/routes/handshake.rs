@@ -19,26 +19,21 @@ use crate::errors::{docker_error, docker_error_response, www_authenticate_challe
 use crate::organization_resolution::ResolvedOrganization;
 use crate::state::DockerState;
 
-/// Returned for `/token` requests with no Basic credentials, instead of `401` (#73) — a standard
-/// Docker client caches the `WWW-Authenticate` challenge from `GET /v2/` and always exchanges it
-/// for a token before its first real request, even against a repository it can read anonymously.
-/// This is deliberately NOT a real, verifiable token: it's not signed by `state.token_issuer`, so
-/// `DockerTokenIssuerPort::verify` fails on it exactly like it already does for any other
-/// non-JWT bearer value (see `a_garbage_bearer_token_is_rejected` in `auth.rs`) — the same path a
-/// fully missing `Authorization` header takes. `Option<DockerAuthUser>` extraction degrades to
-/// `None` (public repo served, private repo 404s, same as no header at all); non-optional
-/// `DockerAuthUser` extraction (writes, `/_catalog`) still 401s. No change needed anywhere else.
+/// Returned for `/token` requests without Basic credentials, instead of `401`: a standard Docker client caches the
+/// `WWW-Authenticate` challenge from `GET /v2/` and always exchanges it for a token first, even for a repository it can
+/// read anonymously. It is deliberately not a verifiable token (not signed by `state.token_issuer`), so
+/// `DockerTokenIssuerPort::verify` rejects it like any non-JWT bearer, the same path as a missing header:
+/// `Option<DockerAuthUser>` degrades to `None` (public served, private 404), and non-optional `DockerAuthUser` (writes,
+/// `/_catalog`) still 401s.
 pub(crate) const ANONYMOUS_DOCKER_TOKEN: &str = "anonymous";
 
 pub fn router() -> Router<DockerState> {
     Router::new().route("/", get(check_version)).route("/token", get(issue_token))
 }
 
-// Routed through `Option<DockerAuthUser>` (M-17 fix round 1) rather than a raw `verify()` call: a
-// bare signature check would accept a syntactically valid token whose holder was deactivated or
-// deleted, or one issued before the holder's `tokens_valid_after` — exactly the gap this task
-// closed for every data-serving route. This probe carries no data of its own, but there's no
-// reason for it to be the one place a revoked token still reads as "authenticated".
+// Routed through `Option<DockerAuthUser>` rather than a raw `verify()`: a bare signature check would accept a valid
+// token whose holder was deactivated or deleted, or issued before `tokens_valid_after`. This probe carries no data, but
+// it should not be the one place a revoked token reads as authenticated.
 async fn check_version(State(state): State<DockerState>, headers: axum::http::HeaderMap, user: Option<DockerAuthUser>) -> Response {
     if user.is_some() {
         (StatusCode::OK, [(HeaderName::from_static("docker-distribution-api-version"), "registry/2.0")], Json(json!({}))).into_response()
@@ -96,8 +91,8 @@ async fn issue_token(
         return Json(token_body(ANONYMOUS_DOCKER_TOKEN)).into_response();
     };
 
-    // Basic auth carries no reliable "username" here (the use case ignores it — only the password,
-    // an ArtiFerris API token, is checked), so the client address is the only throttle key available (M-11).
+    // Basic auth carries no reliable username here (the use case checks only the password, an API token), so the client
+    // address is the only throttle key.
     let forwarded: Vec<&str> = headers.get_all("x-forwarded-for").iter().filter_map(|value| value.to_str().ok()).collect();
     let ip = state.guard.client_address(connect_info.ok().map(|ConnectInfo(addr)| addr.ip()), &forwarded);
     let throttle_key = format!("docker-token:{}", throttle_bucket(&ip));
@@ -122,8 +117,8 @@ async fn issue_token(
             docker_error(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "invalid credentials").into_response()
         }
         Err(ApplicationError::InvalidCredentials) => {
-            // Not `let _ = ...` — Task 3 fixed this exact silent-discard pattern in artiferris-api
-            // (B-5); a brand-new call site in a different crate must not reintroduce it.
+            // Not `let _ = ...`: the silent-discard pattern was fixed in artiferris-api and must not come back in this
+            // crate.
             if let Err(e) = state.record_security_event.execute(artiferris_domain::audit::SecurityEvent::DockerTokenFailed { ip }, None).await {
                 tracing::warn!("failed to record security event: {e}");
             }
@@ -253,8 +248,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// M-11: `/v2/token` had no throttling at all, and its credential check is a cheap unsalted
-    /// SHA-256 comparison — an efficient guessing oracle without this.
+    /// `/v2/token` had no throttling, and its credential check is a cheap unsalted SHA-256 comparison: an efficient
+    /// guessing oracle without it.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn repeated_wrong_password_token_requests_are_eventually_throttled(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -474,7 +469,8 @@ mod tests {
         assert_eq!(actions, vec!["pull".to_string(), "push".to_string()]);
     }
 
-    /// Mirrors artiferris-api's org-admin bypass (`artiferris_api::authz::effective_repository_role`) — implicit Admin on any repository in their own org, no explicit grant needed.
+    /// Mirrors artiferris-api's org-admin bypass (`effective_repository_role`): implicit Admin on any repository of
+    /// their own organization, no explicit grant.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn token_endpoint_grants_full_scope_to_an_organization_admin_of_the_repositorys_own_organization(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();

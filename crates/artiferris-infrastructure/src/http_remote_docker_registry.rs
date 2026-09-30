@@ -84,7 +84,7 @@ impl HttpRemoteDockerRegistry {
         ensure_public_host(target.as_str()).await
     }
 
-    /// On a 401 with a Bearer challenge, fetches a token and retries once. `Ok(None)` for a genuine 404 (either response) — not an error.
+    /// On a 401 with a Bearer challenge, fetches a token and retries once. `Ok(None)` for a 404.
     #[allow(clippy::too_many_arguments)]
     async fn get_with_bearer_challenge(
         &self,
@@ -147,8 +147,8 @@ impl HttpRemoteDockerRegistry {
         Self::require_success(response, url).await.map(Some)
     }
 
-    /// Follows up to `MAX_BLOB_REDIRECTS` hops. Each target must be https and pass the public-host check, and it is asked for
-    /// with no credentials, except that the registry's own token goes along to a target on the registry's own origin.
+    /// Follows up to `MAX_BLOB_REDIRECTS` hops. Each target must be https and pass the public-host check, and is asked
+    /// for without credentials, except that the registry's own token goes to a target on the registry's origin.
     async fn follow_redirects(&self, mut response: reqwest::Response, url: &str, accept: &str, bearer: Option<&str>, client: &reqwest::Client) -> Result<Option<reqwest::Response>, DomainError> {
         let registry = reqwest::Url::parse(url).map_err(|e| DomainError::Infrastructure(format!("invalid remote URL {url}: {e}")))?;
         let mut current = registry.clone();
@@ -423,11 +423,8 @@ mod tests {
             std::future::pending::<()>().await;
         });
 
-        // fetch_manifest -> get_with_bearer_challenge calls ensure_public_host(url) first, which
-        // would reject this loopback address before reqwest ever opens a socket — that would make
-        // this test pass even with no timeout configured at all. Bypass it the same way
-        // `the_configured_client_does_not_follow_a_redirect` does below: drive the raw `client`
-        // (used for manifest/token calls) directly against the local listener.
+        // Drives the raw `client` against a local listener: `ensure_public_host` would reject the loopback address
+        // before any socket opens, and the test would then pass without any timeout configured.
         let client = HttpRemoteDockerRegistry::new().client;
         let started = std::time::Instant::now();
         let result = tokio::time::timeout(std::time::Duration::from_secs(40), client.get(format!("http://{addr}/")).send()).await;
@@ -453,7 +450,7 @@ mod tests {
             std::future::pending::<()>().await;
         });
 
-        // Same SSRF-guard bypass as above, but against `blob_client` (used by fetch_blob).
+        // Same SSRF-guard bypass, against `blob_client`.
         let client = HttpRemoteDockerRegistry::new().blob_client;
         let started = std::time::Instant::now();
         let result = tokio::time::timeout(std::time::Duration::from_secs(60), client.get(format!("http://{addr}/")).send()).await;
@@ -609,14 +606,8 @@ mod tests {
         assert_eq!(chunks.concat(), vec![1, 2, 3]);
     }
 
-    // apply_credentials is what get_with_bearer_challenge calls to attach credentials to the
-    // token request. It's exercised directly (rather than through get_with_bearer_challenge's
-    // full WWW-Authenticate -> token-fetch -> retry flow) because that flow starts with
-    // ensure_public_host(url), which unconditionally rejects loopback addresses — a local
-    // wiremock server would never even get a request. Sending the built request to a mock that
-    // only responds to the exact expected auth header proves the credential was actually
-    // attached, the same way parse_token_response's tests above prove behavior by sending a real
-    // request and inspecting what came back.
+    // `apply_credentials` is tested directly: the full challenge flow starts with `ensure_public_host`, which rejects a
+    // local wiremock. The mock only answers the exact expected auth header.
     #[tokio::test]
     async fn a_password_with_no_username_is_sent_as_a_bearer_token_to_the_token_endpoint() {
         let server = MockServer::start().await;

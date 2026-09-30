@@ -40,9 +40,8 @@ async fn get_metadata(
     }
 
     let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
-    // Deliberately `user`, not `caller`: `caller` is `None` for a public top-level repository, and a
-    // caller who did authenticate must not lose the members they genuinely hold Read on just
-    // because the group wrapping them happens to be public. Same binding Docker's handlers use.
+    // `user`, not `caller`: `caller` is `None` for a public top-level repository, and an authenticated caller must not
+    // lose the members they hold Read on because the wrapping group is public. Docker's handlers do the same.
     let member_caller = user.as_ref();
     let state_ref = &state;
     let document = state
@@ -76,7 +75,7 @@ async fn get_tarball(
     let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
     let version = version_from_tarball_filename(&filename, &package).ok_or_else(|| bad_request("invalid tarball filename"))?;
 
-    // Deliberately `user`, not `caller` — see `get_metadata` for why.
+    // `user`, not `caller`: see `get_metadata`.
     let member_caller = user.as_ref();
     let state_ref = &state;
     let stream = state
@@ -98,14 +97,12 @@ async fn get_metadata_personal(
     headers: HeaderMap,
     user: Option<NpmAuthUser>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    // The npm-format check happens inside this call now (folded into resolution) so it still runs
-    // before any role check hits the database — see `require_readable_personal_repository_by_name`.
+    // The npm-format check runs inside this call, before any role check reaches the database.
     let (repo, _caller) =
         require_readable_personal_repository_by_name(&state, user.as_ref(), &username, &repo).await.map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
 
     let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
-    // Deliberately `user`, not `_caller` (`None` for a public top-level repository) — see
-    // `get_metadata` for why.
+    // `user`, not `caller`: see `get_metadata`.
     let member_caller = user.as_ref();
     let state_ref = &state;
     let document = state
@@ -135,7 +132,7 @@ async fn get_tarball_personal(
     let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
     let version = version_from_tarball_filename(&filename, &package).ok_or_else(|| bad_request("invalid tarball filename"))?;
 
-    // Deliberately `user`, not `_caller` — see `get_metadata` for why.
+    // `user`, not `caller`: see `get_metadata`.
     let member_caller = user.as_ref();
     let state_ref = &state;
     let stream = state
@@ -163,8 +160,8 @@ fn count_download(state: &NpmState, repo: &PackageRepositorySummary, method: &Me
     }
 }
 
-/// A published tarball never changes, but a shared cache may keep it only for a public repository, and only for a day: the
-/// repository can turn private, and a cached copy outlives that.
+/// A published tarball never changes, but a shared cache may keep it only for a public repository and only for a day:
+/// the repository can turn private.
 fn tarball_cache_headers(repository_is_public: bool) -> [(&'static str, &'static str); 2] {
     let cache_control = if repository_is_public { "public, max-age=86400" } else { "private, no-store" };
     [("cache-control", cache_control), ("vary", "Authorization")]
@@ -185,7 +182,7 @@ fn unscoped_name(package: &str) -> &str {
 /// and the scheme from `PUBLIC_URL`.
 fn request_base_url(state: &NpmState, headers: &HeaderMap, repository: &str) -> Result<String, (StatusCode, Json<serde_json::Value>)> {
     let host = headers.get("host").and_then(|h| h.to_str().ok()).unwrap_or("localhost");
-    // Anything else is refused rather than reflected into a client-visible URL (M-10).
+    // Anything else is refused, not reflected into a URL the client follows.
     if artiferris_application::base_domain::own_host(host, &state.artiferris_base_domain).is_none() {
         return Err(bad_request("invalid host"));
     }
@@ -306,7 +303,7 @@ mod tests {
 
     async fn seed_user_with_active_token(pool: &PgPool, organization_id: Uuid, plaintext_token: &str) -> Uuid {
         let user_id = Uuid::new_v4();
-        // Usernames cap at 32 chars, so truncate the UUID rather than use it whole.
+        // Usernames cap at 32 characters: truncate the UUID.
         sqlx::query!(
             "INSERT INTO users (id, username, password_hash, is_super_admin, organization_id, created_at) VALUES ($1, $2, 'irrelevant', false, $3, now())",
             user_id,
@@ -351,9 +348,8 @@ mod tests {
         user_id
     }
 
-    /// Marks a repository public directly against the event store — mirrors how
-    /// `PostgresPackageRepositoryStore`'s own tests seed a `VisibilityChanged` event, since
-    /// `SetRepositoryVisibilityUseCase` isn't wired into this crate's `NpmState`.
+    /// Marks a repository public through the event store, as the store's own tests do: `SetRepositoryVisibilityUseCase`
+    /// is not wired into `NpmState`.
     async fn mark_repository_public(pool: &PgPool, repository_id: Uuid) {
         use artiferris_domain::package_repository::{PackageRepositoryEvent, PackageRepositoryEventStorePort};
         let store = PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string());
@@ -514,7 +510,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    /// Unlike the test above, this seeds an explicit grant and targets the repository's own OWNING organization — only a caller-organization check, not the lookup, can reject it.
+    /// Seeds an explicit grant and targets the repository's own organization, so only the caller-organization check can
+    /// reject it.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_valid_permission_grant_does_not_cross_an_organization_boundary(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -671,9 +668,7 @@ mod tests {
         create_project.execute(owner_user_id, project_name, format, RepositoryType::Hosted).await.unwrap()
     }
 
-    /// A `PermissionQueryPort` that errors on every call — stands in for a database outage so a
-    /// test can prove a code path never reaches the permissions query at all, rather than merely
-    /// observing that it returns no grant.
+    /// A `PermissionQueryPort` that errors on every call, to prove a path never reaches the permissions query.
     struct AlwaysErrorsPermissionQuery;
 
     #[async_trait::async_trait]
@@ -698,11 +693,8 @@ mod tests {
         }
     }
 
-    /// Regression for the finding that the npm-format check on the personal route used to run
-    /// AFTER the shared read-path helper's role check instead of before it: with a permissions
-    /// store that errors on every query, a Docker-format personal repository must still 404
-    /// (the format check short-circuits first), not 500 (which is what a role-check DB error
-    /// reaching the database would produce).
+    /// Regression: the npm-format check on the personal route ran after the role check. With a permissions store that
+    /// errors on every query, a Docker-format personal repository must still 404, not 500.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_private_docker_format_personal_repo_404s_via_the_npm_route_even_when_the_permission_store_is_down(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -747,10 +739,8 @@ mod tests {
         assert_eq!(tarball_response.status(), StatusCode::NOT_FOUND, "same ordering requirement applies to the tarball route");
     }
 
-    /// Reserves `owner_user_id`'s personal namespace once, then creates a GROUP project and a
-    /// HOSTED project inside it and attaches the latter to the former — the exact shape the public
-    /// API produces, and the shape the per-member policy used to reject (see the test below).
-    /// `CreateUserProjectUseCase` grants the owner `Admin` on each project it creates.
+    /// Reserves a personal namespace, creates a group and a hosted project in it and attaches the project to the group:
+    /// the shape the public API produces and the per-member policy once rejected.
     async fn create_personal_group_over_a_personal_member(pool: &PgPool, owner_user_id: Uuid, group_name: &str, member_name: &str) -> (Uuid, Uuid) {
         let organizations = Arc::new(PostgresOrganizationRepository::new(pool.clone()));
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
@@ -1057,10 +1047,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool.clone(), dir.path()).await;
 
-        // `ResolvedOrganization` falls back to the public organization for any Host that doesn't
-        // resolve as this instance's base domain or a subdomain of it — an unrelated Host like
-        // `evil.example` lands here, not on a 404, so the repo must live in the public org for
-        // this test to actually exercise `request_base_url`'s own rejection.
+        // `ResolvedOrganization` falls back to the public organization for a Host outside this instance's base domain,
+        // so the repository must live there for `request_base_url`'s own rejection to be exercised.
         let repo_id = Uuid::new_v4();
         seed_repository(&pool, PUBLIC_ORGANIZATION_ID, repo_id, "npm", "hosted").await;
         mark_repository_public(&pool, repo_id).await;
@@ -1097,12 +1085,8 @@ mod tests {
         );
     }
 
-    /// The cleanest demonstration of the original vulnerability: `get_metadata_personal` resolves
-    /// its target repository purely from the `{username}/{repo}` path segments via
-    /// `resolve_personal_repository` — entirely independent of the `Host` header, and with no
-    /// `ResolvedOrganization` fallback-to-public-org behavior standing between a spoofed Host and
-    /// `request_base_url`. An attacker resolves a real, existing personal repo via the path, then
-    /// spoofs `Host` to try to redirect the generated tarball URL to an attacker-controlled domain.
+    /// A real personal repository is resolved from the path alone, independent of `Host`, so a spoofed Host must not
+    /// redirect the generated tarball URL to another domain.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_spoofed_host_header_on_the_personal_route_is_rejected_rather_than_reflected_into_the_tarball_url(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1144,12 +1128,8 @@ mod tests {
         assert!(tarball.starts_with("http://artiferris.localhost/npm/u/alice/my-lib/"), "got: {tarball}");
     }
 
-    /// Regression for the case-sensitivity bug: `ResolvedOrganization` (organization_resolution.rs)
-    /// lowercases the Host before resolving the organization, so an uppercase Host like
-    /// `ACME.ARTIFERRIS.LOCALHOST` resolves the org fine — but `request_base_url`'s own domain check
-    /// used to compare the raw, non-lowercased Host, wrongly rejecting the very same request with a
-    /// 400 right after org resolution had already accepted it. Mirrors the intent of
-    /// `an_uppercase_host_header_still_resolves_the_organization` in organization_resolution.rs.
+    /// Regression: `ResolvedOrganization` lowercases the Host, but `request_base_url` compared the raw one and rejected
+    /// with 400 a request the organization lookup had accepted.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_uppercase_host_header_still_succeeds_against_the_organization_route(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1243,10 +1223,9 @@ mod tests {
         assert!(tarball.starts_with("https://"), "got: {tarball}");
     }
 
-    /// Direct unit coverage of the suffix-matching logic itself, isolated from routing/auth. Each of
-    /// these hosts superficially resembles the base domain `artiferris.localhost` but must NOT be
-    /// accepted as it or a genuine subdomain of it — only `request_base_url`'s own `.ends_with(".{base}")`
-    /// check (with the leading dot) stands between a spoofed Host and a client-visible tarball URL.
+    /// Suffix matching in isolation: each of these hosts resembles `artiferris.localhost` but is neither it nor a
+    /// subdomain. Only the `.ends_with(".{base}")` check, with its leading dot, stands between a spoofed Host and a
+    /// client-visible tarball URL.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn request_base_url_rejects_hosts_that_only_superficially_resemble_the_base_domain(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1281,9 +1260,9 @@ mod tests {
         .unwrap()
     }
 
-    /// The C-1 fixture: a private npm group whose single member is a private hosted repository
-    /// holding one published package. Returns `(group id, group name, member id, member name)`.
-    /// `owner-token` belongs to a user holding Read on the member and nothing on the group.
+    /// A private npm group whose only member is a private hosted repository holding one published package. Returns
+    /// `(group id, group name, member id, member name)`; `owner-token` holds Read on the member and nothing on the
+    /// group.
     async fn seed_group_over_a_private_member(state: &NpmState, pool: &PgPool, organization_id: Uuid) -> (Uuid, String, Uuid, String) {
         let group_id = Uuid::new_v4();
         seed_repository(pool, organization_id, group_id, "npm", "group").await;
@@ -1310,9 +1289,8 @@ mod tests {
         (group_id, format!("repo-{group_id}"), member_id, format!("repo-{member_id}"))
     }
 
-    /// C-1, the confused deputy itself: reading *through* a group must never be broader than
-    /// reading the member directly. This caller holds Read on the group and nothing at all on the
-    /// private member — neither the member's metadata nor its tarball may come back.
+    /// Reading through a group is never broader than reading the member directly: a caller with Read on the group and
+    /// nothing on the private member gets neither its metadata nor its tarball.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_private_group_member_is_unreachable_through_a_group_the_caller_can_read(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1339,9 +1317,8 @@ mod tests {
         assert_eq!(tarball.status(), StatusCode::NOT_FOUND, "the tarball route must apply the same per-member policy as the metadata route");
     }
 
-    /// The other half of the policy: a caller who *does* hold Read on the private member still
-    /// reaches it through the group. Without this, "fail closed" would have been indistinguishable
-    /// from "group traversal is broken".
+    /// The other half: a caller with Read on the private member still reaches it through the group, so "fail closed" is
+    /// not "traversal is broken".
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_group_member_the_caller_holds_read_on_is_still_reachable_through_the_group(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1371,13 +1348,11 @@ mod tests {
         assert_eq!(bytes, Bytes::from_static(b"secret-widget-tarball-bytes"));
     }
 
-    /// Regression for the identity the per-member check runs as. `require_readable_repository_by_name`
-    /// hands back `None` for the caller whenever the TOP-LEVEL repository is public, whether or not
-    /// the request was authenticated — so building the per-member policy from that value silently
-    /// denies an authenticated caller every private member they legitimately hold Read on. The
-    /// policy must run as the real requester instead. The same fixture also pins the organization
-    /// guard: a public top level skips the top-level org check entirely, and the per-member role
-    /// lookup is organization-blind, so a stale cross-organization grant must not become usable.
+    /// Regression: for a public top-level repository `require_readable_repository_by_name` returns `None` as caller,
+    /// authenticated or not, so building the member policy from it denied an authenticated caller their private
+    /// members. The policy runs as the real requester. The fixture also pins the organization guard: a public top level
+    /// skips the top-level check and the member lookup ignores organizations, so a stale cross-organization grant must
+    /// not work.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_authenticated_callers_own_member_grant_survives_a_public_top_level_group(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1410,12 +1385,9 @@ mod tests {
         assert_eq!(cross_org.status(), StatusCode::NOT_FOUND, "a stale cross-organization grant on the member must not become usable through a public group");
     }
 
-    /// Regression for the personal-namespace hole in the per-member policy. A personal
-    /// organization's id never equals any real user's `organization_id`, so requiring an exact
-    /// organization match on every member locked a user out of their own personal group's members:
-    /// alice owns both projects here and holds `Admin` on each, yet reading the member through the
-    /// group 404'd. The policy must fall through to the explicit-grant lookup for a personal
-    /// organization, the same way `require_personal_repository_role` already does.
+    /// Regression: a personal organization's id never equals a real user's `organization_id`, so requiring a match
+    /// locked alice out of her own group's members. The policy falls to the explicit-grant lookup for personal
+    /// organizations.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_personal_group_members_own_owner_can_read_it_through_the_group(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1541,7 +1513,7 @@ mod tests {
         buffer.drain().iter().map(|count| count.downloads).sum()
     }
 
-    /// C-14: hammering one tarball from one address must not move the popularity figures.
+    /// Hammering one tarball from one address must not move the popularity figures.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn downloading_the_same_tarball_over_and_over_from_one_client_counts_once(pool: PgPool) {
         assert_eq!(counted_downloads_from(pool, &[], &[([203, 0, 113, 7], None); 5]).await, 1);

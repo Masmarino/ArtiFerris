@@ -16,8 +16,8 @@ impl RegisterPublicUserUseCase {
         Self { users, hasher }
     }
 
-    /// The route handler rejects anything but the public organization before calling this.
-    /// Unlike `InviteUserUseCase`, hashes the real password immediately — no activation step.
+    /// The route handler rejects anything but the public organization. Unlike `InviteUserUseCase`, hashes the real
+    /// password right away.
     pub async fn execute(&self, organization_id: Uuid, username: &str, email: &str, password: &str) -> Result<Uuid, ApplicationError> {
         let username = Username::parse_new(username)?;
         validate_email(email)?;

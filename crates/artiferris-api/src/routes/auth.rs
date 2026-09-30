@@ -54,12 +54,11 @@ const OIDC_START_MAX_ATTEMPTS: usize = 60;
 /// A password past this is refused as wrong without hashing it.
 const MAX_LOGIN_PASSWORD_BYTES: usize = 1024;
 
-/// Resolves the client IP for throttling. `X-Forwarded-For` is only read when the direct peer is a
-/// configured trusted proxy — otherwise any client could self-report an IP and pick its own
-/// throttle key. Falls back to the direct peer for everything else.
+/// Resolves the client IP for throttling. `X-Forwarded-For` is read only when the direct peer is a configured trusted
+/// proxy, or any client could pick its own throttle key. Falls back to the direct peer.
 ///
-/// `Result`, not `Option` — axum 0.8 only extracts `Option<T>` for extractors that opt into
-/// `OptionalFromRequestParts`, which `ConnectInfo` doesn't; `Result<T, T::Rejection>` still has the blanket impl.
+/// `Result`, not `Option`: axum 0.8 extracts `Option<T>` only for extractors opting into `OptionalFromRequestParts`,
+/// which `ConnectInfo` does not; `Result<T, T::Rejection>` still has the blanket impl.
 pub(crate) fn peer_ip(state: &AppState, headers: &HeaderMap, connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>) -> String {
     let direct = connect_info.ok().map(|ConnectInfo(addr)| addr.ip());
     let forwarded: Vec<&str> = headers.get_all("x-forwarded-for").iter().filter_map(|v| v.to_str().ok()).collect();
@@ -83,20 +82,18 @@ impl MfaFactors {
     }
 }
 
-/// Fails CLOSED: a repository error here must not be silently treated as "no MFA factors exist" —
-/// that would misroute a user with real MFA configured into the mandatory-setup flow, or (worse)
-/// let a stuck error mask an existing factor from the "already enrolled" refusal check that guards
-/// against a session-hijacker planting a second one (B-4).
+/// Fails closed: a repository error must not read as "no MFA factor", which would misroute a user with real MFA into
+/// mandatory setup, or let an error hide an existing factor from the refusal check that stops a session hijacker
+/// planting a second one.
 async fn mfa_factors(state: &AppState, user_id: uuid::Uuid) -> Result<MfaFactors, ApplicationError> {
     let has_totp = state.totp_credentials.get(user_id).await?.is_some_and(|c| c.confirmed);
     let has_passkey = state.webauthn_credentials.count_for_user(user_id).await? > 0;
     Ok(MfaFactors { has_totp, has_passkey })
 }
 
-/// `Username::parse` lowercases, so alice/Alice/ALICE are all one account — throttle keys and audit
-/// entries have to collapse the same way or every case variant gets its own budget. An unparseable
-/// username is lowercased too rather than passed through, so it can't dodge the same way, and
-/// cut to a sane length so it can't bloat the throttle map or the audit log.
+/// `Username::parse` lowercases, so alice, Alice and ALICE are one account: throttle keys and audit entries must
+/// collapse the same way, or every case variant gets its own budget. An unparseable username is lowercased too, so it
+/// cannot dodge, and cut to a sane length so it cannot bloat the throttle map or the audit log.
 pub(crate) fn normalized_username(raw: &str) -> String {
     let bounded = bounded_identifier(raw);
     artiferris_domain::user::Username::parse(&bounded).map_or_else(|_| bounded.to_ascii_lowercase(), |username| username.as_str().to_string())
@@ -304,9 +301,8 @@ fn oidc_binding_cookie_name(state: &AppState) -> &'static str {
     if artiferris_application::base_domain::is_local_dev_domain(&state.artiferris_base_domain) { OIDC_BINDING_COOKIE } else { OIDC_BINDING_COOKIE_HOST_PREFIXED }
 }
 
-// Parses a raw Set-Cookie string rather than using Cookie::build, which needs a time::Duration
-// for Max-Age that axum-extra doesn't re-export. SameSite=Lax, not Strict: the browser still
-// needs to send this on the cross-site redirect the identity provider sends it through.
+// Parses a raw Set-Cookie string because `Cookie::build` needs a `time::Duration` for Max-Age that axum-extra does not
+// re-export. SameSite=Lax, not Strict: the browser must send it on the cross-site redirect from the identity provider.
 fn oidc_binding_cookie(state: &AppState, value: &str) -> Option<axum_extra::extract::cookie::Cookie<'static>> {
     let name = oidc_binding_cookie_name(state);
     let secure = if artiferris_application::base_domain::is_local_dev_domain(&state.artiferris_base_domain) { "" } else { "; Secure" };
@@ -690,21 +686,18 @@ pub(crate) fn mfa_verify_throttle_key(user_id: uuid::Uuid) -> String {
     format!("mfa:{user_id}")
 }
 
-/// Distinct from `manage_throttle_key` (session-authenticated `/api/me/mfa/*`) and the bare
-/// username key `login`/`change_password` use — this covers every failed attempt during the
-/// mandatory-setup flow (wrong password at enroll/start, wrong code at confirm/finish) for one
-/// account, all sharing the mfa_token's short lifetime.
+/// Distinct from `manage_throttle_key` (session-authenticated `/api/me/mfa/*`) and the bare username key of `login` and
+/// `change_password`: it covers every failed attempt of the mandatory-setup flow for one account, sharing the
+/// mfa_token's short lifetime.
 pub(crate) fn mfa_setup_throttle_key(user_id: uuid::Uuid) -> String {
     format!("mfa-setup:{user_id}")
 }
 
-/// Mandatory-enrollment counterpart to `/api/me/mfa/totp/enroll`, authenticated by `mfa_token` rather than a full session.
+/// Mandatory-enrollment counterpart of `/api/me/mfa/totp/enroll`, authenticated by `mfa_token` instead of a session.
 ///
-/// Deliberately does NOT require `current_password` (unlike `/api/me/mfa/totp/enroll`) — this route
-/// runs right after login/register, gated by the short-lived `mfa_token` rather than a full session,
-/// and that token itself already proves the password was verified moments earlier. Requiring it
-/// again here would just break this flow's wire contract (the frontend never sends one) for no
-/// security benefit; see Task 5 fix round 1.
+/// It deliberately does not require `current_password`: this route runs right after login or registration, gated by the
+/// short-lived `mfa_token`, which already proves the password was verified. Requiring it would break the flow's wire
+/// contract (the frontend sends none) for no security benefit.
 async fn setup_mfa_totp_enroll(State(state): State<AppState>, Json(body): Json<MfaSetupTokenOnlyRequest>) -> Result<Json<TotpEnrollmentResponse>, ApiError> {
     let user = user_for_mfa_token(&state, &body.mfa_token).await?;
     require_no_factor(&state, user.id).await?;
@@ -1240,15 +1233,12 @@ mod tests {
         serde_json::from_slice(&body).unwrap()
     }
 
-    /// Route-level counterpart to `enrolling_totp_requires_the_current_password` in
-    /// `use_cases::mfa`'s own tests — a hijacked session token alone must not be enough to plant a
-    /// new TOTP factor on `/api/me/mfa/totp/enroll` (M-7).
+    /// Route-level counterpart of `enrolling_totp_requires_the_current_password` in `use_cases::mfa`: a hijacked
+    /// session token alone must not plant a new TOTP factor on `/api/me/mfa/totp/enroll`.
     ///
-    /// Uses `authenticate_user` directly, not the `/api/auth/login` HTTP route via `login_response`
-    /// — this app enforces mandatory MFA setup at login, so a freshly created, not-yet-enrolled user
-    /// never gets a full session `token` back from that route (only an `mfa_token`). Every other
-    /// session-authenticated route test in `routes::mfa`'s test module obtains its bearer token the
-    /// same way, for the same reason.
+    /// Uses `authenticate_user` directly, not `/api/auth/login`: mandatory MFA means a new, unenrolled user never gets
+    /// a session `token` from that route, only an `mfa_token`. The other session-authenticated tests in `routes::mfa`
+    /// get their bearer the same way.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn enrolling_totp_via_the_route_requires_the_current_password(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -2120,9 +2110,8 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
         let app = build_router(state);
-        // Two distinct IPs so the new per-IP throttle (B-2) — which is deliberately not cleared
-        // on success — never itself reaches its own cap across this test's two bursts of failures.
-        // This test is about the per-USERNAME counter resetting on success, not about IP throttling.
+        // Two distinct IPs, so the per-IP throttle (deliberately not cleared on success) never reaches its own cap
+        // across the two bursts: this test is about the per-username counter resetting on success.
         let ip_a = SocketAddr::from(([203, 0, 113, 21], 1));
         let ip_b = SocketAddr::from(([203, 0, 113, 22], 1));
 
@@ -2195,8 +2184,8 @@ mod tests {
         security_events_of_type(state, "LoginFailed").await.into_iter().map(|payload| payload["username"].as_str().unwrap_or_default().to_string()).collect()
     }
 
-    /// A fresh IP per attempt, so only the per-username budget is under test — the per-IP one caps
-    /// at the same number and would otherwise fire first and prove nothing.
+    /// A fresh IP per attempt, so only the per-username budget is under test: the per-IP one caps at the same number
+    /// and would fire first.
     fn login_request_from(username: &str, password: &str, last_octet: u8) -> Request<Body> {
         let mut request = login_request(username, password);
         request.extensions_mut().insert(ConnectInfo(SocketAddr::from(([203, 0, 113, last_octet], 51234))));
@@ -3434,9 +3423,8 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::TOO_MANY_REQUESTS);
     }
 
-    // Can't hit /api/auth/login and read `token` off the response — MFA is mandatory, so that
-    // always returns an `mfa_token`. Drives the same mandatory-TOTP-setup flow as the test
-    // above to reach a real, HTTP-issued session token via `setup_mfa_totp_confirm`.
+    // `/api/auth/login` cannot return a `token` (MFA is mandatory, it always returns an `mfa_token`), so this drives
+    // the mandatory TOTP setup to reach an HTTP-issued session token via `setup_mfa_totp_confirm`.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_login_token_carries_the_issuing_users_organizations_session_ttl(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());

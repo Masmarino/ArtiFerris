@@ -8,9 +8,8 @@ use crate::error::ApplicationError;
 use crate::use_cases::personal_repository::personal_organization_slug;
 use crate::use_cases::public_catalog::has_control_character;
 
-/// Looks up a personal project by its owner's username and the project's name — the shape npm/Docker
-/// registry clients address a personal repository by (e.g. `@alice/my-lib`, `alice/my-lib`).
-/// Shared across `artiferris-npm` and `artiferris-docker` since both already depend on this crate.
+/// Looks up a personal project by owner username and project name (`@alice/my-lib`, `alice/my-lib`). Shared by npm and
+/// docker.
 pub struct ResolvePersonalRepositoryUseCase {
     users: Arc<dyn UserRepositoryPort>,
     organizations: Arc<dyn OrganizationRepositoryPort>,
@@ -22,8 +21,7 @@ impl ResolvePersonalRepositoryUseCase {
         Self { users, organizations, repositories }
     }
 
-    /// `None` for an unknown username, an unreserved personal namespace, or an unknown repo name —
-    /// deliberately indistinguishable to the caller, same as other cross-organization lookups here.
+    /// `None` for an unknown user, an unreserved namespace or an unknown repository, indistinguishably.
     pub async fn execute(&self, username: &str, repo_name: &str) -> Result<Option<PackageRepositorySummary>, ApplicationError> {
         let Ok(username) = Username::parse(username) else { return Ok(None) };
         if has_control_character(repo_name) {

@@ -142,9 +142,7 @@ impl ScanDependencyTreeUseCase {
                 None => {
                     let fetched = match NpmPackageName::parse(&dep_name) {
                         Ok(parsed) if self.packages.find_package(repository_id, &parsed).await?.is_some() => None,
-                        // `.ok()` turns a fetch error into "unresolvable, skip it"; `.flatten()`
-                        // additionally folds a genuine upstream 404 (`Ok(None)`) into the same
-                        // "skip it" outcome, since either way there's no packument to resolve against.
+                        // `.ok().flatten()` turns a fetch error and an upstream 404 into "skip".
                         Ok(parsed) => {
                             if requests >= self.limits.max_requests {
                                 truncated = true;
@@ -268,7 +266,8 @@ fn extract_dependencies(manifest: &serde_json::Value, max: usize) -> (Vec<(Strin
     (dependencies, deps.len() > max)
 }
 
-/// node-semver treats a bare `"1.2.3"` as an exact match, not a caret range like Rust's `semver` crate — force an explicit `=` on. `x`/`X` wildcards normalize to `*`.
+/// node-semver treats a bare `1.2.3` as an exact match, unlike Rust's `semver`: force `=`. `x`/`X` wildcards become
+/// `*`.
 fn normalize_comparator(part: &str) -> String {
     let part = part.replace(['x', 'X'], "*");
     if part.starts_with(['^', '~', '>', '<', '=']) {

@@ -148,14 +148,12 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
     ) -> Result<(Uuid, bool), DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
 
-        // Same convention as `PostgresPackageRepositoryStore::append` and friends: an advisory lock keyed
-        // on the repository id, held for the rest of this transaction. Serializes concurrent pushes to
-        // THIS repository only — a push to a different repository hashes to a different key and is not
-        // blocked by this one (B-18).
+        // Takes an advisory lock keyed on the repository id for the rest of the transaction, so concurrent pushes to
+        // this repository are serialized. Other repositories are not blocked.
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", repository_id.to_string()).execute(&mut *tx).await.infra_err()?;
 
-        // Re-verify reachability inside the lock (`blob_is_reachable` OR `is_uploaded_to_repository`), against `&mut *tx` so a
-        // concurrent delete can't slip in before the insert. One query for the whole manifest.
+        // Reachability is re-verified inside the lock (`blob_is_reachable` or `is_uploaded_to_repository`) on `&mut
+        // *tx`, so a concurrent delete cannot slip in before the insert.
         let wanted = unique_digest_strs(blob_digests);
         let reachable: std::collections::HashSet<String> = sqlx::query_scalar!(
             "SELECT blob_digest AS \"blob_digest!\" FROM ( \
@@ -176,9 +174,8 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
             return Err(DomainError::DockerBlobNotReachable((*missing).to_string()));
         }
 
-        // Re-verify the quota inside the lock: what its manifests already reference plus this manifest's blobs, each once, and the
-        // manifest bodies and tags (`used_bytes_for_repository` counts the same things). Uploaded-but-unreferenced blobs count at
-        // upload time, not here. Re-summing under the lock closes the lost-update race (two pushes both reading "not yet exceeded").
+        // The quota is re-verified inside the lock: what the repository's manifests reference plus this manifest's
+        // blobs, each once, plus manifest bodies and tags. Re-summing under the lock closes the lost-update race.
         if let Some(quota) = quota_bytes {
             let total: i64 = sqlx::query_scalar!(
                 "SELECT ( \
@@ -1058,7 +1055,8 @@ mod tests {
         assert_eq!(result, Err(DomainError::DockerBlobNotReachable(theirs.as_str().to_string())));
     }
 
-    /// The quota counts each distinct blob once, however many manifests and repeated layers name it (and the manifest bodies on top).
+    /// The quota counts each distinct blob once, however many manifests and repeated layers name it, plus the manifest
+    /// bodies.
     #[sqlx::test]
     async fn the_manifest_quota_counts_each_blob_once(pool: sqlx::PgPool) {
         let repo = PostgresDockerManifestRepository::new(pool.clone());
@@ -1182,7 +1180,7 @@ mod tests {
         assert!(!digests.iter().any(|(_, d)| d == tagged.digest.as_str() || d == young.digest.as_str()));
     }
 
-    /// A digest-pinned rollback target must not be swept the moment its tag moves on, however old the manifest is.
+    /// A digest-pinned rollback target must not be swept when its tag moves on.
     #[sqlx::test]
     async fn the_grace_period_of_a_manifest_a_tag_moved_away_from_runs_from_that_moment(pool: sqlx::PgPool) {
         let repo = PostgresDockerManifestRepository::new(pool.clone());
@@ -1278,7 +1276,8 @@ mod tests {
         assert_eq!(repo.find_manifest_by_tag(repository_id, &image_name, "revived").await.unwrap().map(|found| found.id), Some(manifest.id));
     }
 
-    /// Migrates to 0009, loads manifests the way an installation from before 0010 has them, then applies 0010 the way an upgrade would.
+    /// Migrates to 0009, loads manifests as an installation from before 0010 has them, then applies 0010 as an upgrade
+    /// would.
     #[sqlx::test(migrations = false)]
     async fn migration_0010_starts_the_grace_period_of_manifests_that_are_untagged_at_upgrade(pool: sqlx::PgPool) {
         let mut before = sqlx::migrate!("./migrations");

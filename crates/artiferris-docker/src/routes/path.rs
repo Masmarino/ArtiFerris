@@ -1,4 +1,5 @@
-// Matches from the right — an image name's own segments can legally be "blobs", "manifests", etc., so the real operation suffix is always the rightmost match.
+// Matches from the right: an image name's own segments can be "blobs" or "manifests", so the operation suffix is the
+// rightmost match.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DockerOperation {
     BlobUploadStart { image_name: String },

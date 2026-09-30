@@ -92,8 +92,8 @@ pub struct AppState {
     pub user_preferences: Arc<dyn artiferris_domain::user_preferences::UserPreferencesPort>,
     pub permissions: Arc<dyn PermissionQueryPort>,
     pub repositories: Arc<dyn PackageRepositoryQueryPort>,
-    /// Backed by the same `PostgresPackageRepositoryStore` instance as `repositories` — a
-    /// separate trait-object view for npm's quota-check TOCTOU fix (see `npm_publish.rs`).
+    /// The same `PostgresPackageRepositoryStore` as `repositories`, as a separate trait object for npm's quota-check
+    /// fix (see `npm_publish.rs`).
     pub repository_quota_lock: Arc<dyn RepositoryQuotaLockPort>,
     pub organizations: Arc<dyn OrganizationRepositoryPort>,
     pub identity_providers: Arc<dyn IdentityProviderRepositoryPort>,

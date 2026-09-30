@@ -21,9 +21,8 @@ impl FilesystemStorageBackend {
         self.root.join(repository_id.to_string())
     }
 
-    /// Rejects `.`/`..`/absolute segments so `Path::join` can't escape the
-    /// repository root — validated, not canonicalized, since a write target
-    /// doesn't exist yet.
+    /// Rejects `.`, `..` and absolute segments so `Path::join` cannot escape the repository root. Validated, not
+    /// canonicalized: a write target does not exist yet.
     fn object_path(&self, repository_id: Uuid, path: &str) -> Result<PathBuf, StorageError> {
         if path.is_empty() {
             return Err(StorageError::Io("object path must not be empty".to_string()));

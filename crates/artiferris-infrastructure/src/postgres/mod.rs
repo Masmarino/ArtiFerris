@@ -78,8 +78,8 @@ mod tests {
         super::run_migrations(&pool).await.unwrap();
     }
 
-    /// The real file. `sqlx::test` has already migrated this database, so the tests below plant
-    /// rows and re-run it — safe, since every statement in it is idempotent.
+    /// The real file. `sqlx::test` already migrated this database, so the tests plant rows and re-run it; every
+    /// statement is idempotent.
     const NORMALIZE_USERNAMES_MIGRATION: &str = include_str!("../../migrations/0002_personal_repositories_visibility_and_hardening.sql");
 
     const PUBLIC_ORGANIZATION_ID: &str = "00000000-0000-0000-0000-000000000001";
@@ -93,8 +93,8 @@ mod tests {
             .unwrap();
     }
 
-    /// Lookups go through the lowercased form against an exact-match query, so without this a row
-    /// stored as "Florian" is unreachable and that account is locked out.
+    /// Lookups use the lowercased name with an exact match, so a row stored as "Florian" would be unreachable and the
+    /// account locked out.
     #[sqlx::test]
     async fn the_backfill_lowercases_an_existing_mixed_case_username(pool: sqlx::PgPool) {
         insert_raw_user(&pool, "Florian").await;
@@ -105,8 +105,8 @@ mod tests {
         assert_eq!(username, "florian");
     }
 
-    /// Two such accounts can't be merged automatically, so refusing to start is the point — and the
-    /// message has to name the collision. Needs the lower(username) unique index dropped: it makes this unreachable.
+    /// Two such accounts cannot be merged automatically, so startup refuses and the message names the collision. Needs
+    /// the lower(username) unique index dropped.
     #[sqlx::test]
     async fn the_backfill_fails_loudly_when_two_accounts_differ_only_in_case(pool: sqlx::PgPool) {
         sqlx::raw_sql("DROP INDEX users_username_lower_unique").execute(&pool).await.unwrap();

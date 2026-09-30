@@ -20,12 +20,9 @@ const MEMBER_LOOKUPS_IN_FLIGHT: usize = 16;
 
 type Visited = Arc<Mutex<HashSet<Uuid>>>;
 
-/// "Try locally, else recurse into group members" — shared by the 4 GET use cases that hit repository groups.
-/// One `visited` set covers the whole traversal, so a repository is entered once whatever path reaches it; past
-/// [`MAX_GROUP_DEPTH`] or [`MAX_GROUP_VISITS`] it stops descending. `authorize_member` is consulted before descending into EVERY group
-/// member (not the top-level repository — that's the caller's own responsibility, checked once before
-/// this function is ever called) and a member it rejects is skipped, exactly like one that no longer
-/// exists — the search just continues into the rest of the group.
+/// Tries locally, else recurses into group members. One `visited` set covers the traversal; past [`MAX_GROUP_DEPTH`] or
+/// [`MAX_GROUP_VISITS`] it stops. `authorize_member` runs before descending into every member (not the top-level
+/// repository); a rejected member is skipped like a missing one.
 #[allow(clippy::too_many_arguments)]
 pub fn resolve_in_group<'a, T, FHosted, FutHosted, FProxy, FutProxy, FNotFound, FAuthorize, FutAuthorize>(
     repositories: &'a Arc<dyn PackageRepositoryQueryPort>,
@@ -372,8 +369,7 @@ mod tests {
         assert_eq!(result.unwrap(), None);
     }
 
-    /// A group member id with no corresponding repository (e.g. soft-deleted after being added) must
-    /// be skipped, not treated as a hard failure for the whole group (C-5).
+    /// A member id with no repository is skipped, not a failure.
     #[tokio::test]
     async fn a_group_resolves_through_its_other_members_when_one_member_no_longer_exists() {
         let store = FakeRepositories::new();
@@ -400,8 +396,7 @@ mod tests {
         assert_eq!(result, Some(hosted_id), "the vanished member must be skipped, not fail the whole group");
     }
 
-    /// The new `authorize_member` hook must be consulted per member, and a member it rejects must be
-    /// skipped exactly like a vanished one — the traversal keeps trying the rest of the group (C-1).
+    /// `authorize_member` is consulted per member; a rejected member is skipped.
     #[tokio::test]
     async fn a_member_the_caller_is_not_authorized_to_read_is_skipped_not_hard_failed() {
         let store = FakeRepositories::new();

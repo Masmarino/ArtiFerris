@@ -43,7 +43,7 @@ impl RemoteNpmRegistryPort for HttpRemoteNpmRegistry {
         username: Option<&str>,
         password: Option<&str>,
     ) -> Result<Option<serde_json::Value>, DomainError> {
-        // npm scoped package names (@scope/name) are sent URL-encoded (@scope%2fname), not as a literal nested path segment.
+        // Scoped names (`@scope/name`) are sent URL-encoded (`@scope%2fname`).
         let encoded_name = urlencoding_replace_slash(package_name.as_str());
         let url = format!("{}/{}", base_url.trim_end_matches('/'), encoded_name);
         ensure_credentials_are_safe(base_url, username, password)?;
@@ -71,8 +71,7 @@ impl RemoteNpmRegistryPort for HttpRemoteNpmRegistry {
     }
 }
 
-/// Split out of `fetch_metadata` so it can be tested against an already-obtained response.
-/// `Ok(None)` for a genuine 404 — not an error.
+/// Split out of `fetch_metadata` for testing. `Ok(None)` for a 404.
 async fn map_metadata_response(response: reqwest::Response, url: &str) -> Result<Option<serde_json::Value>, DomainError> {
     if response.status() == reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
@@ -85,8 +84,7 @@ async fn map_metadata_response(response: reqwest::Response, url: &str) -> Result
     Ok(Some(document))
 }
 
-/// Non-2xx / body-read mapping for `fetch_tarball`, split out for the same reason as `map_metadata_response` above.
-/// `Ok(None)` for a genuine 404 — not an error.
+/// Non-2xx and body-read mapping for `fetch_tarball`. `Ok(None)` for a 404.
 async fn map_tarball_response(response: reqwest::Response, url: &str) -> Result<Option<Vec<u8>>, DomainError> {
     if response.status() == reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
@@ -157,11 +155,8 @@ mod tests {
             std::future::pending::<()>().await;
         });
 
-        // fetch_metadata calls ensure_public_host(&url) first, which would reject this loopback
-        // address before reqwest ever opens a socket — that would make this test pass even with
-        // no timeout configured at all. Bypass it the same way
-        // `the_configured_client_does_not_follow_a_redirect` does below: drive the raw configured
-        // client directly against the local listener.
+        // Drives the raw configured client against a local listener: `ensure_public_host` would reject loopback first,
+        // and the test would pass without any timeout.
         let client = HttpRemoteNpmRegistry::new().client;
         let started = std::time::Instant::now();
         let result = tokio::time::timeout(std::time::Duration::from_secs(40), client.get(format!("http://{addr}/")).send()).await;
@@ -183,13 +178,8 @@ mod tests {
         reqwest::Client::new().get(url).send().await.expect("request to local mock server must succeed")
     }
 
-    // NOTE: the brief's Step 1 sample drives these through `registry.fetch_metadata(...)`
-    // directly against a local wiremock server. That no longer works: `fetch_metadata` calls
-    // `ensure_public_host` first, which rejects loopback before reqwest ever sends the request
-    // (see the "these tests bypass ensure_public_host" note above and `a_hung_upstream_does_not_block_forever`).
-    // Adapted to drive `map_metadata_response`/`map_tarball_response` directly against an
-    // already-obtained response, same as every other test in this module — behavior asserted
-    // (`Ok(None)` for 404, `Err` for 500) is identical to what the brief intended.
+    // These tests drive `map_metadata_response`/`map_tarball_response` on an already-obtained response:
+    // `fetch_metadata` calls `ensure_public_host`, which rejects a loopback wiremock.
     #[tokio::test]
     async fn a_404_metadata_response_is_not_found_not_an_error() {
         let server = MockServer::start().await;

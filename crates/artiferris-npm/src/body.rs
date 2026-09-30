@@ -36,9 +36,9 @@ impl BodyCaller {
     }
 }
 
-/// Reads and parses a JSON body of at most `limit` bytes. The body budget is charged as the body arrives, up to `memory_factor`
-/// times what it declared in `Content-Length` (the limit, when none is declared or the body is compressed), since parsing keeps
-/// more than one copy alive. A body the budget couldn't cover is turned away before it is read.
+/// Reads and parses a JSON body of at most `limit` bytes. The body budget is charged as it arrives, up to
+/// `memory_factor` times the declared `Content-Length` (the limit when none is declared or the body is compressed),
+/// since parsing keeps several copies alive. A body the budget cannot cover is turned away before it is read.
 pub async fn read_json<T: DeserializeOwned>(
     state: &NpmState,
     headers: &HeaderMap,

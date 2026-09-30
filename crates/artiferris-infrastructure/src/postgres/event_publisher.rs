@@ -592,7 +592,7 @@ mod tests {
         assert!(plan.contains("domain_events_audit_occurred_at_idx"), "{plan}");
     }
 
-    /// Migrates up to 0007, loads pre-existing rows, applies 0008 the way an upgrade would, then runs the startup backfill.
+    /// Migrates to 0007, loads existing rows, applies 0008 as an upgrade would, then runs the startup backfill.
     #[sqlx::test(migrations = false)]
     async fn migration_0008_backfills_the_organization_of_existing_events(pool: sqlx::PgPool) {
         let mut before = sqlx::migrate!("./migrations");

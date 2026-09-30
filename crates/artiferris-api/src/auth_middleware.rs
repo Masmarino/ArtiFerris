@@ -52,11 +52,9 @@ impl FromRequestParts<AppState> for AuthUser {
     }
 }
 
-/// Since axum 0.8 (axum-core 0.5), `Option<T>` as an extractor no longer falls back to a blanket
-/// `FromRequestParts` impl on any rejection — it needs this trait implemented explicitly. This is
-/// that opt-in: any rejection (no `Authorization` header, a malformed one, an expired or otherwise
-/// invalid token, ...) becomes `None` rather than failing the request, so a read-only handler taking
-/// `Option<AuthUser>` can treat every one of those the same way an anonymous caller would.
+/// axum 0.8 no longer falls back to a blanket impl for `Option<T>` extractors, so this opts in: any rejection (no
+/// header, malformed, expired or invalid token) becomes `None`, and a read-only handler taking `Option<AuthUser>`
+/// treats them all like an anonymous caller.
 impl OptionalFromRequestParts<AppState> for AuthUser {
     type Rejection = StatusCode;
 

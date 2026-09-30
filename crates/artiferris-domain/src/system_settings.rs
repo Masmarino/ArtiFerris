@@ -11,21 +11,20 @@ pub struct SystemSettings {
     pub max_login_attempts: i32,
     pub login_attempt_window_seconds: i32,
     pub session_ttl_hours: i32,
-    /// Gates `POST /api/auth/register` — independent of an organization being public,
-    /// which already gates it too. Defaults to `true` (unchanged historical behavior) so an
-    /// export/import bundle from before this field existed still enables registration.
+    /// Gates `POST /api/auth/register`, on top of the organization being public. Defaults to `true`, so an export
+    /// bundle from before this field still enables registration.
     #[serde(default = "default_registration_enabled")]
     pub registration_enabled: bool,
     /// Whether search engines may index the public catalog (robots.txt, sitemap, meta robots). Only the public
-    /// organization's row counts. Off by default, and off for a bundle saved before the field existed.
+    /// organization's row counts. Off by default and for older bundles.
     #[serde(default)]
     pub seo_indexing_enabled: bool,
-    /// Keeps search engines away from this organization's pages of the public catalog (`noindex`, left out of the sitemap), even when the
-    /// instance lets the catalog be indexed. Off by default and for a bundle saved before the field existed.
+    /// Keeps search engines away from this organization's public pages (`noindex`, out of the sitemap), even when the
+    /// instance allows indexing. Off by default and for older bundles.
     #[serde(default)]
     pub seo_indexing_blocked: bool,
-    /// Whether this organization's pages of the public catalog are served to visitors at all. Closed, they answer as if nothing was published.
-    /// On the public organization's row it is the same switch for the whole instance. On by default and for a bundle saved before the field existed.
+    /// Whether this organization's public pages are served at all; closed, they answer as if nothing was published. On
+    /// the public organization's row it is the same switch for the whole instance. On by default and for older bundles.
     #[serde(default = "default_public_page_enabled")]
     pub public_page_enabled: bool,
 }
@@ -78,8 +77,7 @@ mod tests {
         assert!(!serde_json::from_str::<SystemSettings>(json).unwrap().seo_indexing_enabled);
     }
 
-    /// An export bundle saved before this field existed must still deserialize — and
-    /// registration must come back enabled, not silently disabled by a missing field.
+    /// A bundle saved before this field existed must still deserialize, with registration enabled.
     #[test]
     fn deserializing_without_registration_enabled_defaults_it_to_true() {
         let json = r#"{"max_login_attempts":10,"login_attempt_window_seconds":300,"session_ttl_hours":12}"#;

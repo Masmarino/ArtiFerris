@@ -50,9 +50,8 @@ pub async fn list_tags(
         Some(Err(_)) => return docker_error(StatusCode::BAD_REQUEST, "PAGINATION_NUMBER_INVALID", "n must be a non-negative integer").into_response(),
     };
 
-    // Same closure shape as `manifests.rs::get_manifest` — deliberately `user`, not `caller`: `caller`
-    // is `None` for a public top-level repository, and a caller who did authenticate must not lose
-    // their own organization's members because the group wrapping them happens to be public.
+    // As `manifests.rs::get_manifest`: `user`, not `caller`, so an authenticated caller keeps their organization's
+    // members when the wrapping group is public.
     let caller_user = user.as_ref();
     let top_level_organization_id = repo.organization_id;
     let top_level_was_authorized = caller.is_some();

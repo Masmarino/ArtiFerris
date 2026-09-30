@@ -60,9 +60,8 @@ impl IssueDockerAccessTokenUseCase {
         Ok(self.api_tokens.list_for_user(user_id).await?.iter().any(|token| token.id == api_token_id && token.is_active()))
     }
 
-    /// A real client requests the full `u/{username}/{repo}/{image}` scope it pulls/pushes against —
-    /// detected from the scope's own content, since there's only the one `/v2/token` endpoint.
-    /// Strips that prefix before authorizing, against the personal org, not the Host-resolved one.
+    /// A docker client requests the full `u/{username}/{repo}/{image}` scope. It is detected from the scope itself and
+    /// authorized against the personal org, not the Host-resolved one.
     async fn authorize_scope(&self, organization_id: Uuid, user: &User, requested: DockerScopeRequest) -> Result<DockerGrantedScope, ApplicationError> {
         let Some((username, repo_name, bare_name)) = personal_scope_parts(&requested.name) else {
             return self.authorize(organization_id, user, &requested).await;
@@ -109,12 +108,8 @@ fn required_role_for_action(action: &str) -> Role {
     if action == "pull" { Role::Read } else { Role::Write }
 }
 
-/// Splits a scope name shaped like `u/{username}/{repo}/{image...}` into its username, repo name,
-/// and the bare `{repo}/{image...}` name — the shape `require_granted_action` on the data-route
-/// side already expects, since it only ever compares against the bare repository name, never the
-/// client-facing `u/{username}/{repo}` prefix. `None` for any other shape (including a real
-/// repository whose own name happens to be `u`, which `artiferris_repository_name` already handles
-/// as a first path segment there).
+/// Splits `u/{username}/{repo}/{image...}` into username, repo name and the bare `{repo}/{image...}` name. `None` for
+/// any other shape.
 fn personal_scope_parts(name: &str) -> Option<(String, String, String)> {
     let mut parts = name.splitn(4, '/');
     if parts.next()? != "u" {
@@ -281,8 +276,7 @@ mod tests {
         harness_with_token(user, token)
     }
 
-    /// Like `harness`, but lets a test control the exact `ApiToken` stored for the user — needed
-    /// to exercise `expires_at` and `created_at`/`tokens_valid_after` ordering (B-6).
+    /// Like `harness`, but with a chosen `ApiToken`, to exercise expiry and `tokens_valid_after` ordering.
     fn harness_with_token(user: User, token: ApiToken) -> Harness {
         let user_id = user.id;
         let api_tokens = Arc::new(FakeApiTokens(Mutex::new(HashMap::from([(token.token_hash.clone(), token)]))));
@@ -297,9 +291,7 @@ mod tests {
         Harness { use_case, repositories, organizations, permissions, issuer, user_id }
     }
 
-    /// Reserves `user_id`'s personal organization in the fake store and seeds a repository inside
-    /// it — mirrors what `ReservePersonalOrganizationUseCase`/`CreateUserProjectUseCase` do against
-    /// Postgres, but in-memory so these tests don't need a real database.
+    /// Seeds a personal organization and a repository in it, in memory.
     fn seed_personal_repository(h: &Harness, user_id: Uuid, repo_name: &str) -> PackageRepositorySummary {
         let personal_org_id = Uuid::new_v4();
         h.organizations.0.lock().unwrap().insert(
@@ -338,7 +330,7 @@ mod tests {
         assert!(matches!(result, Err(ApplicationError::InvalidCredentials)));
     }
 
-    /// B-6: a token minted before a password change must not survive it, same as a session JWT.
+    /// A token minted before a password change must not survive it.
     #[tokio::test]
     async fn a_token_created_before_tokens_valid_after_is_rejected() {
         let user_id = Uuid::new_v4();
@@ -363,8 +355,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    /// B-6: `ApiToken` previously had no expiry at all — an expired token must be rejected
-    /// regardless of `tokens_valid_after`.
+    /// An expired token is rejected whatever `tokens_valid_after` says.
     #[tokio::test]
     async fn an_expired_token_is_rejected_even_when_tokens_valid_after_is_satisfied() {
         let user_id = Uuid::new_v4();
@@ -401,9 +392,7 @@ mod tests {
         assert_eq!(granted.unwrap().actions, vec!["pull".to_string()]);
     }
 
-    /// B-22: `authorize_against` never checked `repository.is_public`, so an anonymous or
-    /// no-grant caller's `docker pull` of a public repository was incorrectly denied outright
-    /// instead of getting the implicit Read floor every other public-repo route already grants.
+    /// A public repository gives an anonymous or ungranted caller Read.
     #[tokio::test]
     async fn a_public_repository_grants_an_implicit_read_with_no_explicit_permission() {
         let h = harness(regular_user(Uuid::new_v4()));
@@ -456,7 +445,7 @@ mod tests {
         assert_eq!(granted.unwrap().actions, vec!["pull".to_string(), "push".to_string()]);
     }
 
-    /// Mirrors artiferris-api's org-admin bypass (`artiferris_api::authz::effective_repository_role`) — implicit Admin on any repository in their own org, no explicit grant needed.
+    /// An org admin gets implicit Admin on any repository of their own organization.
     #[tokio::test]
     async fn an_organization_admin_is_granted_every_requested_action_on_a_repository_in_their_own_organization_without_an_explicit_role() {
         let user_id = Uuid::new_v4();
@@ -548,9 +537,7 @@ mod tests {
         assert_eq!(personal_scope_parts("u/alice//myimage"), None, "empty repo segment");
     }
 
-    /// A real docker client requests the FULL `u/{username}/{repo}/{image}` path it pulls/pushes
-    /// against, unstripped — this is the shape that must authorize correctly, not just a
-    /// pre-stripped `{repo}/{image}` scope.
+    /// The full `u/{username}/{repo}/{image}` path must authorize.
     #[tokio::test]
     async fn a_reader_requesting_pull_and_push_for_a_personal_repositorys_unstripped_scope_is_only_granted_pull() {
         let h = harness(regular_user(Uuid::new_v4()));
@@ -566,9 +553,7 @@ mod tests {
         assert_eq!(granted.granted_repository_id, Some(repo.id));
     }
 
-    /// Mirrors `a_nonexistent_repository_grants_no_actions_without_erroring`, but for the personal
-    /// shape — an unresolvable personal repository must fall through to the same empty-actions,
-    /// no-error result, never a distinguishable error that would reveal whether it exists.
+    /// An unresolvable personal repository grants no actions and raises no error.
     #[tokio::test]
     async fn an_unresolvable_personal_repository_scope_grants_no_actions_without_erroring() {
         let h = harness(regular_user(Uuid::new_v4()));
@@ -581,8 +566,7 @@ mod tests {
         assert!(granted.granted_repository_id.is_none());
     }
 
-    /// The Host-resolved `organization_id` passed into `execute` must be irrelevant for a personal
-    /// scope — only the scope's own `u/{username}/{repo}` content decides which repository this is.
+    /// The Host-resolved `organization_id` is ignored for a personal scope.
     #[tokio::test]
     async fn a_personal_scope_ignores_the_requested_organization_id() {
         let h = harness(regular_user(Uuid::new_v4()));

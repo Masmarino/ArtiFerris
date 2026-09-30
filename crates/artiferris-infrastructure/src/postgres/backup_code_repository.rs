@@ -45,8 +45,8 @@ impl BackupCodePort for PostgresBackupCodeRepository {
         let Some(matched) = candidates.iter().find(|row| verify_backup_code(plaintext_code, &row.code_hash)) else {
             return Ok(false);
         };
-        // Re-guard with `used_at IS NULL` here too: a concurrent call could have consumed this exact
-        // row between the SELECT above and this UPDATE, and only one of the two must win.
+        // Also guarded by `used_at IS NULL`: a concurrent call may have consumed this row since the SELECT, and only
+        // one may win.
         let result = sqlx::query!("UPDATE mfa_backup_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL", matched.id).execute(&self.pool).await.infra_err()?;
         Ok(result.rows_affected() > 0)
     }
@@ -136,10 +136,7 @@ mod tests {
         assert_eq!(repo.count_unused(user_id).await.unwrap(), 0);
     }
 
-    /// Codes issued before M-5 were stored as a bare `Sha256::digest(plaintext)` hex string with no
-    /// `<salt>:` prefix. A user who enrolled before that fix and still holds an unused legacy code
-    /// must still be able to consume it through the real Postgres-backed port, not just the fake
-    /// used by the application-layer tests (Task 4 fix round 1, Critical finding).
+    /// A legacy code (bare sha256 hex, no `<salt>:`) must still be consumable through the real Postgres port.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_legacy_pre_fix_unsalted_hash_still_verifies_and_consumes(pool: sqlx::PgPool) {
         let user_id = seed_user(&pool).await;
@@ -153,8 +150,7 @@ mod tests {
         assert_eq!(repo.count_unused(user_id).await.unwrap(), 0);
     }
 
-    /// Two different users generating the identical plaintext code by coincidence must not collide
-    /// or interfere with each other now that each stored hash carries its own salt (M-5).
+    /// Identical plaintext codes for two users must not collide, since each hash has its own salt.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn two_users_with_the_same_plaintext_code_each_consume_independently(pool: sqlx::PgPool) {
         let user_a = seed_user(&pool).await;

@@ -43,10 +43,7 @@ fn generate_backup_code() -> String {
     hex::encode(bytes)
 }
 
-/// Stored as `<32-hex-char-salt>:<64-hex-char-sha256>` — salted so two identical plaintext codes
-/// (across different enrollments, or a coincidental collision) never produce the same stored value,
-/// and a stolen `backup_codes` table can't be attacked with one shared rainbow table (M-5).
-/// `pub` so tests elsewhere can seed a known backup code by its hash.
+/// Stored as `<salt>:<sha256>`, salted so equal codes never share a stored value. `pub` so tests can seed a known code.
 pub fn hash_backup_code(plaintext: &str) -> String {
     let mut salt = [0u8; 16];
     rand::rng().fill_bytes(&mut salt);
@@ -55,16 +52,8 @@ pub fn hash_backup_code(plaintext: &str) -> String {
     format!("{salt_hex}:{}", hex::encode(digest))
 }
 
-/// Recomputes the hash using the stored salt and compares — the counterpart to `hash_backup_code`.
-/// Because the hash is salted, a stored value can no longer be found by exact-match DB lookup on a
-/// freshly-hashed plaintext; callers must fetch candidate stored hashes for the user and verify each.
-///
-/// A stored value with no `:` is a LEGACY code: issued before M-5 as a bare, unsalted
-/// `Sha256::digest(plaintext)` hex string. Users who enrolled before that fix may still hold unused
-/// legacy codes, and backup codes are precisely the recovery path for when the primary second
-/// factor is unavailable — rejecting them outright would be a permanent, unrecoverable account
-/// lockout. So a colon-less stored value falls back to the old unsalted comparison instead of
-/// failing closed (Task 4 fix round 1, Critical finding).
+/// Recomputes the hash with the stored salt. A value without `:` is a legacy unsalted hash and is compared the old way,
+/// or codes issued before salting would be unusable.
 pub fn verify_backup_code(plaintext: &str, stored: &str) -> bool {
     let Some((salt_hex, expected_digest_hex)) = stored.split_once(':') else {
         return hex::encode(Sha256::digest(plaintext.as_bytes())) == stored;
@@ -141,15 +130,9 @@ impl EnrollTotpUseCase {
         Self { totp, users, hasher }
     }
 
-    /// Refused while already confirmed (disable first); replaces a still-unconfirmed attempt freely.
-    ///
-    /// `current_password` is `Some(..)` and checked for the session-authenticated `/api/me/mfa/*`
-    /// route — an enrolled TOTP credential is a persistent second factor and must not be plantable
-    /// via a hijacked session token alone (M-7). It is `None` for the mandatory first-time-MFA-setup
-    /// flow (`/api/auth/mfa/setup/*`), which is gated by the short-lived `mfa_token` instead of a
-    /// full session — that token itself already proves the password was verified moments earlier
-    /// during login, so re-checking it here would just break that flow's wire contract for no
-    /// security benefit.
+    /// Refused once confirmed; replaces an unconfirmed attempt. `current_password` is `Some` for `/api/me/mfa/*`: a
+    /// hijacked session token alone must not plant a second factor. It is `None` for the first-time setup flow, gated
+    /// by `mfa_token`, which already proves the password.
     pub async fn execute(&self, user_id: Uuid, username: &str, current_password: Option<&str>) -> Result<TotpEnrollment, ApplicationError> {
         if let Some(current_password) = current_password {
             verify_current_password(self.users.as_ref(), self.hasher.as_ref(), user_id, current_password).await?;
@@ -568,9 +551,7 @@ mod tests {
         assert!(enrollment.otpauth_url.starts_with("otpauth://totp/"));
     }
 
-    /// A hijacked session token alone must not be enough to plant a new MFA factor — enrolling a
-    /// new TOTP credential requires the caller's current password, same as `disable_totp` and
-    /// `regenerate_backup_codes` already do (M-7).
+    /// A hijacked session token alone must not enroll a TOTP credential: the current password is required.
     #[tokio::test]
     async fn enrolling_totp_requires_the_current_password() {
         let totp_port = Arc::new(FakeTotp::new());
@@ -586,10 +567,7 @@ mod tests {
         assert!(!enrollment.secret_base32.is_empty());
     }
 
-    /// `/api/auth/mfa/setup/totp/enroll` (the mandatory first-time-MFA-setup flow, gated by the
-    /// short-lived `mfa_token` rather than a full session) passes `None` and must skip the password
-    /// check entirely — that route is intentionally password-less, since the `mfa_token` itself
-    /// already proves the password was verified moments earlier during login (Task 5 fix round 1).
+    /// The first-time setup flow passes `None` and skips the password check.
     #[tokio::test]
     async fn enrolling_totp_with_no_password_supplied_skips_the_check() {
         let totp_port = Arc::new(FakeTotp::new());
@@ -794,10 +772,7 @@ mod tests {
         assert!(matches!(err, ApplicationError::InvalidMfaCode));
     }
 
-    /// `ConfirmTotpUseCase` has no guard against being called again once the credential is already
-    /// confirmed — repeated confirm calls each regenerate (and thereby invalidate) the backup codes,
-    /// which is a denial-of-service against the victim's MFA recovery path given nothing more than
-    /// one currently-valid code (C-4).
+    /// Confirming an already confirmed credential must not regenerate (and invalidate) the backup codes.
     #[tokio::test]
     async fn confirming_again_after_already_confirmed_is_refused_and_does_not_touch_backup_codes() {
         let totp_port = Arc::new(FakeTotp::new());
@@ -996,11 +971,7 @@ mod tests {
         assert!(!verify_backup_code("wrong-code", &hash));
     }
 
-    /// Pre-M-5 backup codes were stored as a bare `Sha256::digest(plaintext)` hex string with no
-    /// `<salt>:` prefix. `verify_backup_code` must recognize the colon-less shape as a legacy
-    /// unsalted hash and fall back to the old comparison, or every backup code issued before this
-    /// fix becomes permanently unusable the moment a user needs it (Critical finding, Task 4 fix
-    /// round 1).
+    /// Backup codes stored as a bare sha256 hex (no `<salt>:`) must still verify.
     #[test]
     fn verify_backup_code_falls_back_to_the_legacy_unsalted_comparison_for_a_colon_less_stored_value() {
         let legacy_hash = hex::encode(Sha256::digest(b"abc123"));
@@ -1010,9 +981,7 @@ mod tests {
         assert!(!verify_backup_code("wrong-code", &legacy_hash));
     }
 
-    /// End-to-end through the same port/use-case a real login uses: a user who enrolled before the
-    /// M-5 fix and still holds an unused legacy code must be able to log in with it, not be locked
-    /// out of their own account's recovery path.
+    /// A user holding an unused legacy code can log in with it.
     #[tokio::test]
     async fn a_legacy_pre_fix_backup_code_still_verifies_and_consumes_through_the_use_case() {
         let backup_codes = Arc::new(FakeBackupCodes::new());

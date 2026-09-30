@@ -35,10 +35,8 @@ impl CreateApiTokenUseCase {
         Self { tokens }
     }
 
-    /// A 7-day token, for a caller authenticated by a session alone.
-    /// Returns `(token_id, plaintext_token)` — the plaintext is available
-    /// only here, at creation. Callers must surface it to the user
-    /// immediately and never attempt to retrieve it again.
+    /// A 7-day token for a caller authenticated by a session alone. Returns `(token_id, plaintext_token)`; the
+    /// plaintext is only available here.
     pub async fn execute(&self, user_id: Uuid, label: &str) -> Result<(Uuid, String), ApplicationError> {
         self.create(user_id, label, SESSION_ONLY_API_TOKEN_TTL).await
     }
@@ -95,9 +93,8 @@ impl RevokeApiTokenUseCase {
         Self { tokens }
     }
 
-    /// Errs with `ApiTokenNotFound` if `token_id` doesn't exist or isn't owned by
-    /// `user_id` — the repository update is scoped by both, so "zero rows
-    /// affected" must not be reported to the caller as a successful revoke.
+    /// `ApiTokenNotFound` if the token does not exist or is not owned by `user_id`: zero rows affected is not a
+    /// successful revoke.
     pub async fn execute(&self, token_id: Uuid, user_id: Uuid) -> Result<(), ApplicationError> {
         if self.tokens.revoke(token_id, user_id).await? {
             Ok(())
@@ -185,8 +182,7 @@ mod tests {
         assert_eq!(stored[0].token_hash, hash_api_token(&plaintext));
     }
 
-    /// B-6: a token with no expiry at all lived forever — every newly created token must get a
-    /// real, future expiry by default.
+    /// Every new token gets a real, future expiry by default.
     #[tokio::test]
     async fn a_newly_created_token_has_a_future_expiry() {
         let tokens = Arc::new(FakeTokens::new());

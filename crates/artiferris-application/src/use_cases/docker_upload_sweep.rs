@@ -16,8 +16,7 @@ pub struct UploadSweepReport {
     pub temp_files_removed: usize,
 }
 
-/// Run periodically by a background timer: reclaims upload sessions abandoned mid `docker push` (M-13), which the lazy
-/// sweep in `find` never reaches, and blobs no manifest ever referenced.
+/// Run periodically: reclaims upload sessions abandoned mid `docker push` and blobs no manifest references.
 pub struct SweepExpiredDockerUploadsUseCase {
     sessions: Arc<dyn DockerUploadSessionPort>,
     blobs: Arc<dyn DockerBlobStorePort>,

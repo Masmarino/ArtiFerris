@@ -1,7 +1,4 @@
-//! Fakes shared by two or more of `use_cases::admin`'s per-concern test modules. A fake used by
-//! only one concern's tests lives in that concern's own file instead (see e.g. `FakeApiTokens` in
-//! `admin/api_tokens.rs` or the import-only fakes in `admin/config_import.rs`), matching this
-//! crate's existing convention (`npm_test_support.rs`, `docker_test_support.rs`).
+//! Fakes shared by several of the admin use-case test modules.
 
 use std::collections::HashMap;
 use std::sync::Mutex;

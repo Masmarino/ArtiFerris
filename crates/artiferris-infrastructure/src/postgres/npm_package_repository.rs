@@ -360,14 +360,9 @@ impl NpmPackageRepositoryPort for PostgresNpmPackageRepository {
         )
         .execute(&mut *tx)
         .await
-        // The unique (npm_package_id, version) constraint is what actually resolves a same-version
-        // publish race now that the storage key includes a fresh random component per publish
-        // attempt and never collides, even between identical-bytes retries (Bug 4b, fix rounds 1
-        // and 2: the advisory lock that used to serialize this was removed because holding a pool
-        // connection for it while a second connection was needed for the re-check starved the pool
-        // under concurrent load). Whichever concurrent insert commits second hits this constraint —
-        // map it to a dedicated variant so the application layer can surface the same
-        // `PackageVersionExists` the early existence check already returns, instead of a raw 500.
+        // The unique `(npm_package_id, version)` constraint resolves a same-version publish race, since the storage key
+        // is unique per attempt. The second insert to commit hits it and maps to a dedicated variant, so the
+        // application returns `PackageVersionExists` instead of a 500.
         .map_err(|e| match &e {
             sqlx::Error::Database(db_err) if db_err.constraint() == Some("npm_package_versions_npm_package_id_version_key") => DomainError::NpmVersionAlreadyExists,
             _ => DomainError::Infrastructure(e.to_string()),
@@ -434,7 +429,7 @@ impl NpmPackageRepositoryPort for PostgresNpmPackageRepository {
         )
         .execute(&mut *tx)
         .await
-        // Of two publishes of the same new version, the one that commits second is stopped by this constraint.
+        // Of two publishes of one new version, the second to commit is stopped by this constraint.
         .map_err(|e| match &e {
             sqlx::Error::Database(db_err) if db_err.constraint() == Some("npm_package_versions_npm_package_id_version_key") => DomainError::NpmVersionAlreadyExists,
             _ => DomainError::Infrastructure(e.to_string()),

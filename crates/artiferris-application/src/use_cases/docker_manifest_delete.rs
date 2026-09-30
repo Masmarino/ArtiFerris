@@ -195,15 +195,8 @@ mod tests {
         assert!(manifests.find_manifest_by_digest(repository_id, &name, &manifest_b.digest).await.unwrap().is_none());
     }
 
-    /// End-to-end regression coverage over a REAL Postgres database, using the actual
-    /// `PostgresDockerManifestRepository` and `FilesystemDockerBlobStore` adapters instead of the fakes
-    /// above (the fakes don't model `docker_repository_blobs`'s foreign key at all, so they can't
-    /// reproduce this bug). Mirrors the real push/delete flow: a monolithic blob upload creates the
-    /// blob's `docker_repository_blobs` link row independent of any manifest (exactly like a real
-    /// `docker push`'s layer upload, which always lands before the manifest PUT that references it),
-    /// then a manifest push references it. Before this fix, deleting that manifest would decrement the
-    /// blob to zero real references and then immediately roll that decrement back — forever — the
-    /// instant the reclaim saw the leftover, by-then-stale link row.
+    /// Runs against a real Postgres with the real manifest repository and blob store: the fakes do not model the
+    /// `docker_repository_blobs` foreign key.
     mod real_postgres_blob_reclamation {
         use super::*;
         use crate::use_cases::docker_manifest_put::PutManifestUseCase;
@@ -254,9 +247,8 @@ mod tests {
             .unwrap()
         }
 
-        /// The exact scenario in the bug report: a blob's last real (manifest) reference is removed,
-        /// and it must now be genuinely reclaimed — row AND on-disk file gone — not left pinned forever
-        /// by its own stale upload-time link row.
+        /// When a blob's last manifest reference goes, the row and the file are reclaimed, not pinned by the
+        /// upload-time link row.
         #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
         async fn deleting_a_manifest_reclaims_a_blob_whose_stale_repository_link_would_otherwise_block_it_forever(pool: sqlx::PgPool) {
             let dir = tempfile::tempdir().unwrap();
@@ -292,9 +284,7 @@ mod tests {
             assert!(!file_still_present, "the on-disk blob file must be removed too, not just the row");
         }
 
-        /// The "don't reintroduce premature deletion" half: a blob still genuinely referenced by
-        /// another live manifest in the SAME repository must survive deleting a different manifest that
-        /// happens to also (still) reference it.
+        /// A blob still referenced by another manifest of the same repository survives.
         #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
         async fn deleting_one_of_two_manifests_sharing_a_blob_in_the_same_repository_leaves_it_intact(pool: sqlx::PgPool) {
             let dir = tempfile::tempdir().unwrap();
@@ -323,12 +313,7 @@ mod tests {
             assert!(blobs.is_uploaded_to_repository(repository_id, &config_digest).await.unwrap(), "the link row backing a live reference must survive too");
         }
 
-        /// A stronger "don't reintroduce premature deletion" case: the blob is uploaded directly to a
-        /// SECOND, unrelated repository (independent of any manifest there — exactly the scenario
-        /// `docker_repository_blobs`'s own schema comment and the hard-delete sweep's tests document),
-        /// while the first repository's manifest — its only real (manifest) reference anywhere — is
-        /// deleted. The fix must decrement the now-zero global reference count but must NOT delete the
-        /// row or file, since the second repository's link still legitimately needs it reachable.
+        /// A blob also uploaded to a second repository keeps its row and file; only the count drops to zero.
         #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
         async fn deleting_a_manifest_does_not_delete_a_blob_still_directly_linked_to_another_repository(pool: sqlx::PgPool) {
             let dir = tempfile::tempdir().unwrap();
@@ -362,8 +347,7 @@ mod tests {
         }
     }
 
-    /// A failure removing one digest's file (a starved connection pool here, which a fake can't reproduce) must not
-    /// abort the loop and leave the digests after it unreclaimed.
+    /// A failure removing one digest's file must not leave the following digests unreclaimed.
     mod phase_2_failure_does_not_abort_the_loop {
         use super::*;
         use artiferris_infrastructure::filesystem_docker_blob_store::FilesystemDockerBlobStore;

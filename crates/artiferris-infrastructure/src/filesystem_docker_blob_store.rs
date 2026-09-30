@@ -39,8 +39,7 @@ impl FilesystemDockerBlobStore {
         format!("sha256/{}/{}/{}", &hex[0..2], &hex[2..4], hex)
     }
 
-    /// The locked half of `write`: one transaction spans the digest lock and the final rename (see
-    /// `delete_row_if_unreferenced_now` for the race against a concurrent delete).
+    /// The locked half of `write`: one transaction spans the digest lock and the final rename.
     async fn publish_written_blob(&self, digest: &Digest, storage_key: &str, tmp_path: &std::path::Path, target: &std::path::Path, size_bytes: i64) -> Result<(), DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", digest.as_str()).execute(&mut *tx).await.infra_err()?;
@@ -61,9 +60,9 @@ impl FilesystemDockerBlobStore {
         Ok(())
     }
 
-    /// Phase 1 of `delete_if_unreferenced`: DB-only, under the digest lock, no filesystem I/O. Deletes the row
-    /// if nothing references or links the blob; a link or manifest row that lands at the same moment shows up as a
-    /// foreign-key violation, which leaves the blob alone. Returns the deleted row's `storage_key`.
+    /// Phase 1 of `delete_if_unreferenced`: database only, under the digest lock. Deletes the row if nothing references
+    /// or links the blob; a concurrent link or manifest row shows up as a foreign-key violation and leaves the blob
+    /// alone. Returns the deleted row's `storage_key`.
     async fn delete_row_if_unreferenced_now(&self, digest: &Digest) -> Result<Option<String>, DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", digest.as_str()).execute(&mut *tx).await.infra_err()?;
@@ -125,22 +124,10 @@ impl FilesystemDockerBlobStore {
         Ok(deleted.map(|row| row.storage_key))
     }
 
-    /// Phase 2 of `delete_if_unreferenced`: only called when phase 1 actually deleted a
-    /// row. Begins a NEW, separate transaction, RE-ACQUIRES the SAME digest lock, and RE-CHECKS
-    /// whether the `docker_blobs` row for this digest still does not exist.
-    ///
-    /// This re-check is what makes it safe to not hold one lock across phase 1 and the filesystem
-    /// removal: a concurrent `write`/`adopt_staged_file` for the SAME digest can freely race into
-    /// the gap between phase 1's commit (which released the lock) and this call's own lock
-    /// acquisition, and recreate the row. If it did, that row and its file are the correct,
-    /// current state — this call must leave them alone. Only if the row is STILL absent does it
-    /// remove the file backing phase 1's deleted row.
-    ///
-    /// Keeping phase 1's DELETE (durable the moment it commits) separate from phase 2 (whose only
-    /// content is the lock and a read-only re-check) also means a crash, a cancelled request, or a
-    /// COMMIT failure after `remove_file` here only loses phase 2's own commit — which has nothing
-    /// of substance to lose — never the decrement or the DELETE. The worst case is an orphaned
-    /// file with no row, not a ghost row with no file.
+    /// Phase 2 of `delete_if_unreferenced`: runs only if phase 1 deleted a row. In a new transaction it re-takes the
+    /// digest lock and re-checks that the row is still absent, because a concurrent `write` may have recreated it in
+    /// the gap; if so, row and file are current and stay. Only if the row is still absent is the file removed. A crash
+    /// here leaves at worst an orphan file, never a row without a file.
     async fn remove_file_if_still_absent(&self, digest: &Digest, storage_key: &str) -> Result<(), DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", digest.as_str()).execute(&mut *tx).await.infra_err()?;
@@ -164,12 +151,8 @@ impl DockerBlobStorePort for FilesystemDockerBlobStore {
         let storage_key = Self::storage_key(hex);
         let target = self.root.join(&storage_key);
 
-        // Write the bytes to a fresh temp file BEFORE acquiring the digest lock. A per-call UUID
-        // temp path can't collide with any concurrent writer or deleter of this same digest, so
-        // nothing about this step needs the lock — only the final rename onto `target` (which
-        // touches the shared path) and the INSERT do. This keeps a large blob's `fs::write` off
-        // the digest lock and off a held pool connection, same idea `adopt_staged_file` already
-        // gets for free (its bytes are staged by an earlier, separate call).
+        // The bytes go to a fresh temp file before the digest lock is taken: only the final rename and the INSERT need
+        // it, which keeps a large write off the lock and off a held connection.
         let tmp_path = write_temp(&target, hex, bytes).await.infra_err()?;
         let _tmp = TempFileGuard::new(tmp_path.clone());
 
@@ -214,8 +197,7 @@ impl DockerBlobStorePort for FilesystemDockerBlobStore {
         let storage_key = Self::storage_key(hex);
         let target = self.root.join(&storage_key);
 
-        // Same digest-scoped advisory lock as `write`, held for the same reason across this
-        // method's own DB+filesystem work.
+        // Same digest-scoped advisory lock as `write`.
         let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", digest.as_str()).execute(&mut *tx).await.infra_err()?;
 
@@ -288,10 +270,8 @@ impl DockerBlobStorePort for FilesystemDockerBlobStore {
     }
 
     async fn unlink_from_repository_if_unreferenced(&self, repository_id: Uuid, digest: &Digest) -> Result<(), DomainError> {
-        // The NOT EXISTS re-verifies "no manifest in this repository references `digest` anymore" at
-        // the same statement that removes the link — closing the race window between the caller's own
-        // `blob_is_reachable` check and this call (e.g. a concurrent manifest push landing a fresh
-        // `docker_manifest_blobs` row for the same digest in between).
+        // The NOT EXISTS re-checks that no manifest of this repository references `digest` in the same statement that
+        // removes the link, closing the race with a concurrent manifest push.
         sqlx::query!(
             "DELETE FROM docker_repository_blobs \
              WHERE package_repository_id = $1 AND blob_digest = $2 \
@@ -373,8 +353,8 @@ impl DockerBlobStorePort for FilesystemDockerBlobStore {
         let Some(storage_key) = self.delete_row_if_unreferenced_now(digest).await? else {
             return Ok(false);
         };
-        // The row is gone for good at this point, so a failure removing the file must not fail the call: a stray file is
-        // recoverable, and an error here would abort the caller's loop over a manifest's other blobs.
+        // A failure removing the file does not fail the call: a stray file is recoverable, and an error would abort the
+        // caller's loop over the manifest's other blobs.
         if let Err(e) = self.remove_file_if_still_absent(digest, &storage_key).await {
             tracing::warn!(digest = %digest.as_str(), storage_key, error = %e, "the blob row is gone but its file could not be removed");
         }
@@ -477,7 +457,7 @@ impl DockerBlobStorePort for FilesystemDockerBlobStore {
         .infra_err()?
         .rows_affected() as usize;
 
-        // Links first: one no manifest of its (hosted) repository references, past the grace period, is abandoned.
+        // Links no manifest of a hosted repository references, past the grace period, are abandoned.
         let links_removed = sqlx::query!(
             "DELETE FROM docker_repository_blobs l USING package_repository_projections r \
              WHERE r.id = l.package_repository_id AND r.repo_type = 'hosted' AND l.created_at < $1 \
@@ -555,7 +535,8 @@ async fn remove_stale_temp_files(root: &std::path::Path, max_age: std::time::Dur
 mod tests {
     use super::*;
 
-    /// One manifest reference given up, the way `PostgresDockerManifestRepository` does it, then the reclaim `DeleteManifestUseCase` follows with.
+    /// One manifest reference given up as `PostgresDockerManifestRepository` does, then the reclaim
+    /// `DeleteManifestUseCase` follows.
     async fn release(store: &FilesystemDockerBlobStore, digest: &Digest) -> Result<bool, DomainError> {
         sqlx::query!("UPDATE docker_blobs SET reference_count = reference_count - 1 WHERE digest = $1", digest.as_str()).execute(&store.pool).await.infra_err()?;
         store.delete_if_unreferenced(digest).await
@@ -713,10 +694,8 @@ mod tests {
         assert!(store.exists(&digest).await.unwrap());
     }
 
-    /// Mirrors what the repository deletion sweep itself already did, transactionally, before ever
-    /// calling this: `docker_blobs` row gone, file still on disk. `remove_reclaimed_blob_files` must
-    /// re-derive the storage key from the digest alone (no DB round trip needed for that) and remove
-    /// the file once its re-check confirms the row is still absent.
+    /// The sweep already deleted the `docker_blobs` row; the file is still on disk. `remove_reclaimed_blob_files`
+    /// derives the storage key from the digest and removes the file once the row is confirmed absent.
     #[sqlx::test]
     async fn remove_reclaimed_blob_files_removes_the_file_once_its_row_is_already_gone(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -741,8 +720,7 @@ mod tests {
         store.remove_reclaimed_blob_files(&[Digest::of(b"never-written")]).await;
     }
 
-    /// Every existing test here passes a single-element slice — this pins that each digest in a
-    /// multi-digest batch is removed independently of the others.
+    /// Each digest of a multi-digest batch is removed independently.
     #[sqlx::test]
     async fn remove_reclaimed_blob_files_removes_every_digest_in_a_multi_digest_batch(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -765,13 +743,8 @@ mod tests {
         assert!(!store.exists(&digest_b).await.unwrap());
     }
 
-    /// Race regression test: the sweep's own transaction has already committed the `docker_blobs`
-    /// row's deletion by the time `remove_reclaimed_blob_files` is called — like the test above — but
-    /// here a concurrent `write` for the SAME digest lands in the gap between that commit and this
-    /// call. Sequential `.await`s are enough to force the interleaving deterministically, the same
-    /// "direct-call" technique `a_concurrent_write_landing_between_phase_1_and_phase_2_...` uses for
-    /// `release`'s own two phases — `remove_reclaimed_blob_files` reuses
-    /// `remove_file_if_still_absent` unchanged, so the same protection applies here too.
+    /// A concurrent `write` for the same digest landing between the sweep's commit and `remove_reclaimed_blob_files`
+    /// must keep its file.
     #[sqlx::test]
     async fn a_concurrent_write_landing_before_remove_reclaimed_blob_files_is_detected_and_the_file_survives(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -793,21 +766,10 @@ mod tests {
         );
     }
 
-    /// Regression test for the fix that stops a phase-2 (file-removal) failure from propagating as
-    /// an `Err` out of `release`, even though phase 1 (the decrement +
-    /// row delete) is already durably committed by the time phase 2 could possibly fail —
-    /// `docker_manifest_delete.rs`'s loop over a manifest's blob digests calls this once per
-    /// digest with `?`, and used to abort entirely (skipping every later digest's own decrement)
-    /// the instant one digest's phase 2 failed.
-    ///
-    /// The failure is genuinely induced, not fabricated: a second, deliberately tiny pool (one
-    /// connection, a short acquire timeout) points at the SAME database. A bystander, queued for
-    /// that pool's one connection while phase 1 still holds it checked out (confirmed blocked on
-    /// the digest's advisory lock, the same technique the tests above use), is guaranteed — by
-    /// sqlx's FIFO connection handoff — to be granted the connection the instant phase 1 commits
-    /// and releases it, ahead of phase 2's own later request. Phase 2's `pool.begin()` then
-    /// genuinely times out waiting for a connection: exactly the "transient DB connectivity
-    /// issue" shape this fix targets.
+    /// A phase-2 failure must not make `release` return an `Err` once phase 1 is committed: `docker_manifest_delete.rs`
+    /// loops over digests with `?` and would skip the later ones. The failure is induced with a one-connection pool and
+    /// a short acquire timeout on the same database. A bystander queues for that connection while phase 1 holds it, so
+    /// sqlx's FIFO handoff gives it the connection at phase 1's commit and phase 2's `pool.begin()` times out.
     #[sqlx::test]
     async fn a_phase_2_connection_failure_does_not_lose_phase_1s_already_committed_decrement(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1055,14 +1017,9 @@ mod tests {
         assert_eq!(store.used_bytes_for_repository(repository_id).await.unwrap(), 0);
     }
 
-    /// Repo A's last (manifest-backed) reference to a digest is removed while repo B still holds
-    /// a link-only row for the SAME digest — no manifest, never incremented, exactly what a proxy
-    /// repository's blob cache leaves behind (see `docker_blob_get.rs`'s `execute_proxy`, which
-    /// links a fetched blob without ever calling `increment_ref`). An unconditional DELETE would
-    /// hit B's link row's FK and roll the WHOLE transaction back — silently losing A's decrement
-    /// too, forever, since nothing else would ever retry it. The row must survive (B's link still
-    /// legitimately needs it reachable) but the decrement itself must land: `reference_count`
-    /// must reach exactly 0, not be rolled back to 1.
+    /// Repo A's last manifest reference is removed while repo B holds a link-only row for the same digest (what a proxy
+    /// cache leaves behind). An unconditional DELETE would hit B's link FK and roll back A's decrement too. The row
+    /// must survive and `reference_count` must reach 0.
     #[sqlx::test]
     async fn decrementing_the_last_real_reference_still_commits_even_when_a_different_repositorys_stale_link_survives(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1080,13 +1037,8 @@ mod tests {
         let row = sqlx::query!("SELECT reference_count FROM docker_blobs WHERE digest = $1", digest.as_str()).fetch_one(&pool).await.unwrap();
         assert_eq!(row.reference_count, 0, "the decrement must not be rolled back just because another repository's link row still exists");
 
-        // Once repo B's stale link is ALSO removed (the real-world trigger: no manifest in repo B ever
-        // referenced this digest, so `unlink_from_repository_if_unreferenced` clears it — the same call
-        // `DeleteManifestUseCase` makes for its own repository), the blob is genuinely reclaimable.
-        // `reference_count` is already at 0 from the decrement above, so this mirrors the hard-delete
-        // sweep's own retry shape (`package_repository_store.rs`) rather than calling
-        // `release` a second time, which would correspond to no real caller —
-        // nothing decrements twice for one reference.
+        // Once B's stale link is removed too, the blob is reclaimable. The count is already 0, so this mirrors the
+        // hard-delete sweep's retry instead of calling `release` again.
         store.unlink_from_repository_if_unreferenced(repo_b, &digest).await.unwrap();
         let reclaimed = sqlx::query!(
             "DELETE FROM docker_blobs WHERE digest = $1 AND reference_count <= 0 \
@@ -1100,24 +1052,11 @@ mod tests {
         assert!(reclaimed.is_some(), "once no repository's link references it anymore, the blob must be genuinely reclaimable");
     }
 
-    /// The FK race the savepoint above guards against, reproduced with two real,
-    /// separately-connected transactions and explicit commit ordering rather than a sleep-based
-    /// guess. `link_to_repository`'s INSERT is started and deliberately left uncommitted on its
-    /// own connection for the whole test — this holds the FK's `FOR KEY SHARE` lock on the
-    /// `docker_blobs` row the whole time, so it is guaranteed to still be uncommitted (and thus
-    /// invisible to `NOT EXISTS`, under read-committed) when the decrement's guard runs, and still
-    /// be holding the lock when the decrement's DELETE tries to acquire it. The decrement itself
-    /// runs concurrently on a genuinely separate OS thread and pool connection (`spawn_blocking`,
-    /// mirroring `docker_manifest_put.rs`'s real-concurrency race test — a plain `tokio::join!` on
-    /// this test's single-threaded runtime would just run the two operations back to back and
-    /// never contend). A third connection polls `pg_stat_activity` until it observes the
-    /// decrement's backend genuinely blocked waiting for that lock — not a fixed sleep, so this
-    /// can't spuriously pass by finishing before the race is even set up — and only then commits
-    /// the link. That ordering guarantees Postgres's end-of-statement FK check fires while the
-    /// DELETE is still in flight. Without the savepoint, this FK violation would propagate out of
-    /// the whole transaction and roll the decrement back with it (`reference_count` stuck at 1,
-    /// and a 500 out of `DeleteManifestUseCase`); with it, only the DELETE's savepoint rolls back,
-    /// so the call returns `Ok(false)` and the decrement survives.
+    /// The FK race the savepoint guards against, with two real transactions and explicit commit order. The link INSERT
+    /// stays uncommitted on its own connection, holding the `FOR KEY SHARE` lock. The decrement runs on another OS
+    /// thread (`spawn_blocking`; `tokio::join!` on this single-threaded runtime would not contend). A third connection
+    /// polls `pg_stat_activity` until the decrement is blocked, then the link commits. Without the savepoint the
+    /// violation would roll the decrement back; with it `release` returns `Ok(false)` and the decrement survives.
     #[sqlx::test]
     async fn a_concurrent_link_landing_between_the_guard_and_the_delete_does_not_lose_the_decrement(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1180,32 +1119,10 @@ mod tests {
         assert!(store.read(&digest).await.is_ok(), "the file itself must still be there, not just the row");
     }
 
-    /// A real-concurrency counterpart to the more targeted
-    /// `a_concurrent_write_landing_between_phase_1_and_phase_2_is_detected_and_the_file_survives`
-    /// below. This test drives the REAL, public `release` and the REAL
-    /// `write` as genuinely concurrent, separately-connected background tasks, rather than calling
-    /// the two internal phases directly — proving the wired-up public method produces the right
-    /// outcome under real interleaving (the phase-2 re-check logic itself is covered in isolation
-    /// by the more targeted test below).
-    ///
-    /// Phase 1 commits and releases the digest lock as soon as the row is deleted, which lets the
-    /// already-queued `write` (queued behind `blocker_tx` before phase 1 even started, confirmed by
-    /// the polls below) get granted the lock next — strictly before the decrement's own phase 2 can
-    /// re-request it, since phase 2's request necessarily happens after phase 1's commit, i.e. after
-    /// `write`'s request was already queued. Postgres's FIFO lock grants make this deterministic:
-    /// `write` lands in the phase-1-to-phase-2 gap every time.
-    ///
-    /// This test controls the race deterministically with its own separately-held advisory lock
-    /// (`blocker_tx`, the SAME `pg_advisory_xact_lock(hashtext($1))` key as the digest lock under
-    /// test) — mirroring
-    /// `a_concurrent_link_landing_between_the_guard_and_the_delete_does_not_lose_the_decrement`'s use
-    /// of an explicit, manually-committed transaction as a deterministic gate. Both
-    /// `release` and `write` run as REAL, separately-connected background
-    /// tasks (`spawn_blocking`, for genuine OS-thread concurrency — see that same test's comment on
-    /// why a plain `tokio::join!` wouldn't interleave). `blocker_tx` acquires the digest's advisory
-    /// lock FIRST, so both background tasks queue up behind it; a `pg_stat_activity` poll confirms the
-    /// decrement is blocked, then a second poll confirms the write ALSO joins the same lock's wait
-    /// queue before `blocker_tx` releases the lock.
+    /// Real-concurrency counterpart of the phase test below: `release` and `write` run as separate background tasks
+    /// behind a manual advisory-lock gate (`blocker_tx`, same key as the digest lock). Polls on `pg_stat_activity`
+    /// confirm both are queued before the gate opens. Postgres grants locks in FIFO order, so `write` always lands
+    /// between phase 1 and phase 2.
     #[sqlx::test]
     async fn a_concurrent_write_cannot_land_in_the_window_between_a_delete_and_its_file_removal(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1299,16 +1216,8 @@ mod tests {
         );
     }
 
-    /// `release` is two separately-transacted phases —
-    /// `delete_row_if_unreferenced_now` (phase 1, commits and releases the digest lock the
-    /// moment the row is deleted) and `remove_file_if_still_absent` (phase 2, re-acquires the SAME
-    /// lock and re-checks before touching the file) — specifically so the gap between them can be
-    /// hit deterministically, with no lock gate, no `pg_stat_activity` polling, and no background
-    /// tasks: it's just two sequential `.await`s here, with a real concurrent `write` call inserted
-    /// between them. Phase 1's transaction has genuinely committed (and released the lock) by the
-    /// time the `write` below runs — matching real production behavior, where nothing blocks a
-    /// concurrent `write` from landing in exactly this window — and phase 2 hasn't yet re-acquired
-    /// it, so this is the exact interleaving the original bug depended on, forced rather than raced.
+    /// `release` runs in two transactions, so the gap between the phases can be hit deterministically with two
+    /// sequential awaits and a real `write` between them, without a lock gate or background tasks.
     #[sqlx::test]
     async fn a_concurrent_write_landing_between_phase_1_and_phase_2_is_detected_and_the_file_survives(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1336,13 +1245,8 @@ mod tests {
         );
     }
 
-    /// Proves `write`'s rename and INSERT genuinely happen only once it holds the digest lock —
-    /// not just that `write` eventually succeeds. Neither test above would catch the rename
-    /// moving to run before lock acquisition: the phase-based test only calls `write` after
-    /// phase 1 has already released the lock, and the blocker test only checks `write`'s eventual
-    /// result, never when the file itself materializes relative to the lock. Here the digest lock
-    /// is held by `blocker_tx` first, so a concurrent `write` must join its wait queue; while it's
-    /// confirmed waiting, neither the file nor the `docker_blobs` row may exist yet.
+    /// `write` renames and INSERTs only once it holds the digest lock. With `blocker_tx` holding the lock, a concurrent
+    /// `write` must queue, and while it waits neither the file nor the row may exist.
     #[sqlx::test]
     async fn a_write_does_not_create_the_file_or_row_before_it_holds_the_digest_lock(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1395,13 +1299,8 @@ mod tests {
         assert_eq!(store.read(&digest).await.unwrap(), b"payload", "the file must contain the write's own bytes");
     }
 
-    /// Reproduces the bug this fix addresses, at the SQL level: a `docker_repository_blobs` link row
-    /// created at upload time (independent of any manifest) survives on its own once the manifest
-    /// that used to make it non-stale is gone — here simulated by deleting the manifest row directly,
-    /// the same state `DeleteManifestUseCase` leaves behind. Before this fix existed at all,
-    /// `release` would hit this row's FK and roll its own decrement back
-    /// forever; `unlink_from_repository_if_unreferenced` is what makes it possible to first remove the
-    /// now-stale row so the decrement can actually succeed.
+    /// A link row created at upload time survives once its manifest is gone (simulated by deleting the manifest row).
+    /// `unlink_from_repository_if_unreferenced` removes the stale row so the decrement can succeed.
     #[sqlx::test]
     async fn unlink_from_repository_if_unreferenced_removes_a_stale_link_row(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1416,10 +1315,8 @@ mod tests {
         assert!(!store.is_uploaded_to_repository(repository_id, &digest).await.unwrap(), "the stale link row must be gone");
     }
 
-    /// The other half of the same behavior: a link row backed by a manifest that's still very much
-    /// there must survive — this is the "don't reintroduce premature deletion" case. A blob genuinely
-    /// still in use (reachable via `docker_manifest_blobs`) must never lose its repository link just
-    /// because some OTHER, unrelated digest's manifest got deleted.
+    /// A link backed by a manifest that still exists must survive: another digest's manifest being deleted must not
+    /// unlink it.
     #[sqlx::test]
     async fn unlink_from_repository_if_unreferenced_leaves_a_still_referenced_link_row_alone(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1562,7 +1459,7 @@ mod tests {
         assert_eq!(count_of(&recent), Some(7), "a blob still inside the grace period is left alone");
     }
 
-    /// A proxy repository's blob cache is made of exactly such links, with no manifest behind them.
+    /// A proxy repository's blob cache is made of such links, with no manifest behind them.
     #[sqlx::test]
     async fn the_sweep_leaves_a_proxy_repositorys_blob_cache_alone(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();

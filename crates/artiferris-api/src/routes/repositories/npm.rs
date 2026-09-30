@@ -935,8 +935,8 @@ mod tests {
         // Creating a repository doesn't itself grant the creator a role on it.
         state.grant_permission.execute(admin_id, repo_id, Role::Read, admin_id).await.unwrap();
 
-        // Grant as super-admin (only way to cross orgs), then demote — leaves a stale
-        // out-of-org grant. A second super-admin so the demotion below isn't rejected.
+        // Grant as super-admin (the only way to cross organizations), then demote: this leaves a stale
+        // out-of-organization grant. A second super-admin keeps the demotion from being rejected.
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "another-super-admin", "sup3r-s3cret!", true).await.unwrap();
         let other_user_id = state.create_user.execute(other_id, "other-user", "sup3r-s3cret!", true).await.unwrap();
         state.grant_permission.execute(other_user_id, repo_id, Role::Read, admin_id).await.unwrap();

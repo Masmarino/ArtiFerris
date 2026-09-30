@@ -159,9 +159,8 @@ impl DockerUploadSessionPort for PostgresDockerUploadSessionRepository {
             }
         }
 
-        // The write must land at exactly `row.bytes_received` — if the on-disk file has drifted ahead
-        // (e.g. a crash after a prior write but before its counter update committed), truncate back to
-        // the recorded offset first, so a retried/duplicate write can never double-append (M-14).
+        // The write must land at `row.bytes_received`: if the file drifted ahead (a crash before the counter update),
+        // truncate back first, so a retry never double-appends.
         let start = row.bytes_received as u64;
         let mut file = fs::OpenOptions::new().write(true).open(&row.staging_path).await.infra_err()?;
         file.seek(std::io::SeekFrom::Start(start)).await.infra_err()?;
@@ -417,8 +416,7 @@ mod tests {
         assert_eq!(sessions.find(session.id).await.unwrap().unwrap().bytes_received, 11);
     }
 
-    /// Larger than the 64 KiB read buffer `hash_staged_file` uses internally, so this actually
-    /// exercises more than one read/hash-update iteration.
+    /// Larger than the 64 KiB read buffer of `hash_staged_file`, so it takes more than one iteration.
     #[sqlx::test]
     async fn hash_staged_file_matches_a_one_shot_hash_for_content_spanning_multiple_reads(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -523,8 +521,7 @@ mod tests {
         assert!(!std::path::Path::new(&session.staging_path).exists());
     }
 
-    /// Unlike `an_expired_session_is_lazily_swept_on_the_next_find` above, nothing ever calls `find`
-    /// on this session again — the background sweep (M-13) is the only thing that ever reclaims it.
+    /// Nothing calls `find` on this session again: only the background sweep reclaims it.
     #[sqlx::test]
     async fn sweep_expired_uploads_removes_a_session_nobody_ever_looks_up_again(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();

@@ -92,8 +92,7 @@ impl CreateUserProjectUseCase {
         let created = PackageRepository::create(repository_id, personal_org.id, name, format, repo_type, None, None, None)?;
         let grant = Permission::default().grant(owner_user_id, repository_id, Role::Admin);
 
-        // Repository creation and the owner's grant persist together in one transaction, or
-        // neither does — see `PersonalProjectProvisioningPort`'s doc comment for why that matters.
+        // Repository creation and the owner's grant persist in one transaction, or neither does.
         self.provisioning.create_with_owner_grant(repository_id, created, owner_user_id, grant, owner_user_id).await?;
 
         Ok(repository_id)
@@ -215,8 +214,7 @@ mod tests {
         assert!(matches!(err, ApplicationError::NoPersonalOrganization));
     }
 
-    /// A fake `PersonalProjectProvisioningPort` that always fails, simulating a transient error
-    /// (pool exhaustion, a dropped connection) hitting the atomic provisioning call.
+    /// A `PersonalProjectProvisioningPort` that always fails, like pool exhaustion.
     struct AlwaysFailsProvisioning;
 
     #[async_trait::async_trait]

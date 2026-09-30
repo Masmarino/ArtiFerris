@@ -2,9 +2,9 @@ use artiferris_domain::organization::Organization;
 use artiferris_domain::package_repository::PackageRepositorySummary;
 use artiferris_domain::public_catalog::OwnerKind;
 
-/// Where a repository is served from, which decides the URL a client installs with. Always the owner's own
-/// URL: a personal repository lives under `/u/<user>/<repo>` on the main host, the public organization's
-/// repositories directly on the main host, and any other organization on its own subdomain.
+/// Where a repository is served from, which decides the install URL: a personal repository under `/u/<user>/<repo>` on
+/// the main host, the public organization's repositories directly on the main host, any other organization on its own
+/// subdomain.
 pub struct RepositoryLocation {
     pub owner_kind: OwnerKind,
     /// The username for a personal owner, the organization slug otherwise.

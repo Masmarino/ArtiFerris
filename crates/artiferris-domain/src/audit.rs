@@ -211,8 +211,8 @@ pub enum BrandingAsset {
     Favicon,
 }
 
-/// Privilege and configuration changes made by administrators (and account activation).
-/// Payloads carry ids, names and non-secret settings only, never passwords, tokens or client secrets.
+/// Privilege and configuration changes by administrators, and account activation. Payloads carry ids, names and
+/// non-secret settings only.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event_type")]
 pub enum AdminAuditEvent {
@@ -395,8 +395,8 @@ const REDACTED: &str = "[redacted]";
 /// Leads a sealed secret stored as text; `secret_box` writes the same prefix (its tests check they agree).
 pub const SEALED_SECRET_PREFIX: &str = "af1.";
 
-/// Blanks payload values whose key names a password, secret or token (the sealed proxy password in a repository's `Created` event, say),
-/// and any string that is a sealed secret whatever its key is called. Booleans like `secret_changed` and ids like `token_id` stay.
+/// Blanks payload values whose key names a password, secret or token, and any sealed secret whatever its key. Booleans
+/// like `secret_changed` and ids like `token_id` stay.
 pub fn redact_secrets(payload: &mut serde_json::Value) {
     match payload {
         serde_json::Value::Object(fields) => {
@@ -420,7 +420,7 @@ pub fn redact_secrets(payload: &mut serde_json::Value) {
 /// Only security and administrative events are ever aged out. Repository, permission and package events stay: the first two are the source of truth for their aggregates, the last are business history.
 #[async_trait]
 pub trait AuditRetentionPort: Send + Sync {
-    /// Deletes at most `limit` security and administrative events that happened before `cutoff`, oldest first, and returns how many went.
+    /// Deletes at most `limit` security and administrative events older than `cutoff`, oldest first; returns how many.
     async fn delete_audit_events_before(&self, cutoff: DateTime<Utc>, limit: i64) -> Result<u64, EventStoreError>;
 }
 

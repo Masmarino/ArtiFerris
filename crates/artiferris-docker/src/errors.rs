@@ -25,7 +25,7 @@ pub fn docker_error_response(error: ApplicationError) -> (StatusCode, Json<serde
     };
     if status == StatusCode::INTERNAL_SERVER_ERROR {
         tracing::error!(error = %error, "docker route internal error");
-        // Never echo a raw infrastructure error string back to the client.
+        // Never echo a raw infrastructure error to the client.
         return (status, Json(json!({ "errors": [{ "code": code, "message": "internal server error" }] })));
     }
     (status, Json(json!({ "errors": [{ "code": code, "message": error.to_string() }] })))
@@ -35,9 +35,8 @@ pub fn docker_error(status: StatusCode, code: &str, message: &str) -> (StatusCod
     (status, Json(json!({ "errors": [{ "code": code, "message": message }] })))
 }
 
-/// Maps a bare `StatusCode` from an `authz.rs` check into the OCI error envelope, so a 401/403/
-/// 404/405 from an authorization gate is spec-compliant like every `ApplicationError`-driven
-/// response already is (B-17).
+/// Maps a bare `StatusCode` from an `authz.rs` check to the OCI error envelope, so 401/403/404/405 from an
+/// authorization gate are spec-compliant.
 pub fn docker_authz_error(status: StatusCode) -> Response {
     let code = match status {
         StatusCode::UNAUTHORIZED => "UNAUTHORIZED",

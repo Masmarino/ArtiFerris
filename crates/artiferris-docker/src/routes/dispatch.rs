@@ -38,18 +38,16 @@ pub struct BlobQueryParams {
     digest: Option<String>,
 }
 
-// dispatch_* holds the per-verb match shape once; each handle_*/handle_*_personal wrapper just
-// supplies its own resolve_organization_id closure.
+// `dispatch_*` holds the per-verb match once; each `handle_*` wrapper supplies its own `resolve_organization_id`
+// closure.
 //
-// The closure returns Result<Uuid, Response>, not StatusCode, so each path keeps its own
-// resolution-failure shape: on the org path, a bad Host never even reaches the closure — that's
-// ResolvedOrganization's own `Rejection = StatusCode` extractor rejecting the request first — while
-// on the personal path the closure itself returns docker_authz_error's JSON-enveloped Response.
+// The closure returns `Result<Uuid, Response>`, not `StatusCode`, so each path keeps its own failure shape: on the
+// organization path a bad Host is rejected before the closure by `ResolvedOrganization`'s extractor, while on the
+// personal path the closure returns the JSON-enveloped `docker_authz_error` response.
 //
-// resolve_organization_id().await must be called INSIDE the matched parse_operation arm, not before
-// it — the personal path's lookup hits the database, so calling it before the match would let an
-// unhandled verb/shape leak a private repo's existence via 405-vs-404 (see
-// a_wrongly_shaped_personal_request_is_not_an_existence_oracle).
+// `resolve_organization_id().await` must be called inside the matched `parse_operation` arm: the personal lookup hits
+// the database, so calling it before the match would let an unhandled verb or shape reveal a private repository through
+// 405 versus 404 (see `a_wrongly_shaped_personal_request_is_not_an_existence_oracle`).
 
 #[allow(clippy::too_many_arguments)]
 async fn dispatch_get<F, Fut>(state: DockerState, repository: String, rest: String, user: Option<DockerAuthUser>, client: String, tags_query: TagsQueryParams, location_base: String, resolve_organization_id: F) -> Response
@@ -328,10 +326,8 @@ async fn handle_delete(
     dispatch_delete(state, repository, rest, user, || async move { Ok::<Uuid, Response>(organization_id) }).await
 }
 
-// Personal-repository counterparts of the handlers above: resolved via `resolve_personal_repository`
-// instead of the `Host`-header `ResolvedOrganization`, since personal orgs have no subdomain — see
-// the `dispatch_*` doc comment above for why that resolution is threaded through as a closure called
-// from inside each dispatcher's matched arm.
+// Personal counterparts of the handlers above, resolved with `resolve_personal_repository` since personal organizations
+// have no subdomain; see `dispatch_*` for why that is a closure called inside each matched arm.
 async fn resolve_personal_organization_id(state: &DockerState, username: &str, repo: &str) -> Result<Uuid, Response> {
     resolve_personal_repository(state, username, repo).await.map(|r| r.organization_id).map_err(docker_authz_error)
 }
@@ -430,8 +426,7 @@ mod tests {
 
     use crate::route_test_support::{create_personal_project, issue_test_token, seed_bare_user, seed_named_user_with_active_token, seed_repository, seed_user_with_active_token, test_state};
 
-    /// `PostgresPackageRepositoryStore`'s own tests seed a `VisibilityChanged` event directly,
-    /// since this task's own implementation is the only route that could otherwise flip it.
+    /// Marks a repository public through the event store, as `PostgresPackageRepositoryStore`'s tests do.
     async fn mark_repository_public(pool: &sqlx::PgPool, repository_id: Uuid) {
         let store = PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string());
         let (version, _) = store.load(repository_id).await.unwrap();
@@ -514,8 +509,8 @@ mod tests {
         assert_eq!(returned.to_vec(), body);
     }
 
-    /// An unknown, or someone else's nonexistent, personal project must 404 — same as the plain
-    /// org-based route — without ever reaching `require_granted_action`.
+    /// An unknown personal project, or someone else's, must 404 like the organization route, without reaching
+    /// `require_granted_action`.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_request_for_an_unknown_personal_project_is_not_found(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -538,9 +533,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    /// Resolving the personal repository must not, by itself, grant push access — and a denied
-    /// caller must get the same 404 a nonexistent repository would, not a 403 that would confirm
-    /// alice's project exists.
+    /// Resolving a personal repository must not grant push by itself, and a denied caller gets the same 404 as a
+    /// missing repository, not a 403 confirming alice's project exists.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn pushing_to_a_personal_project_without_push_scope_is_not_found(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -565,9 +559,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    /// A genuine stranger — not alice, holding no grant on her project at all, not merely a
-    /// narrower scope — must not be able to tell her private personal project apart from one that
-    /// doesn't exist.
+    /// A real stranger, with no grant at all rather than a narrower scope, must not tell alice's private project from a
+    /// missing one.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_stranger_with_no_grant_cannot_reach_someone_elses_personal_project(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -633,11 +626,9 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    /// The test that was missing before this task's review: a real docker client requests a token
-    /// scoped to the FULL `u/{username}/{repo}/{image}` path it pulls/pushes against, unstripped —
-    /// not a pre-stripped `{repo}/{image}` scope no real client ever sends. Drives the actual
-    /// `/v2/token` exchange, then uses the resulting token against the personal data routes
-    /// end-to-end, proving both the exchange and the data-route match on the same bare scope shape.
+    /// A real docker client asks for a token scoped to the full `u/{username}/{repo}/{image}` path, unstripped, never a
+    /// pre-stripped `{repo}/{image}`. This drives the real `/v2/token` exchange and uses the token on the personal data
+    /// routes, proving both match the same bare scope shape.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_real_clients_unstripped_personal_scope_authenticates_end_to_end(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -710,10 +701,9 @@ mod tests {
         assert_eq!(returned.to_vec(), manifest);
     }
 
-    /// A personal org's slug is a syntactically valid subdomain label, so a caller can reach a
-    /// personal repo through the plain `/{repository}/{*rest}` route too, not just `/u/...` —
-    /// `require_repository_by_name` must still recognize it as personal either way, so a denied
-    /// caller gets 404, never the 403 a real org's own members would see.
+    /// A personal organization's slug is a valid subdomain label, so a personal repository is reachable through the
+    /// plain `/{repository}/{*rest}` route too: `require_repository_by_name` must recognize it as personal either way,
+    /// so a denied caller gets 404, never a 403.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_personal_org_reached_via_its_own_derived_subdomain_still_remaps_forbidden_to_not_found(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -775,10 +765,9 @@ mod tests {
         );
     }
 
-    /// The `Some(_) => METHOD_NOT_ALLOWED` arm must never depend on whether the named personal repo
-    /// actually exists — that lookup only happens inside a correctly-shaped operation's own arm, same
-    /// as the org-route handlers. A GET whose path parses to a write-shaped operation must 405
-    /// identically whether the repo is real (and the caller has no grant on it) or doesn't exist.
+    /// The `Some(_) => METHOD_NOT_ALLOWED` arm must not depend on whether the named personal repository exists: that
+    /// lookup happens only inside a correctly shaped operation's arm. A GET that parses to a write-shaped operation
+    /// must 405 the same whether the repository is real (and the caller has no grant) or not.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_wrongly_shaped_personal_request_is_not_an_existence_oracle(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1033,12 +1022,9 @@ mod tests {
         assert_eq!(get_response.status(), StatusCode::NOT_FOUND);
     }
 
-    /// The anonymous tests above only pin that `require_readable_repository_by_name`'s public
-    /// check fires before `user.ok_or`. This pins that it fires before `resolve_is_personal` too —
-    /// a real, authenticated caller in a completely different organization, holding no grant on
-    /// this repository at all, must still be able to read a public one. A refactor that reordered
-    /// the public check after `resolve_is_personal` would keep every other test green while
-    /// silently 404-ing this caller.
+    /// The anonymous tests above pin that the public check fires before `user.ok_or`. This pins that it fires before
+    /// `resolve_is_personal` too: an authenticated caller from another organization with no grant must still read a
+    /// public repository. Reordering the checks would keep the other tests green while silently 404-ing this caller.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_authenticated_stranger_with_no_grant_can_still_pull_a_manifest_from_a_public_organization_repository(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1115,10 +1101,8 @@ mod tests {
         assert_eq!(returned.to_vec(), body);
     }
 
-    /// `is_public` only unlocks reads. A push must still require a real, authenticated caller even
-    /// against a public repository — the type system makes an accidental regression here unlikely
-    /// (a write handler would have to be deliberately changed to `Option<DockerAuthUser>`), but
-    /// this is the single highest-value guard for the whole feature.
+    /// `is_public` only unlocks reads: a push still needs a real, authenticated caller, even against a public
+    /// repository. The single highest-value guard of the feature.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_public_organization_repository_still_requires_authentication_for_a_push(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1145,9 +1129,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "a public repository unlocks reads only — writes still require a real, authenticated caller");
     }
 
-    /// End-to-end for #73: a real Docker client's own handshake (challenge → `/token` with no
-    /// Basic credentials → present the returned token) must succeed against a public repository,
-    /// not just a request with no `Authorization` header at all.
+    /// End to end: a real Docker client's handshake (challenge, `/token` with no Basic credentials, present the token)
+    /// must succeed against a public repository, not only a request with no `Authorization` header.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_anonymous_docker_client_can_pull_a_manifest_from_a_public_organization_repository(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1211,8 +1194,8 @@ mod tests {
         assert_eq!(returned.to_vec(), body);
     }
 
-    /// The anonymous token must degrade exactly like a fully missing `Authorization` header — a
-    /// `404`, never a `403` (which would leak that the repository exists at all).
+    /// The anonymous token must degrade like a missing `Authorization` header: a 404, never a 403 that would reveal the
+    /// repository.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_anonymous_docker_client_pulling_a_private_repository_gets_not_found(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1243,8 +1226,7 @@ mod tests {
         assert_eq!(pull_response.status(), StatusCode::NOT_FOUND);
     }
 
-    /// A write still requires a real, authenticated caller — an anonymous token must be rejected
-    /// exactly like a missing `Authorization` header, never silently accepted as "some user".
+    /// A write still needs a real, authenticated caller: an anonymous token is rejected like a missing header.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_anonymous_docker_client_cannot_push_even_to_a_public_repository(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();

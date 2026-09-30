@@ -58,10 +58,9 @@ impl PostgresPublicCatalog {
     }
 }
 
-/// Visibility is decided here, in SQL, so a private repository cannot reach any result through a later branch.
-/// A personal owner is the user whose personal organization the repository sits in; the slug is
-/// `'u' || first 24 hex characters of the user id` (`personal_organization_slug` in the application crate).
-/// The filter is what a search scope widens: it is spliced in by the macros below, never at run time.
+/// Visibility is decided in SQL, so a private repository cannot reach a result through a later branch. A personal owner
+/// is the user whose personal organization holds the repository (slug `'u' || first 24 hex of the user id`, see
+/// `personal_organization_slug`). The filter is spliced in by the macros, never at run time.
 macro_rules! public_repositories {
     ($filter:expr) => {
         concat!(
@@ -108,13 +107,9 @@ macro_rules! listed_filter {
 
 const PUBLIC_REPOSITORIES: &str = concat!("WITH ", public_repositories!(public_filter!()), "\n");
 
-/// Every search statement takes the same thirteen parameters, whichever variant runs, so that one binding code path
-/// serves them all and each statement text is prepared once. `params` mentions the ones a variant may not otherwise use.
-///
-/// $1 lowercased text (or NULL), $2 `%text%` and $3 `text%` LIKE patterns, $4 format filter (or NULL), $5 limit, $6 offset,
-/// $7/$8 owner kind and slug (or NULL), $9 names only (skip description, keyword and tag matches), $10 the repository ids
-/// a signed-in scope adds, $11/$12 repository and entry name for an exact lookup (or NULL), $13 whether downloads decide the
-/// order, so that they are worth summing for every candidate.
+/// Every search statement takes the same thirteen parameters so one binding path serves all variants. $1 lowercased
+/// text, $2 `%text%`, $3 `text%`, $4 format, $5 limit, $6 offset, $7/$8 owner kind and slug, $9 names only, $10 ids a
+/// signed-in scope adds, $11/$12 repository and entry name for an exact lookup, $13 whether downloads decide the order.
 macro_rules! search_params {
     () => {
         "WITH params AS (SELECT $9::bool AS names_only, $10::uuid[] AS scope_ids, $11::text AS repository_name, $12::text AS entry_name, $13::bool AS rank_by_downloads),\n"
@@ -133,17 +128,11 @@ fn repositories_cte(scope: &CatalogScope) -> &'static str {
     }
 }
 
-/// Two stages, so the expensive per-entry work only ever touches one page of rows.
-/// Stage 1 (`candidates`) is cheap: it narrows by name or text through the indexes, tiers each entry and pages it.
-/// Stage 2 (`page`, then the final select) fetches description, keywords, latest version and downloads for those rows alone.
-///
-/// `updated_at` is the newest publication of any version (npm) or tag (Docker). A text hit is a match on any npm
-/// version's description or keywords, or on an exact Docker tag. The fuzzy tier is a trigram name match (`%`, similarity
-/// 0.3 and up), only for text of three characters or more.
-///
-/// Without text every public entry is a candidate, so the candidates come straight from the public repositories.
-/// `npm_scope` and `docker_images` are what a variant considers; the newest-publication and download aggregates that
-/// follow only look at those rows, so a narrow scope (one owner, one entry) never pays for the whole catalog.
+/// Two stages keep the expensive per-entry work to one page. Stage 1 (`candidates`) narrows by name or text through the
+/// indexes, tiers and pages. Stage 2 (`page`) fetches description, keywords, latest version and downloads for those
+/// rows. `updated_at` is the newest publication of any version (npm) or tag (Docker). A text hit matches an npm
+/// version's description or keywords, or an exact Docker tag. The fuzzy tier is a trigram name match (similarity 0.3+),
+/// for text of three characters or more. Without text every public entry is a candidate.
 const CANDIDATES_WITHOUT_TEXT: &str = r#"
 , npm_scope AS (
     SELECT k.id, k.name, false AS text_hit, r.id AS repository_id, r.repository_name
@@ -206,8 +195,8 @@ const CANDIDATES_WITH_TEXT: &str = r#"
 )
 "#;
 
-/// Candidates carry only what ordering needs; the owner's details and the page's extras are joined after the LIMIT.
-/// Downloads are summed over the last seven days for the candidates' repositories only, and only when they decide the order.
+/// Candidates carry only what ordering needs; owner details and extras are joined after the LIMIT. Downloads are summed
+/// over seven days, only when they decide the order.
 const CANDIDATES_COMMON: &str = r#"
 , recent_downloads AS (
     SELECT ds.package_repository_id, ds.kind, ds.name, sum(ds.downloads)::bigint AS downloads

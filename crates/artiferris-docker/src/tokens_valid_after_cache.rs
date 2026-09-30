@@ -1,11 +1,10 @@
-//! A short-TTL cache of each user's `tokens_valid_after`, so the Docker data-plane auth extractor
-//! can reject a token issued before a password change/deactivation without a DB round-trip on
-//! every single request — only on a cache miss or once the cached value goes stale (M-17).
+//! A short-TTL cache of each user's `tokens_valid_after`, so the Docker data-plane auth extractor rejects a token
+//! issued before a password change or deactivation without a DB round trip per request, only on a miss or a stale
+//! entry.
 //!
-//! The tradeoff is deliberate: blob/manifest GET/PUT is the highest-traffic path in the system, so
-//! the live per-request lookup `artiferris-api` does is too expensive here. Caching bounds the
-//! worst-case revocation-propagation delay to the TTL (30s in production) instead of the token's
-//! full 5-minute lifetime.
+//! The tradeoff is deliberate: blob and manifest GET/PUT is the highest-traffic path, so the live per-request lookup
+//! `artiferris-api` does is too expensive here. The revocation delay is bounded by the TTL (30 s in production) instead
+//! of the token's 5-minute lifetime.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -52,13 +51,10 @@ impl TokensValidAfterCache {
         Ok(active)
     }
 
-    /// `true` if `issued_at` is at or after the user's current `tokens_valid_after` — i.e. the
-    /// token predates no known revocation event. Refreshes from `users` on a cache miss or once
-    /// the cached entry is older than `ttl`.
-    ///
-    /// Fails closed: a user that no longer exists is an error, not a pass, matching
-    /// `artiferris-api`'s `AuthUser` extractor. Misses are not cached, so a deleted user's
-    /// still-unexpired token costs a lookup per request rather than being remembered as invalid.
+    /// `true` if `issued_at` is at or after the user's current `tokens_valid_after`, refreshing from `users` on a miss
+    /// or an entry older than `ttl`. Fails closed: a user that no longer exists is an error, matching
+    /// `artiferris-api`'s extractor. Misses are not cached, so a deleted user's unexpired token costs one lookup per
+    /// request.
     pub async fn is_valid(
         &self,
         users: &Arc<dyn UserRepositoryPort>,
@@ -116,8 +112,7 @@ mod tests {
         }
     }
 
-    /// Counts `find_by_id` calls — that count is the whole point of the cache, so the tests assert
-    /// on it directly rather than inferring caching from timing.
+    /// Counts `find_by_id` calls: the tests assert on it directly rather than inferring caching from timing.
     struct FakeUsers {
         user: Mutex<Option<User>>,
         lookups: AtomicUsize,
@@ -225,8 +220,7 @@ mod tests {
         assert_eq!(fake.lookups(), 1, "only the first check should have reached the repository");
     }
 
-    /// The flip side, and the one that actually proves the DB-backed path stays live: a revocation
-    /// that lands while an entry is warm must take effect once that entry goes stale.
+    /// The flip side: a revocation landing while an entry is warm must take effect once it goes stale.
     #[tokio::test]
     async fn a_bump_takes_effect_once_the_cached_entry_goes_stale() {
         let cache = TokensValidAfterCache::new(Duration::from_millis(50));
@@ -245,8 +239,7 @@ mod tests {
         assert_eq!(fake.lookups(), 2, "the stale entry should have triggered exactly one refresh");
     }
 
-    /// Fails closed, matching `artiferris-api`'s extractor: a token for a user that no longer
-    /// exists must not authenticate just because nothing bumped a `tokens_valid_after` for it.
+    /// Fails closed, like `artiferris-api`'s extractor: a token for a user that no longer exists must not authenticate.
     #[tokio::test]
     async fn a_token_for_an_unknown_user_is_an_error_rather_than_valid() {
         let cache = TokensValidAfterCache::new(Duration::from_secs(30));
@@ -295,8 +288,8 @@ mod tests {
         assert!(cache.is_api_token_active(token_id, async { Ok::<_, DomainError>(true) }).await.unwrap());
     }
 
-    /// `iat` only carries whole seconds. A token minted in the same second as the bump must not be
-    /// rejected on sub-second grounds alone — the same truncation `artiferris-api` applies.
+    /// `iat` has whole seconds: a token minted in the same second as the bump must not be rejected on sub-second
+    /// grounds, the same truncation `artiferris-api` applies.
     #[tokio::test]
     async fn a_token_minted_in_the_same_second_as_the_bump_is_still_valid() {
         let cache = TokensValidAfterCache::new(Duration::from_secs(30));

@@ -10,9 +10,8 @@ pub enum RepositoryAccessError {
     Internal,
 }
 
-/// The minimal shape every crate's own `AuthUser` type already has — lets the primitives below
-/// stay generic instead of depending on `artiferris-api`'s `AuthUser` (a dependency direction
-/// that isn't allowed: npm/docker can't depend on api).
+/// The minimal shape every crate's `AuthUser` already has, so these primitives stay generic (npm and docker cannot
+/// depend on api).
 pub trait OrganizationScoped {
     fn is_super_admin(&self) -> bool;
     fn organization_id(&self) -> Uuid;

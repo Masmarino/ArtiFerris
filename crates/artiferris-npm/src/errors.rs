@@ -17,7 +17,7 @@ pub fn npm_error_response(error: ApplicationError) -> (StatusCode, Json<serde_js
     };
     if status == StatusCode::INTERNAL_SERVER_ERROR {
         tracing::error!(error = %error, "npm route internal error");
-        // Never echo a raw infrastructure error string back to the client (M-8).
+        // Never echo a raw infrastructure error to the client.
         return (status, Json(json!({ "error": "internal server error" })));
     }
     (status, Json(json!({ "error": error.to_string() })))

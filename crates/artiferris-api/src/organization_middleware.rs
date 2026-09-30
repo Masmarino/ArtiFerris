@@ -222,8 +222,7 @@ mod tests {
             .await
             .unwrap();
         let app = router(state);
-        // DNS is case-insensitive, so a real client can send an uppercase Host header — it
-        // must resolve exactly like the lowercase form, not silently fall through to the
+        // DNS is case-insensitive: an uppercase Host must resolve like the lowercase one, not fall through to the
         // public organization.
         let response = app
             .oneshot(

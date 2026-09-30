@@ -1,8 +1,4 @@
-//! Admin use cases, split by concern (Q-6). Each submodule owns one concern's production code
-//! and its own tests; fakes shared by two or more concerns' tests live in the sibling
-//! `crate::use_cases::admin_test_support` module (this crate's existing convention — see also
-//! `npm_test_support.rs`, `docker_test_support.rs`), while fakes used by only one concern's tests
-//! stay local to that concern's file.
+//! Admin use cases, one submodule per concern. Fakes shared by several concerns live in `admin_test_support`.
 
 mod admin_stats;
 mod api_tokens;

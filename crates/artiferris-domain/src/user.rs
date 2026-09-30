@@ -86,22 +86,17 @@ pub trait UserRepositoryPort: Send + Sync {
     async fn find_by_email(&self, email: &str) -> Result<Option<User>, DomainError>;
     async fn list_all(&self) -> Result<Vec<User>, DomainError>;
 
-    /// Exactly the users whose id is in `ids` — scoped at the database level (`WHERE id = ANY($1)`),
-    /// not implemented via `list_all()` and filtering in memory (M-21, B-7). For a caller that only
-    /// needs a handful of users out of a potentially large table, e.g. resolving usernames for a
-    /// repository's permission grants.
+    /// Exactly the users whose id is in `ids`, scoped in SQL (`id = ANY($1)`), not via `list_all()`. For resolving a
+    /// handful of usernames, e.g. a repository's grants.
     async fn find_by_ids(&self, ids: &[Uuid]) -> Result<Vec<User>, DomainError>;
-    /// `COUNT(*) WHERE organization_id = $1`, pushed to SQL rather than `list_all()` filtered and
-    /// counted in application code (M-21, B-7's admin-stats follow-up).
+    /// `COUNT(*)` for one organization, in SQL.
     async fn count_by_organization(&self, organization_id: Uuid) -> Result<i64, DomainError>;
 
-    /// Case-insensitive substring match on username, scoped to one organization, sorted by
-    /// username, capped at `limit` — all pushed to SQL, not filtered in application code after a
-    /// full-table `list_all()` read (M-21, B-7).
+    /// Case-insensitive substring match on username within one organization, sorted by username, capped at `limit`, all
+    /// in SQL.
     async fn search_by_organization(&self, organization_id: Uuid, query: &str, limit: i64) -> Result<Vec<User>, DomainError>;
-    /// The super-admin counterpart of `search_by_organization`: same match/sort/cap, but with no
-    /// organization filter — a super-admin's search is intentionally cross-organization (mirrors
-    /// `list_users`' own `is_super_admin` bypass of its organization scope).
+    /// The super-admin counterpart of `search_by_organization`, with no organization filter: a super-admin's search
+    /// crosses organizations.
     async fn search_all_organizations(&self, query: &str, limit: i64) -> Result<Vec<User>, DomainError>;
 
     async fn insert(&self, user: &User) -> Result<(), DomainError>;
@@ -114,8 +109,8 @@ pub trait UserRepositoryPort: Send + Sync {
     /// `false` if this would leave zero super-admins (a no-op then). `audit` goes in the same transaction.
     async fn delete_unless_last_super_admin(&self, id: Uuid, audit: Option<&AdminAuditRecord>) -> Result<bool, DomainError>;
 
-    /// `false` if the demotion would leave zero super-admins (a no-op then). A demotion also bumps `tokens_valid_after`.
-    /// `audit` is written in the same transaction as the change.
+    /// `false` if the demotion would leave no super-admin (a no-op). A demotion also bumps `tokens_valid_after`.
+    /// `audit` goes in the same transaction.
     async fn set_super_admin_unless_last(&self, id: Uuid, is_super_admin: bool, audit: Option<&AdminAuditRecord>) -> Result<bool, DomainError>;
 
     /// A demotion also bumps `tokens_valid_after`. `audit` goes in the same transaction.

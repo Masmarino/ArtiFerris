@@ -24,8 +24,8 @@ impl OrganizationSlug {
         }
     }
 
-    /// For a slug being created. `parse` stays lenient so an organization that predates the
-    /// `artiferris-` reservation can still be looked up and loaded.
+    /// For a slug being created. `parse` stays lenient so organizations that predate the `artiferris-` reservation
+    /// still load.
     pub fn parse_new(raw: &str) -> Result<Self, DomainError> {
         let slug = Self::parse(raw)?;
         reject_reserved_name(raw)?;
@@ -43,8 +43,7 @@ pub struct Organization {
     pub slug: OrganizationSlug,
     pub display_name: String,
     pub is_public: bool,
-    /// A personal namespace's own hidden organization — filtered out of every organization
-    /// listing/picker; see `docs/superpowers/specs/2026-09-18-user-repositories-design.md`.
+    /// A personal namespace's own hidden organization, left out of every organization listing and picker.
     pub is_personal: bool,
     pub created_at: DateTime<Utc>,
 }

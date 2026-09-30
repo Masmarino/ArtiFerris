@@ -42,7 +42,7 @@ async fn unpublish_package(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
     require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    // Role before type (B-14): see publish.rs's identical reordering.
+    // Role before type, as in publish.rs.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write)
         .await
         .map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;
@@ -88,7 +88,7 @@ async fn unpublish_via_document_put(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
     require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    // Role before type (B-14): see publish.rs's identical reordering.
+    // Role before type, as in publish.rs.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write)
         .await
         .map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;
@@ -123,8 +123,8 @@ async fn unpublish_via_document_put_personal(
     Ok(Json(json!({ "ok": true })))
 }
 
-/// Shared by `unpublish_via_document_put` and its personal-namespace sibling — the diff-and-remove
-/// logic is identical once the repository has been resolved and authorized.
+/// Shared by `unpublish_via_document_put` and its personal sibling: the diff-and-remove is the same once the repository
+/// is resolved and authorized.
 async fn apply_unpublish_diff(state: &NpmState, repository_id: Uuid, name: &NpmPackageName, doc: UnpublishDocument, user_id: Uuid) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
     let document = state
         .metadata
@@ -161,7 +161,7 @@ async fn unpublish_version(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
     require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    // Role before type (B-14): see publish.rs's identical reordering.
+    // Role before type, as in publish.rs.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write)
         .await
         .map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;

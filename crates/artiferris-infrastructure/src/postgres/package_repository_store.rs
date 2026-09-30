@@ -28,9 +28,8 @@ impl PostgresPackageRepositoryStore {
         Self { pool, secrets_encryption_key, quota_locks: KeyedLocks::new() }
     }
 
-    /// A listing must not fail wholesale because one row's password cannot be decrypted (a key
-    /// mismatch, a corrupt value). That row lists without it; `find_by_*`, which proxying goes
-    /// through, still fails loudly.
+    /// A listing must not fail because one row's password cannot be decrypted: that row lists without it, while
+    /// `find_by_*`, which proxying uses, still fails.
     fn password_for_listing(&self, repository_id: Uuid, stored: Option<String>) -> Option<String> {
         match secret_box::open_packed(&stored?, &self.secrets_encryption_key, secret_box::PROXY_REMOTE_PASSWORD) {
             Ok(password) => Some(password),
@@ -200,8 +199,7 @@ impl PackageRepositoryEventStorePort for PostgresPackageRepositoryStore {
 }
 
 impl PostgresPackageRepositoryStore {
-    /// `append`'s write logic, pulled out so `create_with_owner_grant` can reuse it inside its own
-    /// transaction instead of keeping a second copy in sync by hand.
+    /// `append`'s write logic, reusable by `create_with_owner_grant` inside its own transaction.
     pub(crate) async fn append_in_tx(
         &self,
         tx: &mut Transaction<'_, Postgres>,
@@ -259,8 +257,8 @@ impl PostgresPackageRepositoryStore {
     }
 }
 
-/// Runs each aggregate's own transaction-scoped append helper against one shared transaction, so
-/// the repository and its owner's grant persist together or not at all.
+/// Runs each aggregate's append helper in one shared transaction, so the repository and its owner's grant persist
+/// together or not at all.
 #[async_trait]
 impl PersonalProjectProvisioningPort for PostgresPackageRepositoryStore {
     async fn create_with_owner_grant(
@@ -490,8 +488,7 @@ impl PackageRepositoryQueryPort for PostgresPackageRepositoryStore {
         Ok(summaries)
     }
 
-    /// Identical to `list_all` above, just with `organization_id = $1` pushed into the `WHERE`
-    /// clause instead of filtering the full table's worth of rows in application code (M-21, B-7).
+    /// Same as `list_all`, filtered by `organization_id` in the `WHERE` clause.
     async fn list_by_organization(&self, organization_id: Uuid) -> Result<Vec<PackageRepositorySummary>, EventStoreError> {
         let rows = sqlx::query!(
             "SELECT id, organization_id, name, format, repo_type, remote_url, remote_username, remote_password, quota_bytes, retention_keep_last_n, is_public FROM package_repository_projections WHERE organization_id = $1 AND deleted_at IS NULL",
@@ -548,19 +545,9 @@ impl RepositoryDeletionSweepPort for PostgresPackageRepositoryStore {
 
         let mut result = HardDeleteSweepResult::default();
 
-        // Each doomed repository is hard-deleted in its OWN transaction, not one batched statement
-        // for the whole set (a deliberate change from B-39's original shape, made in this fix
-        // round). The reviewer reproduced a batched delete failing outright — and rolling back
-        // EVERY repository in the run, not just the one at fault — whenever any single repository
-        // in the batch was still listed as some other, still-live group's member (Finding 1). That
-        // specific cause is now fixed below (the stale membership row is removed before the
-        // projection delete), but the batching itself was the real amplifier: it turned one
-        // repository's problem into a total, silent, permanently-recurring outage of this sweep.
-        // Per-repository transactions mean a single unexpected FK issue (this one, or one this
-        // cascade grows into later) can only ever cost that one repository's turn, not the whole
-        // run — it's picked up again on tomorrow's run either way. This sweep runs once daily
-        // against what's realistically a small batch of repositories, so the extra per-repository
-        // round trip this costs is negligible next to that correctness win.
+        // Each doomed repository is hard-deleted in its own transaction: in one batched statement a single failing
+        // repository rolled back the whole run, every day. Per repository, a failure only costs that repository's turn;
+        // it is retried the next day.
         for repository_id in doomed_ids {
             match self.hard_delete_one_repository(repository_id).await {
                 Ok(outcome) => {
@@ -578,8 +565,8 @@ impl RepositoryDeletionSweepPort for PostgresPackageRepositoryStore {
     }
 }
 
-/// Holds the transaction that acquired the advisory lock; dropping it (sqlx rolls back) releases it just as well as a
-/// commit would. Neither field is read, only held.
+/// Holds the transaction that took the advisory lock; dropping it releases the lock like a commit. Neither field is
+/// read.
 struct PostgresRepositoryLockGuard {
     _tx: sqlx::Transaction<'static, Postgres>,
     _in_process: OwnedMutexGuard<()>,
@@ -589,10 +576,9 @@ impl RepositoryLockGuard for PostgresRepositoryLockGuard {}
 
 #[async_trait]
 impl RepositoryQuotaLockPort for PostgresPackageRepositoryStore {
-    /// Serializes quota-affecting writes to one repository, in this process by an in-memory lock and across everything else
-    /// by `pg_advisory_xact_lock`, the same key the Docker manifest insert takes. The in-memory lock goes first so a queue of
-    /// waiters holds no pool connection: the holder needs more connections for its own checks, and waiters occupying the
-    /// pool would starve it.
+    /// Serializes quota-affecting writes to one repository: in-process by an in-memory lock, across processes by
+    /// `pg_advisory_xact_lock` (the key the Docker manifest insert takes). The in-memory lock goes first so waiters
+    /// hold no pool connection, which the holder needs.
     async fn acquire_repository_lock(&self, repository_id: Uuid) -> Result<Box<dyn RepositoryLockGuard>, EventStoreError> {
         let in_process = self.quota_locks.lock(repository_id).await;
         let mut tx = self.pool.begin().await.storage_err()?;
@@ -602,10 +588,8 @@ impl RepositoryQuotaLockPort for PostgresPackageRepositoryStore {
 }
 
 impl PostgresPackageRepositoryStore {
-    /// Hard-deletes exactly one repository, in its own transaction. Returns the digests of any
-    /// Docker blobs the caller should now remove from disk (best-effort, after this commits) via
-    /// `DockerBlobStorePort::remove_reclaimed_blob_files`, which re-locks and re-checks each digest
-    /// before touching a file rather than removing it unconditionally.
+    /// Hard-deletes one repository in its own transaction. Returns the digests of Docker blobs to remove from disk
+    /// after the commit, via `remove_reclaimed_blob_files`, which re-locks and re-checks each digest.
     async fn hard_delete_one_repository(&self, repository_id: Uuid) -> Result<Vec<String>, artiferris_domain::error::DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
 
@@ -685,8 +669,7 @@ mod tests {
     use artiferris_domain::docker_registry::Digest;
     use artiferris_domain::permission::{PermissionEventStorePort, Role};
 
-    /// `package_repository_projections.organization_id` is FK-constrained against `organizations`
-    /// — every test that needs a second (non-seeded) organization must insert a real row for it.
+    /// `package_repository_projections.organization_id` is a foreign key: a second organization needs a real row.
     async fn seed_organization(pool: &PgPool, id: Uuid, slug: &str) {
         sqlx::query!("INSERT INTO organizations (id, slug, display_name) VALUES ($1, $2, $3)", id, slug, slug)
             .execute(pool)
@@ -1330,9 +1313,8 @@ mod tests {
         assert_eq!(conflicts, 1, "expected the loser to get a clean ConcurrencyConflict{{expected:0, actual:1}}, got: {outcomes:?}");
     }
 
-    /// A `Revoked` event is never valid as a stream's first event, so the port rejects it — but
-    /// only after the repository-side insert already ran in the same transaction, which is what
-    /// makes this a real rollback test rather than an early-return one.
+    /// A `Revoked` event is never valid first in a stream, so the port rejects it after the repository insert ran in
+    /// the same transaction: a real rollback test.
     #[sqlx::test]
     async fn create_with_owner_grant_leaves_no_partial_state_when_the_permission_side_is_rejected(pool: sqlx::PgPool) {
         let store = PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string());
@@ -1378,8 +1360,7 @@ mod tests {
         assert_eq!(permission_row_count, 0);
     }
 
-    /// The happy path this port exists to serve: both the repository and its owner's grant persist
-    /// together from one call.
+    /// Repository and owner's grant persist together from one call.
     #[sqlx::test]
     async fn create_with_owner_grant_persists_both_the_repository_and_the_grant(pool: sqlx::PgPool) {
         let store = PostgresPackageRepositoryStore::new(pool, "test-secret".to_string());
@@ -1445,10 +1426,8 @@ mod tests {
         assert_eq!(stamped, 4, "created, quota, and both grants");
     }
 
-    /// Creates a repository and immediately soft-deletes it (a real `Deleted` event, going through
-    /// `apply_to_projection` like production does), then backdates `deleted_at` directly — there's no
-    /// port method for that, and every other test in this codebase that needs a specific past
-    /// timestamp (e.g. `docker_upload_session_repository`'s sweep tests) does the same thing.
+    /// Creates a repository, soft-deletes it through `apply_to_projection`, then backdates `deleted_at` directly: there
+    /// is no port method for that.
     async fn create_and_soft_delete_backdated(store: &PostgresPackageRepositoryStore, id: Uuid, name: &str, days_ago: i64) {
         store
             .append(
@@ -1479,9 +1458,7 @@ mod tests {
         .unwrap();
     }
 
-    /// Inserts a `docker_blobs` row the way production does (`storage_key` distinct from `digest`,
-    /// unlike the shorthand some older tests used) — realistic even though `reclaimed_docker_blob_digests`
-    /// is asserted against the digest itself, not the storage key.
+    /// Inserts a `docker_blobs` row as production does, with a `storage_key` distinct from the digest.
     async fn seed_docker_blob(pool: &PgPool, digest: &Digest, storage_key: &str, reference_count: i64) {
         sqlx::query!(
             "INSERT INTO docker_blobs (digest, size_bytes, storage_key, reference_count, created_at) VALUES ($1, 11, $2, $3, now())",
@@ -1541,12 +1518,8 @@ mod tests {
             .unwrap();
         assert!(manifest_row.is_none(), "ON DELETE CASCADE from package_repository_projections must have removed the dependent manifest row");
 
-        // Fix round 1, Finding 3: unlike the original B-39 shape (which left `docker_blobs` alone and
-        // handed digests back to the caller to decrement post-commit), the decrement and the row
-        // deletion now happen IN THIS SAME TRANSACTION — this blob had exactly one reference, from
-        // the doomed repository's one manifest, and no other repository link, so it must be gone by
-        // the time this call returns, with its digest reported for on-disk cleanup —
-        // `remove_reclaimed_blob_files` derives the storage key from the digest itself.
+        // The decrement and the row deletion happen in the sweep's transaction: this blob had one reference and no
+        // other link, so it is gone when the call returns, with its digest reported for file cleanup.
         assert_eq!(result.reclaimed_docker_blob_digests, vec![blob_digest.as_str().to_string()]);
         let blob_row: Option<i64> = sqlx::query_scalar!("SELECT reference_count FROM docker_blobs WHERE digest = $1", blob_digest.as_str())
             .fetch_optional(&pool)
@@ -1555,13 +1528,8 @@ mod tests {
         assert_eq!(blob_row, None, "a zero-referenced, unlinked blob's row must be deleted transactionally, not left for a later step");
     }
 
-    /// Fix round 1, Finding 3: a blob can still be linked to some OTHER, non-doomed repository via
-    /// `docker_repository_blobs` even once no manifest references it anymore. The decrement must
-    /// still happen and survive, but the row itself must NOT be deleted while that link still exists,
-    /// since deleting it would violate `docker_repository_blobs`'s FK to `docker_blobs`. (In this
-    /// sweep the NOT EXISTS guard avoids that FK outright, so there's nothing to roll back; contrast
-    /// `decrement_ref_and_delete_if_zero`, which used to roll its own decrement back on this same kind
-    /// of FK violation before fix round 2, N1 gave its analogous DELETE a savepoint instead.)
+    /// A blob linked by another live repository keeps its row while the decrement still happens; the NOT EXISTS guard
+    /// avoids the FK violation.
     #[sqlx::test]
     async fn sweeping_decrements_a_shared_blobs_reference_count_but_does_not_delete_it_while_another_repository_still_links_it(pool: sqlx::PgPool) {
         let store = PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string());
@@ -1612,20 +1580,14 @@ mod tests {
         assert_eq!(blob_row, Some(0), "the decrement itself must survive even though the row couldn't be deleted");
     }
 
-    /// Mirrors the private `FilesystemDockerBlobStore::storage_key`/`hex_part` sharding scheme (not
-    /// reachable from this file — those helpers are private to that module) so these tests can assert
-    /// against the real on-disk path a `remove_reclaimed_blob_files` call would remove.
+    /// Mirrors the private `FilesystemDockerBlobStore::storage_key` sharding to assert the real on-disk path.
     fn expected_storage_key(digest: &Digest) -> String {
         let hex = digest.as_str().strip_prefix("sha256:").unwrap();
         format!("sha256/{}/{}/{}", &hex[0..2], &hex[2..4], hex)
     }
 
-    /// GC-gap regression: a `docker_repository_blobs` link row created independent of any manifest —
-    /// exactly what a proxy repository's blob cache leaves behind (see `docker_blob_get.rs`'s
-    /// `execute_proxy`, which links a fetched blob without ever calling `increment_ref`) — must still
-    /// be reclaimed once the repository holding it is hard-deleted. Runs the real, fully-wired use
-    /// case (not just the port call) so the `remove_reclaimed_blob_files` file-removal path is
-    /// exercised end to end.
+    /// A link row with no manifest (what a proxy cache leaves) is reclaimed once its repository is hard-deleted. Runs
+    /// the wired use case so file removal is exercised end to end.
     #[sqlx::test]
     async fn sweeping_reclaims_a_link_only_digest_no_manifest_ever_referenced_closing_the_gc_gap(pool: sqlx::PgPool) {
         use crate::filesystem_storage::FilesystemStorageBackend;
@@ -1655,10 +1617,7 @@ mod tests {
         assert!(!file_path.exists(), "the file itself must be removed too, via the locked remove_reclaimed_blob_files path");
     }
 
-    /// The other half of the same fix: widening the reclaim-candidate list must not over-reclaim a
-    /// digest another, still-live repository legitimately still links. Repository B is hard-deleted
-    /// while holding a link-only row for digest E; repository C, NOT being deleted, also links E. Both
-    /// E's `docker_blobs` row and its on-disk file must survive intact.
+    /// Widening the candidates must not over-reclaim a digest another live repository links: row and file survive.
     #[sqlx::test]
     async fn sweeping_does_not_reclaim_a_link_only_digest_a_different_live_repository_still_links(pool: sqlx::PgPool) {
         use crate::filesystem_storage::FilesystemStorageBackend;
@@ -1708,12 +1667,8 @@ mod tests {
         assert!(file_path.exists(), "the file must survive too, since the row was never eligible for deletion");
     }
 
-    /// Pins the decrement step to `orphaned_docker_blob_digests` (manifest-backed only), never the
-    /// wider union the DELETE uses. Digest D is only ever LINKED by the doomed repository A (no
-    /// manifest reference from A), but is referenced by live repository B's own manifest, so D's
-    /// `reference_count` correctly reflects only B's usage. If the decrement were ever widened to the
-    /// same union as the DELETE (an easy copy-paste mistake, since both lists sit right next to each
-    /// other), A's hard-delete would silently steal a reference count that belongs to B.
+    /// The decrement stays on `orphaned_docker_blob_digests`, not the wider union the DELETE uses: D is only linked by
+    /// doomed A but referenced by live B's manifest, and A's hard-delete must not steal B's count.
     #[sqlx::test]
     async fn sweeping_a_link_only_digest_does_not_decrement_a_live_repositorys_manifest_reference(pool: sqlx::PgPool) {
         let store = PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string());
@@ -1776,13 +1731,8 @@ mod tests {
         );
     }
 
-    /// Fix round 1, Finding 1 (CRITICAL): reproduces the reviewer's exact scenario. Before this fix,
-    /// `package_repository_group_members_member_fk` had no `ON DELETE` action, so hard-deleting a
-    /// repository still listed as some OTHER, still-live group's member failed with a foreign-key
-    /// violation — and because the original implementation processed every doomed repository in one
-    /// batched `DELETE ... WHERE id = ANY($1)`, that single violation rolled back the ENTIRE batch,
-    /// permanently, on every run, for every repository, the moment any group existed anywhere. This
-    /// is the single most important case to prove out of this whole fix round.
+    /// A repository still listed as another live group's member must be hard-deletable: the member FK has no `ON
+    /// DELETE`, and one violation in a batched delete used to roll back the whole run.
     #[sqlx::test]
     async fn sweeping_a_group_member_soft_deleted_past_the_grace_period_removes_the_stale_membership_row_and_still_hard_deletes_it(pool: sqlx::PgPool) {
         let store = PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string());
@@ -1894,12 +1844,8 @@ mod tests {
         assert!(repo_row.is_some(), "still within the 30-day undo window — must not be hard-deleted yet");
     }
 
-    /// Fix round 1, Finding 2: an end-to-end run of the real daily sweep, wired together the same
-    /// way `AppState::build` wires it in production (this port plus the real `FilesystemStorageBackend`
-    /// and `FilesystemDockerBlobStore`, not fakes), proving a hard-deleted repository's npm tarball is
-    /// actually freed from disk — B-39's original claim ("deleting a repository frees nothing") was
-    /// still literally true for npm's on-disk files even after the Finding 1 and 3 fixes above, since
-    /// the cascade delete only ever touches the DB.
+    /// End-to-end run of the daily sweep wired as in `AppState::build`, with the real filesystem backends: a
+    /// hard-deleted repository's npm tarball is freed from disk.
     #[sqlx::test]
     async fn sweeping_frees_a_hard_deleted_repositorys_npm_tarball_from_disk(pool: sqlx::PgPool) {
         use crate::filesystem_storage::FilesystemStorageBackend;

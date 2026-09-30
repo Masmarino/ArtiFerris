@@ -106,9 +106,8 @@ fn internal_error<E>(_: E) -> (StatusCode, Json<ErrorResponse>) {
     (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string())))
 }
 
-/// Every repository id belonging to `organization_id` — the "which repos are mine" set metrics scoping filters against.
-/// Scoped at the database level via `list_by_organization` instead of an unbounded `list_all()`
-/// read filtered in application code (M-21, B-7).
+/// Every repository id of `organization_id`, the "which repositories are mine" set that metrics scoping filters
+/// against; scoped in SQL by `list_by_organization`.
 async fn organization_repository_ids(state: &AppState, organization_id: Uuid) -> Result<std::collections::HashSet<Uuid>, artiferris_domain::error::EventStoreError> {
     Ok(state.repositories.list_by_organization(organization_id).await?.into_iter().map(|r| r.id).collect())
 }
@@ -288,9 +287,8 @@ async fn get_stats(State(state): State<AppState>, user: AuthUser, Query(scope): 
     let target_org = requested_organization_override(&user, scope.organization_id);
     require_organization_admin(&user, target_org.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let stats = if let Some(org) = target_org.or_else(|| (!user.is_super_admin).then_some(user.organization_id)) {
-        // Each of these three counts is now pushed to SQL instead of loading an entire table
-        // (users, repositories, or permission grants) and filtering/counting in application code
-        // (M-21, B-7's admin-stats follow-up).
+        // Each of these three counts is computed in SQL instead of loading a whole table and counting in application
+        // code.
         let total_users = state.users.count_by_organization(org).await.map_err(internal_error)? as usize;
         let org_repository_ids = organization_repository_ids(&state, org).await.map_err(internal_error)?;
         let repository_ids: Vec<Uuid> = org_repository_ids.iter().copied().collect();

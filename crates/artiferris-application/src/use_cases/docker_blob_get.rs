@@ -82,10 +82,9 @@ impl GetBlobUseCase {
         self
     }
 
-    /// The blob's bytes, chunked. `authorize_member` is the caller's read policy, consulted for every group member the
-    /// traversal would descend into — the top-level repository's own access is the caller's responsibility, checked once
-    /// before this is ever called (C-1). A proxy serves what it has cached and otherwise fills its cache from the remote,
-    /// verified against `digest` on the way to disk.
+    /// The blob's bytes, chunked. `authorize_member` is the caller's read policy for every group member descended into;
+    /// access to the top-level repository is checked by the caller. A proxy serves its cache, else fills it from the
+    /// remote, verified against `digest`.
     pub fn execute_stream<'a, FAuthorize, FutAuthorize>(
         &'a self,
         repository_id: Uuid,
@@ -118,7 +117,7 @@ impl GetBlobUseCase {
         })
     }
 
-    /// Hot path for `docker push`'s per-layer `HEAD` check: answered from the local size, no blob bytes read.
+    /// `docker push` HEADs each layer: answered from the local size, no blob bytes read.
     pub fn execute_exists<'a, FAuthorize, FutAuthorize>(
         &'a self,
         repository_id: Uuid,
@@ -194,9 +193,9 @@ impl GetBlobUseCase {
         repo.remote_url.as_deref().ok_or_else(|| ApplicationError::InvalidDockerPayload("proxy repository has no remote_url configured".into()))
     }
 
-    /// Fills the cache in a task of its own, so a client going away doesn't cancel it, and hands back the bytes as they arrive.
-    /// The digest is only checked once the blob is all in, so a bad blob ends the stream with an error. `Ok(None)` if the remote
-    /// has no such blob.
+    /// Fills the cache in its own task, so a client going away does not cancel it, and streams the bytes as they
+    /// arrive. The digest is checked once the blob is complete, so a bad blob ends the stream with an error. `Ok(None)`
+    /// if the remote has no such blob.
     async fn start_fill(
         &self,
         fill: OwnedMutexGuard<()>,
@@ -265,8 +264,7 @@ impl GetBlobUseCase {
         }))))
     }
 
-    /// The most a fill may store, and the quota it holds until dropped: what is left after what the repository holds and
-    /// what fills in progress have promised. Without a quota, only the size cap applies.
+    /// The most a fill may store, and the quota it holds until dropped. Without a quota only the size cap applies.
     async fn reserve_room(&self, repository_id: Uuid, repo: &PackageRepositorySummary, declared: Option<u64>) -> Result<(u64, Option<Reservation>), ApplicationError> {
         let Some(quota) = repo.quota_bytes else {
             return Ok((self.max_blob_bytes, None));
@@ -346,7 +344,7 @@ mod tests {
         assert_eq!(read_all(stream).await, Some(b"layer-bytes".to_vec()));
     }
 
-    /// Blob storage is globally deduplicated by digest, but a repository the caller has no manifest in must not be able to serve content that only ever lived elsewhere.
+    /// A repository the caller has no manifest in must not serve content stored elsewhere.
     #[tokio::test]
     async fn a_blob_only_reachable_from_a_different_repository_is_not_served() {
         let blobs = Arc::new(FakeDockerBlobStore::new());
@@ -461,9 +459,8 @@ mod tests {
         assert!(result.unwrap().is_none());
     }
 
-    /// `execute_exists` must not answer from the global, dedup-by-digest store alone — that turns
-    /// HEAD into an oracle for "does this blob exist anywhere on the server", leaking the existence
-    /// of content in repositories the caller can't read (C-2).
+    /// `execute_exists` must not answer from the global store alone: that would reveal which blobs exist in
+    /// repositories the caller cannot read.
     #[tokio::test]
     async fn exists_of_a_blob_only_reachable_from_a_different_repository_returns_none() {
         let blobs = Arc::new(FakeDockerBlobStore::new());

@@ -34,23 +34,19 @@ async fn find_repository_by_name(state: &NpmState, organization_id: Uuid, name: 
 
 pub async fn require_repository_by_name(state: &NpmState, user: &NpmAuthUser, organization_id: Uuid, name: &str) -> Result<PackageRepositorySummary, StatusCode> {
     let repo = find_repository_by_name(state, organization_id, name).await?;
-    // The repository was looked up within organization_id, but the caller's own organization
-    // must also match — otherwise a stale cross-organization permission grant stays usable.
-    // 404, not 403, so the caller can't tell "wrong org" from "doesn't exist".
+    // The caller's own organization must match too, or a stale cross-organization grant stays usable. 404, not 403: the
+    // caller cannot tell a wrong organization from a missing repository.
     require_same_organization(user, repo.organization_id)?;
     Ok(repo)
 }
 
-/// Shared branching shape behind the org and personal read-path helpers below: resolve the
-/// repository, then run `verify` (and require a caller) only when it's private. `resolve`/`verify`
-/// are injected because the two paths resolve and authorize differently — only this branch is
-/// shared. The returned `Option` is `None` only for a public repo, where `verify` never ran.
+/// Shared shape of the organization and personal read paths: resolve the repository, then run `verify` (and require a
+/// caller) only when it is private. `None` is returned only for a public repository, where `verify` never ran.
 async fn require_readable_repository<'a, R, RFut, V, VFut>(user: Option<&'a NpmAuthUser>, resolve: R, verify: V) -> Result<(PackageRepositorySummary, Option<&'a NpmAuthUser>), StatusCode>
 where
     R: FnOnce() -> RFut,
     RFut: Future<Output = Result<PackageRepositorySummary, StatusCode>>,
-    // By value, not `&PackageRepositorySummary` — a plain (non-higher-ranked) `VFut` can't borrow a
-    // value that only lives inside this function's own stack frame.
+    // By value: a non-higher-ranked `VFut` cannot borrow a value living in this function's frame.
     V: FnOnce(&'a NpmAuthUser, Uuid, Uuid) -> VFut,
     VFut: Future<Output = Result<(), StatusCode>>,
 {
@@ -58,15 +54,13 @@ where
     if repo.is_public {
         return Ok((repo, None));
     }
-    // No Authorization header at all on a private repository is indistinguishable from a
-    // nonexistent one — same 404-not-401 discipline as everywhere else in this file.
+    // No Authorization header on a private repository looks like a missing one: 404, not 401.
     let user = user.ok_or(StatusCode::NOT_FOUND)?;
     verify(user, repo.id, repo.organization_id).await?;
     Ok((repo, Some(user)))
 }
 
-/// The read-path counterpart of `require_repository_by_name`, resolving by org+name. The role
-/// check itself stays deferred to the caller, same as before this was extracted.
+/// The organization-and-name counterpart of `require_repository_by_name`; the caller does the role check.
 pub async fn require_readable_repository_by_name<'a>(
     state: &NpmState,
     user: Option<&'a NpmAuthUser>,
@@ -79,9 +73,9 @@ pub async fn require_readable_repository_by_name<'a>(
     .await
 }
 
-/// The personal-namespace counterpart, resolving via `/u/{username}/{repo}`. Unlike the org path,
-/// it runs the full role check here rather than deferring it — a personal org's id never equals a
-/// real user's `organization_id`, so the org-membership check would always reject even the owner.
+/// The personal-namespace counterpart, via `/u/{username}/{repo}`. It does the full role check here: a personal
+/// organization's id never equals a real user's `organization_id`, so the organization check would reject even the
+/// owner.
 pub async fn require_readable_personal_repository_by_name<'a>(
     state: &NpmState,
     user: Option<&'a NpmAuthUser>,
@@ -90,9 +84,8 @@ pub async fn require_readable_personal_repository_by_name<'a>(
 ) -> Result<(PackageRepositorySummary, Option<&'a NpmAuthUser>), StatusCode> {
     require_readable_repository(
         user,
-        // The format check runs here, inside resolution, not after this function returns — it must
-        // reject a non-npm repository before `verify` below ever runs a role check against the
-        // database, so a DB error there can't turn a 404 into a 500.
+        // The format check runs inside resolution, before `verify` does a database role check, so a database error
+        // cannot turn a 404 into a 500.
         || async move {
             let repo = resolve_personal_repository(state, username, repo_name).await?;
             require_npm_format_repository(&repo)?;
@@ -107,24 +100,19 @@ pub fn require_same_organization(user: &NpmAuthUser, organization_id: Uuid) -> R
     authz_primitives::require_same_organization(user, organization_id).map_err(map_access_error)
 }
 
-/// A non-npm-format repository is unreachable through any npm route — 404, same as nonexistent.
-/// Checks FORMAT only (npm vs docker); it does NOT check repo_type — see `require_hosted` for the
-/// hosted/proxy/group distinction (B-19: this function was previously misleadingly named
-/// `require_npm_hosted_repository`, implying a repo_type check it never performed).
+/// A non-npm repository is unreachable through any npm route: 404, like a missing one. Checks the format only;
+/// `require_hosted` checks hosted, proxy or group.
 pub fn require_npm_format_repository(repo: &PackageRepositorySummary) -> Result<(), StatusCode> {
     authz_primitives::require_format(repo, RepositoryFormat::Npm).map_err(map_access_error)
 }
 
-/// Writes only make sense against a hosted repository — proxy/group have no local storage.
+/// Writes need a hosted repository: proxies and groups have no local storage.
 pub fn require_hosted(repo: &PackageRepositorySummary) -> Result<(), StatusCode> {
     authz_primitives::require_hosted(repo).map_err(map_access_error)
 }
 
-/// Resolves `/u/{username}/{repo}` via Task 8's shared `ResolvePersonalRepositoryUseCase`
-/// (stored on `NpmState`, same as every other application-layer use case this crate wires up),
-/// translating its `ApplicationError`/`None` into the `StatusCode`s this crate's handlers expect.
-/// A missing user, an unreserved personal namespace, and an unknown repo name are all 404 —
-/// deliberately indistinguishable, same as the use case's own contract.
+/// Resolves `/u/{username}/{repo}` with `ResolvePersonalRepositoryUseCase` and maps its result to the status codes
+/// handlers expect. A missing user, an unreserved namespace and an unknown repository are all 404, indistinguishable.
 pub async fn resolve_personal_repository(state: &NpmState, username: &str, repo_name: &str) -> Result<PackageRepositorySummary, StatusCode> {
     state
         .resolve_personal_repository
@@ -134,12 +122,9 @@ pub async fn resolve_personal_repository(state: &NpmState, username: &str, repo_
         .ok_or(StatusCode::NOT_FOUND)
 }
 
-/// `require_repository_role`, but for a personal repository reached via `/u/{username}/{repo}`.
-/// A personal org's only conceptual member is its owner, who already holds an explicit
-/// `Permission::Admin` grant (Task 6) — the org-admin bypass never legitimately fires here, so a
-/// denied caller always falls through to the plain permission-grant lookup. That denial must
-/// still read as 404, not 403: an unauthorized caller must not learn a private personal project
-/// exists at all, the same privacy goal `artiferris_api`'s personal-repository gate has.
+/// `require_repository_role` for a personal repository. A personal organization's only member is its owner, who already
+/// holds an explicit Admin grant, so a denied caller falls to the plain grant lookup. The denial reads as 404 so a
+/// stranger cannot learn a private personal project exists.
 pub async fn require_personal_repository_role(state: &NpmState, user: &NpmAuthUser, repository_id: Uuid, repository_organization_id: Uuid, minimum_role: Role) -> Result<(), StatusCode> {
     require_repository_role(state, user, repository_id, repository_organization_id, minimum_role).await.map_err(|status| match status {
         StatusCode::FORBIDDEN => StatusCode::NOT_FOUND,
@@ -147,13 +132,9 @@ pub async fn require_personal_repository_role(state: &NpmState, user: &NpmAuthUs
     })
 }
 
-/// npm's per-member read policy for group traversal (C-1). Reading *through* a group must never be
-/// broader than reading a member directly: the group's own (possibly public, possibly widely
-/// granted) access stops at its boundary, and every member is re-checked on its own terms.
-///
-/// Takes the member's fields by value rather than a `&PackageRepositorySummary` on purpose — the
-/// `authorize_member` hook it feeds (`artiferris_application::use_cases::group_resolve`) requires a
-/// future that outlives the borrow the traversal hands it.
+/// Per-member read policy for group traversal: reading through a group is never broader than reading a member directly.
+/// The group's own access stops at its boundary and each member is checked on its own terms. Takes the member's fields
+/// by value because `authorize_member` needs a future that outlives the traversal's borrow.
 pub async fn member_is_readable(state: &NpmState, caller: Option<&NpmAuthUser>, member_id: Uuid, member_organization_id: Uuid, member_is_public: bool) -> bool {
     if member_is_public {
         return true;
@@ -161,27 +142,21 @@ pub async fn member_is_readable(state: &NpmState, caller: Option<&NpmAuthUser>, 
     let Some(user) = caller else {
         return false;
     };
-    // `require_repository_role`'s grant lookup keys on (user id, repository id) alone — it's
-    // organization-blind — so a stale cross-organization grant would otherwise be usable here. The
-    // top-level repository gets this check in `require_readable_repository_by_name`, but that's
-    // skipped entirely when the top level is public, so a member reached through a public group
-    // would never get it. Re-assert it per member.
+    // `require_repository_role` keys on (user, repository) only, so a stale cross-organization grant would be usable
+    // here. The top-level repository gets the organization check only when it is private, so a member reached through a
+    // public group needs it re-asserted.
     //
-    // A personal organization is the exception: its id never equals a real user's
-    // `organization_id`, so an exact match can never hold there and demanding one locks a user out
-    // of their own personal group's members. There the explicit grant IS the access model — same
-    // branch `artiferris-api`'s `require_repository_access` takes — so fall through to the grant
-    // lookup instead of rejecting.
+    // A personal organization is the exception: its id never equals a real user's `organization_id`, so demanding a
+    // match would lock a user out of their own group's members. There the explicit grant is the access model, as in
+    // `artiferris-api`'s `require_repository_access`.
     if require_same_organization(user, member_organization_id).is_err() && !organization_is_personal(state, member_organization_id).await {
         return false;
     }
     require_repository_role(state, user, member_id, member_organization_id, Role::Read).await.is_ok()
 }
 
-/// Only ever consulted once the cheap org-equality check has already failed — a real user's
-/// `organization_id` is never a personal org's id, so a match rules a personal org out and saves
-/// the query. Same shape as `artiferris-docker`'s `resolve_is_personal`. A lookup failure reads as
-/// "not personal", which fails closed.
+/// Consulted only after the cheap organization equality check failed: a real user's `organization_id` is never a
+/// personal organization's id. A lookup failure reads as "not personal", which fails closed.
 async fn organization_is_personal(state: &NpmState, organization_id: Uuid) -> bool {
     matches!(state.organizations.find_by_id(organization_id).await, Ok(Some(organization)) if organization.is_personal)
 }
