@@ -457,9 +457,7 @@ export class RepositoryDetail {
 
   readonly canChangeVisibility = computed(() => {
     const repository = this.repository()
-    return (
-      repository?.repo_type === 'hosted' && (repository.owner_is_personal || this.me.isSuperAdmin())
-    )
+    return repository?.repo_type === 'hosted' && (this.isAdmin() || this.me.isSuperAdmin())
   })
 
   readonly changingVisibility = signal(false)

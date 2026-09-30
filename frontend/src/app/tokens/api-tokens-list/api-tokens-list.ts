@@ -77,8 +77,16 @@ export class ApiTokensList implements OnInit {
     this.reload()
   }
 
+  readonly loadError = signal<string | null>(null)
+
   reload(): void {
-    this.tokenService.list().subscribe((tokens) => this.tokens.set(tokens))
+    this.tokenService.list().subscribe({
+      next: (tokens) => {
+        this.loadError.set(null)
+        this.tokens.set(tokens)
+      },
+      error: () => this.loadError.set(t('tokens.errors.loadFailed')),
+    })
   }
 
   readonly creatingToken = signal(false)

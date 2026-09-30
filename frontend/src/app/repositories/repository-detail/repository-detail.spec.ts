@@ -1329,12 +1329,22 @@ describe('RepositoryDetail', () => {
       expect(fixture.componentInstance.canChangeVisibility()).toBe(true)
     })
 
-    it('does not offer it for an organization repository unless the user is a super-admin', () => {
+    it('offers it to any admin of the repository, as the server does, organization repository included', () => {
       const orgRepo = { ...REPO, owner_is_personal: false }
 
-      expect(render(orgRepo, true).fixture.componentInstance.canChangeVisibility()).toBe(false)
-      TestBed.resetTestingModule()
-      expect(render(orgRepo, true, true).fixture.componentInstance.canChangeVisibility()).toBe(true)
+      expect(render(orgRepo, true).fixture.componentInstance.canChangeVisibility()).toBe(true)
+    })
+
+    it('does not offer it to someone who is not an admin of the repository', () => {
+      const { fixture } = render({ ...REPO, my_role: 'write' }, true)
+
+      expect(fixture.componentInstance.canChangeVisibility()).toBe(false)
+    })
+
+    it('offers it to a super-admin', () => {
+      const { fixture } = render({ ...REPO, my_role: null }, true, true)
+
+      expect(fixture.componentInstance.canChangeVisibility()).toBe(true)
     })
 
     it('never offers it for a proxy or a group', () => {

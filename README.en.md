@@ -405,6 +405,12 @@ too).
   versions to `registry.npmjs.org`; packages this repository publishes itself
   are never looked up by the scan, and the relay is capped in size. Do not
   point `npm audit` at ArtiFerris if those names must not leave your network
+- An account activation token travels in the URL (`/activate?token=…`); it is
+  single-use on the server (deleted when consumed) and expires
+- When an SSO sign-in comes back, the browser only accepts the session token if
+  it started that sign-in itself in the last 10 minutes. This is a second
+  barrier: the server already ties the return to that browser with a cookie and
+  a `state`
 - Format-sniffed (magic-byte) validation on uploaded assets (branding
   logo/favicon), never trusting a client-supplied `Content-Type`
 

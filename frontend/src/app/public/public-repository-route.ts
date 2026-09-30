@@ -1,5 +1,6 @@
 import { ParamMap } from '@angular/router'
-import { Observable } from 'rxjs'
+import { HttpErrorResponse } from '@angular/common/http'
+import { Observable, throwError } from 'rxjs'
 import { RepositoriesService } from '../repositories/application/repositories.service'
 import { RepositorySummary } from '../repositories/domain/repository.entity'
 
@@ -10,9 +11,14 @@ export function resolvePublicRepository(
 ): Observable<RepositorySummary> {
   const repoName = params.get('repoName')!
   const slug = params.get('slug')
-  return slug
-    ? repositories.getByOrg(slug, repoName)
-    : repositories.getByOwner(params.get('username')!.replace(/^@/, ''), repoName)
+  if (slug) {
+    return repositories.getByOrg(slug, repoName)
+  }
+  const username = params.get('username')!.replace(/^@/, '')
+  // "/@/repo" names nobody: not found, without asking the server.
+  return username
+    ? repositories.getByOwner(username, repoName)
+    : throwError(() => new HttpErrorResponse({ status: 404 }))
 }
 
 /** Absolute routerLink prefix of the public repository page, keeping the personal `@` segment as typed. */

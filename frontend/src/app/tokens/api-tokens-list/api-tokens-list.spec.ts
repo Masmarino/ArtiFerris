@@ -24,6 +24,26 @@ describe('ApiTokensList', () => {
     expect(fixture.componentInstance.tokens().length).toBe(1)
   })
 
+  it('says so when the list cannot be loaded, and clears the message once a reload works', () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), ...apiTokenProviders],
+    })
+    const fixture = TestBed.createComponent(ApiTokensList)
+    const httpMock = TestBed.inject(HttpTestingController)
+
+    fixture.detectChanges()
+    httpMock.expectOne('/api/tokens').flush(null, { status: 500, statusText: 'Server Error' })
+    fixture.detectChanges()
+    expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain(
+      'Échec du chargement des tokens.',
+    )
+
+    fixture.componentInstance.reload()
+    httpMock.expectOne('/api/tokens').flush([])
+    fixture.detectChanges()
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull()
+  })
+
   it('shows the plaintext token exactly once after creating it, via a real button click', () => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting(), ...apiTokenProviders],

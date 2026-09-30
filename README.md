@@ -435,6 +435,12 @@ personnalisée devra l'installer aussi).
   publie lui-même ne sont jamais cherchés par le scan, et le relais est borné
   en taille. Ne pas pointer `npm audit` sur ArtiFerris si ces noms ne doivent
   pas sortir de votre réseau
+- Le jeton d'activation d'un compte voyage dans l'URL (`/activate?token=…`) ; il
+  est à usage unique côté serveur (il est supprimé en étant consommé) et expire
+- Au retour d'une connexion SSO, le navigateur n'accepte le jeton de session que
+  s'il a lui-même lancé la connexion dans les 10 dernières minutes. C'est une
+  seconde barrière : le serveur lie déjà le retour à ce navigateur par un cookie
+  et un `state`
 - Validation par signature de fichier (magic bytes) sur les assets
   téléversés (logo/favicon de marque), sans jamais faire confiance au
   `Content-Type` fourni par le client

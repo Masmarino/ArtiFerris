@@ -166,4 +166,19 @@ describe('app.routes', () => {
       expect(await matchedComponentName(url)).toContain(component)
     }
   })
+
+  it.each([
+    '/repositories/repo-1/packages/pypi/left-pad',
+    '/@alice/lib/packages/pypi/left-pad',
+    '/o/acme/lib/packages/pypi/left-pad',
+  ])('sends %s, a format nobody serves, to the not-found page', async (url) => {
+    expect(await matchedComponentName(url)).toContain('NotFoundPage')
+  })
+
+  it.each([
+    ['/@alice/lib/packages/npm/left-pad', 'PublicPackagePage'],
+    ['/o/acme/lib/packages/docker/api', 'PublicPackagePage'],
+  ])('still serves %s', async (url, page) => {
+    expect(await matchedComponentName(url)).toContain(page)
+  })
 })

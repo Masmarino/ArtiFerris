@@ -481,6 +481,7 @@
       "tooMany": "Troppi tentativi, riprova più tardi.",
       "createFailed": "Impossibile creare il token.",
       "wrongPassword": "Password errata.",
+      "loadFailed": "Impossibile caricare i token.",
       "revokeFailed": "Impossibile revocare il token \"{{ label }}\"."
     },
     "revoke": {

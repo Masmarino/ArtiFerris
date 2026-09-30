@@ -5,6 +5,7 @@ import { usersGuard } from './auth/users.guard'
 import { organizationAdminGuard } from './auth/organization-admin.guard'
 import { CATALOGS } from './public/catalog/domain/catalog.registry'
 import { personalOwnerMatcher } from './public/catalog/owner-url-matcher'
+import { knownFormatAt } from './public/known-format'
 
 // One route per catalog: single-segment literals, so they're safe ahead of AppShell.
 const catalogRoutes: Routes = CATALOGS.map((catalog) => ({
@@ -95,6 +96,7 @@ export const routes: Routes = [
       },
       {
         path: 'repositories/:id/packages/:format/:name',
+        canMatch: [knownFormatAt(3)],
         loadComponent: () =>
           import('./repositories/package-detail-page/package-detail-page').then(
             (m) => m.PackageDetailPage,
@@ -152,6 +154,7 @@ export const routes: Routes = [
   },
   {
     path: ':username/:repoName/packages/:format/:name',
+    canMatch: [knownFormatAt(3)],
     loadComponent: () =>
       import('./public/public-package-page/public-package-page').then((m) => m.PublicPackagePage),
   },
@@ -164,6 +167,7 @@ export const routes: Routes = [
   },
   {
     path: 'o/:slug/:repoName/packages/:format/:name',
+    canMatch: [knownFormatAt(4)],
     loadComponent: () =>
       import('./public/public-package-page/public-package-page').then((m) => m.PublicPackagePage),
   },

@@ -26,6 +26,19 @@ describe('public repository route helpers', () => {
     expect(getByOrg).not.toHaveBeenCalled()
   })
 
+  it('answers 404 for "/@/repo" without asking the server', () => {
+    const { repositories, getByOwner } = service()
+    let status: number | undefined
+
+    resolvePublicRepository(
+      repositories,
+      convertToParamMap({ username: '@', repoName: 'my-lib' }),
+    ).subscribe({ error: (error) => (status = error.status) })
+
+    expect(status).toBe(404)
+    expect(getByOwner).not.toHaveBeenCalled()
+  })
+
   it('resolves an organization route through by-org', () => {
     const { repositories, getByOwner, getByOrg } = service()
 

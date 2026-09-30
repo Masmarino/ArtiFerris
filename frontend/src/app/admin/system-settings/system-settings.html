@@ -39,16 +39,20 @@
           <h3>{{ 'admin.system.publicPage' | transloco }}</h3>
           <gbt-checkbox
             [label]="
-              (publicPageForInstance() ? 'admin.system.publicPageEnabledInstance' : 'admin.system.publicPageEnabled')
-                | transloco
+              (publicPageForInstance()
+                ? 'admin.system.publicPageEnabledInstance'
+                : 'admin.system.publicPageEnabled'
+              ) | transloco
             "
             [ngModel]="publicPageEnabled()"
             (ngModelChange)="publicPageEnabled.set($event)"
           />
           <p class="seo__hint">
             {{
-              (publicPageForInstance() ? 'admin.system.publicPageHintInstance' : 'admin.system.publicPageHint')
-                | transloco
+              (publicPageForInstance()
+                ? 'admin.system.publicPageHintInstance'
+                : 'admin.system.publicPageHint'
+              ) | transloco
             }}
           </p>
           @if (showBlockIndexing()) {
