@@ -1,3 +1,4 @@
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute } from '@angular/router'
@@ -19,6 +20,7 @@ import { SmtpSettingsAdmin } from '../smtp-settings/smtp-settings'
   selector: 'app-organizations-page',
   standalone: true,
   imports: [
+    TranslocoPipe,
     OrganizationsList,
     Tabs,
     Tab,

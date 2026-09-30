@@ -1,3 +1,4 @@
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core'
 import { rxResource, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute } from '@angular/router'
@@ -14,7 +15,7 @@ import { publicRepositoryBasePath, resolvePublicRepository } from '../public-rep
 @Component({
   selector: 'app-public-repository-page',
   standalone: true,
-  imports: [Card, UsageInstructions, PackageTree, PublicLayout, Spinner],
+  imports: [TranslocoPipe, Card, UsageInstructions, PackageTree, PublicLayout, Spinner],
   templateUrl: './public-repository-page.html',
   styleUrl: './public-repository-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

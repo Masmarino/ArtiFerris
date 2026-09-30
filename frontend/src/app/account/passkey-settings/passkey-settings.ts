@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { firstValueFrom } from 'rxjs'
@@ -11,7 +13,7 @@ import { SessionRevocationService } from '../../auth/application/session-revocat
 @Component({
   selector: 'app-passkey-settings',
   standalone: true,
-  imports: [Button, Card, EmptyState, GbtInput, FormsModule, Spinner],
+  imports: [TranslocoPipe, Button, Card, EmptyState, GbtInput, FormsModule, Spinner],
   templateUrl: './passkey-settings.html',
   styleUrl: './passkey-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,7 +47,7 @@ export class PasskeySettings implements OnInit {
       },
       error: () => {
         this.loading.set(false)
-        this.errorMessage.set("Échec du chargement des clés d'accès.")
+        this.errorMessage.set(t('account.passkeys.errors.loadFailed'))
       },
     })
   }
@@ -76,9 +78,9 @@ export class PasskeySettings implements OnInit {
       )
       this.addingName.set(false)
       this.reload()
-      this.toastService.success('Clé d’accès enregistrée.')
+      this.toastService.success(t('account.passkeys.registered'))
     } catch {
-      this.toastService.error("Échec de l'enregistrement de la clé d'accès. Réessayez.")
+      this.toastService.error(t('auth.mfaEnrollment.errors.passkeyFailed'))
     } finally {
       this.registering.set(false)
     }
@@ -106,7 +108,7 @@ export class PasskeySettings implements OnInit {
       },
       error: () => {
         this.stopDeleting(id)
-        this.toastService.error('Mot de passe incorrect.')
+        this.toastService.error(t('account.mfa.errors.wrongPassword'))
       },
     })
   }

@@ -1,3 +1,4 @@
+import { t } from './i18n/translator'
 import { Pipe, PipeTransform } from '@angular/core'
 import type { SelectOption } from '@masmarino/gabarit'
 
@@ -33,17 +34,17 @@ export class SeverityClassPipe implements PipeTransform {
   }
 }
 
-export const DOCKER_SEVERITY_OPTIONS: SelectOption<string>[] = [
-  { value: 'CRITICAL', label: 'Critique' },
-  { value: 'HIGH', label: 'Élevée' },
-  { value: 'MEDIUM', label: 'Moyenne' },
-  { value: 'LOW', label: 'Faible' },
-  { value: 'UNKNOWN', label: 'Inconnue' },
+export const buildDockerSeverityOptions = (): SelectOption<string>[] => [
+  { value: 'CRITICAL', label: t('severity.critical') },
+  { value: 'HIGH', label: t('severity.high') },
+  { value: 'MEDIUM', label: t('severity.medium') },
+  { value: 'LOW', label: t('severity.low') },
+  { value: 'UNKNOWN', label: t('severity.unknown') },
 ]
 
-export const NPM_SEVERITY_OPTIONS: SelectOption<string>[] = [
-  { value: 'critical', label: 'Critique' },
-  { value: 'high', label: 'Élevée' },
-  { value: 'moderate', label: 'Moyenne' },
-  { value: 'low', label: 'Faible' },
+export const buildNpmSeverityOptions = (): SelectOption<string>[] => [
+  { value: 'critical', label: t('severity.critical') },
+  { value: 'high', label: t('severity.high') },
+  { value: 'moderate', label: t('severity.medium') },
+  { value: 'low', label: t('severity.low') },
 ]

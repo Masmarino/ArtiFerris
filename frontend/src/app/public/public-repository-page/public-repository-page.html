@@ -1,13 +1,15 @@
 <app-public-layout>
   @if (loading()) {
-    <div class="loading-state"><gbt-spinner size="lg" label="Chargement…" /></div>
+    <div class="loading-state">
+      <gbt-spinner size="lg" [label]="'common.loading' | transloco" />
+    </div>
   } @else if (loadError()) {
     <gbt-card>
-      <p class="gbt-form-error" role="alert">Échec du chargement du dépôt.</p>
+      <p class="gbt-form-error" role="alert">{{ 'publicRepo.loadFailed' | transloco }}</p>
     </gbt-card>
   } @else if (notFound()) {
     <gbt-card>
-      <p class="gbt-form-error" role="alert">Dépôt introuvable.</p>
+      <p class="gbt-form-error" role="alert">{{ 'publicRepo.notFound' | transloco }}</p>
     </gbt-card>
   } @else if (repository(); as repo) {
     <gbt-card>
@@ -18,15 +20,15 @@
       </div>
     </gbt-card>
 
-    <gbt-card heading="Utilisation" icon="terminal">
+    <gbt-card [heading]="'repositories.detail.usage' | transloco" icon="terminal">
       <app-usage-instructions
         [repository]="repo"
         apiTokenLink="/login"
-        apiTokenLinkLabel="Se connecter"
+        [apiTokenLinkLabel]="'auth.login.submit' | transloco"
       />
     </gbt-card>
 
-    <gbt-card heading="Packages">
+    <gbt-card [heading]="'repositories.detail.tabs.packages' | transloco">
       <app-package-tree [repositoryId]="repo.id" [basePath]="basePath()" />
     </gbt-card>
   }

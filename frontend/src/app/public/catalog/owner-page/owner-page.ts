@@ -1,3 +1,5 @@
+import { t } from '../../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core'
 import { rxResource, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, RouterLink } from '@angular/router'
@@ -15,7 +17,7 @@ import { ownerCountsLabel } from '../domain/owner-counts'
 @Component({
   selector: 'app-owner-page',
   standalone: true,
-  imports: [Button, CatalogSearch, EmptyState, PublicLayout, RouterLink, Spinner],
+  imports: [TranslocoPipe, Button, CatalogSearch, EmptyState, PublicLayout, RouterLink, Spinner],
   templateUrl: './owner-page.html',
   styleUrl: './owner-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -55,13 +57,13 @@ export class OwnerPage {
   readonly errorMessage = computed(() => {
     return (
       overloadMessage(this.resource.error(), CATALOG_OVERLOAD) ??
-      'Échec du chargement du profil. Vérifiez votre connexion puis réessayez.'
+      t('catalog.owner.errors.loadFailed')
     )
   })
 
   constructor() {
     const pageTitle = inject(PageTitleService)
-    effect(() => pageTitle.title.set(this.summary()?.display_name ?? 'Propriétaire'))
+    effect(() => pageTitle.title.set(this.summary()?.display_name ?? t('catalog.owner.title')))
   }
 
   retry(): void {

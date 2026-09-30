@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -49,7 +51,7 @@ interface AuditLogRow {
 @Component({
   selector: 'app-audit-log',
   standalone: true,
-  imports: [Table, DimensionCard, Button, Card, EmptyState, Spinner],
+  imports: [TranslocoPipe, Table, DimensionCard, Button, Card, EmptyState, Spinner],
   providers: [DatePipe],
   templateUrl: './audit-log.html',
   styleUrl: './audit-log.scss',
@@ -88,24 +90,24 @@ export class AuditLog {
   )
 
   private readonly csvColumns: { key: keyof AuditCsvRow; label: string }[] = [
-    { key: 'occurred_at', label: 'Date' },
-    { key: 'aggregate_type', label: 'Type' },
-    { key: 'aggregate_id', label: 'Identifiant' },
-    { key: 'event_type', label: 'Événement' },
-    { key: 'actor_id', label: 'Acteur' },
-    { key: 'payload', label: 'Détails' },
+    { key: 'occurred_at', label: t('common.date') },
+    { key: 'aggregate_type', label: t('common.type') },
+    { key: 'aggregate_id', label: t('admin.auditLog.columns.id') },
+    { key: 'event_type', label: t('admin.auditLog.columns.event') },
+    { key: 'actor_id', label: t('admin.auditLog.columns.actor') },
+    { key: 'payload', label: t('admin.auditLog.columns.details') },
   ]
 
   readonly columns: TableColumn<AuditLogRow>[] = [
     {
       key: 'occurred_at',
-      label: 'Date',
+      label: t('common.date'),
       format: (e) => this.datePipe.transform(e.occurred_at, 'short') ?? '',
     },
-    { key: 'aggregate_type', label: 'Type' },
-    { key: 'event_type', label: 'Événement' },
-    { key: 'actor_id', label: 'Acteur' },
-    { key: 'details', label: 'Détails' },
+    { key: 'aggregate_type', label: t('common.type') },
+    { key: 'event_type', label: t('admin.auditLog.columns.event') },
+    { key: 'actor_id', label: t('admin.auditLog.columns.actor') },
+    { key: 'details', label: t('admin.auditLog.columns.details') },
   ]
   readonly rowId = (r: AuditLogRow): string =>
     `${r.occurred_at}|${r.aggregate_id}|${r.event_type}|${r.actor_id}|${r.details}`

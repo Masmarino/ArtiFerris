@@ -1,5 +1,5 @@
 @if (loading()) {
-  <gbt-spinner label="Chargement…" />
+  <gbt-spinner [label]="'common.loading' | transloco" />
 } @else if (error(); as message) {
   <p class="gbt-form-error" role="alert">{{ message }}</p>
 } @else if (tree(); as t) {
@@ -7,8 +7,8 @@
     @if (t.packages.length === 0) {
       <gbt-empty-state
         illustration="folder"
-        heading="Aucun package"
-        message="Les packages npm publiés dans ce dépôt apparaîtront ici."
+        [heading]="'repositories.tree.noPackagesHeading' | transloco"
+        [message]="'repositories.tree.noPackagesMessage' | transloco"
       />
     } @else {
       <ul class="package-tree">
@@ -23,7 +23,7 @@
             </a>
             @if (row.pkg.truncated) {
               <p class="package-tree__hint" data-testid="truncated-hint">
-                Seules les {{ row.pkg.versions.length }} plus récentes sont listées
+                {{ 'repositories.tree.truncated' | transloco: { count: row.pkg.versions.length } }}
               </p>
             }
           </li>
@@ -34,8 +34,8 @@
     @if (t.images.length === 0) {
       <gbt-empty-state
         illustration="tag"
-        heading="Aucune image"
-        message="Les images docker poussées dans ce dépôt apparaîtront ici."
+        [heading]="'repositories.tree.noImagesHeading' | transloco"
+        [message]="'repositories.tree.noImagesMessage' | transloco"
       />
     } @else {
       <ul class="package-tree">
@@ -50,7 +50,7 @@
             </a>
             @if (row.image.truncated) {
               <p class="package-tree__hint" data-testid="truncated-hint">
-                Seules les {{ row.image.tags.length }} plus récentes sont listées
+                {{ 'repositories.tree.truncated' | transloco: { count: row.image.tags.length } }}
               </p>
             }
           </li>
@@ -61,14 +61,16 @@
   @if (hasMore()) {
     <div class="package-tree__more">
       @if (loadMoreError()) {
-        <p class="gbt-form-error" role="alert">Échec du chargement de la suite.</p>
+        <p class="gbt-form-error" role="alert">
+          {{ 'repositories.tree.loadMoreFailed' | transloco }}
+        </p>
       }
       <gbt-button
         variant="secondary"
-        text="Charger plus"
+        [text]="'repositories.tree.loadMore' | transloco"
         [loading]="loadingMore()"
         (clicked)="loadMore()"
-        loadingLabel="Chargement en cours"
+        [loadingLabel]="'common.loadingLabel' | transloco"
       />
     </div>
   }

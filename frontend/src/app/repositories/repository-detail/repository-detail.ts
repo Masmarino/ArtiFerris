@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
@@ -38,6 +40,7 @@ const BYTES_PER_MB = 1024 * 1024
   selector: 'app-repository-detail',
   standalone: true,
   imports: [
+    TranslocoPipe,
     Table,
     Button,
     GbtInput,
@@ -117,15 +120,15 @@ export class RepositoryDetail {
   readonly memberColumns: TableColumn<{ id: string }>[] = [
     {
       key: 'id',
-      label: 'Dépôt membre',
+      label: t('repositories.detail.columns.member'),
       format: (row) => this.repositoryNamesById().get(row.id) ?? row.id,
     },
   ]
   readonly memberRowId = (row: { id: string }): string => row.id
 
   readonly permissionColumns: TableColumn<PermissionEntry>[] = [
-    { key: 'username', label: 'Utilisateur' },
-    { key: 'role', label: 'Rôle' },
+    { key: 'username', label: t('repositories.detail.columns.user') },
+    { key: 'role', label: t('repositories.permissions.role') },
   ]
   readonly permissionRowId = (p: PermissionEntry): string => p.user_id
 
@@ -237,7 +240,7 @@ export class RepositoryDetail {
         error: () => {
           this.savingQuota.set(false)
           if (repository.id === this.routeId()) {
-            this.quotaError.set("Échec de l'enregistrement du quota.")
+            this.quotaError.set(t('repositories.detail.errors.quotaSave'))
           }
         },
       })
@@ -245,7 +248,7 @@ export class RepositoryDetail {
     }
     const mb = Number(raw)
     if (!Number.isFinite(mb) || mb < 0) {
-      this.quotaError.set('Doit être un nombre positif (ou vide pour illimité).')
+      this.quotaError.set(t('repositories.create.errors.quota'))
       return
     }
     this.savingQuota.set(true)
@@ -260,7 +263,7 @@ export class RepositoryDetail {
       error: () => {
         this.savingQuota.set(false)
         if (repository.id === this.routeId()) {
-          this.quotaError.set("Échec de l'enregistrement du quota.")
+          this.quotaError.set(t('repositories.detail.errors.quotaSave'))
         }
       },
     })
@@ -283,7 +286,7 @@ export class RepositoryDetail {
     const raw = this.retentionKeepLastN().trim()
     const keepLastN = raw === '' ? null : Number(raw)
     if (keepLastN !== null && (!Number.isInteger(keepLastN) || keepLastN < 1)) {
-      this.retentionError.set('Doit être un entier positif (ou vide pour désactiver).')
+      this.retentionError.set(t('repositories.create.errors.retention'))
       return
     }
     this.savingRetention.set(true)
@@ -298,7 +301,7 @@ export class RepositoryDetail {
       error: () => {
         this.savingRetention.set(false)
         if (repository.id === this.routeId()) {
-          this.retentionError.set("Échec de l'enregistrement de la politique de rétention.")
+          this.retentionError.set(t('repositories.detail.errors.retentionSave'))
         }
       },
     })
@@ -322,11 +325,11 @@ export class RepositoryDetail {
         this.grantingPermission.set(false)
         this.grantUser.set(null)
         this.reload(repository.id)
-        this.toastService.success("Droit d'accès accordé.")
+        this.toastService.success(t('users.detail.granted'))
       },
       error: () => {
         this.grantingPermission.set(false)
-        this.toastService.error("Échec de l'attribution du droit d'accès.")
+        this.toastService.error(t('repositories.detail.errors.grantFailed'))
       },
     })
   }
@@ -353,11 +356,11 @@ export class RepositoryDetail {
         this.savingRole.set(false)
         this.editingPermission.set(null)
         this.reload(repository.id)
-        this.toastService.success("Droit d'accès mis à jour.")
+        this.toastService.success(t('users.detail.updated'))
       },
       error: () => {
         this.savingRole.set(false)
-        this.toastService.error("Échec de la mise à jour du droit d'accès.")
+        this.toastService.error(t('users.detail.errors.updateFailed'))
       },
     })
   }
@@ -374,11 +377,11 @@ export class RepositoryDetail {
         this.savingRole.set(false)
         this.editingPermission.set(null)
         this.reload(repository.id)
-        this.toastService.success("Droit d'accès révoqué.")
+        this.toastService.success(t('users.detail.revoked'))
       },
       error: () => {
         this.savingRole.set(false)
-        this.toastService.error("Échec de la révocation du droit d'accès.")
+        this.toastService.error(t('users.detail.errors.revokeFailed'))
       },
     })
   }
@@ -395,11 +398,11 @@ export class RepositoryDetail {
       next: () => {
         this.renaming.set(false)
         this.reload(repository.id)
-        this.toastService.success('Dépôt renommé.')
+        this.toastService.success(t('repositories.detail.renamed'))
       },
       error: () => {
         this.renaming.set(false)
-        this.toastService.error('Échec du renommage du dépôt.')
+        this.toastService.error(t('repositories.detail.errors.renameFailed'))
       },
     })
   }
@@ -419,11 +422,11 @@ export class RepositoryDetail {
           this.addingMember.set(false)
           this.newMemberId.set('')
           this.reload(repository.id)
-          this.toastService.success('Dépôt membre ajouté.')
+          this.toastService.success(t('repositories.detail.memberAdded'))
         },
         error: () => {
           this.addingMember.set(false)
-          this.toastService.error("Échec de l'ajout du dépôt membre.")
+          this.toastService.error(t('repositories.detail.errors.memberAddFailed'))
         },
       })
   }
@@ -435,9 +438,9 @@ export class RepositoryDetail {
     }
     const memberName = this.repositoryNamesById().get(memberId) ?? memberId
     const confirmed = await this.confirmService.ask({
-      heading: 'Retirer du groupe',
-      message: `Retirer "${memberName}" du groupe ?`,
-      confirmLabel: 'Retirer',
+      heading: t('repositories.detail.removeFromGroup'),
+      message: t('repositories.detail.removeFromGroupMessage', { name: memberName }),
+      confirmLabel: t('repositories.create.remove'),
       danger: true,
     })
     if (!confirmed) {
@@ -446,9 +449,9 @@ export class RepositoryDetail {
     this.repositoriesService.removeGroupMember(repository.id, memberId).subscribe({
       next: () => {
         this.reload(repository.id)
-        this.toastService.success(`« ${memberName} » retiré du groupe.`)
+        this.toastService.success(t('repositories.detail.memberRemoved', { name: memberName }))
       },
-      error: () => this.toastService.error('Échec du retrait du dépôt membre.'),
+      error: () => this.toastService.error(t('repositories.detail.errors.memberRemoveFailed')),
     })
   }
 
@@ -470,15 +473,15 @@ export class RepositoryDetail {
     const confirmed = await this.confirmService.ask(
       makePublic
         ? {
-            heading: 'Rendre le dépôt public',
-            message: `Toute personne, sans authentification, pourra consulter et télécharger le contenu de « ${repository.name} ».`,
-            confirmLabel: 'Rendre public',
+            heading: t('repositories.detail.makePublicHeading'),
+            message: t('repositories.detail.makePublicMessage', { name: repository.name }),
+            confirmLabel: t('repositories.detail.makePublic'),
             danger: true,
           }
         : {
-            heading: 'Rendre le dépôt privé',
-            message: `Seuls les utilisateurs autorisés pourront accéder à « ${repository.name} ».`,
-            confirmLabel: 'Rendre privé',
+            heading: t('repositories.detail.makePrivateHeading'),
+            message: t('repositories.detail.makePrivateMessage', { name: repository.name }),
+            confirmLabel: t('repositories.detail.makePrivate'),
           },
     )
     if (!confirmed) {
@@ -489,13 +492,15 @@ export class RepositoryDetail {
       next: () => {
         this.changingVisibility.set(false)
         this.toastService.success(
-          `Dépôt « ${repository.name} » ${makePublic ? 'public' : 'privé'}.`,
+          t(makePublic ? 'repositories.detail.nowPublic' : 'repositories.detail.nowPrivate', {
+            name: repository.name,
+          }),
         )
         this.reload(repository.id)
       },
       error: () => {
         this.changingVisibility.set(false)
-        this.toastService.error('Échec du changement de visibilité.')
+        this.toastService.error(t('repositories.detail.errors.visibilityFailed'))
       },
     })
   }
@@ -508,9 +513,9 @@ export class RepositoryDetail {
       return
     }
     const confirmed = await this.confirmService.ask({
-      heading: 'Supprimer le dépôt',
-      message: `Supprimer le dépôt "${repository.name}" ?`,
-      confirmLabel: 'Supprimer',
+      heading: t('repositories.detail.delete'),
+      message: t('repositories.detail.deleteMessage', { name: repository.name }),
+      confirmLabel: t('common.delete'),
       danger: true,
       typeToConfirm: repository.name,
     })
@@ -521,11 +526,11 @@ export class RepositoryDetail {
     this.repositoriesService.delete(repository.id).subscribe({
       next: () => {
         this.router.navigate(['/repositories'])
-        this.toastService.success(`Dépôt « ${repository.name} » supprimé.`)
+        this.toastService.success(t('repositories.detail.deleted', { name: repository.name }))
       },
       error: () => {
         this.deletingRepository.set(false)
-        this.toastService.error('Échec de la suppression du dépôt.')
+        this.toastService.error(t('repositories.detail.errors.deleteFailed'))
       },
     })
   }

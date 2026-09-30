@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
@@ -25,7 +27,7 @@ import { ConfirmService } from '../../shared/confirm.service'
 @Component({
   selector: 'app-user-detail',
   standalone: true,
-  imports: [Table, Button, Select, PermissionRoleEditor, FormsModule, Card, Tooltip],
+  imports: [TranslocoPipe, Table, Button, Select, PermissionRoleEditor, FormsModule, Card, Tooltip],
   templateUrl: './user-detail.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -87,9 +89,9 @@ export class UserDetail {
   readonly roleOptions = ROLE_OPTIONS
 
   readonly permissionColumns: TableColumn<UserPermissionEntry>[] = [
-    { key: 'repository_name', label: 'Dépôt' },
-    { key: 'format', label: 'Format' },
-    { key: 'role', label: 'Rôle' },
+    { key: 'repository_name', label: t('users.detail.columns.repository') },
+    { key: 'format', label: t('common.format') },
+    { key: 'role', label: t('users.detail.role') },
   ]
   readonly permissionRowId = (p: UserPermissionEntry): string => p.repository_id
 
@@ -155,7 +157,7 @@ export class UserDetail {
     const userId = this.userId
     this.permissionsService.grant(entry.repository_id, userId, role).subscribe({
       next: () => {
-        this.toastService.success("Droit d'accès mis à jour.")
+        this.toastService.success(t('users.detail.updated'))
         if (userId !== this.userId) {
           return
         }
@@ -167,7 +169,7 @@ export class UserDetail {
         if (userId === this.userId) {
           this.savingRole.set(false)
         }
-        this.toastService.error("Échec de la mise à jour du droit d'accès.")
+        this.toastService.error(t('users.detail.errors.updateFailed'))
       },
     })
   }
@@ -181,7 +183,7 @@ export class UserDetail {
     const userId = this.userId
     this.permissionsService.revoke(entry.repository_id, userId).subscribe({
       next: () => {
-        this.toastService.success("Droit d'accès révoqué.")
+        this.toastService.success(t('users.detail.revoked'))
         if (userId !== this.userId) {
           return
         }
@@ -193,7 +195,7 @@ export class UserDetail {
         if (userId === this.userId) {
           this.savingRole.set(false)
         }
-        this.toastService.error("Échec de la révocation du droit d'accès.")
+        this.toastService.error(t('users.detail.errors.revokeFailed'))
       },
     })
   }
@@ -207,7 +209,7 @@ export class UserDetail {
     const userId = this.userId
     forkJoin(repositoryIds.map((id) => this.permissionsService.grant(id, userId, role))).subscribe({
       next: () => {
-        this.toastService.success("Droit d'accès accordé.")
+        this.toastService.success(t('users.detail.granted'))
         if (userId === this.userId) {
           this.grantRepositoryIds.set([])
           this.reload()
@@ -215,7 +217,7 @@ export class UserDetail {
       },
       error: () => {
         // forkJoin only surfaces the first failure, but earlier grants in the batch may have landed
-        this.toastService.error("Échec de l'attribution sur au moins un dépôt.")
+        this.toastService.error(t('users.detail.errors.grantFailed'))
         if (userId === this.userId) {
           this.reload()
         }
@@ -230,14 +232,12 @@ export class UserDetail {
     }
     const next = !user.is_super_admin
     const message = next
-      ? `Promouvoir "${user.username}" au rang de super-administrateur ?`
-      : `Retirer le rang de super-administrateur à "${user.username}" ?`
+      ? t('users.detail.promoteConfirm', { username: user.username })
+      : t('users.detail.demoteConfirm', { username: user.username })
     const confirmed = await this.confirmService.ask({
-      heading: next
-        ? 'Promouvoir en super-administrateur'
-        : 'Retirer le rang de super-administrateur',
+      heading: next ? t('users.detail.promoteHeading') : t('users.detail.demoteHeading'),
       message,
-      confirmLabel: next ? 'Promouvoir' : 'Retirer',
+      confirmLabel: next ? t('users.detail.promoteAction') : t('users.detail.demoteAction'),
       danger: !next,
     })
     if (!confirmed) {
@@ -250,16 +250,16 @@ export class UserDetail {
         this.reload()
         this.toastService.success(
           next
-            ? `${user.username} est désormais super-administrateur·rice.`
-            : `${user.username} n'est plus super-administrateur·rice.`,
+            ? t('users.detail.promoted', { username: user.username })
+            : t('users.detail.demoted', { username: user.username }),
         )
       },
       error: (err: HttpErrorResponse) => {
         this.settingSuperAdmin.set(false)
         this.toastService.error(
           err.status === 409
-            ? 'Impossible de rétrograder le dernier super-administrateur.'
-            : 'Impossible de modifier le statut super-administrateur.',
+            ? t('users.detail.errors.lastSuperAdmin')
+            : t('users.detail.errors.superAdminStatus'),
         )
       },
     })
@@ -274,13 +274,11 @@ export class UserDetail {
     this.usersService.resendInvitation(user.id).subscribe({
       next: () => {
         this.resendingInvitation.set(false)
-        this.toastService.success('Invitation renvoyée.')
+        this.toastService.success(t('users.detail.resent'))
       },
       error: () => {
         this.resendingInvitation.set(false)
-        this.toastService.error(
-          "Échec de l'envoi de l'invitation. Vérifiez la configuration du serveur mail.",
-        )
+        this.toastService.error(t('users.detail.errors.resendFailed'))
       },
     })
   }
@@ -291,9 +289,9 @@ export class UserDetail {
       return
     }
     const confirmed = await this.confirmService.ask({
-      heading: "Supprimer l'utilisateur",
-      message: `Supprimer l'utilisateur "${user.username}" ?`,
-      confirmLabel: 'Supprimer',
+      heading: t('users.detail.delete'),
+      message: t('users.detail.deleteConfirm', { username: user.username }),
+      confirmLabel: t('common.delete'),
       danger: true,
       typeToConfirm: user.username,
     })
@@ -303,9 +301,9 @@ export class UserDetail {
     this.usersService.delete(user.id).subscribe({
       next: () => {
         this.router.navigate(['/users'])
-        this.toastService.success(`Utilisateur « ${user.username} » supprimé.`)
+        this.toastService.success(t('users.detail.deleted', { username: user.username }))
       },
-      error: () => this.toastService.error("Échec de la suppression de l'utilisateur."),
+      error: () => this.toastService.error(t('users.detail.errors.deleteFailed')),
     })
   }
 }

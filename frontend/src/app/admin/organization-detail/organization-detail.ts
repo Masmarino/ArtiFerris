@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -36,6 +38,7 @@ const PROVIDER_TYPE_OPTIONS: SelectOption<'ldap' | 'oidc'>[] = [
   selector: 'app-organization-detail',
   standalone: true,
   imports: [
+    TranslocoPipe,
     Alert,
     Card,
     GbtInput,
@@ -78,7 +81,7 @@ export class OrganizationDetail {
   readonly issuerError = computed(() => {
     const url = this.issuerUrl().trim()
     return url !== '' && !url.toLowerCase().startsWith('https://')
-      ? "L'URL de l'émetteur doit commencer par https://."
+      ? t('admin.orgDetail.errors.issuerHttps')
       : null
   })
   readonly clientId = signal('')
@@ -141,7 +144,7 @@ export class OrganizationDetail {
       error: () => {
         if (requestedId === this.organizationId()) {
           this.loading.set(false)
-          this.errorMessage.set("Échec du chargement de l'organisation.")
+          this.errorMessage.set(t('admin.orgDetail.errors.loadFailed'))
         }
       },
     })
@@ -220,7 +223,7 @@ export class OrganizationDetail {
           this.bindPasswordSet.set(true)
           this.bindPassword.set('')
         }
-        this.toastService.success('Configuration enregistrée.')
+        this.toastService.success(t('admin.orgDetail.saved'))
       },
       error: (error: unknown) => {
         if (requestedId === this.organizationId()) {
@@ -230,7 +233,7 @@ export class OrganizationDetail {
           }
         }
         this.toastService.error(
-          secretFormFailureMessage(error, 'Échec de la mise à jour de la configuration.'),
+          secretFormFailureMessage(error, t('admin.orgDetail.errors.updateFailed')),
         )
       },
     })
@@ -238,9 +241,9 @@ export class OrganizationDetail {
 
   async clear(): Promise<void> {
     const confirmed = await this.confirmService.ask({
-      heading: 'Revenir aux comptes locaux',
-      message: 'Revenir aux comptes locaux pour cette organisation ?',
-      confirmLabel: 'Revenir',
+      heading: t('admin.orgDetail.revert'),
+      message: t('admin.orgDetail.revertMessage'),
+      confirmLabel: t('admin.orgDetail.revertConfirm'),
       danger: true,
     })
     if (!confirmed) return
@@ -262,13 +265,13 @@ export class OrganizationDetail {
         this.issuerUrl.set('')
         this.clientId.set('')
         this.clientSecretSet.set(false)
-        this.toastService.success('Retour aux comptes locaux effectué.')
+        this.toastService.success(t('admin.orgDetail.reverted'))
       },
       error: () => {
         if (requestedId === this.organizationId()) {
           this.clearing.set(false)
         }
-        this.toastService.error('Échec de la suppression de la configuration.')
+        this.toastService.error(t('admin.orgDetail.errors.clearFailed'))
       },
     })
   }

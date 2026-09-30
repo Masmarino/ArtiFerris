@@ -1,28 +1,27 @@
 <section>
   @if (repository().format === 'docker') {
-    <p>Connexion :</p>
-    <pre>
-echo &lt;votre-token&gt; | docker login {{
-        host
-      }} -u &lt;votre-nom-utilisateur&gt; --password-stdin</pre>
+    <p>{{ 'repositories.usage.login' | transloco }}</p>
+    <pre>{{ 'repositories.usage.dockerLogin' | transloco: { host } }}</pre>
     @if (isHosted()) {
-      <p>Marquage et publication de l'image :</p>
-      <pre>
-docker tag mon-image:latest {{ host }}/{{ repositoryPath() }}/mon-image:latest
-docker push {{ host }}/{{ repositoryPath() }}/mon-image:latest</pre>
+      <p>{{ 'repositories.usage.tagAndPush' | transloco }}</p>
+      <pre>{{
+        'repositories.usage.dockerTagPush' | transloco: { host, path: repositoryPath() }
+      }}</pre>
     }
-    <p>Récupération d'une image :</p>
-    <pre>docker pull {{ host }}/{{ repositoryPath() }}/&lt;image&gt;:&lt;tag&gt;</pre>
+    <p>{{ 'repositories.usage.pull' | transloco }}</p>
+    <pre>{{ 'repositories.usage.dockerPull' | transloco: { host, path: repositoryPath() } }}</pre>
   } @else {
-    <p>Ajoutez ces lignes à votre <code>.npmrc</code> :</p>
-    <pre>
-registry={{ origin }}/npm/{{ repositoryPath() }}/
-//{{ host }}/npm/{{ repositoryPath() }}/:_authToken=&lt;votre-token&gt;</pre>
+    <p [innerHTML]="'repositories.usage.npmrc' | transloco"></p>
+    <pre>{{
+      'repositories.usage.npmrcContent' | transloco: { origin, host, path: repositoryPath() }
+    }}</pre>
     @if (isHosted()) {
       <pre>npm publish</pre>
     }
     <pre>npm install</pre>
   }
 
-  <p><a [routerLink]="apiTokenLink()">{{ apiTokenLinkLabel() }}</a></p>
+  <p>
+    <a [routerLink]="apiTokenLink()">{{ apiTokenLinkLabel() }}</a>
+  </p>
 </section>

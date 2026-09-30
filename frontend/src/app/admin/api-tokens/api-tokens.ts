@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -17,7 +19,7 @@ import { ToastService } from '../../shared/toast.service'
 @Component({
   selector: 'app-api-tokens-admin',
   standalone: true,
-  imports: [Button, Card, DatePipe, EmptyState, Tooltip],
+  imports: [TranslocoPipe, Button, Card, DatePipe, EmptyState, Tooltip],
   templateUrl: './api-tokens.html',
   styleUrl: './api-tokens.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -67,18 +69,19 @@ export class ApiTokensAdmin {
 
   async revoke(token: AdminApiToken): Promise<void> {
     const confirmed = await this.confirmService.ask({
-      heading: 'Révoquer le jeton',
-      message: `Révoquer le jeton « ${token.label} » de ${token.username} ?`,
-      confirmLabel: 'Révoquer',
+      heading: t('admin.apiTokens.revokeHeading'),
+      message: t('admin.apiTokens.revokeMessage', { label: token.label, username: token.username }),
+      confirmLabel: t('admin.apiTokens.revoke'),
       danger: true,
     })
     if (!confirmed) return
     this.tokensService.revoke(token.id).subscribe({
       next: () => {
         this.reload()
-        this.toastService.success(`Jeton « ${token.label} » révoqué.`)
+        this.toastService.success(t('admin.apiTokens.revoked', { label: token.label }))
       },
-      error: () => this.toastService.error(`Échec de la révocation du jeton « ${token.label} ».`),
+      error: () =>
+        this.toastService.error(t('admin.apiTokens.errors.revokeFailed', { label: token.label })),
     })
   }
 }

@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -23,7 +25,7 @@ import { formatBytes } from '../../shared/format'
 @Component({
   selector: 'app-health-status',
   standalone: true,
-  imports: [Badge, Card, DescriptionList, GaugeBar],
+  imports: [TranslocoPipe, Badge, Card, DescriptionList, GaugeBar],
   templateUrl: './health-status.html',
   styleUrl: './health-status.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -42,11 +44,14 @@ export class HealthStatusPage implements OnInit {
     const statusValue = this.dbStatusValue()
     if (!s || !statusValue) return []
     const items: DescriptionListEntry[] = [
-      { term: 'Statut', value: statusValue },
-      { term: 'Temps de réponse', value: `${s.database.response_time_ms} ms` },
+      { term: t('admin.health.status'), value: statusValue },
+      {
+        term: t('admin.health.responseTime'),
+        value: t('admin.health.milliseconds', { count: s.database.response_time_ms }),
+      },
     ]
     if (s.database.server_version) {
-      items.push({ term: 'Version PostgreSQL', value: s.database.server_version })
+      items.push({ term: t('admin.health.postgresVersion'), value: s.database.server_version })
     }
     return items
   })
@@ -56,15 +61,15 @@ export class HealthStatusPage implements OnInit {
     const statusValue = this.storageStatusValue()
     if (!s || !statusValue) return []
     return [
-      { term: 'Statut', value: statusValue },
-      { term: 'Espace libre', value: formatBytes(s.storage.free_bytes) },
+      { term: t('admin.health.status'), value: statusValue },
+      { term: t('admin.health.freeSpace'), value: formatBytes(s.storage.free_bytes) },
     ]
   })
 
   readonly serverItems = computed<DescriptionListEntry[]>(() => {
     const s = this.status()
     if (!s) return []
-    return [{ term: 'Démarré depuis', value: this.formatUptime(s.uptime_seconds) }]
+    return [{ term: t('admin.health.uptime'), value: this.formatUptime(s.uptime_seconds) }]
   })
 
   ngOnInit(): void {
@@ -92,12 +97,12 @@ export class HealthStatusPage implements OnInit {
     const minutes = Math.floor((seconds % 3600) / 60)
     const parts: string[] = []
     if (days > 0) {
-      parts.push(`${days} j`)
+      parts.push(t('admin.health.days', { count: days }))
     }
     if (days > 0 || hours > 0) {
-      parts.push(`${hours} h`)
+      parts.push(t('admin.health.hours', { count: hours }))
     }
-    parts.push(`${minutes} min`)
+    parts.push(t('admin.health.minutes', { count: minutes }))
     return parts.join(' ')
   }
 }

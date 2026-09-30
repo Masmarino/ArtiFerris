@@ -1,39 +1,39 @@
 <div class="container">
   @if (failed()) {
     <p class="gbt-form-error" role="alert">
-      Échec du chargement de l'utilisation. Vérifiez votre connexion puis réessayez.
+      {{ 'admin.usage.loadFailed' | transloco }}
     </p>
-    <gbt-button text="Réessayer" (clicked)="retry()" />
+    <gbt-button [text]="'common.retry' | transloco" (clicked)="retry()" />
   }
-  <gbt-card heading="Espace utilisé par dépôt" icon="hard-drive">
+  <gbt-card [heading]="'admin.usage.usedPerRepo' | transloco" icon="hard-drive">
     <gbt-dimension-card
       [rows]="chartData()"
-      caption="Dépôts les plus volumineux"
-      labelColumn="Dépôt"
-      valueColumn="Espace utilisé"
-      emptyMessage="Aucun dépôt."
+      [caption]="'admin.usage.largest' | transloco"
+      [labelColumn]="'admin.usage.repository' | transloco"
+      [valueColumn]="'admin.usage.usedSpace' | transloco"
+      [emptyMessage]="'admin.usage.noRepos' | transloco"
       [locale]="locale"
     />
   </gbt-card>
 
   @if (quotasInUse().length > 0) {
-    <gbt-card heading="Quotas de stockage" icon="bar-chart">
+    <gbt-card [heading]="'admin.usage.quotas' | transloco" icon="bar-chart">
       @for (usage of quotasInUse(); track usage.repository_id) {
         <gbt-gauge-bar
           [label]="usage.name"
           [value]="usage.used_bytes"
           [max]="usage.quota_bytes!"
           [formattedValue]="quotaFormatter(usage.used_bytes, usage.quota_bytes!)"
-          warningLabel="Avertissement"
-          criticalLabel="Critique"
+          [warningLabel]="'admin.health.warning' | transloco"
+          [criticalLabel]="'admin.health.critical' | transloco"
         />
       }
     </gbt-card>
   }
 
   <gbt-table
-    caption="Utilisation par dépôt"
-    emptyMessage="Aucun détail d'utilisation disponible."
+    [caption]="'admin.usage.perRepo' | transloco"
+    [emptyMessage]="'admin.usage.noDetails' | transloco"
     [data]="usages()"
     [columns]="columns"
     [trackBy]="rowId"

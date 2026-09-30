@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -34,7 +36,15 @@ function mergePages(current: RepositoryPackages, page: RepositoryPackages): Repo
 @Component({
   selector: 'app-package-tree',
   standalone: true,
-  imports: [Button, EmptyState, Icon, RouterLink, Spinner, VulnerabilitySummaryBadge],
+  imports: [
+    TranslocoPipe,
+    Button,
+    EmptyState,
+    Icon,
+    RouterLink,
+    Spinner,
+    VulnerabilitySummaryBadge,
+  ],
   templateUrl: './package-tree.html',
   styleUrl: './package-tree.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -81,7 +91,7 @@ export class PackageTree {
           return
         }
         this.loading.set(false)
-        this.error.set('Échec du chargement des packages.')
+        this.error.set(t('repositories.tree.errors.loadFailed'))
       },
     })
   }

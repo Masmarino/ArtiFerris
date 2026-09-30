@@ -54,6 +54,25 @@ ng e2e
 
 Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
 
+## Internationalisation (i18n)
+
+Every user-facing string of the interface lives in `public/i18n/<lang>.json` (today `fr.json`, the
+reference language) and is read through [Transloco](https://jsverse.gitbook.io/transloco):
+
+- In a template, use the pipe: `{{ 'auth.login.submit' | transloco }}`, or
+  `[label]="'auth.login.username' | transloco"` for an attribute, with parameters as
+  `{{ 'users.detail.email' | transloco: { email } }}` (`"E-mail : {{ email }}"` in the JSON).
+- In TypeScript, call `t('some.key', { param })` from `shared/i18n/translator`. It works without an
+  injection context (validators, formatters, error mappers). Do not call it at module level: the
+  dictionary is only loaded when the application starts.
+- Plurals are a `_one` / `_other` pair (`format.results_one`, `format.results_other`); the code picks
+  the right key.
+- `meta.locale` holds the BCP 47 tag used for number and relative-date formatting.
+
+The unit tests load the real `fr.json`, so they still assert the text users see. A spec
+(`shared/i18n/translations.spec.ts`) fails when the code uses a key that `fr.json` does not define,
+or when a key of `fr.json` is used nowhere.
+
 ## Known issues
 
 ### npm audit — devDependency-only UUID vulnerability (B-44)

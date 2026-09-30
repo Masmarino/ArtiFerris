@@ -2,33 +2,33 @@
   <form
     class="catalog-search__form"
     role="search"
-    aria-label="Recherche dans le catalogue"
+    [attr.aria-label]="'catalog.search.ariaLabel' | transloco"
     (submit)="$event.preventDefault(); searchNow()"
   >
     <app-suggest-search-box
       class="catalog-search__input"
-      label="Rechercher un paquet"
-      placeholder="Nom, description ou mot-clé"
+      [label]="'catalog.search.label' | transloco"
+      [placeholder]="'catalog.search.placeholder' | transloco"
       [value]="text()"
       [format]="format()"
       [owner]="owner()"
       (valueChange)="onTextChange($event)"
       (search)="searchNow()"
     />
-    <gbt-button type="submit" text="Rechercher" iconName="search" />
+    <gbt-button type="submit" [text]="'catalog.search.submit' | transloco" iconName="search" />
   </form>
 
   <div class="catalog-search__filters">
     @if (!format()) {
       <gbt-segmented-control
-        ariaLabel="Format"
+        [ariaLabel]="'common.format' | transloco"
         [options]="formatOptions()"
         [value]="activeFormat() ?? ''"
         (valueChange)="setFormat($event)"
       />
     }
     <gbt-segmented-control
-      ariaLabel="Trier par"
+      [ariaLabel]="'catalog.search.sortBy' | transloco"
       [options]="sortOptions()"
       [value]="sort()"
       (valueChange)="setSort($event)"
@@ -38,45 +38,55 @@
   <div class="catalog-search__summary">
     <h2 #resultsHeading class="catalog-search__heading" tabindex="-1">
       @if (searchedText()) {
-        Résultats pour « {{ searchedText() }} »
+        {{ 'catalog.search.resultsFor' | transloco: { text: searchedText() } }}
       } @else if (sort() === 'popular') {
-        Populaires cette semaine
+        {{ 'catalog.search.popular' | transloco }}
       } @else {
-        Récemment mis à jour
+        {{ 'catalog.search.recent' | transloco }}
       }
     </h2>
     <p class="catalog-search__count" aria-live="polite">{{ resultCount() }}</p>
   </div>
 
   @if (loading()) {
-    <div class="loading-state"><gbt-spinner label="Recherche en cours…" /></div>
+    <div class="loading-state">
+      <gbt-spinner [label]="'catalog.search.searching' | transloco" />
+    </div>
   } @else if (failed()) {
     <p class="gbt-form-error" role="alert">{{ errorMessage() }}</p>
-    <gbt-button text="Réessayer" (clicked)="retry()" />
+    <gbt-button [text]="'common.retry' | transloco" (clicked)="retry()" />
   } @else if (result(); as result) {
     @if (result.total === 0 && !searchedText() && owner()) {
       <gbt-empty-state
         illustration="folder"
-        heading="Rien à afficher"
-        message="Ce propriétaire n'a rien de public à afficher ici."
+        [heading]="'catalog.search.ownerEmptyHeading' | transloco"
+        [message]="'catalog.search.ownerEmptyMessage' | transloco"
       >
         @if (activeFormat() && !format()) {
-          <gbt-button variant="secondary" text="Tous les formats" (clicked)="setFormat('')" />
+          <gbt-button
+            variant="secondary"
+            [text]="'catalog.search.allFormats' | transloco"
+            (clicked)="setFormat('')"
+          />
         }
       </gbt-empty-state>
     } @else if (result.total === 0 && !searchedText()) {
       <gbt-empty-state
         illustration="folder"
-        heading="Rien à explorer pour l'instant"
-        message="Aucun contenu public n'est encore publié ici. Rendez un dépôt public pour qu'il apparaisse dans le catalogue."
+        [heading]="'catalog.search.emptyHeading' | transloco"
+        [message]="'catalog.search.emptyMessage' | transloco"
       />
     } @else if (result.total === 0) {
       <gbt-empty-state
         illustration="book"
-        heading="Aucun résultat"
-        message="Aucun paquet ne correspond à cette recherche. Essayez un autre nom, un mot-clé, ou une recherche plus courte."
+        [heading]="'shell.search.noResults' | transloco"
+        [message]="'catalog.search.noMatchMessage' | transloco"
       >
-        <gbt-button variant="secondary" text="Effacer la recherche" (clicked)="clearSearch()" />
+        <gbt-button
+          variant="secondary"
+          [text]="'shell.search.clear' | transloco"
+          (clicked)="clearSearch()"
+        />
       </gbt-empty-state>
     } @else {
       @if (exactItems().length > 0) {
@@ -89,10 +99,12 @@
       @if (approximateItems().length > 0) {
         @if (exactItems().length === 0) {
           <p class="catalog-search__hint">
-            Aucun résultat exact — voici des résultats approchants.
+            {{ 'catalog.search.noExact' | transloco }}
           </p>
         }
-        <h2 class="catalog-search__approximate-heading">Résultats approchants</h2>
+        <h2 class="catalog-search__approximate-heading">
+          {{ 'catalog.search.approximate' | transloco }}
+        </h2>
         <ol class="catalog-search__results">
           @for (
             entry of approximateItems();
@@ -103,18 +115,23 @@
         </ol>
       }
       @if (totalPages() > 1) {
-        <nav class="catalog-search__pagination" aria-label="Pagination">
+        <nav
+          class="catalog-search__pagination"
+          [attr.aria-label]="'catalog.search.pagination' | transloco"
+        >
           <gbt-button
             variant="secondary"
-            text="Précédent"
+            [text]="'common.previous' | transloco"
             iconName="chevron-left"
             [disabled]="page() <= 1"
             (clicked)="goToPage(page() - 1)"
           />
-          <span class="catalog-search__page">Page {{ page() }} sur {{ totalPages() }}</span>
+          <span class="catalog-search__page">{{
+            'package.pageOf' | transloco: { page: page(), total: totalPages() }
+          }}</span>
           <gbt-button
             variant="secondary"
-            text="Suivant"
+            [text]="'common.next' | transloco"
             iconName="chevron-right"
             [disabled]="page() >= totalPages()"
             (clicked)="goToPage(page() + 1)"

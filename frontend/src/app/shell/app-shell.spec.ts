@@ -4,7 +4,6 @@ import { TestBed } from '@angular/core/testing'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
 import { Router, provideRouter } from '@angular/router'
-import { provideTransloco } from '@jsverse/transloco'
 import { AppShell } from './app-shell'
 import { AuthService } from '../auth/application/auth.service'
 import { meProviders } from './infrastructure/me.providers'
@@ -39,9 +38,6 @@ describe('AppShell', () => {
         ...versionProviders,
         ...readableCatalogProviders,
         provideRouter([]),
-        provideTransloco({
-          config: { availableLangs: ['fr'], defaultLang: 'fr', prodMode: false },
-        }),
       ],
     })
     httpMock = TestBed.inject(HttpTestingController)
@@ -183,9 +179,6 @@ describe('AppShell', () => {
         ...versionProviders,
         ...readableCatalogProviders,
         provideRouter([{ path: 'repositories', component: DummyRoutedComponent }]),
-        provideTransloco({
-          config: { availableLangs: ['fr'], defaultLang: 'fr', prodMode: false },
-        }),
       ],
     })
     httpMock = TestBed.inject(HttpTestingController)
@@ -293,9 +286,6 @@ describe('AppShell', () => {
             { path: 'admin', component: DummyRoutedComponent },
             { path: 'admin/export', component: DummyRoutedComponent },
           ]),
-          provideTransloco({
-            config: { availableLangs: ['fr'], defaultLang: 'fr', prodMode: false },
-          }),
         ],
       })
       httpMock = TestBed.inject(HttpTestingController)
@@ -397,12 +387,17 @@ describe('AppShell', () => {
           ...versionProviders,
           ...readableCatalogProviders,
           provideRouter([
-            { path: 'repositories', component: DummyRoutedComponent, data: { title: 'Dépôts' } },
-            { path: 'admin', component: DummyRoutedComponent, data: { title: 'Administration' } },
+            {
+              path: 'repositories',
+              component: DummyRoutedComponent,
+              data: { titleKey: 'nav.repositories' },
+            },
+            {
+              path: 'admin',
+              component: DummyRoutedComponent,
+              data: { titleKey: 'nav.administration' },
+            },
           ]),
-          provideTransloco({
-            config: { availableLangs: ['fr'], defaultLang: 'fr', prodMode: false },
-          }),
         ],
       })
       httpMock = TestBed.inject(HttpTestingController)
@@ -583,9 +578,6 @@ describe('AppShell', () => {
         ...versionProviders,
         ...readableCatalogProviders,
         provideRouter([{ path: 'account', component: DummyRoutedComponent }]),
-        provideTransloco({
-          config: { availableLangs: ['fr'], defaultLang: 'fr', prodMode: false },
-        }),
       ],
     })
     httpMock = TestBed.inject(HttpTestingController)

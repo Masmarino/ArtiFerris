@@ -2,7 +2,6 @@ import { TestBed } from '@angular/core/testing'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
 import { provideRouter } from '@angular/router'
-import { provideTransloco } from '@jsverse/transloco'
 import { CreateUserModal } from './create-user-modal'
 import { userProviders } from '../infrastructure/user.providers'
 import { ToastService } from '../../shared/toast.service'
@@ -17,9 +16,6 @@ describe('CreateUserModal', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
-        provideTransloco({
-          config: { availableLangs: ['fr'], defaultLang: 'fr', prodMode: false },
-        }),
         ...userProviders,
       ],
     })

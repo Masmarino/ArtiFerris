@@ -1,14 +1,12 @@
 <div class="container">
-  <gbt-card heading="Configuration" icon="download">
+  <gbt-card [heading]="'admin.export.configuration' | transloco" icon="download">
     <p>
-      Exporte les dépôts, utilisateurs, permissions et paramètres système dans un fichier JSON
-      téléchargeable — utile pour un audit ou une sauvegarde de la configuration. Ne contient ni mot
-      de passe, ni jeton API, ni les paquets/images eux-mêmes.
+      {{ 'admin.export.exportHelp' | transloco }}
     </p>
     <gbt-button
-      text="Télécharger la configuration (JSON)"
+      [text]="'admin.export.download' | transloco"
       [loading]="downloading()"
-      loadingLabel="Chargement en cours"
+      [loadingLabel]="'common.loadingLabel' | transloco"
       (clicked)="downloadConfiguration()"
     />
     @if (error(); as message) {
@@ -16,24 +14,22 @@
     }
   </gbt-card>
 
-  <gbt-card heading="Restaurer une configuration" icon="upload">
+  <gbt-card [heading]="'admin.export.restore' | transloco" icon="upload">
     <p>
-      Importe utilisateurs, dépôts, permissions et paramètres système depuis un fichier JSON exporté
-      précédemment. Ne fonctionne que sur une instance fraîchement provisionnée, sans dépôt ni autre
-      utilisateur que vous — les paquets/images ne sont pas restaurés.
+      {{ 'admin.export.importHelp' | transloco }}
     </p>
     <gbt-file-upload
-      label="Fichier de configuration JSON"
+      [label]="'admin.export.file' | transloco"
       accept=".json"
-      dropLabel="Glisser-déposer un fichier ici, ou cliquer pour parcourir"
+      [dropLabel]="'admin.branding.dropLabel' | transloco"
       [removeLabel]="removeFileLabel"
       [ngModel]="selectedFile()"
       (ngModelChange)="onFileSelected($event)"
     />
     <gbt-button
-      text="Importer"
+      [text]="'admin.branding.import' | transloco"
       [loading]="importing()"
-      loadingLabel="Chargement en cours"
+      [loadingLabel]="'common.loadingLabel' | transloco"
       [disabled]="selectedFile().length === 0"
       (clicked)="importConfiguration()"
     />
@@ -42,17 +38,30 @@
     }
     @if (importReport(); as report) {
       <p>
-        {{ report.users_created }} utilisateur(s), {{ report.repositories_created }} dépôt(s),
-        {{ report.permissions_granted }} permission(s) restaurés.
+        {{
+          'admin.export.restored'
+            | transloco
+              : {
+                  users: report.users_created,
+                  repositories: report.repositories_created,
+                  permissions: report.permissions_granted,
+                }
+        }}
       </p>
       @if (report.invited.length > 0) {
-        <p>Invités : {{ report.invited.join(', ') }}</p>
+        <p>{{ 'admin.export.invited' | transloco: { list: report.invited.join(', ') } }}</p>
       }
       @if (report.skipped_no_email.length > 0) {
-        <p>Sans email, non invités : {{ report.skipped_no_email.join(', ') }}</p>
+        <p>
+          {{
+            'admin.export.skippedNoEmail' | transloco: { list: report.skipped_no_email.join(', ') }
+          }}
+        </p>
       }
       @if (report.failed.length > 0) {
-        <p class="gbt-form-error" role="alert">Échecs : {{ report.failed.join(' · ') }}</p>
+        <p class="gbt-form-error" role="alert">
+          {{ 'admin.export.failed' | transloco: { list: report.failed.join(' · ') } }}
+        </p>
       }
     }
   </gbt-card>

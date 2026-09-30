@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { HttpErrorResponse } from '@angular/common/http'
@@ -13,7 +15,7 @@ type ViewState = 'loading' | 'load-failed' | 'disabled' | 'enrolling' | 'backup-
 @Component({
   selector: 'app-mfa-settings',
   standalone: true,
-  imports: [Button, Card, GbtInput, FormsModule, Spinner, Tooltip, Divider],
+  imports: [TranslocoPipe, Button, Card, GbtInput, FormsModule, Spinner, Tooltip, Divider],
   templateUrl: './mfa-settings.html',
   styleUrl: './mfa-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -67,7 +69,7 @@ export class MfaSettings implements OnInit {
           .catch(() => this.qrCodeDataUrl.set(null))
         this.state.set('enrolling')
       },
-      error: () => this.errorMessage.set("Échec du démarrage de l'activation. Réessayez."),
+      error: () => this.errorMessage.set(t('account.mfa.errors.startFailed')),
     })
   }
 
@@ -92,7 +94,7 @@ export class MfaSettings implements OnInit {
       },
       error: () => {
         this.submitting.set(false)
-        this.errorMessage.set('Code invalide.')
+        this.errorMessage.set(t('auth.mfaEnrollment.errors.invalidCode'))
       },
     })
   }
@@ -116,7 +118,9 @@ export class MfaSettings implements OnInit {
       error: (err: HttpErrorResponse) => {
         this.submitting.set(false)
         this.toastService.error(
-          err.status === 400 ? 'Mot de passe incorrect.' : 'Échec de la désactivation.',
+          err.status === 400
+            ? t('account.mfa.errors.wrongPassword')
+            : t('account.mfa.errors.disableFailed'),
         )
       },
     })
@@ -136,7 +140,9 @@ export class MfaSettings implements OnInit {
       error: (err: HttpErrorResponse) => {
         this.submitting.set(false)
         this.toastService.error(
-          err.status === 400 ? 'Mot de passe incorrect.' : 'Échec de la régénération.',
+          err.status === 400
+            ? t('account.mfa.errors.wrongPassword')
+            : t('account.mfa.errors.regenerateFailed'),
         )
       },
     })

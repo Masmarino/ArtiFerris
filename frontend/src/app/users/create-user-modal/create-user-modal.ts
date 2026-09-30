@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core'
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms'
 import { Button, Checkbox, GbtInput, Modal } from '@masmarino/gabarit'
@@ -8,7 +10,7 @@ import { rejectionMessage } from '../../shared/api-error'
 @Component({
   selector: 'app-create-user-modal',
   standalone: true,
-  imports: [ReactiveFormsModule, Modal, GbtInput, Checkbox, Button],
+  imports: [TranslocoPipe, ReactiveFormsModule, Modal, GbtInput, Checkbox, Button],
   templateUrl: './create-user-modal.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -40,11 +42,11 @@ export class CreateUserModal {
       next: () => {
         this.creating.set(false)
         this.created.emit()
-        this.toastService.success(`Utilisateur « ${username} » créé.`)
+        this.toastService.success(t('users.create.created', { username }))
       },
       error: (err) => {
         this.creating.set(false)
-        this.toastService.error(rejectionMessage(err) ?? "Échec de la création de l'utilisateur.")
+        this.toastService.error(rejectionMessage(err) ?? t('users.create.errors.createFailed'))
       },
     })
   }

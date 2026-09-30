@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms'
 import { Router, RouterLink } from '@angular/router'
@@ -9,7 +11,15 @@ import { overloadMessage, rejectionMessage } from '../../shared/api-error'
 @Component({
   selector: 'app-register-page',
   standalone: true,
-  imports: [ReactiveFormsModule, GbtInput, Button, MfaEnrollmentPage, RouterLink, Divider],
+  imports: [
+    TranslocoPipe,
+    ReactiveFormsModule,
+    GbtInput,
+    Button,
+    MfaEnrollmentPage,
+    RouterLink,
+    Divider,
+  ],
   templateUrl: './register-page.html',
   styleUrl: '../login-page/login-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -66,23 +76,23 @@ export class RegisterPage {
 
   private messageFor(backendMessage: string): string {
     if (backendMessage.includes('username already taken')) {
-      return 'Ce nom d’utilisateur est déjà pris.'
+      return t('auth.register.errors.usernameTaken')
     }
     if (backendMessage.includes('invalid email')) {
-      return 'Adresse e-mail invalide.'
+      return t('auth.register.errors.invalidEmail')
     }
     if (backendMessage.includes('password must be at least')) {
-      return 'Le mot de passe doit comporter au moins 8 caractères.'
+      return t('auth.register.errors.passwordTooShort')
     }
     if (backendMessage.includes('not available on this organization')) {
-      return "L'inscription publique n'est pas disponible sur cette organisation."
+      return t('auth.register.errors.notAvailable')
     }
     if (backendMessage.includes('currently disabled')) {
-      return "La création de compte est actuellement désactivée par l'administrateur."
+      return t('auth.register.errors.disabled')
     }
     if (backendMessage.includes('invalid username')) {
-      return "Nom d'utilisateur invalide : 3 à 32 caractères, doit commencer par une lettre."
+      return t('auth.register.errors.invalidUsername')
     }
-    return 'Impossible de créer le compte. Réessayez.'
+    return t('auth.register.errors.generic')
   }
 }

@@ -1,47 +1,53 @@
 <main class="auth-layout">
   <div class="auth-layout__card">
-    <h1 class="sr-only">Créer un compte ArtiFerris</h1>
-    <img src="/api/branding/logo" alt="ArtiFerris logo" class="auth-layout__logo" />
+    <h1 class="sr-only">{{ 'auth.register.heading' | transloco }}</h1>
+    <img
+      src="/api/branding/logo"
+      [alt]="'auth.login.logoAlt' | transloco"
+      class="auth-layout__logo"
+    />
     @if (!mfaToken()) {
       <form [formGroup]="form" (ngSubmit)="submit()">
         <p class="gbt-form-required-note">
-          Les champs marqués d'un astérisque (*) sont obligatoires.
+          {{ 'common.requiredNote' | transloco }}
         </p>
         <gbt-input
-          label="Nom d'utilisateur"
+          [label]="'auth.login.username' | transloco"
           formControlName="username"
           [required]="true"
           autocomplete="username"
         />
         <gbt-input
-          label="Adresse e-mail"
+          [label]="'auth.register.email' | transloco"
           type="email"
           formControlName="email"
           [required]="true"
           autocomplete="email"
         />
         <gbt-input
-          label="Mot de passe"
+          [label]="'auth.login.password' | transloco"
           type="password"
           formControlName="password"
           [required]="true"
           autocomplete="new-password"
-          showPasswordLabel="Afficher le mot de passe"
-          hidePasswordLabel="Masquer le mot de passe"
+          [showPasswordLabel]="'common.showPassword' | transloco"
+          [hidePasswordLabel]="'common.hidePassword' | transloco"
         />
         @if (errorMessage(); as message) {
           <p class="gbt-form-error" role="alert">{{ message }}</p>
         }
         <gbt-button
-          text="Créer mon compte"
+          [text]="'auth.register.submit' | transloco"
           type="submit"
           [loading]="submitting()"
-          loadingLabel="Chargement en cours"
+          [loadingLabel]="'common.loadingLabel' | transloco"
           [disabled]="form.invalid || submitting()"
         />
       </form>
       <gbt-divider />
-      <a routerLink="/login" class="auth-layout__link">J'ai déjà un compte</a>
+      <a routerLink="/login" class="auth-layout__link">{{
+        'auth.register.haveAccount' | transloco
+      }}</a>
     } @else {
       <app-mfa-enrollment [mfaToken]="mfaToken()!" (completed)="onEnrollmentCompleted()" />
     }

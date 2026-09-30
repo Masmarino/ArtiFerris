@@ -1,24 +1,31 @@
 <gbt-modal
   [isOpen]="true"
-  heading="Nouvel utilisateur"
-  closeLabel="Fermer"
+  [heading]="'users.create.heading' | transloco"
+  [closeLabel]="'common.close' | transloco"
   (closed)="cancelled.emit()"
 >
   <form class="stack" [formGroup]="form" (ngSubmit)="submit()">
-    <p class="gbt-form-required-note">Les champs marqués d'un astérisque (*) sont obligatoires.</p>
-    <gbt-input label="Nom d'utilisateur" formControlName="username" [required]="true" />
-    <gbt-input label="Adresse e-mail" formControlName="email" [required]="true" />
+    <p class="gbt-form-required-note">{{ 'common.requiredNote' | transloco }}</p>
+    <gbt-input
+      [label]="'users.create.username' | transloco"
+      formControlName="username"
+      [required]="true"
+    />
+    <gbt-input
+      [label]="'users.create.email' | transloco"
+      formControlName="email"
+      [required]="true"
+    />
     <p>
-      Un e-mail sera envoyé à cette adresse pour que l'utilisateur active son compte et choisisse
-      son mot de passe, sous 24 heures.
+      {{ 'users.create.inviteNote' | transloco }}
     </p>
-    <gbt-checkbox label="Super-administrateur" formControlName="isSuperAdmin" />
+    <gbt-checkbox [label]="'users.create.superAdmin' | transloco" formControlName="isSuperAdmin" />
     <gbt-button
-      text="Inviter"
+      [text]="'users.create.invite' | transloco"
       type="submit"
       [disabled]="form.invalid"
       [loading]="creating()"
-      loadingLabel="Chargement en cours"
+      [loadingLabel]="'common.loadingLabel' | transloco"
     />
   </form>
 </gbt-modal>

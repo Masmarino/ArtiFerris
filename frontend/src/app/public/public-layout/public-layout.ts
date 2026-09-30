@@ -1,3 +1,4 @@
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
 import { Router, RouterLink } from '@angular/router'
 import { AuthService } from '../../auth/application/auth.service'
@@ -7,7 +8,7 @@ import { SuggestSearchBox } from '../catalog/suggest-search-box/suggest-search-b
 @Component({
   selector: 'app-public-layout',
   standalone: true,
-  imports: [RouterLink, SuggestSearchBox],
+  imports: [TranslocoPipe, RouterLink, SuggestSearchBox],
   templateUrl: './public-layout.html',
   styleUrl: './public-layout.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

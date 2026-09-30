@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing'
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router'
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs'
 import { By } from '@angular/platform-browser'
+import { Tab } from '@masmarino/gabarit'
 import { HttpErrorResponse } from '@angular/common/http'
 import { AuthService } from '../../auth/application/auth.service'
 import { NO_SUGGESTIONS } from '../catalog/testing/no-suggestions'
@@ -138,9 +139,9 @@ describe('PublicPackagePage', () => {
   it('shows the Aperçu and Sécurité tabs for an npm package', async () => {
     const { fixture } = await render()
 
-    const labels = Array.from(fixture.nativeElement.querySelectorAll('gbt-tab')).map((tab) =>
-      (tab as HTMLElement).getAttribute('label'),
-    )
+    const labels = fixture.debugElement
+      .queryAll(By.directive(Tab))
+      .map((tab) => (tab.componentInstance as Tab).label())
     expect(labels).toEqual(['Aperçu', 'Sécurité'])
   })
 

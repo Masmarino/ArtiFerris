@@ -9,20 +9,22 @@ import {
 import { ActivatedRoute, Router, RouterLink } from '@angular/router'
 import { firstValueFrom } from 'rxjs'
 import { Alert, Button, Divider, GbtInput } from '@masmarino/gabarit'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { AuthService } from '../application/auth.service'
 import { safeReturnUrl } from '../domain/return-url'
 import {
-  SESSIONS_ENDED_MESSAGE,
+  SESSIONS_ENDED_MESSAGE_KEY,
   SESSIONS_ENDED_QUERY_PARAM,
   SESSIONS_ENDED_REASON,
 } from '../domain/sessions-ended'
 import { getPasskeyAssertion, passkeysSupported } from '../../shared/webauthn-browser'
 import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
 import { overloadMessage } from '../../shared/api-error'
+import { t } from '../../shared/i18n/translator'
 
 const LOGIN_OVERLOAD = {
-  busy: 'Service momentanément occupé, réessayez',
-  tooManyRequests: 'Trop de tentatives, réessayez plus tard.',
+  busy: 'auth.login.errors.busy',
+  tooManyRequests: 'auth.login.errors.tooManyRequests',
 }
 
 @Component({
@@ -37,6 +39,7 @@ const LOGIN_OVERLOAD = {
     RouterLink,
     Alert,
     Divider,
+    TranslocoPipe,
   ],
   templateUrl: './login-page.html',
   styleUrl: './login-page.scss',
@@ -49,7 +52,7 @@ export class LoginPage implements OnInit {
   private readonly returnUrl = safeReturnUrl(this.queryParams.get('returnUrl'))
   readonly sessionsEndedMessage =
     this.queryParams.get(SESSIONS_ENDED_QUERY_PARAM) === SESSIONS_ENDED_REASON
-      ? SESSIONS_ENDED_MESSAGE
+      ? t(SESSIONS_ENDED_MESSAGE_KEY)
       : null
 
   readonly form = new FormGroup({
@@ -134,7 +137,9 @@ export class LoginPage implements OnInit {
       },
       error: (error: unknown) => {
         this.submitting.set(false)
-        this.errorMessage.set(overloadMessage(error, LOGIN_OVERLOAD) ?? 'Identifiants invalides')
+        this.errorMessage.set(
+          overloadMessage(error, LOGIN_OVERLOAD) ?? t('auth.login.errors.invalidCredentials'),
+        )
       },
     })
   }
@@ -160,7 +165,13 @@ export class LoginPage implements OnInit {
       next: () => this.navigateAfterLogin(),
       error: () => {
         this.submitting.set(false)
-        this.errorMessage.set(this.useBackupCode() ? 'Code de secours invalide.' : 'Code invalide.')
+        this.errorMessage.set(
+          t(
+            this.useBackupCode()
+              ? 'auth.login.errors.invalidBackupCode'
+              : 'auth.login.errors.invalidCode',
+          ),
+        )
       },
     })
   }
@@ -179,7 +190,7 @@ export class LoginPage implements OnInit {
       this.navigateAfterLogin()
     } catch {
       this.submitting.set(false)
-      this.errorMessage.set("Échec de l'authentification par clé d'accès.")
+      this.errorMessage.set(t('auth.login.errors.passkeyFailed'))
     }
   }
 

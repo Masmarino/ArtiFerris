@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
@@ -8,7 +10,7 @@ import { overloadMessage } from '../../shared/api-error'
 @Component({
   selector: 'app-activate-page',
   standalone: true,
-  imports: [ReactiveFormsModule, GbtInput, Button, Alert],
+  imports: [TranslocoPipe, ReactiveFormsModule, GbtInput, Button, Alert],
   templateUrl: './activate-page.html',
   styleUrl: '../login-page/login-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -48,10 +50,7 @@ export class ActivatePage {
       next: () => this.router.navigateByUrl('/login'),
       error: (error: unknown) => {
         this.submitting.set(false)
-        this.errorMessage.set(
-          overloadMessage(error) ??
-            "Ce lien d'activation est invalide ou a expiré. Demandez à un administrateur de vous renvoyer une invitation.",
-        )
+        this.errorMessage.set(overloadMessage(error) ?? t('auth.activate.errors.invalidLink'))
       },
     })
   }

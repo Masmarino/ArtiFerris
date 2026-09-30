@@ -1,11 +1,11 @@
-<gbt-card heading="Clés d'accès (passkeys)" icon="key">
+<gbt-card [heading]="'account.passkeys.heading' | transloco" icon="key">
   <div class="stack">
     @if (!supported) {
       <p class="gbt-form-error" role="alert">
-        Votre navigateur ne prend pas en charge les clés d'accès.
+        {{ 'account.passkeys.unsupported' | transloco }}
       </p>
     } @else if (loading()) {
-      <gbt-spinner label="Chargement…" />
+      <gbt-spinner [label]="'common.loading' | transloco" />
     } @else {
       @if (passkeys().length > 0) {
         <ul class="passkey-settings__list">
@@ -13,18 +13,18 @@
             <li>
               <span>{{ passkey.name }}</span>
               <gbt-input
-                label="Mot de passe actuel"
+                [label]="'account.mfa.currentPassword' | transloco"
                 type="password"
-                showPasswordLabel="Afficher le mot de passe"
-                hidePasswordLabel="Masquer le mot de passe"
+                [showPasswordLabel]="'common.showPassword' | transloco"
+                [hidePasswordLabel]="'common.hidePassword' | transloco"
                 [ngModel]="passwordFor(passkey.id)"
                 (ngModelChange)="setPasswordFor(passkey.id, $event)"
               />
               <gbt-button
-                text="Supprimer"
+                [text]="'common.delete' | transloco"
                 variant="danger"
                 [loading]="deletingIds().has(passkey.id)"
-                loadingLabel="Chargement en cours"
+                [loadingLabel]="'common.loadingLabel' | transloco"
                 [disabled]="passwordFor(passkey.id).trim() === ''"
                 (clicked)="delete(passkey.id)"
               />
@@ -34,8 +34,8 @@
       } @else {
         <gbt-empty-state
           illustration="star"
-          heading="Aucune clé d'accès"
-          message="Ajoutez une clé d'accès pour vous connecter sans mot de passe."
+          [heading]="'account.passkeys.emptyHeading' | transloco"
+          [message]="'account.passkeys.emptyMessage' | transloco"
         />
       }
 
@@ -45,22 +45,26 @@
 
       @if (addingName()) {
         <gbt-input
-          label="Nom de la clé (ex. « MacBook Touch ID »)"
+          [label]="'auth.mfaEnrollment.passkeyName' | transloco"
           [ngModel]="newPasskeyName()"
           (ngModelChange)="newPasskeyName.set($event)"
         />
         <div class="passkey-settings__actions">
           <gbt-button
-            text="Enregistrer une nouvelle clé"
+            [text]="'account.passkeys.registerNew' | transloco"
             [loading]="registering()"
-            loadingLabel="Chargement en cours"
+            [loadingLabel]="'common.loadingLabel' | transloco"
             [disabled]="newPasskeyName().trim() === ''"
             (clicked)="register()"
           />
-          <gbt-button text="Annuler" variant="secondary" (clicked)="cancelAdding()" />
+          <gbt-button
+            [text]="'common.cancel' | transloco"
+            variant="secondary"
+            (clicked)="cancelAdding()"
+          />
         </div>
       } @else {
-        <gbt-button text="Ajouter une clé d'accès" (clicked)="startAdding()" />
+        <gbt-button [text]="'account.passkeys.add' | transloco" (clicked)="startAdding()" />
       }
     }
   </div>

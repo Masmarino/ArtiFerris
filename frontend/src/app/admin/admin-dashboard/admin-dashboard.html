@@ -1,59 +1,58 @@
 <div class="container">
   @if (loadFailed()) {
     <div role="alert">
-      <p class="gbt-form-error">Échec du chargement d'une partie du tableau de bord.</p>
-      <gbt-button text="Réessayer" variant="secondary" (clicked)="retry()" />
+      <p class="gbt-form-error">{{ 'admin.dashboard.partialFailure' | transloco }}</p>
+      <gbt-button [text]="'common.retry' | transloco" variant="secondary" (clicked)="retry()" />
     </div>
   }
   @if (stats(); as s) {
     <section>
-      <gbt-card heading="Utilisateurs" icon="users">
+      <gbt-card [heading]="'admin.dashboard.users' | transloco" icon="users">
         <p>{{ s.total_users }}</p>
       </gbt-card>
-      <gbt-card heading="Dépôts" icon="package">
+      <gbt-card [heading]="'admin.dashboard.repositories' | transloco" icon="package">
         <p>{{ s.total_repositories }}</p>
       </gbt-card>
-      <gbt-card heading="Permissions actives" icon="shield">
+      <gbt-card [heading]="'admin.dashboard.permissions' | transloco" icon="shield">
         <p>{{ s.total_active_permissions }}</p>
       </gbt-card>
     </section>
   }
 
   <section class="admin-dashboard__charts">
-    <gbt-card heading="Activité (7 derniers jours)" icon="activity">
+    <gbt-card [heading]="'admin.dashboard.activity' | transloco" icon="activity">
       @if (activityTruncated()) {
         <p class="partial-note">
-          Basé sur les {{ activityEvents().length }} événements les plus récents : les jours plus
-          anciens sont sous-estimés.
+          {{ 'admin.dashboard.activityTruncated' | transloco: { count: activityEvents().length } }}
         </p>
       }
       <gbt-dimension-card
         [rows]="activityChartData()"
-        caption="Événements par jour"
-        labelColumn="Jour"
-        valueColumn="Événements"
-        emptyMessage="Aucun événement ces 7 derniers jours."
+        [caption]="'admin.dashboard.eventsPerDay' | transloco"
+        [labelColumn]="'admin.dashboard.day' | transloco"
+        [valueColumn]="'admin.dashboard.events' | transloco"
+        [emptyMessage]="'admin.dashboard.noEvents' | transloco"
         [locale]="locale"
       />
     </gbt-card>
-    <gbt-card heading="Dépôts par format" icon="bar-chart">
+    <gbt-card [heading]="'admin.dashboard.reposByFormat' | transloco" icon="bar-chart">
       <gbt-dimension-card
         [rows]="repositoriesByFormatChartData()"
-        caption="Dépôts par format"
-        labelColumn="Format"
-        valueColumn="Dépôts"
-        emptyMessage="Aucun dépôt à répartir par format."
+        [caption]="'admin.dashboard.reposByFormat' | transloco"
+        [labelColumn]="'common.format' | transloco"
+        [valueColumn]="'admin.dashboard.repositories' | transloco"
+        [emptyMessage]="'admin.dashboard.noReposByFormat' | transloco"
         [locale]="locale"
       />
     </gbt-card>
   </section>
 
   <section class="admin-dashboard__charts">
-    <gbt-card heading="Évolution du stockage" icon="hard-drive">
+    <gbt-card [heading]="'admin.dashboard.storageEvolution' | transloco" icon="hard-drive">
       <gbt-select
         size="sm"
         card-header-actions
-        placeholder="Sélectionner…"
+        [placeholder]="'common.select' | transloco"
         [options]="evolutionDaysOptions"
         [ngModel]="storageEvolutionDays()"
         (ngModelChange)="setStorageEvolutionDays($event)"
@@ -63,18 +62,18 @@
           [series]="storageEvolutionSeries()"
           xKind="time"
           [locale]="locale"
-          label="Évolution du stockage"
-          tableCaption="Stockage total par relevé"
-          xColumn="Date"
-          emptyMessage="Pas encore assez de mesures."
+          [label]="'admin.dashboard.storageEvolution' | transloco"
+          [tableCaption]="'admin.dashboard.storageTable' | transloco"
+          [xColumn]="'common.date' | transloco"
+          [emptyMessage]="'admin.dashboard.notEnoughData' | transloco"
         />
       </div>
     </gbt-card>
-    <gbt-card heading="Évolution des utilisateurs et dépôts" icon="trending-up">
+    <gbt-card [heading]="'admin.dashboard.usersAndRepos' | transloco" icon="trending-up">
       <gbt-select
         size="sm"
         card-header-actions
-        placeholder="Sélectionner…"
+        [placeholder]="'common.select' | transloco"
         [options]="evolutionDaysOptions"
         [ngModel]="countsEvolutionDays()"
         (ngModelChange)="setCountsEvolutionDays($event)"
@@ -84,16 +83,16 @@
           [series]="countsEvolutionSeries()"
           xKind="time"
           [locale]="locale"
-          label="Évolution des utilisateurs et dépôts"
-          tableCaption="Utilisateurs et dépôts par relevé"
-          xColumn="Date"
-          emptyMessage="Pas encore assez de mesures."
+          [label]="'admin.dashboard.usersAndRepos' | transloco"
+          [tableCaption]="'admin.dashboard.usersAndReposTable' | transloco"
+          [xColumn]="'common.date' | transloco"
+          [emptyMessage]="'admin.dashboard.notEnoughData' | transloco"
         />
       </div>
     </gbt-card>
   </section>
 
-  <gbt-card heading="Activité récente" icon="history">
+  <gbt-card [heading]="'admin.dashboard.recent' | transloco" icon="history">
     @for (
       event of recentEvents();
       track event.occurred_at + event.event_type + event.aggregate_id
@@ -105,8 +104,8 @@
     } @empty {
       <gbt-empty-state
         illustration="checklist"
-        heading="Aucune activité récente"
-        message="Les événements du registre apparaîtront ici dès qu'il y en aura."
+        [heading]="'admin.dashboard.noRecentHeading' | transloco"
+        [message]="'admin.dashboard.noRecentMessage' | transloco"
       />
     }
   </gbt-card>

@@ -1,12 +1,15 @@
 <div class="toolbar">
   <gbt-button
-    [text]="mode() === 'personal' ? 'Nouveau projet' : 'Nouveau dépôt'"
+    [text]="
+      (mode() === 'personal' ? 'repositories.list.newProject' : 'repositories.list.newRepository')
+        | transloco
+    "
     (clicked)="showCreateModal.set(true)"
   />
   @if (showOrganizationControls()) {
     <gbt-select
-      label="Organisation"
-      placeholder="Sélectionner…"
+      [label]="'users.list.organization' | transloco"
+      [placeholder]="'common.select' | transloco"
       [options]="organizationOptions()"
       [ngModel]="selectedOrganizationId()"
       (ngModelChange)="selectedOrganizationId.set($event)"
@@ -14,34 +17,41 @@
   }
 </div>
 @if (loading()) {
-  <div class="loading-state"><gbt-spinner label="Chargement…" /></div>
+  <div class="loading-state"><gbt-spinner [label]="'common.loading' | transloco" /></div>
 } @else if (error(); as message) {
   <p class="gbt-form-error" role="alert">{{ message }}</p>
-  <gbt-button text="Réessayer" (clicked)="reload()" />
+  <gbt-button [text]="'common.retry' | transloco" (clicked)="reload()" />
 } @else if (repositories().length === 0) {
   <gbt-empty-state
     illustration="folder"
-    [heading]="mode() === 'personal' ? 'Aucun projet' : 'Aucun dépôt'"
+    [heading]="
+      (mode() === 'personal' ? 'repositories.list.noProject' : 'repositories.list.noRepository')
+        | transloco
+    "
     [message]="
-      mode() === 'personal'
-        ? 'Créez votre premier projet pour y publier des paquets npm ou des images docker.'
-        : 'Créez un dépôt pour commencer à publier des paquets npm ou des images docker.'
+      (mode() === 'personal'
+        ? 'repositories.list.noProjectMessage'
+        : 'repositories.list.noRepositoryMessage'
+      ) | transloco
     "
   >
     <gbt-button
-      [text]="mode() === 'personal' ? 'Nouveau projet' : 'Nouveau dépôt'"
+      [text]="
+        (mode() === 'personal' ? 'repositories.list.newProject' : 'repositories.list.newRepository')
+          | transloco
+      "
       (clicked)="showCreateModal.set(true)"
     />
   </gbt-empty-state>
 } @else if (filteredRepositories().length === 0) {
   <gbt-empty-state
     illustration="folder"
-    heading="Aucun résultat"
-    message="Aucun dépôt ne correspond à l'organisation sélectionnée. Changez le filtre pour en voir d'autres."
+    [heading]="'repositories.list.noResultsHeading' | transloco"
+    [message]="'repositories.list.noResultsMessage' | transloco"
   />
 } @else {
   <gbt-table
-    caption="Dépôts"
+    [caption]="'repositories.list.caption' | transloco"
     [clickableRows]="true"
     [data]="filteredRepositories()"
     [columns]="columns()"

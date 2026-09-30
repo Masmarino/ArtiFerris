@@ -1,29 +1,29 @@
 <gbt-modal
   [isOpen]="isOpen()"
   [heading]="modalTitle()"
-  closeLabel="Fermer"
+  [closeLabel]="'common.close' | transloco"
   (closed)="closed.emit()"
 >
   <gbt-select
-    label="Rôle"
-    placeholder="Sélectionner…"
+    [label]="'repositories.permissions.role' | transloco"
+    [placeholder]="'common.select' | transloco"
     [options]="roleOptions"
     [ngModel]="selectedRole()"
     (ngModelChange)="onRoleSelect($event)"
   />
   <gbt-button
-    text="Enregistrer"
+    [text]="'common.save' | transloco"
     data-testid="save-role"
     [loading]="saving()"
     (clicked)="save()"
-    loadingLabel="Chargement en cours"
+    [loadingLabel]="'common.loadingLabel' | transloco"
   />
   <gbt-button
-    text="Révoquer"
+    [text]="'repositories.permissions.revoke' | transloco"
     variant="danger"
     data-testid="revoke"
     [loading]="saving()"
     (clicked)="revoke()"
-    loadingLabel="Chargement en cours"
+    [loadingLabel]="'common.loadingLabel' | transloco"
   />
 </gbt-modal>

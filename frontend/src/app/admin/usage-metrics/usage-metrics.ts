@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -26,7 +28,7 @@ const CHART_TOP_N = 15
 @Component({
   selector: 'app-usage-metrics',
   standalone: true,
-  imports: [Table, DimensionCard, Card, GaugeBar, Button],
+  imports: [TranslocoPipe, Table, DimensionCard, Card, GaugeBar, Button],
   templateUrl: './usage-metrics.html',
   styleUrl: './usage-metrics.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -56,8 +58,8 @@ export class UsageMetrics {
     `${formatBytes(value)} / ${formatBytes(max)}`
 
   readonly columns: TableColumn<RepositoryUsage>[] = [
-    { key: 'name', label: 'Dépôt' },
-    { key: 'used_bytes', label: 'Espace utilisé (octets)' },
+    { key: 'name', label: t('admin.usage.repository') },
+    { key: 'used_bytes', label: t('admin.usage.usedBytes') },
   ]
   readonly rowId = (u: RepositoryUsage): string => u.repository_id
 
@@ -75,7 +77,11 @@ export class UsageMetrics {
     }))
     if (rest.length > 0) {
       const total = rest.reduce((sum, u) => sum + u.used_bytes, 0)
-      data.push({ label: `Autres (${rest.length})`, value: total, display: formatBytes(total) })
+      data.push({
+        label: t('admin.usage.others', { count: rest.length }),
+        value: total,
+        display: formatBytes(total),
+      })
     }
     return data
   })

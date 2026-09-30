@@ -1,12 +1,15 @@
 import {
   ApplicationConfig,
   LOCALE_ID,
+  inject,
   isDevMode,
+  provideAppInitializer,
   provideZonelessChangeDetection,
 } from '@angular/core'
 import { provideRouter } from '@angular/router'
 import { provideHttpClient, withInterceptors } from '@angular/common/http'
-import { provideTransloco } from '@jsverse/transloco'
+import { TranslocoService, provideTransloco } from '@jsverse/transloco'
+import { firstValueFrom } from 'rxjs'
 
 import { routes } from './app.routes'
 import { authInterceptor } from './auth/auth.interceptor'
@@ -26,6 +29,7 @@ import { organizationsProviders } from './admin/infrastructure/organizations.pro
 import { organizationMembersProviders } from './admin/infrastructure/organization-members.providers'
 import { catalogProviders } from './public/catalog/infrastructure/catalog.providers'
 import { provideArtiferrisIcons } from './shared/register-icons'
+import { provideTranslator } from './shared/i18n/translator'
 registerLocaleData(localeFr)
 
 export const appConfig: ApplicationConfig = {
@@ -38,8 +42,6 @@ export const appConfig: ApplicationConfig = {
       provide: LOCALE_ID,
       useValue: 'fr-FR',
     },
-    // Foundation for future i18n — not wired into any component yet, every string is
-    // still a hardcoded French literal.
     provideTransloco({
       config: {
         availableLangs: ['fr'],
@@ -48,6 +50,14 @@ export const appConfig: ApplicationConfig = {
         prodMode: !isDevMode(),
       },
       loader: TranslocoHttpLoader,
+    }),
+    provideTranslator(),
+    // Templates read translations through the pipe, but TypeScript code (error messages, labels
+    // computed in components) calls translate() synchronously, so the active language must be
+    // loaded before the first component is created.
+    provideAppInitializer(() => {
+      const transloco = inject(TranslocoService)
+      return firstValueFrom(transloco.load(transloco.getActiveLang()), { defaultValue: undefined })
     }),
     // Feature port -> adapter bindings (hexagonal architecture) — each
     // feature owns its own providers array; this just spreads them in.

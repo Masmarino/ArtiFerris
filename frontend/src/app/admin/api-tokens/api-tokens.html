@@ -1,25 +1,27 @@
 <div class="container">
   @if (loadFailed()) {
-    <p class="gbt-form-error" role="alert">Échec du chargement des jetons.</p>
+    <p class="gbt-form-error" role="alert">{{ 'admin.apiTokens.loadFailed' | transloco }}</p>
   }
   @if (listTruncated()) {
-    <p class="api-tokens__limit" role="status">La liste est limitée à {{ pageLimit }} jetons.</p>
+    <p class="api-tokens__limit" role="status">
+      {{ 'admin.apiTokens.limit' | transloco: { max: pageLimit } }}
+    </p>
   }
-  <gbt-card heading="Jetons actifs" icon="key">
+  <gbt-card [heading]="'admin.apiTokens.active' | transloco" icon="key">
     @if (activeTokens().length === 0) {
       <gbt-empty-state
         illustration="star"
-        heading="Aucun jeton actif"
-        message="Les jetons d'accès créés par les utilisateurs apparaîtront ici."
+        [heading]="'admin.apiTokens.noneHeading' | transloco"
+        [message]="'admin.apiTokens.noneMessage' | transloco"
       />
     } @else {
       <table class="api-tokens__table">
         <thead>
           <tr>
-            <th>Utilisateur</th>
-            <th>Libellé</th>
-            <th>Créé le</th>
-            <th>Dernière utilisation</th>
+            <th>{{ 'admin.apiTokens.columns.user' | transloco }}</th>
+            <th>{{ 'admin.apiTokens.columns.label' | transloco }}</th>
+            <th>{{ 'tokens.table.createdAt' | transloco }}</th>
+            <th>{{ 'admin.apiTokens.columns.lastUsed' | transloco }}</th>
             <th></th>
           </tr>
         </thead>
@@ -29,11 +31,17 @@
               <td>{{ token.username }}</td>
               <td>{{ token.label }}</td>
               <td>{{ token.created_at | date: 'short' }}</td>
-              <td>{{ token.last_used_at ? (token.last_used_at | date: 'short') : 'Jamais' }}</td>
+              <td>
+                {{
+                  token.last_used_at
+                    ? (token.last_used_at | date: 'short')
+                    : ('admin.apiTokens.never' | transloco)
+                }}
+              </td>
               <td class="api-tokens__actions">
-                <gbt-tooltip text="Le jeton cessera immédiatement de fonctionner, définitivement.">
+                <gbt-tooltip [text]="'admin.apiTokens.revokeHint' | transloco">
                   <gbt-button
-                    text="Révoquer"
+                    [text]="'admin.apiTokens.revoke' | transloco"
                     variant="danger"
                     size="small"
                     (clicked)="revoke(token)"
@@ -48,14 +56,14 @@
   </gbt-card>
 
   @if (revokedTokens().length > 0) {
-    <gbt-card heading="Jetons révoqués" icon="x">
+    <gbt-card [heading]="'admin.apiTokens.revokedHeading' | transloco" icon="x">
       <table class="api-tokens__table">
         <thead>
           <tr>
-            <th>Utilisateur</th>
-            <th>Libellé</th>
-            <th>Créé le</th>
-            <th>Révoqué le</th>
+            <th>{{ 'admin.apiTokens.columns.user' | transloco }}</th>
+            <th>{{ 'admin.apiTokens.columns.label' | transloco }}</th>
+            <th>{{ 'tokens.table.createdAt' | transloco }}</th>
+            <th>{{ 'admin.apiTokens.columns.revokedAt' | transloco }}</th>
           </tr>
         </thead>
         <tbody>

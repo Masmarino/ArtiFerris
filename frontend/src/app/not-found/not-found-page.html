@@ -1,7 +1,9 @@
 <app-public-layout>
   <gbt-card>
-    <h1>Page introuvable</h1>
-    <p>Cette adresse ne correspond à aucune page.</p>
-    <p><a routerLink="/">Retour à l'accueil</a></p>
+    <h1>{{ 'notFound.heading' | transloco }}</h1>
+    <p>{{ 'notFound.message' | transloco }}</p>
+    <p>
+      <a routerLink="/">{{ 'notFound.backHome' | transloco }}</a>
+    </p>
   </gbt-card>
 </app-public-layout>

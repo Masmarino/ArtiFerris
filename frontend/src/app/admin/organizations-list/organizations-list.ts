@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core'
 import { Router } from '@angular/router'
 import { Button, EmptyState, Spinner, Table, TableColumn } from '@masmarino/gabarit'
@@ -8,7 +10,7 @@ import { OrganizationSummary } from '../domain/organization.entity'
 @Component({
   selector: 'app-organizations-list',
   standalone: true,
-  imports: [Table, Button, CreateOrganizationModal, EmptyState, Spinner],
+  imports: [TranslocoPipe, Table, Button, CreateOrganizationModal, EmptyState, Spinner],
   templateUrl: './organizations-list.html',
   styleUrl: './organizations-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,8 +25,8 @@ export class OrganizationsList implements OnInit {
   readonly error = signal<string | null>(null)
 
   readonly columns: TableColumn<OrganizationSummary>[] = [
-    { key: 'slug', label: 'Sous-domaine' },
-    { key: 'display_name', label: 'Nom' },
+    { key: 'slug', label: t('admin.organizations.columns.subdomain') },
+    { key: 'display_name', label: t('common.name') },
   ]
   readonly rowId = (o: OrganizationSummary): string => o.id
 
@@ -41,7 +43,7 @@ export class OrganizationsList implements OnInit {
       },
       error: () => {
         this.loading.set(false)
-        this.error.set('Échec du chargement des organisations.')
+        this.error.set(t('admin.organizations.errors.loadFailed'))
       },
     })
   }

@@ -20,7 +20,12 @@
     (blur)="dismiss()"
   />
   <div class="suggest__popup" [hidden]="!open()" (mousedown)="$event.preventDefault()">
-    <ul class="suggest__list" role="listbox" [id]="listboxId" aria-label="Suggestions">
+    <ul
+      class="suggest__list"
+      role="listbox"
+      [id]="listboxId"
+      [attr.aria-label]="'catalog.suggest.label' | transloco"
+    >
       @for (
         suggestion of suggestions();
         track suggestion.kind +
@@ -41,9 +46,11 @@
         >
           <span class="suggest__format">{{ formatLabel(suggestion.kind) }}</span>
           <span class="suggest__name">{{ suggestion.name }}</span>
-          <span class="suggest__meta"
-            >par {{ suggestion.owner.display_name }} / {{ suggestion.repository.name }}</span
-          >
+          <span class="suggest__meta">{{
+            'catalog.suggest.by'
+              | transloco
+                : { owner: suggestion.owner.display_name, repository: suggestion.repository.name }
+          }}</span>
         </li>
       }
     </ul>
@@ -51,7 +58,7 @@
       <p class="suggest__empty" aria-hidden="true">{{ message }}</p>
     }
     @if (noSuggestion()) {
-      <p class="suggest__empty" aria-hidden="true">Aucune suggestion</p>
+      <p class="suggest__empty" aria-hidden="true">{{ 'catalog.suggest.none' | transloco }}</p>
     }
   </div>
   <span class="sr-only" aria-live="polite">{{ announcement() }}</span>

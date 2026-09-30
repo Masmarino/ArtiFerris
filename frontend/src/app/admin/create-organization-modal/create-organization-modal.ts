@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core'
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms'
 import { Button, GbtInput, Modal } from '@masmarino/gabarit'
@@ -8,7 +10,7 @@ import { rejectionMessage } from '../../shared/api-error'
 @Component({
   selector: 'app-create-organization-modal',
   standalone: true,
-  imports: [ReactiveFormsModule, Modal, GbtInput, Button],
+  imports: [TranslocoPipe, ReactiveFormsModule, Modal, GbtInput, Button],
   templateUrl: './create-organization-modal.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -36,11 +38,13 @@ export class CreateOrganizationModal {
       next: () => {
         this.creating.set(false)
         this.created.emit()
-        this.toastService.success(`Organisation « ${displayName} » créée.`)
+        this.toastService.success(t('admin.organizations.created', { name: displayName }))
       },
       error: (err) => {
         this.creating.set(false)
-        this.toastService.error(rejectionMessage(err) ?? "Échec de la création de l'organisation.")
+        this.toastService.error(
+          rejectionMessage(err) ?? t('admin.organizations.errors.createFailed'),
+        )
       },
     })
   }

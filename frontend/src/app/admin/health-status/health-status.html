@@ -1,10 +1,10 @@
 <div class="container">
   @if (loadError()) {
     <gbt-card>
-      <p class="gbt-form-error" role="alert">Échec du chargement de l'état du système.</p>
+      <p class="gbt-form-error" role="alert">{{ 'admin.health.loadFailed' | transloco }}</p>
     </gbt-card>
   } @else if (status(); as s) {
-    <gbt-card heading="Base de données" icon="database">
+    <gbt-card [heading]="'admin.health.database' | transloco" icon="database">
       <ng-template #dbStatusValue>
         <gbt-badge [variant]="s.database.status === 'up' ? 'success' : 'error'">
           {{ s.database.status }}
@@ -15,16 +15,16 @@
       </ng-template>
       <gbt-description-list [items]="databaseItems()" layout="inline" />
       <gbt-gauge-bar
-        label="Connexions"
+        [label]="'admin.health.connections' | transloco"
         [value]="s.database.active_connections"
         [max]="s.database.max_connections"
         [formattedValue]="formatRatio(s.database.active_connections, s.database.max_connections)"
-        warningLabel="Avertissement"
-        criticalLabel="Critique"
+        [warningLabel]="'admin.health.warning' | transloco"
+        [criticalLabel]="'admin.health.critical' | transloco"
       />
     </gbt-card>
 
-    <gbt-card heading="Stockage" icon="hard-drive">
+    <gbt-card [heading]="'admin.health.storage' | transloco" icon="hard-drive">
       <ng-template #storageStatusValue>
         <gbt-badge [variant]="s.storage.status === 'up' ? 'success' : 'error'">
           {{ s.storage.status }}
@@ -35,16 +35,16 @@
       </ng-template>
       <gbt-description-list [items]="storageItems()" layout="inline" />
       <gbt-gauge-bar
-        label="Espace utilisé"
+        [label]="'admin.health.usedSpace' | transloco"
         [value]="s.storage.used_bytes"
         [max]="s.storage.total_bytes"
         [formattedValue]="formatByteRatio(s.storage.used_bytes, s.storage.total_bytes)"
-        warningLabel="Avertissement"
-        criticalLabel="Critique"
+        [warningLabel]="'admin.health.warning' | transloco"
+        [criticalLabel]="'admin.health.critical' | transloco"
       />
     </gbt-card>
 
-    <gbt-card heading="Serveur" icon="server">
+    <gbt-card [heading]="'admin.health.server' | transloco" icon="server">
       <gbt-description-list [items]="serverItems()" layout="inline" />
     </gbt-card>
   }

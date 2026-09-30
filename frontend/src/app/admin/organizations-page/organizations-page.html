@@ -8,28 +8,28 @@
   @if (organizationId(); as id) {
     <div class="organizations-page__detail">
       <gbt-tabs>
-        <gbt-tab label="Aperçu">
+        <gbt-tab [label]="'admin.orgPage.overview' | transloco">
           <app-organization-detail [organizationId]="id" />
         </gbt-tab>
-        <gbt-tab label="Marque">
+        <gbt-tab [label]="'admin.orgPage.brand' | transloco">
           <app-branding-settings [organizationId]="id" />
         </gbt-tab>
-        <gbt-tab label="Jetons API">
+        <gbt-tab [label]="'tokens.table.caption' | transloco">
           <app-api-tokens-admin [organizationId]="id" />
         </gbt-tab>
-        <gbt-tab label="Historique">
+        <gbt-tab [label]="'admin.orgPage.history' | transloco">
           <app-audit-log [organizationId]="id" />
         </gbt-tab>
-        <gbt-tab label="Sécurité">
+        <gbt-tab [label]="'package.security' | transloco">
           <app-security-log [organizationId]="id" />
         </gbt-tab>
-        <gbt-tab label="Métriques">
+        <gbt-tab [label]="'admin.orgPage.metrics' | transloco">
           <app-organization-metrics-page [organizationId]="id" />
         </gbt-tab>
-        <gbt-tab label="Paramètres">
+        <gbt-tab [label]="'admin.orgPage.settings' | transloco">
           <app-system-settings [organizationId]="id" />
         </gbt-tab>
-        <gbt-tab label="Serveur mail">
+        <gbt-tab [label]="'admin.orgPage.mail' | transloco">
           <app-smtp-settings [organizationId]="id" />
         </gbt-tab>
       </gbt-tabs>

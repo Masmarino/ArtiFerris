@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -28,8 +30,8 @@ import { PageTitleService } from '../../shell/page-title.service'
 import { FormatBytesPipe } from '../../shared/format-bytes.pipe'
 import {
   bySeverityDesc,
-  DOCKER_SEVERITY_OPTIONS,
-  NPM_SEVERITY_OPTIONS,
+  buildDockerSeverityOptions,
+  buildNpmSeverityOptions,
   SeverityClassPipe,
 } from '../../shared/severity'
 import { formatSelectedCount, formatWeeklyDownloads } from '../../shared/format'
@@ -55,6 +57,7 @@ class ShortDigestPipe implements PipeTransform {
   selector: 'app-package-detail-page',
   standalone: true,
   imports: [
+    TranslocoPipe,
     Button,
     DatePipe,
     RouterLink,
@@ -150,7 +153,7 @@ export class PackageDetailPage {
   readonly depAuditScanning = signal(false)
   readonly depAuditSeverityFilter = signal<string[]>([])
   readonly depAuditPage = signal(1)
-  readonly npmSeverityOptions = NPM_SEVERITY_OPTIONS
+  readonly npmSeverityOptions = buildNpmSeverityOptions()
 
   readonly sortedFindings = computed(() => {
     const result = this.depAuditResult()
@@ -180,7 +183,7 @@ export class PackageDetailPage {
   readonly imageScanScanning = signal(false)
   readonly imageScanSeverityFilter = signal<string[]>([])
   readonly imageScanPage = signal(1)
-  readonly dockerSeverityOptions = DOCKER_SEVERITY_OPTIONS
+  readonly dockerSeverityOptions = buildDockerSeverityOptions()
 
   readonly sortedVulnerabilities = computed(() => {
     const result = this.imageScanResult()
@@ -526,9 +529,9 @@ export class PackageDetailPage {
 
   async deleteVersion(version: string): Promise<void> {
     const confirmed = await this.confirmService.ask({
-      heading: 'Supprimer la version',
-      message: `Supprimer la version ${version} de ${this.name} ?`,
-      confirmLabel: 'Supprimer',
+      heading: t('package.delete.versionHeading'),
+      message: t('package.delete.versionMessage', { version, name: this.name }),
+      confirmLabel: t('common.delete'),
       danger: true,
     })
     if (!confirmed) {
@@ -539,17 +542,17 @@ export class PackageDetailPage {
       .subscribe({
         next: () => {
           this.reload()
-          this.toastService.success(`Version ${version} supprimée.`)
+          this.toastService.success(t('package.delete.versionDeleted', { version }))
         },
-        error: () => this.toastService.error(`Échec de la suppression de la version ${version}.`),
+        error: () => this.toastService.error(t('package.delete.versionFailed', { version })),
       })
   }
 
   async deleteWholePackage(): Promise<void> {
     const confirmed = await this.confirmService.ask({
-      heading: 'Supprimer le package',
-      message: `Supprimer entièrement le package ${this.name} ? Cette action est irréversible.`,
-      confirmLabel: 'Supprimer',
+      heading: t('package.delete.packageHeading'),
+      message: t('package.delete.packageMessage', { name: this.name }),
+      confirmLabel: t('common.delete'),
       danger: true,
       typeToConfirm: this.name,
     })
@@ -559,17 +562,17 @@ export class PackageDetailPage {
     this.repositoriesService.deleteNpmPackage(this.repositoryId, this.name).subscribe({
       next: () => {
         this.backToRepository()
-        this.toastService.success(`Package ${this.name} supprimé.`)
+        this.toastService.success(t('package.delete.packageDeleted', { name: this.name }))
       },
-      error: () => this.toastService.error('Échec de la suppression du package.'),
+      error: () => this.toastService.error(t('package.delete.packageFailed')),
     })
   }
 
   async deleteTag(tag: string): Promise<void> {
     const confirmed = await this.confirmService.ask({
-      heading: 'Supprimer le tag',
-      message: `Supprimer le tag ${tag} de ${this.name} ? Toute autre étiquette pointant vers la même image sera aussi supprimée.`,
-      confirmLabel: 'Supprimer',
+      heading: t('package.delete.tagHeading'),
+      message: t('package.delete.tagMessage', { tag, name: this.name }),
+      confirmLabel: t('common.delete'),
       danger: true,
     })
     if (!confirmed) {
@@ -578,17 +581,17 @@ export class PackageDetailPage {
     this.repositoriesService.deleteDockerTag(this.repositoryId, this.name, tag).subscribe({
       next: () => {
         this.reload()
-        this.toastService.success(`Tag ${tag} supprimé.`)
+        this.toastService.success(t('package.delete.tagDeleted', { tag }))
       },
-      error: () => this.toastService.error(`Échec de la suppression du tag ${tag}.`),
+      error: () => this.toastService.error(t('package.delete.tagFailed', { tag })),
     })
   }
 
   async deleteWholeImage(): Promise<void> {
     const confirmed = await this.confirmService.ask({
-      heading: "Supprimer l'image",
-      message: `Supprimer entièrement l'image ${this.name} ? Cette action est irréversible.`,
-      confirmLabel: 'Supprimer',
+      heading: t('package.delete.imageHeading'),
+      message: t('package.delete.imageMessage', { name: this.name }),
+      confirmLabel: t('common.delete'),
       danger: true,
       typeToConfirm: this.name,
     })
@@ -598,9 +601,9 @@ export class PackageDetailPage {
     this.repositoriesService.deleteDockerImage(this.repositoryId, this.name).subscribe({
       next: () => {
         this.backToRepository()
-        this.toastService.success(`Image ${this.name} supprimée.`)
+        this.toastService.success(t('package.delete.imageDeleted', { name: this.name }))
       },
-      error: () => this.toastService.error("Échec de la suppression de l'image."),
+      error: () => this.toastService.error(t('package.delete.imageFailed')),
     })
   }
 }

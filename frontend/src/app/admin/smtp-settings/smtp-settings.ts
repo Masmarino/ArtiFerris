@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -22,22 +24,22 @@ import { SmtpSettingsService } from '../application/smtp-settings.service'
 import { SmtpSecurity, isUnreadableSmtpSettings } from '../domain/smtp-settings.entity'
 import { ToastService } from '../../shared/toast.service'
 import {
-  SECRET_UNREADABLE_MESSAGE,
+  secretUnreadableMessage,
   isSecretUnreadable,
   overloadMessage,
   secretFormFailureMessage,
 } from '../../shared/api-error'
 
-const SECURITY_OPTIONS: SelectOption<SmtpSecurity>[] = [
-  { value: 'start_tls', label: 'STARTTLS (port 587 usuellement)' },
-  { value: 'tls', label: 'TLS implicite (port 465 usuellement)' },
-  { value: 'none', label: 'Aucun (réseau interne de confiance uniquement)' },
+const securityOptions = (): SelectOption<SmtpSecurity>[] => [
+  { value: 'start_tls', label: t('admin.smtp.security.startTls') },
+  { value: 'tls', label: t('admin.smtp.security.tls') },
+  { value: 'none', label: t('admin.smtp.security.none') },
 ]
 
 @Component({
   selector: 'app-smtp-settings',
   standalone: true,
-  imports: [Alert, Button, Card, GbtInput, Select, FormsModule, Spinner, Tooltip],
+  imports: [TranslocoPipe, Alert, Button, Card, GbtInput, Select, FormsModule, Spinner, Tooltip],
   templateUrl: './smtp-settings.html',
   styleUrl: './smtp-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -49,7 +51,7 @@ export class SmtpSettingsAdmin {
   /** Set only when embedded in an organization's own admin page — scopes read/write to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
-  readonly securityOptions = SECURITY_OPTIONS
+  readonly securityOptions = securityOptions()
 
   readonly host = signal('')
   readonly port = signal('587')
@@ -125,33 +127,33 @@ export class SmtpSettingsAdmin {
   private readonly rawPortError = computed(() => {
     const parsed = Number(this.port())
     if (this.port().trim() === '' || !Number.isInteger(parsed)) {
-      return 'Doit être un nombre entier.'
+      return t('admin.smtp.errors.integer')
     }
     if (parsed < 1 || parsed > 65_535) {
-      return 'Doit être entre 1 et 65535.'
+      return t('admin.smtp.errors.portRange')
     }
     return null
   })
 
   private readonly rawHostError = computed(() =>
-    this.host().trim() === '' ? "L'hôte est requis." : null,
+    this.host().trim() === '' ? t('admin.smtp.errors.hostRequired') : null,
   )
 
   private readonly rawUsernameError = computed(() =>
-    this.username().trim() === '' ? "L'identifiant est requis." : null,
+    this.username().trim() === '' ? t('admin.smtp.errors.usernameRequired') : null,
   )
 
   private readonly rawFromAddressError = computed(() =>
-    this.fromAddress().includes('@') ? null : 'Doit être une adresse e-mail valide.',
+    this.fromAddress().includes('@') ? null : t('admin.smtp.errors.emailInvalid'),
   )
 
   private readonly rawFromNameError = computed(() =>
-    this.fromName().trim() === '' ? "Le nom d'expéditeur est requis." : null,
+    this.fromName().trim() === '' ? t('admin.smtp.errors.fromNameRequired') : null,
   )
 
   private readonly rawPasswordError = computed(() => {
     if (!this.passwordSet() && this.password().trim() === '') {
-      return 'Le mot de passe est requis lors de la première configuration.'
+      return t('admin.smtp.errors.passwordRequired')
     }
     return null
   })
@@ -205,7 +207,7 @@ export class SmtpSettingsAdmin {
             this.secretUnreadable.set(false)
             this.password.set('')
           }
-          this.toastService.success('Paramètres SMTP enregistrés.')
+          this.toastService.success(t('admin.smtp.saved'))
         },
         error: (error: unknown) => {
           if (stillCurrent()) {
@@ -215,7 +217,7 @@ export class SmtpSettingsAdmin {
             }
           }
           this.toastService.error(
-            secretFormFailureMessage(error, 'Échec de la mise à jour des paramètres SMTP.'),
+            secretFormFailureMessage(error, t('admin.smtp.errors.updateFailed')),
           )
         },
       })
@@ -233,7 +235,7 @@ export class SmtpSettingsAdmin {
         if (stillCurrent()) {
           this.sendingTest.set(false)
         }
-        this.toastService.success('E-mail de test envoyé.')
+        this.toastService.success(t('admin.smtp.testSent'))
       },
       error: (error: unknown) => {
         if (stillCurrent()) {
@@ -244,9 +246,8 @@ export class SmtpSettingsAdmin {
         }
         this.toastService.error(
           isSecretUnreadable(error)
-            ? SECRET_UNREADABLE_MESSAGE
-            : (overloadMessage(error) ??
-                "Échec de l'envoi de l'e-mail de test. Vérifiez la configuration."),
+            ? secretUnreadableMessage()
+            : (overloadMessage(error) ?? t('admin.smtp.errors.testFailed')),
         )
       },
     })

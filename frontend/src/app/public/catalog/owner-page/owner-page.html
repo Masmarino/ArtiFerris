@@ -1,16 +1,20 @@
 <app-public-layout>
   @if (loading()) {
-    <div class="loading-state"><gbt-spinner size="lg" label="Chargement…" /></div>
+    <div class="loading-state">
+      <gbt-spinner size="lg" [label]="'common.loading' | transloco" />
+    </div>
   } @else if (failed()) {
     <p class="gbt-form-error" role="alert">{{ errorMessage() }}</p>
-    <gbt-button text="Réessayer" (clicked)="retry()" />
+    <gbt-button [text]="'common.retry' | transloco" (clicked)="retry()" />
   } @else if (notFound()) {
     <gbt-empty-state
       illustration="folder"
-      heading="Propriétaire introuvable"
-      message="Il n'y a rien de public à cette adresse."
+      [heading]="'catalog.owner.notFoundHeading' | transloco"
+      [message]="'catalog.owner.notFoundMessage' | transloco"
     >
-      <a class="owner-page__back" routerLink="/explorer">Parcourir le catalogue public</a>
+      <a class="owner-page__back" routerLink="/explorer">{{
+        'catalog.owner.browse' | transloco
+      }}</a>
     </gbt-empty-state>
   } @else if (summary(); as owner) {
     <header class="owner-page__header">

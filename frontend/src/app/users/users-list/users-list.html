@@ -1,9 +1,9 @@
 @if (isSuperAdmin()) {
   <div class="toolbar">
-    <gbt-button text="Nouvel utilisateur" (clicked)="showCreateModal.set(true)" />
+    <gbt-button [text]="'users.list.new' | transloco" (clicked)="showCreateModal.set(true)" />
     <gbt-select
-      label="Organisation"
-      placeholder="Sélectionner…"
+      [label]="'users.list.organization' | transloco"
+      [placeholder]="'common.select' | transloco"
       [options]="organizationOptions()"
       [ngModel]="selectedOrganizationId()"
       (ngModelChange)="selectedOrganizationId.set($event)"
@@ -11,29 +11,29 @@
   </div>
 }
 @if (loading()) {
-  <div class="loading-state"><gbt-spinner label="Chargement…" /></div>
+  <div class="loading-state"><gbt-spinner [label]="'common.loading' | transloco" /></div>
 } @else if (error(); as message) {
   <p class="gbt-form-error" role="alert">{{ message }}</p>
-  <gbt-button text="Réessayer" (clicked)="reload()" />
+  <gbt-button [text]="'common.retry' | transloco" (clicked)="reload()" />
 } @else if (users().length === 0) {
   <gbt-empty-state
     illustration="folder"
-    heading="Aucun utilisateur"
-    message="Les utilisateurs créés ou invités apparaîtront ici."
+    [heading]="'users.list.emptyHeading' | transloco"
+    [message]="'users.list.emptyMessage' | transloco"
   >
     @if (isSuperAdmin()) {
-      <gbt-button text="Nouvel utilisateur" (clicked)="showCreateModal.set(true)" />
+      <gbt-button [text]="'users.list.new' | transloco" (clicked)="showCreateModal.set(true)" />
     }
   </gbt-empty-state>
 } @else if (filteredUsers().length === 0) {
   <gbt-empty-state
     illustration="folder"
-    heading="Aucun résultat"
-    message="Aucun utilisateur dans cette organisation. Changez le filtre pour en voir d'autres."
+    [heading]="'users.list.noResultsHeading' | transloco"
+    [message]="'users.list.noResultsMessage' | transloco"
   />
 } @else {
   <gbt-table
-    caption="Utilisateurs"
+    [caption]="'users.list.caption' | transloco"
     [clickableRows]="true"
     [data]="filteredUsers()"
     [columns]="columns()"

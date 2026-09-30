@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core'
 import { HttpErrorResponse } from '@angular/common/http'
 import { Button, EmptyState, Spinner } from '@masmarino/gabarit'
@@ -10,7 +12,7 @@ import { rejectionMessage } from '../../shared/api-error'
 @Component({
   selector: 'app-my-repository-page',
   standalone: true,
-  imports: [Button, EmptyState, Spinner, RepositoriesList, ConfirmModal],
+  imports: [TranslocoPipe, Button, EmptyState, Spinner, RepositoriesList, ConfirmModal],
   templateUrl: './my-repository-page.html',
   styleUrl: './my-repository-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -33,7 +35,7 @@ export class MyRepositoryPage implements OnInit {
       error: () => {
         // Assume not reserved yet — the create flow re-checks via reserve() regardless.
         this.loading.set(false)
-        this.toastService.error('Échec de la vérification de votre dépôt personnel.')
+        this.toastService.error(t('repositories.mine.errors.checkFailed'))
       },
     })
   }
@@ -67,9 +69,7 @@ export class MyRepositoryPage implements OnInit {
           this.reserved.set(true)
           return
         }
-        this.toastService.error(
-          rejectionMessage(err) ?? 'Échec de la création de votre dépôt utilisateur.',
-        )
+        this.toastService.error(rejectionMessage(err) ?? t('repositories.mine.errors.createFailed'))
       },
     })
   }

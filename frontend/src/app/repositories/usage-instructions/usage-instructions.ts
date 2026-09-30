@@ -1,3 +1,5 @@
+import { TranslocoPipe } from '@jsverse/transloco'
+import { t } from '../../shared/i18n/translator'
 import { DOCUMENT } from '@angular/common'
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core'
 import { RouterLink } from '@angular/router'
@@ -6,7 +8,7 @@ import { RepositorySummary } from '../domain/repository.entity'
 @Component({
   selector: 'app-usage-instructions',
   standalone: true,
-  imports: [RouterLink],
+  imports: [TranslocoPipe, RouterLink],
   templateUrl: './usage-instructions.html',
   styleUrl: './usage-instructions.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -16,7 +18,7 @@ export class UsageInstructions {
 
   readonly repository = input.required<RepositorySummary>()
   readonly apiTokenLink = input('/account')
-  readonly apiTokenLinkLabel = input('Créer un token API')
+  readonly apiTokenLinkLabel = input(t('repositories.usage.createApiToken'))
 
   readonly host = this.document.location.host
   readonly origin = this.document.location.origin

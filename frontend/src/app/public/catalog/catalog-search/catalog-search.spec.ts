@@ -695,7 +695,7 @@ describe('CatalogSearch', () => {
       const { lists, heading } = groups(el)
       expect(lists).toHaveLength(2)
       expect(names(lists[0])).toEqual(['left-pad', 'left'])
-      expect(heading!.textContent).toBe('Résultats approchants')
+      expect(heading!.textContent?.trim()).toBe('Résultats approchants')
       expect(names(lists[1])).toEqual(['lefft-pad', 'team/api'])
       expect(
         lists[0].compareDocumentPosition(heading!) & Node.DOCUMENT_POSITION_FOLLOWING,

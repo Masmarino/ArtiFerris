@@ -1,11 +1,11 @@
 @if (loadError()) {
   <gbt-card>
-    <p class="gbt-form-error" role="alert">Échec du chargement du dépôt.</p>
+    <p class="gbt-form-error" role="alert">{{ 'repositories.detail.loadFailed' | transloco }}</p>
   </gbt-card>
 } @else if (repository(); as repo) {
   <div class="container">
     <gbt-tabs>
-      <gbt-tab label="Aperçu">
+      <gbt-tab [label]="'repositories.detail.tabs.overview' | transloco">
         <gbt-card>
           <div class="repository-detail__header">
             <span class="repository-detail__badge">{{ repo.format }}</span>
@@ -13,57 +13,62 @@
           </div>
           @if (isAdmin()) {
             <div class="d-flex align-items-end gap-4">
-              <gbt-input label="Nom" [ngModel]="newName()" (ngModelChange)="newName.set($event)" />
+              <gbt-input
+                [label]="'common.name' | transloco"
+                [ngModel]="newName()"
+                (ngModelChange)="newName.set($event)"
+              />
               <gbt-button
                 class="mb-3"
-                text="Renommer"
+                [text]="'repositories.detail.rename' | transloco"
                 [disabled]="newName() === repo.name"
                 [loading]="renaming()"
                 (clicked)="rename()"
-                loadingLabel="Chargement en cours"
+                [loadingLabel]="'common.loadingLabel' | transloco"
               />
             </div>
           }
           @if (repo.remote_url) {
             <p class="repository-detail__remote">
-              Dépôt distant : <code>{{ repo.remote_url }}</code>
+              {{ 'repositories.detail.remote' | transloco }} <code>{{ repo.remote_url }}</code>
             </p>
           }
         </gbt-card>
 
-        <gbt-card heading="Utilisation" icon="terminal">
+        <gbt-card [heading]="'repositories.detail.usage' | transloco" icon="terminal">
           <app-usage-instructions [repository]="repo" />
         </gbt-card>
 
-        <gbt-card heading="Partage" icon="share-2">
+        <gbt-card [heading]="'repositories.detail.share' | transloco" icon="share-2">
           <app-share-repository-link [repository]="repo" [canManageVisibility]="isAdmin()" />
         </gbt-card>
       </gbt-tab>
 
-      <gbt-tab label="Packages">
+      <gbt-tab [label]="'repositories.detail.tabs.packages' | transloco">
         <gbt-card>
           <app-package-tree [repositoryId]="repo.id" />
         </gbt-card>
       </gbt-tab>
 
       @if (repo.repo_type === 'group') {
-        <gbt-tab label="Dépôts membres">
+        <gbt-tab [label]="'repositories.detail.tabs.members' | transloco">
           <gbt-card>
             @if (repo.group_members.length === 0) {
               <gbt-empty-state
                 illustration="merge"
-                heading="Aucun dépôt membre"
+                [heading]="'repositories.detail.noMembers' | transloco"
                 [message]="
-                  isAdmin()
-                    ? 'Ajoutez des dépôts membres pour les regrouper derrière ce dépôt.'
-                    : 'Ce groupe ne contient aucun dépôt pour le moment.'
+                  (isAdmin()
+                    ? 'repositories.detail.membersEmptyAdmin'
+                    : 'repositories.detail.membersEmpty'
+                  ) | transloco
                 "
               />
             } @else if (isAdmin()) {
-              <p>Cliquer sur une ligne pour retirer le dépôt membre du groupe.</p>
+              <p>{{ 'repositories.detail.removeHint' | transloco }}</p>
               <gbt-table
-                caption="Dépôts membres du groupe"
-                emptyMessage="Aucun dépôt membre"
+                [caption]="'repositories.detail.membersCaption' | transloco"
+                [emptyMessage]="'repositories.detail.noMembers' | transloco"
                 [clickableRows]="true"
                 [data]="groupMemberRows()"
                 [columns]="memberColumns"
@@ -72,8 +77,8 @@
               />
             } @else {
               <gbt-table
-                caption="Dépôts membres du groupe"
-                emptyMessage="Aucun dépôt membre"
+                [caption]="'repositories.detail.membersCaption' | transloco"
+                [emptyMessage]="'repositories.detail.noMembers' | transloco"
                 [data]="groupMemberRows()"
                 [columns]="memberColumns"
                 [trackBy]="memberRowId"
@@ -81,15 +86,15 @@
             }
             @if (isAdmin()) {
               <gbt-input
-                label="ID du dépôt à ajouter"
+                [label]="'repositories.detail.memberId' | transloco"
                 [ngModel]="newMemberId()"
                 (ngModelChange)="newMemberId.set($event)"
               />
               <gbt-button
-                text="Ajouter"
+                [text]="'common.add' | transloco"
                 [loading]="addingMember()"
                 (clicked)="addMember()"
-                loadingLabel="Chargement en cours"
+                [loadingLabel]="'common.loadingLabel' | transloco"
               />
             }
           </gbt-card>
@@ -97,19 +102,19 @@
       }
 
       @if (isAdmin()) {
-        <gbt-tab label="Droits d'accès">
+        <gbt-tab [label]="'repositories.detail.tabs.permissions' | transloco">
           <gbt-card>
             @if (permissions().length === 0) {
               <gbt-empty-state
                 illustration="star"
-                heading="Aucun droit spécifique"
-                message="Accordez un rôle à un utilisateur avec le formulaire ci-dessous."
+                [heading]="'repositories.detail.noPermissions' | transloco"
+                [message]="'repositories.detail.noPermissionsMessage' | transloco"
               />
             } @else {
-              <p>Cliquer sur une ligne pour modifier ou révoquer un droit.</p>
+              <p>{{ 'repositories.detail.editHint' | transloco }}</p>
               <gbt-table
-                caption="Droits d'accès sur ce dépôt"
-                emptyMessage="Aucun droit"
+                [caption]="'repositories.detail.permissionsCaption' | transloco"
+                [emptyMessage]="'repositories.detail.noRight' | transloco"
                 [clickableRows]="true"
                 [data]="permissions()"
                 [columns]="permissionColumns"
@@ -121,10 +126,10 @@
             <div class="d-flex align-items-end gap-2">
               <gbt-autocomplete
                 class="w-full"
-                placeholder="Nom d'utilisateur"
-                noResultsMessage="Aucun résultat"
-                searchErrorMessage="Échec de la recherche"
-                loadingMessage="Recherche en cours…"
+                [placeholder]="'users.create.username' | transloco"
+                [noResultsMessage]="'shell.search.noResults' | transloco"
+                [searchErrorMessage]="'repositories.detail.searchFailed' | transloco"
+                [loadingMessage]="'repositories.detail.searching' | transloco"
                 [search]="searchUsers"
                 [displayFn]="userDisplayFn"
                 [resultsAnnouncement]="resultsAnnouncement"
@@ -134,8 +139,8 @@
               <gbt-select
                 class="mb-0"
                 style="max-width: 300px"
-                label="Rôle"
-                placeholder="Sélectionner…"
+                [label]="'repositories.permissions.role' | transloco"
+                [placeholder]="'common.select' | transloco"
                 size="sm"
                 [options]="roleOptions"
                 [ngModel]="grantRole()"
@@ -143,11 +148,11 @@
               />
             </div>
             <gbt-button
-              text="Accorder"
+              [text]="'users.detail.grant' | transloco"
               [disabled]="!grantUser()"
               [loading]="grantingPermission()"
               (clicked)="grantPermission()"
-              loadingLabel="Chargement en cours"
+              [loadingLabel]="'common.loadingLabel' | transloco"
             />
           </gbt-card>
 
@@ -164,105 +169,119 @@
           }
         </gbt-tab>
 
-        <gbt-tab label="Paramètres">
+        <gbt-tab [label]="'repositories.detail.tabs.settings' | transloco">
           @if (canChangeVisibility()) {
-            <gbt-card heading="Visibilité" icon="globe">
+            <gbt-card [heading]="'repositories.detail.visibility' | transloco" icon="globe">
               <p>
-                Actuellement :
-                <strong>{{ repo.is_public ? 'public' : 'privé' }}</strong>
+                {{ 'repositories.detail.currently' | transloco }}
+                <strong>{{
+                  (repo.is_public ? 'repositories.detail.public' : 'repositories.detail.private')
+                    | transloco
+                }}</strong>
               </p>
               <p class="repository-detail__hint">
                 {{
-                  repo.is_public
-                    ? 'Tout le monde peut consulter et télécharger le contenu de ce dépôt, sans authentification. Publier reste réservé aux utilisateurs autorisés.'
-                    : 'Seuls les utilisateurs autorisés peuvent accéder à ce dépôt.'
+                  (repo.is_public
+                    ? 'repositories.detail.publicHint'
+                    : 'repositories.detail.privateHint'
+                  ) | transloco
                 }}
               </p>
               <gbt-button
-                [text]="repo.is_public ? 'Rendre privé' : 'Rendre public'"
+                [text]="
+                  (repo.is_public
+                    ? 'repositories.detail.makePrivate'
+                    : 'repositories.detail.makePublic'
+                  ) | transloco
+                "
                 [variant]="repo.is_public ? 'secondary' : 'primary'"
                 [loading]="changingVisibility()"
                 (clicked)="changeVisibility()"
-                loadingLabel="Chargement en cours"
+                [loadingLabel]="'common.loadingLabel' | transloco"
               />
             </gbt-card>
           }
 
-          <gbt-card heading="Quota de stockage" icon="hard-drive">
+          <gbt-card [heading]="'repositories.detail.quotaHeading' | transloco" icon="hard-drive">
             <p>
-              Actuel :
+              {{ 'repositories.detail.current' | transloco }}
               {{
-                (repo.quota_bytes ?? null) === null ? 'illimité' : (repo.quota_bytes | formatBytes)
+                (repo.quota_bytes ?? null) === null
+                  ? ('repositories.detail.unlimited' | transloco)
+                  : (repo.quota_bytes | formatBytes)
               }}
             </p>
             <div class="d-flex align-items-end gap-4">
               <gbt-input
-                label="Quota (Mo, vide = illimité)"
+                [label]="'repositories.create.quota' | transloco"
                 [ngModel]="quotaMb()"
                 (ngModelChange)="setQuotaMb($event)"
                 [errorMessage]="quotaError()"
               />
               <gbt-button
                 class="mb-3"
-                text="Enregistrer"
+                [text]="'common.save' | transloco"
                 [loading]="savingQuota()"
                 (clicked)="saveQuota()"
-                loadingLabel="Chargement en cours"
+                [loadingLabel]="'common.loadingLabel' | transloco"
               />
             </div>
             @if (quotaSaved()) {
-              <p class="repository-detail__quota-success">Quota enregistré.</p>
+              <p class="repository-detail__quota-success">
+                {{ 'repositories.detail.quotaSaved' | transloco }}
+              </p>
             }
           </gbt-card>
 
-          <gbt-card heading="Rétention" icon="history">
+          <gbt-card [heading]="'repositories.detail.retentionHeading' | transloco" icon="history">
             <p>
-              Actuel :
+              {{ 'repositories.detail.current' | transloco }}
               {{
                 (repo.retention_keep_last_n ?? null) === null
-                  ? 'désactivée'
-                  : 'conserver les ' + repo.retention_keep_last_n + ' dernières versions/étiquettes'
+                  ? ('repositories.detail.retentionDisabled' | transloco)
+                  : ('repositories.detail.retentionKeep'
+                    | transloco: { count: repo.retention_keep_last_n })
               }}
             </p>
             <p class="repository-detail__hint">
-              Purge automatique périodique des versions npm ou étiquettes Docker les plus anciennes
-              au-delà de ce nombre, par paquet/image. Les versions taguées (ex. « latest ») ne sont
-              jamais supprimées.
+              {{ 'repositories.detail.retentionHint' | transloco }}
             </p>
             <div class="d-flex align-items-end gap-4">
               <gbt-input
-                label="Conserver les N dernières (vide = désactivé)"
+                [label]="'repositories.detail.retentionLabel' | transloco"
                 [ngModel]="retentionKeepLastN()"
                 (ngModelChange)="setRetentionKeepLastN($event)"
                 [errorMessage]="retentionError()"
               />
               <gbt-button
                 class="mb-3"
-                text="Enregistrer"
+                [text]="'common.save' | transloco"
                 [loading]="savingRetention()"
                 (clicked)="saveRetentionPolicy()"
-                loadingLabel="Chargement en cours"
+                [loadingLabel]="'common.loadingLabel' | transloco"
               />
             </div>
             @if (retentionSaved()) {
-              <p class="repository-detail__quota-success">Politique de rétention enregistrée.</p>
+              <p class="repository-detail__quota-success">
+                {{ 'repositories.detail.retentionSaved' | transloco }}
+              </p>
             }
           </gbt-card>
 
           <gbt-card
             class="repository-detail__danger"
-            heading="Zone de danger"
+            [heading]="'repositories.detail.dangerZone' | transloco"
             icon="triangle-alert"
           >
             <p>
-              La suppression d'un dépôt est définitive et efface tous les packages qu'il contient.
+              {{ 'repositories.detail.dangerMessage' | transloco }}
             </p>
             <gbt-button
-              text="Supprimer le dépôt"
+              [text]="'repositories.detail.delete' | transloco"
               variant="danger"
               [loading]="deletingRepository()"
               (clicked)="deleteRepository()"
-              loadingLabel="Chargement en cours"
+              [loadingLabel]="'common.loadingLabel' | transloco"
             />
           </gbt-card>
         </gbt-tab>
