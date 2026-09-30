@@ -56,8 +56,8 @@ Angular CLI does not come with an end-to-end testing framework by default. You c
 
 ## Internationalisation (i18n)
 
-Every user-facing string of the interface lives in `public/i18n/<lang>.json` (today `fr.json`, the
-reference language) and is read through [Transloco](https://jsverse.gitbook.io/transloco):
+Every user-facing string of the interface lives in `public/i18n/<lang>.json` (`fr`, `en`, `es`, `it`,
+`de`; `fr.json` is the reference language) and is read through [Transloco](https://jsverse.gitbook.io/transloco):
 
 - In a template, use the pipe: `{{ 'auth.login.submit' | transloco }}`, or
   `[label]="'auth.login.username' | transloco"` for an attribute, with parameters as
@@ -68,6 +68,10 @@ reference language) and is read through [Transloco](https://jsverse.gitbook.io/t
 - Plurals are a `_one` / `_other` pair (`format.results_one`, `format.results_other`); the code picks
   the right key.
 - `meta.locale` holds the BCP 47 tag used for number and relative-date formatting.
+
+The language is picked at startup from the browser's `navigator.languages` (`fr-CA` gives `fr`),
+English when none of them is translated (`shared/i18n/languages.ts`). Adding a language means a
+new `<lang>.json`, an entry in `LANGUAGE_LOCALES` and its Angular locale data in `app.config.ts`.
 
 The unit tests load the real `fr.json`, so they still assert the text users see. A spec
 (`shared/i18n/translations.spec.ts`) fails when the code uses a key that `fr.json` does not define,
