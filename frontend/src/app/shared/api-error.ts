@@ -11,16 +11,42 @@ export async function badRequestBlobMessage(error: unknown): Promise<string | nu
     return null
   }
   try {
-    const message = (JSON.parse(await error.error.text()) as { error?: unknown } | null)?.error
-    return typeof message === 'string' && message.trim() !== '' ? message : null
+    return messageOf(JSON.parse(await error.error.text()))
   } catch {
     return null
   }
 }
 
-function bodyMessage(error: HttpErrorResponse): string | null {
-  const message = (error.error as { error?: unknown } | null)?.error
+/** The stable name of the kind of error the server reported (`username_taken`…), when it sent one. */
+export function errorCode(error: unknown): string | null {
+  return error instanceof HttpErrorResponse ? codeOf(error.error) : null
+}
+
+function codeOf(body: unknown): string | null {
+  const code = (body as { code?: unknown } | null)?.code
+  return typeof code === 'string' && code !== '' ? code : null
+}
+
+/**
+ * What to tell the user about an error body: the translation of its `code` when there is one, so
+ * the wording is ours and in the user's language; otherwise the server's own text (an error that
+ * has no code yet).
+ */
+function messageOf(body: unknown): string | null {
+  const code = codeOf(body)
+  if (code) {
+    const key = `errors.api.${code}`
+    const translated = t(key)
+    if (translated !== key) {
+      return translated
+    }
+  }
+  const message = (body as { error?: unknown } | null)?.error
   return typeof message === 'string' && message.trim() !== '' ? message : null
+}
+
+function bodyMessage(error: HttpErrorResponse): string | null {
+  return messageOf(error.error)
 }
 
 /** The server's own explanation of a 400, or null for any other failure. */

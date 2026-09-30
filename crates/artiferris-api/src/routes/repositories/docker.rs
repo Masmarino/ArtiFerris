@@ -49,9 +49,9 @@ pub(super) async fn get_docker_image_details(
     require_anonymous_budget(&state, &user, &headers, connect_info)?;
     let repo = load_repository(&state, id).await?;
     require_readable_repository_access(&state, user.as_ref(), repo.organization_id, id, repo.is_public, "view image details").await.map_err(repository_access_error)?;
-    let parsed = DockerImageName::parse(&image).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid image name".to_string() })))?;
+    let parsed = DockerImageName::parse(&image).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid image name".to_string()))))?;
     let details = state.get_docker_image_details.execute(id, &parsed).await.map_err(|e| application_error_response("failed to get docker image details", e))?;
-    let owner = state.organizations.find_by_id(repo.organization_id).await.ok().flatten().ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+    let owner = state.organizations.find_by_id(repo.organization_id).await.ok().flatten().ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     let image_reference = RepositoryLocation::of(&repo, &owner).image_reference(&details.image_name, &state.public_url, &state.artiferris_base_domain);
     Ok(Json(DockerImageDetailsResponse {
         image_name: details.image_name,
@@ -114,7 +114,7 @@ pub(super) async fn get_docker_image_scan(
     require_anonymous_budget(&state, &user, &headers, connect_info)?;
     let repo = load_repository(&state, id).await?;
     require_readable_repository_access(&state, user.as_ref(), repo.organization_id, id, repo.is_public, "read docker image scan").await.map_err(repository_access_error)?;
-    let parsed = DockerImageName::parse(&image).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid image name".to_string() })))?;
+    let parsed = DockerImageName::parse(&image).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid image name".to_string()))))?;
     let result = state
         .get_docker_image_scan
         .execute(id, &parsed, &tag)
@@ -130,7 +130,7 @@ pub(super) async fn scan_docker_image(
 ) -> Result<Json<DockerImageScanResultResponse>, (StatusCode, Json<ErrorResponse>)> {
     let repo = load_repository(&state, id).await?;
     require_repository_access(&state, &user, repo.organization_id, id, repo.is_public, Role::Write, "run docker image scan").await.map_err(repository_access_error)?;
-    let parsed = DockerImageName::parse(&image).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid image name".to_string() })))?;
+    let parsed = DockerImageName::parse(&image).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid image name".to_string()))))?;
     let result = state
         .scan_docker_image
         .execute(id, &parsed, &tag, user.id)
@@ -146,13 +146,13 @@ pub(super) async fn delete_docker_tag(
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let repo = load_repository(&state, id).await?;
     require_repository_access(&state, &user, repo.organization_id, id, repo.is_public, Role::Write, "delete docker tag").await.map_err(repository_access_error)?;
-    let parsed = DockerImageName::parse(&image).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid image name".to_string() })))?;
+    let parsed = DockerImageName::parse(&image).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid image name".to_string()))))?;
     let manifest = state
         .docker_manifests
         .find_manifest_by_tag(id, &parsed, &tag)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
-        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "tag not found".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("tag not found".to_string()))))?;
     state
         .delete_docker_manifest
         .execute(id, &parsed, &manifest.digest, user.id)
@@ -168,7 +168,7 @@ pub(super) async fn delete_docker_image(
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let repo = load_repository(&state, id).await?;
     require_repository_access(&state, &user, repo.organization_id, id, repo.is_public, Role::Write, "delete docker image").await.map_err(repository_access_error)?;
-    let parsed = DockerImageName::parse(&image).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid image name".to_string() })))?;
+    let parsed = DockerImageName::parse(&image).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid image name".to_string()))))?;
     state.delete_docker_image.execute(id, &parsed, user.id).await.map_err(|e| application_error_response("failed to delete docker image", e))?;
     Ok(StatusCode::NO_CONTENT)
 }

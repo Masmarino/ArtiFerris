@@ -60,14 +60,14 @@ pub(super) async fn get_npm_package_details(
     require_anonymous_budget(&state, &user, &headers, connect_info)?;
     let repo = load_repository(&state, id).await?;
     require_readable_repository_access(&state, user.as_ref(), repo.organization_id, id, repo.is_public, "view package details").await.map_err(repository_access_error)?;
-    let parsed = NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid package name".to_string() })))?;
+    let parsed = NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid package name".to_string()))))?;
     let details = state
         .get_npm_package_details
         .execute(id, &parsed)
         .await
         .map_err(|e| application_error_response("failed to get npm package details", e))?
-        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "package not found".to_string() })))?;
-    let owner = state.organizations.find_by_id(repo.organization_id).await.ok().flatten().ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("package not found".to_string()))))?;
+    let owner = state.organizations.find_by_id(repo.organization_id).await.ok().flatten().ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     let registry_url = RepositoryLocation::of(&repo, &owner).registry_url(&state.public_url, &state.artiferris_base_domain);
     Ok(Json(NpmPackageDetailsResponse {
         name: details.name,
@@ -98,7 +98,7 @@ pub(super) async fn delete_npm_package(
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let repo = load_repository(&state, id).await?;
     require_repository_access(&state, &user, repo.organization_id, id, repo.is_public, Role::Write, "delete npm package").await.map_err(repository_access_error)?;
-    let parsed = NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid package name".to_string() })))?;
+    let parsed = NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid package name".to_string()))))?;
     state
         .unpublish_npm_package
         .execute_whole_package(id, &parsed, user.id)
@@ -115,9 +115,9 @@ pub(super) async fn delete_npm_package_version(
     let repo = load_repository(&state, id).await?;
     require_repository_access(&state, &user, repo.organization_id, id, repo.is_public, Role::Write, "delete npm package version").await.map_err(repository_access_error)?;
     let parsed_name =
-        NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid package name".to_string() })))?;
+        NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid package name".to_string()))))?;
     let parsed_version =
-        NpmVersion::parse(&version).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid version".to_string() })))?;
+        NpmVersion::parse(&version).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid version".to_string()))))?;
     state
         .unpublish_npm_package
         .execute_version(id, &parsed_name, &parsed_version, user.id)
@@ -150,16 +150,16 @@ pub(super) async fn audit_npm_package(
     require_anonymous_budget(&state, &user, &headers, connect_info)?;
     let repo = load_repository(&state, id).await?;
     require_readable_repository_access(&state, user.as_ref(), repo.organization_id, id, repo.is_public, "audit npm package").await.map_err(repository_access_error)?;
-    let parsed = NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid package name".to_string() })))?;
+    let parsed = NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid package name".to_string()))))?;
     // An audit calls npm's advisory service, so only a signed-in caller can start one; anyone can read a recent result.
     let advisories = if let Some(user) = &user {
         if !spend_budget(&state, &format!("npm-audit:{}", user.id), SIGNED_IN_AUDITS_PER_MINUTE) {
-            return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: "too many audits, try again shortly".to_string() })));
+            return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many audits, try again shortly".to_string()))));
         }
         let request = AuditRequest { user_id: user.id, repository_is_public: repo.is_public };
         state.audit_npm_package.execute(id, &parsed, request).await.map_err(|e| application_error_response("failed to audit npm package", e))?
     } else {
-        state.audit_npm_package.cached(id, &parsed).ok_or((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error: "sign in to run an audit".to_string() })))?
+        state.audit_npm_package.cached(id, &parsed).ok_or((StatusCode::UNAUTHORIZED, Json(ErrorResponse::message("sign in to run an audit".to_string()))))?
     };
     Ok(Json(
         advisories
@@ -230,9 +230,9 @@ pub(super) async fn get_dependency_audit(
     let repo = load_repository(&state, id).await?;
     require_readable_repository_access(&state, user.as_ref(), repo.organization_id, id, repo.is_public, "read npm dependency audit").await.map_err(repository_access_error)?;
     let parsed_name =
-        NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid package name".to_string() })))?;
+        NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid package name".to_string()))))?;
     let parsed_version =
-        NpmVersion::parse(&version).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid version".to_string() })))?;
+        NpmVersion::parse(&version).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid version".to_string()))))?;
     let result = state
         .get_dependency_audit
         .execute(id, &parsed_name, &parsed_version)
@@ -249,9 +249,9 @@ pub(super) async fn scan_dependency_tree(
     let repo = load_repository(&state, id).await?;
     require_repository_access(&state, &user, repo.organization_id, id, repo.is_public, Role::Write, "run npm dependency audit").await.map_err(repository_access_error)?;
     let parsed_name =
-        NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid package name".to_string() })))?;
+        NpmPackageName::parse(&name).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid package name".to_string()))))?;
     let parsed_version =
-        NpmVersion::parse(&version).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid version".to_string() })))?;
+        NpmVersion::parse(&version).map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid version".to_string()))))?;
     let result = state
         .scan_dependency_tree
         .execute(user.id, id, &parsed_name, &parsed_version)

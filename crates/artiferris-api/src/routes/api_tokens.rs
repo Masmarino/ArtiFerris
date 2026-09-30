@@ -53,7 +53,7 @@ async fn create_token(
     Json(body): Json<CreateTokenRequest>,
 ) -> Result<(StatusCode, Json<CreateTokenResponse>), (StatusCode, Json<ErrorResponse>)> {
     if body.label.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "label must not be empty".to_string() })));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::message("label must not be empty".to_string()))));
     }
     let label = body.label.trim();
     let created = match body.current_password.as_deref() {
@@ -78,7 +78,7 @@ async fn confirm_password(state: &AppState, user: &AuthUser, password: &str) -> 
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(state, user.organization_id).await;
     let throttle_key = crate::routes::mfa::manage_throttle_key(user.id);
     if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
-        return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: "too many failed attempts, try again later".to_string() })));
+        return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many failed attempts, try again later".to_string()))));
     }
     match state.confirm_password.execute(user.id, password).await {
         Ok(()) => {

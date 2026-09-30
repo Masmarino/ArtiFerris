@@ -92,7 +92,7 @@ fn repository_access_error(status: StatusCode) -> (StatusCode, Json<ErrorRespons
         StatusCode::FORBIDDEN => "forbidden",
         _ => "internal error",
     };
-    (status, Json(ErrorResponse { error: message.to_string() }))
+    (status, Json(ErrorResponse::message(message.to_string())))
 }
 
 /// The lookup-only half of the `find_by_id → map internal error → 404 if missing` pattern
@@ -106,8 +106,8 @@ async fn load_repository(state: &AppState, id: Uuid) -> Result<PackageRepository
         .repositories
         .find_by_id(id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
-        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "repository not found".to_string() })))
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("repository not found".to_string()))))
 }
 
 /// Anonymous callers of the package and image pages share the per-IP budget of the other public endpoints; signed-in ones are not limited here.
@@ -142,7 +142,7 @@ fn spend_anonymous_budget(
     limit: usize,
 ) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
     if user.is_none() && !crate::routes::public_catalog::within_budget(state, headers, connect_info, scope, limit) {
-        return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: "too many requests, try again shortly".to_string() })));
+        return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many requests, try again shortly".to_string()))));
     }
     Ok(())
 }
@@ -364,11 +364,13 @@ struct CreateRepositoryRequest {
 struct CreateRepositoryErrorBody {
     error: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     repository_id: Option<Uuid>,
 }
 
 fn create_repository_error(status: StatusCode, message: impl Into<String>, repository_id: Option<Uuid>) -> (StatusCode, Json<CreateRepositoryErrorBody>) {
-    (status, Json(CreateRepositoryErrorBody { error: message.into(), repository_id }))
+    (status, Json(CreateRepositoryErrorBody { error: message.into(), code: None, repository_id }))
 }
 
 /// Reuses `application_error_response` for its status-code/message mapping without adopting its
@@ -378,8 +380,8 @@ fn create_repository_application_error(
     error: artiferris_application::error::ApplicationError,
     repository_id: Option<Uuid>,
 ) -> (StatusCode, Json<CreateRepositoryErrorBody>) {
-    let (status, Json(ErrorResponse { error: message })) = application_error_response(context, error);
-    create_repository_error(status, message, repository_id)
+    let (status, Json(ErrorResponse { error: message, code })) = application_error_response(context, error);
+    (status, Json(CreateRepositoryErrorBody { error: message, code, repository_id }))
 }
 
 async fn create_repository(
@@ -438,7 +440,7 @@ async fn create_repository(
             require_repository_access(&state, &user, member.organization_id, member.id, member.is_public, Role::Read, "create repository")
                 .await
                 .map_err(repository_access_error)
-                .map_err(|(status, Json(ErrorResponse { error }))| create_repository_error(status, error, None))?;
+                .map_err(|(status, Json(ErrorResponse { error, .. }))| create_repository_error(status, error, None))?;
         }
     }
 
@@ -537,14 +539,14 @@ async fn create_user_project(
         .repositories
         .find_by_id(id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
-        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
+        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     let owner = state
         .organizations
         .find_by_id(created.organization_id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
-        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
+        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     // Same convention as `create_repository` above: the caller who just created this always
     // holds Admin on it (that's exactly what `CreateUserProjectUseCase::execute` just granted),
     // so there's no need to re-derive it with another round trip.

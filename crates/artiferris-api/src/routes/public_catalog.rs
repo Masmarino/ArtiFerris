@@ -78,7 +78,7 @@ fn over_budget_for(
     if within_budget(state, headers, connect_info, scope, limit) {
         return None;
     }
-    let mut response = (StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: "too many requests, try again shortly".to_string() })).into_response();
+    let mut response = (StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many requests, try again shortly".to_string()))).into_response();
     response.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from(WINDOW.as_secs()));
     Some(no_store(response))
 }

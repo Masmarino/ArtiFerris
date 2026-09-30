@@ -46,16 +46,16 @@ struct UserResponse {
 /// An organization admin only sees their own organization's users, not everyone's.
 async fn list_users(State(state): State<AppState>, user: AuthUser) -> Result<Json<Vec<UserResponse>>, (StatusCode, Json<ErrorResponse>)> {
     if !user.is_super_admin && !user.is_organization_admin {
-        return Err((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() })));
+        return Err((StatusCode::FORBIDDEN, Json(ErrorResponse::message("forbidden".to_string()))));
     }
-    let users = state.users.list_all().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+    let users = state.users.list_all().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     let users: Vec<_> = if user.is_super_admin { users } else { users.into_iter().filter(|u| u.organization_id == user.organization_id).collect() };
     let user_ids: Vec<Uuid> = users.iter().map(|u| u.id).collect();
     let pending = state
         .user_invitations
         .list_pending_user_ids(&user_ids)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     let result = users
         .into_iter()
         .map(|u| UserResponse {
@@ -76,14 +76,14 @@ async fn get_user(State(state): State<AppState>, user: AuthUser, Path(id): Path<
         .users
         .find_by_id(id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
-        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() })))?;
-    require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("user not found".to_string()))))?;
+    require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let invitation_pending = state
         .user_invitations
         .find_by_user_id(target.id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
         .is_some();
     Ok(Json(UserResponse {
         id: target.id,
@@ -101,7 +101,7 @@ async fn create_user(
     resolved_org: ResolvedOrganization,
     Json(body): Json<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<UserResponse>), (StatusCode, Json<ErrorResponse>)> {
-    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let id = state
         .invite_user
         .execute(resolved_org.0.id, body.is_organization_admin, &body.username, &body.email, body.is_super_admin, user.id)
@@ -126,12 +126,12 @@ async fn resend_invitation(State(state): State<AppState>, user: AuthUser, Path(i
         .users
         .find_by_id(id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     if !user.is_super_admin {
-        let target = target.as_ref().ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() })))?;
-        require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+        let target = target.as_ref().ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("user not found".to_string()))))?;
+        require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
         if target.is_super_admin {
-            return Err((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() })));
+            return Err((StatusCode::FORBIDDEN, Json(ErrorResponse::message("forbidden".to_string()))));
         }
     }
     state.resend_invitation.execute(id, user.id).await.map_err(|e| application_error_response("failed to resend invitation", e))?;
@@ -144,12 +144,12 @@ async fn delete_user(State(state): State<AppState>, user: AuthUser, Path(id): Pa
         .users
         .find_by_id(id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     if !user.is_super_admin {
-        let target = target.as_ref().ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() })))?;
-        require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+        let target = target.as_ref().ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("user not found".to_string()))))?;
+        require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
         if target.is_super_admin {
-            return Err((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() })));
+            return Err((StatusCode::FORBIDDEN, Json(ErrorResponse::message("forbidden".to_string()))));
         }
     }
     let audit = target.map(|target| AdminAuditRecord {
@@ -171,7 +171,7 @@ async fn set_super_admin(
     Path(id): Path<Uuid>,
     Json(body): Json<SetSuperAdminRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     state.set_super_admin.execute(id, body.is_super_admin, user.id).await.map_err(|e| application_error_response("failed to change super-admin status", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -193,13 +193,13 @@ struct UserLookupResponse {
 /// let any authenticated user enumerate another organization's usernames by spoofing that
 /// organization's subdomain (audit finding C-3).
 async fn lookup_user(State(state): State<AppState>, user: AuthUser, Query(params): Query<LookupQuery>) -> Result<Json<UserLookupResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let not_found = || (StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() }));
+    let not_found = || (StatusCode::NOT_FOUND, Json(ErrorResponse::message("user not found".to_string())));
     let username = artiferris_domain::user::Username::parse(&params.username).map_err(|_| not_found())?;
     let target = state
         .users
         .find_by_username(&username)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
         .ok_or_else(not_found)?;
     if !user.is_super_admin && target.organization_id != user.organization_id {
         return Err(not_found());
@@ -233,7 +233,7 @@ async fn search_users(State(state): State<AppState>, user: AuthUser, Query(param
     } else {
         state.users.search_by_organization(user.organization_id, &query, SEARCH_RESULT_LIMIT as i64).await
     }
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     Ok(Json(matches.into_iter().map(|u| UserLookupResponse { id: u.id, username: u.username.as_str().to_string() }).collect()))
 }
 
@@ -255,21 +255,21 @@ async fn list_user_permissions(
         .users
         .find_by_id(id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
-        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("user not found".to_string()))))?;
     if !user.is_super_admin {
-        require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+        require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     }
     let entries = state
         .permissions
         .list_for_user(id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     let repos: std::collections::HashMap<Uuid, _> = state
         .repositories
         .list_all()
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
         .into_iter()
         .map(|r| (r.id, r))
         .collect();

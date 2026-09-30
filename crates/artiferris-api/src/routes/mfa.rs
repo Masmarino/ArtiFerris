@@ -11,7 +11,7 @@ use crate::state::AppState;
 use axum::extract::State;
 
 fn throttled_response() -> (StatusCode, Json<ErrorResponse>) {
-    (StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: "too many failed attempts, try again later".to_string() }))
+    (StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many failed attempts, try again later".to_string())))
 }
 
 /// Like a password change, this ends every session, the caller's included.

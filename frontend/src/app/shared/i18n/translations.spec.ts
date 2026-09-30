@@ -36,6 +36,8 @@ const DYNAMIC_PREFIXES = [
   'admin.audit.details.favicon',
   'repositories.vulnerability.severity.',
   'format.bytes.',
+  // `errors.api.<code>`, one per error code the API can send (checked below).
+  'errors.api.',
 ]
 
 const sources = sourceFiles(SOURCE_ROOT).map((path) => readFileSync(path, 'utf8'))
@@ -45,7 +47,46 @@ const referenced = new Set(
 const defined = new Set(leafKeys(fr))
 const plural = /_(one|other)$/
 
+/** Every error code the API can send: the ones of the two error enums, and the ones a route sets itself. */
+function apiErrorCodes(): string[] {
+  const crates = join(process.cwd(), '..', 'crates')
+  const enumCodes = [
+    join(crates, 'artiferris-domain', 'src', 'error.rs'),
+    join(crates, 'artiferris-application', 'src', 'error.rs'),
+  ].flatMap((file) =>
+    [...readFileSync(file, 'utf8').matchAll(/=> "([a-z_]+)",/g)].map((match) => match[1]),
+  )
+  const routeCodes = rustFiles(join(crates, 'artiferris-api', 'src')).flatMap((file) =>
+    [...readFileSync(file, 'utf8').matchAll(/ErrorResponse::coded\("([a-z_]+)"/g)].map(
+      (match) => match[1],
+    ),
+  )
+  return [...new Set([...enumCodes, ...routeCodes])]
+}
+
+function rustFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name)
+    if (statSync(path).isDirectory()) {
+      return rustFiles(path)
+    }
+    return name.endsWith('.rs') ? [path] : []
+  })
+}
+
 describe('translations (fr.json)', () => {
+  it('has a message for every error code the API can send', () => {
+    const codes = apiErrorCodes()
+
+    expect(codes.length).toBeGreaterThan(50)
+    expect(codes.filter((code) => !defined.has(`errors.api.${code}`))).toEqual([])
+    expect(
+      [...defined]
+        .filter((key) => key.startsWith('errors.api.'))
+        .filter((key) => !codes.includes(key.slice('errors.api.'.length))),
+    ).toEqual([])
+  })
+
   it('defines every key the code refers to', () => {
     const missing = [...referenced].filter(
       (key) =>
