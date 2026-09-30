@@ -14,6 +14,7 @@ pub mod personal_repository;
 pub mod storage;
 pub mod sso;
 pub mod user;
+pub mod user_preferences;
 pub mod organization;
 pub mod npm_remote;
 pub mod api_token;

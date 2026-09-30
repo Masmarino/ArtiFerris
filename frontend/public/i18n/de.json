@@ -355,6 +355,14 @@
       "errors": {
         "signOutFailed": "Die Sitzungen konnten nicht beendet werden. Versuchen Sie es erneut."
       }
+    },
+    "language": {
+      "heading": "Sprache",
+      "label": "Sprache der Oberfläche",
+      "saved": "Sprache gespeichert.",
+      "errors": {
+        "saveFailed": "Die Sprache konnte nicht gespeichert werden. Versuchen Sie es erneut."
+      }
     }
   },
   "tokens": {

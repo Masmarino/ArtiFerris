@@ -1,13 +1,6 @@
-import { t } from '../../shared/i18n/translator'
+import { activeLocale, t } from '../../shared/i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
-import {
-  ChangeDetectionStrategy,
-  Component,
-  LOCALE_ID,
-  computed,
-  inject,
-  input,
-} from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core'
 import { rxResource } from '@angular/core/rxjs-interop'
 import {
   Button,
@@ -39,7 +32,7 @@ export class UsageMetrics {
   /** Set only when embedded in an organization's own admin page — scopes the usage to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
-  readonly locale = inject(LOCALE_ID)
+  readonly locale = activeLocale()
 
   // Switching organization drops the previous answer and cancels its request.
   private readonly resource = rxResource({

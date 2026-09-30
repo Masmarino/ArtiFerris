@@ -6,12 +6,12 @@ import { appConfig } from './app.config'
 
 describe('appConfig language', () => {
   afterEach(() => {
-    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
     document.documentElement.lang = ''
   })
 
   async function start(browserLanguages: string[]) {
-    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(browserLanguages)
+    vi.stubGlobal('navigator', { languages: browserLanguages })
     TestBed.configureTestingModule({
       providers: [...appConfig.providers, provideHttpClientTesting()],
     })

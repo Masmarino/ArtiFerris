@@ -9,7 +9,7 @@ import {
   input,
   signal,
 } from '@angular/core'
-import { DatePipe } from '@angular/common'
+import { LocalizedDatePipe } from '../../shared/i18n/localized-date'
 import { Button, Card, EmptyState, Tooltip } from '@masmarino/gabarit'
 import { AdminApiTokensService } from '../application/admin-api-tokens.service'
 import { ADMIN_TOKEN_PAGE_LIMIT, AdminApiToken } from '../domain/admin-api-token.entity'
@@ -19,7 +19,7 @@ import { ToastService } from '../../shared/toast.service'
 @Component({
   selector: 'app-api-tokens-admin',
   standalone: true,
-  imports: [TranslocoPipe, Button, Card, DatePipe, EmptyState, Tooltip],
+  imports: [TranslocoPipe, Button, Card, LocalizedDatePipe, EmptyState, Tooltip],
   templateUrl: './api-tokens.html',
   styleUrl: './api-tokens.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

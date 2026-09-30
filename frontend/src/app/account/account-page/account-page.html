@@ -16,6 +16,8 @@
           </div>
         </gbt-card>
 
+        <app-language-settings />
+
         <gbt-card [heading]="'account.password.heading' | transloco" icon="lock">
           <form class="stack" [formGroup]="form" (ngSubmit)="submit()">
             <p class="gbt-form-required-note">

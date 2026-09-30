@@ -1,6 +1,6 @@
 import { TranslocoPipe } from '@jsverse/transloco'
 import { t } from '../../../shared/i18n/translator'
-import { DatePipe } from '@angular/common'
+import { LocalizedDatePipe } from '../../../shared/i18n/localized-date'
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core'
 import { RouterLink } from '@angular/router'
 import { Badge, Card, Icon } from '@masmarino/gabarit'
@@ -13,7 +13,7 @@ import { installCommand } from '../domain/install-command'
 @Component({
   selector: 'app-catalog-result-card',
   standalone: true,
-  imports: [TranslocoPipe, Badge, Card, CopyableCommand, DatePipe, Icon, RouterLink],
+  imports: [TranslocoPipe, Badge, Card, CopyableCommand, LocalizedDatePipe, Icon, RouterLink],
   templateUrl: './catalog-result-card.html',
   styleUrl: './catalog-result-card.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

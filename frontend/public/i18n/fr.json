@@ -355,6 +355,14 @@
       "errors": {
         "signOutFailed": "Échec de la déconnexion des sessions. Réessayez."
       }
+    },
+    "language": {
+      "heading": "Langue",
+      "label": "Langue de l'interface",
+      "saved": "Langue enregistrée.",
+      "errors": {
+        "saveFailed": "Échec de l'enregistrement de la langue. Réessayez."
+      }
     }
   },
   "tokens": {

@@ -89,6 +89,7 @@ use crate::config::Config;
 #[derive(Clone)]
 pub struct AppState {
     pub users: Arc<dyn UserRepositoryPort>,
+    pub user_preferences: Arc<dyn artiferris_domain::user_preferences::UserPreferencesPort>,
     pub permissions: Arc<dyn PermissionQueryPort>,
     pub repositories: Arc<dyn PackageRepositoryQueryPort>,
     /// Backed by the same `PostgresPackageRepositoryStore` instance as `repositories` — a
@@ -399,6 +400,7 @@ impl AppState {
 
         Self {
             users: users_repo.clone(),
+            user_preferences: Arc::new(artiferris_infrastructure::postgres::user_preferences_repository::PostgresUserPreferencesRepository::new(pool.clone())),
             permissions: permission_store.clone(),
             repositories: repository_store.clone(),
             repository_quota_lock: repository_quota_lock.clone(),

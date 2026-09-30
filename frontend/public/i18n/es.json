@@ -355,6 +355,14 @@
       "errors": {
         "signOutFailed": "Error al cerrar las sesiones. Inténtelo de nuevo."
       }
+    },
+    "language": {
+      "heading": "Idioma",
+      "label": "Idioma de la interfaz",
+      "saved": "Idioma guardado.",
+      "errors": {
+        "saveFailed": "Error al guardar el idioma. Inténtelo de nuevo."
+      }
     }
   },
   "tokens": {

@@ -168,7 +168,10 @@
         }
       </div>
     </div>
-    <router-outlet />
+    <!-- A language change re-creates the routed view so what it computed once is rebuilt in the new language. -->
+    @for (generation of [viewGeneration()]; track generation) {
+      <router-outlet />
+    }
   </gbt-app-shell>
 }
 

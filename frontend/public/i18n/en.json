@@ -355,6 +355,14 @@
       "errors": {
         "signOutFailed": "Failed to sign out the sessions. Try again."
       }
+    },
+    "language": {
+      "heading": "Language",
+      "label": "Interface language",
+      "saved": "Language saved.",
+      "errors": {
+        "saveFailed": "Failed to save the language. Try again."
+      }
     }
   },
   "tokens": {

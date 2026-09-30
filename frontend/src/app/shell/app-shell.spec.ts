@@ -4,6 +4,8 @@ import { TestBed } from '@angular/core/testing'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
 import { Router, provideRouter } from '@angular/router'
+import { LanguageService } from '../shared/i18n/language.service'
+import { registerTranslator } from '../shared/i18n/translator'
 import { AppShell } from './app-shell'
 import { AuthService } from '../auth/application/auth.service'
 import { meProviders } from './infrastructure/me.providers'
@@ -416,6 +418,23 @@ describe('AppShell', () => {
       expect(fixture.nativeElement.querySelector('.app-shell__page-title').textContent).toContain(
         'Dépôts',
       )
+    })
+
+    it('translates the title again and re-creates the routed view on a language change', async () => {
+      const fixture = setupWithTitledRoutes()
+      const router = TestBed.inject(Router)
+      await router.navigateByUrl('/repositories')
+      fixture.detectChanges()
+      flushMe({ id: 'user-1', username: 'florian', is_super_admin: false })
+      fixture.detectChanges()
+      const generation = fixture.componentInstance.viewGeneration()
+
+      registerTranslator((key) => `en:${key}`)
+      await TestBed.inject(LanguageService).use('en')
+      fixture.detectChanges()
+
+      expect(fixture.componentInstance.pageTitle.title()).toBe('en:nav.repositories')
+      expect(fixture.componentInstance.viewGeneration()).toBe(generation + 1)
     })
 
     it("updates to the new route's title on navigation", async () => {

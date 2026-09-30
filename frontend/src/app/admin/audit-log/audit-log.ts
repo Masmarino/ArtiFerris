@@ -1,9 +1,8 @@
-import { t } from '../../shared/i18n/translator'
+import { activeLocale, t } from '../../shared/i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
-  LOCALE_ID,
   DestroyRef,
   computed,
   effect,
@@ -11,7 +10,7 @@ import {
   input,
   signal,
 } from '@angular/core'
-import { DatePipe } from '@angular/common'
+import { formatLocalizedDate } from '../../shared/i18n/localized-date'
 import { Subscription, last, tap } from 'rxjs'
 import {
   Button,
@@ -52,14 +51,12 @@ interface AuditLogRow {
   selector: 'app-audit-log',
   standalone: true,
   imports: [TranslocoPipe, Table, DimensionCard, Button, Card, EmptyState, Spinner],
-  providers: [DatePipe],
   templateUrl: './audit-log.html',
   styleUrl: './audit-log.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AuditLog {
   private readonly auditService = inject(AuditService)
-  private readonly datePipe = inject(DatePipe)
   private exportRun: Subscription | null = null
 
   /** Set only when embedded in an organization's own admin page — scopes the query to it. */
@@ -102,7 +99,7 @@ export class AuditLog {
     {
       key: 'occurred_at',
       label: t('common.date'),
-      format: (e) => this.datePipe.transform(e.occurred_at, 'short') ?? '',
+      format: (e) => formatLocalizedDate(e.occurred_at, 'short'),
     },
     { key: 'aggregate_type', label: t('common.type') },
     { key: 'event_type', label: t('admin.auditLog.columns.event') },
@@ -112,7 +109,7 @@ export class AuditLog {
   readonly rowId = (r: AuditLogRow): string =>
     `${r.occurred_at}|${r.aggregate_id}|${r.event_type}|${r.actor_id}|${r.details}`
 
-  readonly locale = inject(LOCALE_ID)
+  readonly locale = activeLocale()
 
   readonly summaryChartData = computed<DimensionRow[]>(() => {
     const counts = new Map<string, number>()
