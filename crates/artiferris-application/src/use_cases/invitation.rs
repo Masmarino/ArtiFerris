@@ -134,7 +134,9 @@ impl InviteUserUseCase {
 
         // A delivery failure shouldn't fail account creation — retry via ResendInvitationUseCase.
         let activation_url = format!("{origin}/activate?token={token}");
-        let content = crate::email_templates::account_created(user.username.as_str(), &activation_url);
+        // The invitee cannot have chosen a language yet: write in the one of the admin who invites them.
+        let language = self.email.language_for(actor_id).await;
+        let content = crate::email_templates::account_created(language, user.username.as_str(), &activation_url);
         if let Err(e) = self.email.send(organization_id, email, &content.subject, &content.text, &content.html).await {
             tracing::warn!("failed to send account-activation email to {email}: {e}");
         }
@@ -181,7 +183,8 @@ impl ResendInvitationUseCase {
         let organization = require_organization(self.organizations.as_ref(), user.organization_id).await?;
         let origin = organization_origin(&self.artiferris_base_domain, &organization);
         let activation_url = format!("{origin}/activate?token={token}");
-        let content = crate::email_templates::account_created(user.username.as_str(), &activation_url);
+        let language = self.email.language_for(actor_id).await;
+        let content = crate::email_templates::account_created(language, user.username.as_str(), &activation_url);
         self.email.send(user.organization_id, email, &content.subject, &content.text, &content.html).await?;
         Ok(())
     }

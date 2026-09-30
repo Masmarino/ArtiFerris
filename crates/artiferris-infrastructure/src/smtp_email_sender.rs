@@ -7,6 +7,7 @@ use artiferris_application::email_templates::LOGO_CID;
 use artiferris_domain::branding::BrandingPort;
 use artiferris_domain::email::{EmailPort, SmtpSecurity, SmtpSettingsPort};
 use artiferris_domain::error::DomainError;
+use artiferris_domain::user_preferences::{Language, UserPreferencesPort};
 use lettre::message::{Attachment, Body, Mailbox, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
@@ -19,11 +20,18 @@ pub const UNENCRYPTED_SMTP_REFUSED: &str = "SMTP without TLS sends the login in 
 pub struct SmtpEmailSender {
     settings: Arc<dyn SmtpSettingsPort>,
     branding: Arc<dyn BrandingPort>,
+    preferences: Option<Arc<dyn UserPreferencesPort>>,
 }
 
 impl SmtpEmailSender {
     pub fn new(settings: Arc<dyn SmtpSettingsPort>, branding: Arc<dyn BrandingPort>) -> Self {
-        Self { settings, branding }
+        Self { settings, branding, preferences: None }
+    }
+
+    /// Lets e-mails be written in the language each recipient chose (English for the others).
+    pub fn with_preferences(mut self, preferences: Arc<dyn UserPreferencesPort>) -> Self {
+        self.preferences = Some(preferences);
+        self
     }
 }
 
@@ -53,6 +61,20 @@ fn build_message(from_address: &str, from_name: &str, to: &str, subject: &str, t
 
 #[async_trait]
 impl EmailPort for SmtpEmailSender {
+    async fn language_for(&self, user_id: Uuid) -> Language {
+        let Some(preferences) = &self.preferences else {
+            return Language::FALLBACK;
+        };
+        // A notification must go out even when the preference cannot be read.
+        match preferences.language(user_id).await {
+            Ok(language) => language.unwrap_or(Language::FALLBACK),
+            Err(e) => {
+                tracing::warn!("failed to read the language of user {user_id} for an email: {e}");
+                Language::FALLBACK
+            }
+        }
+    }
+
     async fn send(&self, organization_id: Uuid, to: &str, subject: &str, text_body: &str, html_body: &str) -> Result<(), DomainError> {
         let Some(settings) = self.settings.get(organization_id).await? else {
             return Err(DomainError::Infrastructure("SMTP is not configured".to_string()));
@@ -260,5 +282,53 @@ mod tests {
     fn html_references_logo_detects_the_cid_reference() {
         assert!(html_references_logo(&format!("<img src=\"cid:{LOGO_CID}\">")));
         assert!(!html_references_logo("<p>no logo here</p>"));
+    }
+
+    struct FakePreferences {
+        answer: Result<Option<Language>, DomainError>,
+    }
+
+    #[async_trait]
+    impl UserPreferencesPort for FakePreferences {
+        async fn language(&self, _user_id: Uuid) -> Result<Option<Language>, DomainError> {
+            self.answer.clone()
+        }
+        async fn set_language(&self, _user_id: Uuid, _language: Language) -> Result<(), DomainError> {
+            unreachable!("not exercised by this test")
+        }
+    }
+
+    fn sender_with(answer: Option<Result<Option<Language>, DomainError>>) -> SmtpEmailSender {
+        let sender = SmtpEmailSender::new(Arc::new(FakeSmtpSettings { settings: Mutex::new(Default::default()) }), Arc::new(FakeBranding));
+        match answer {
+            Some(answer) => sender.with_preferences(Arc::new(FakePreferences { answer })),
+            None => sender,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_recipient_is_written_to_in_the_language_they_chose() {
+        let sender = sender_with(Some(Ok(Some(Language::De))));
+
+        assert_eq!(sender.language_for(Uuid::new_v4()).await, Language::De);
+    }
+
+    #[tokio::test]
+    async fn a_recipient_who_never_chose_is_written_to_in_english() {
+        let sender = sender_with(Some(Ok(None)));
+
+        assert_eq!(sender.language_for(Uuid::new_v4()).await, Language::En);
+    }
+
+    #[tokio::test]
+    async fn an_unreadable_preference_does_not_stop_the_notification() {
+        let sender = sender_with(Some(Err(DomainError::Infrastructure("db down".to_string()))));
+
+        assert_eq!(sender.language_for(Uuid::new_v4()).await, Language::FALLBACK);
+    }
+
+    #[tokio::test]
+    async fn without_preferences_wired_every_recipient_gets_english() {
+        assert_eq!(sender_with(None).language_for(Uuid::new_v4()).await, Language::FALLBACK);
     }
 }

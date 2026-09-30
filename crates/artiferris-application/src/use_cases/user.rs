@@ -165,7 +165,8 @@ impl ChangePasswordUseCase {
 
         // Best-effort: the password change already succeeded, a delivery failure must not undo it.
         if let Some(email) = crate::use_cases::mfa::verified_address(self.security.as_ref(), &user).await {
-            let content = crate::email_templates::password_changed(user.username.as_str());
+            let language = self.email.language_for(user.id).await;
+            let content = crate::email_templates::password_changed(language, user.username.as_str());
             if let Err(e) = self.email.send(user.organization_id, &email, &content.subject, &content.text, &content.html).await {
                 tracing::warn!("failed to send password-change notification email to {email}: {e}");
             }
@@ -223,11 +224,18 @@ mod tests {
 
     struct FakeEmail {
         sent: Mutex<Vec<(Uuid, String, String, String, String)>>,
+        languages: Mutex<HashMap<Uuid, artiferris_domain::user_preferences::Language>>,
     }
 
     impl FakeEmail {
         fn new() -> Self {
-            Self { sent: Mutex::new(Vec::new()) }
+            Self { sent: Mutex::new(Vec::new()), languages: Mutex::new(HashMap::new()) }
+        }
+
+        fn writing_to(user_id: Uuid, language: artiferris_domain::user_preferences::Language) -> Self {
+            let email = Self::new();
+            email.languages.lock().unwrap().insert(user_id, language);
+            email
         }
     }
 
@@ -236,6 +244,10 @@ mod tests {
         async fn send(&self, organization_id: Uuid, to: &str, subject: &str, text_body: &str, html_body: &str) -> Result<(), DomainError> {
             self.sent.lock().unwrap().push((organization_id, to.to_string(), subject.to_string(), text_body.to_string(), html_body.to_string()));
             Ok(())
+        }
+
+        async fn language_for(&self, user_id: Uuid) -> artiferris_domain::user_preferences::Language {
+            self.languages.lock().unwrap().get(&user_id).copied().unwrap_or(artiferris_domain::user_preferences::Language::FALLBACK)
         }
     }
 
@@ -582,8 +594,29 @@ mod tests {
         let sent = email.sent.lock().unwrap();
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].1, "florian@example.com");
-        assert!(sent[0].3.contains("modifié"));
+        assert!(sent[0].3.contains("has just been changed"), "a user with no language chosen is written to in English: {}", sent[0].3);
         assert!(sent[0].4.contains("florian"));
+    }
+
+    #[tokio::test]
+    async fn writes_the_notification_in_the_language_the_user_chose() {
+        use artiferris_domain::user_preferences::Language;
+        let users = Arc::new(FakeUserRepository::new());
+        let create = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher));
+        let id = create.execute(Uuid::new_v4(), "florian", "old-s3cret!", false).await.unwrap();
+        let mut user = users.find_by_id(id).await.unwrap().unwrap();
+        user.email = Some("florian@example.com".to_string());
+        users.insert(&user).await.unwrap();
+
+        for (language, phrase) in [(Language::Fr, "vient d'être modifié"), (Language::De, "wurde gerade geändert"), (Language::Es, "se acaba de cambiar"), (Language::It, "è stata appena modificata")] {
+            let email = Arc::new(FakeEmail::writing_to(id, language));
+            let change_password = ChangePasswordUseCase::new(users.clone(), Arc::new(FakeVerification::of(&[&user])), Arc::new(FakePasswordHasher), email.clone());
+            change_password.execute(id, "old-s3cret!", "old-s3cret!", None).await.unwrap();
+
+            let sent = email.sent.lock().unwrap();
+            assert!(sent[0].3.contains(phrase), "{language:?}: {}", sent[0].3);
+            assert!(sent[0].4.contains(&format!(r#"<html lang="{}">"#, language.as_str())));
+        }
     }
 
     #[tokio::test]

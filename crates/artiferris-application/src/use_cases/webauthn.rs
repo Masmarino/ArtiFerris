@@ -247,7 +247,8 @@ impl FinishPasskeyRegistrationUseCase {
         // Best-effort: registration already succeeded, a delivery failure must not undo it.
         if let Ok(Some(user)) = self.users.find_by_id(user_id).await {
             if let Some(email) = crate::use_cases::mfa::verified_address(self.security.as_ref(), &user).await {
-                let content = crate::email_templates::mfa_enrolled(user.username.as_str(), "une clé d'accès (passkey)");
+                let language = self.email.language_for(user.id).await;
+                let content = crate::email_templates::mfa_enrolled(language, user.username.as_str(), crate::email_templates::EnrolledMethod::Passkey);
                 if let Err(e) = self.email.send(user.organization_id, &email, &content.subject, &content.text, &content.html).await {
                     tracing::warn!("failed to send passkey-enrollment confirmation email to {email}: {e}");
                 }

@@ -3,25 +3,40 @@ use uuid::Uuid;
 
 use crate::error::DomainError;
 
-/// The languages the interface is translated into (the frontend's `public/i18n/<lang>.json`).
-pub const SUPPORTED_LANGUAGES: [&str; 5] = ["en", "fr", "es", "it", "de"];
-
-/// A language code the interface is translated into, e.g. `fr`.
+/// A language the interface (and the e-mails) are available in: `en`, `fr`, `es`, `it` or `de`, the frontend's `public/i18n/<lang>.json`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Language(&'static str);
+pub enum Language {
+    En,
+    Fr,
+    Es,
+    It,
+    De,
+}
+
+/// Every language, in the order the interface lists them.
+pub const SUPPORTED_LANGUAGES: [Language; 5] = [Language::En, Language::Fr, Language::Es, Language::It, Language::De];
 
 impl Language {
+    /// Used when nothing is known of what the reader wants (an account that never chose, a browser whose languages are not translated).
+    pub const FALLBACK: Language = Language::En;
+
     /// Only the exact lowercase code: `fr-FR` or `FR` are the client's job to reduce.
     pub fn parse(raw: &str) -> Result<Self, DomainError> {
         SUPPORTED_LANGUAGES
             .iter()
-            .find(|code| **code == raw)
-            .map(|code| Self(code))
+            .copied()
+            .find(|language| language.as_str() == raw)
             .ok_or_else(|| DomainError::UnsupportedLanguage(raw.chars().take(16).collect()))
     }
 
     pub fn as_str(&self) -> &'static str {
-        self.0
+        match self {
+            Language::En => "en",
+            Language::Fr => "fr",
+            Language::Es => "es",
+            Language::It => "it",
+            Language::De => "de",
+        }
     }
 }
 
@@ -41,9 +56,15 @@ mod tests {
 
     #[test]
     fn every_supported_code_parses_to_itself() {
-        for code in SUPPORTED_LANGUAGES {
-            assert_eq!(Language::parse(code).unwrap().as_str(), code);
+        for language in SUPPORTED_LANGUAGES {
+            assert_eq!(Language::parse(language.as_str()).unwrap(), language);
         }
+    }
+
+    #[test]
+    fn the_fallback_is_english_and_supported() {
+        assert_eq!(Language::FALLBACK.as_str(), "en");
+        assert!(SUPPORTED_LANGUAGES.contains(&Language::FALLBACK));
     }
 
     #[test]

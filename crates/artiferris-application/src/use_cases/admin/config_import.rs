@@ -119,7 +119,7 @@ impl ImportConfigurationUseCase {
 
         // Its own task: a client that disconnects mid-import must not leave the rest of the invitations unsent.
         let email = self.email.clone();
-        let mailed = tokio::spawn(send_invitations(email, restore_organization_id, pending_invitations));
+        let mailed = tokio::spawn(send_invitations(email, restore_organization_id, actor_id, pending_invitations));
         let (invited, failed) = mailed.await.map_err(|e| DomainError::Infrastructure(format!("sending the invitations failed: {e}")))?;
         report.invited = invited;
         report.failed.extend(failed);
@@ -128,11 +128,13 @@ impl ImportConfigurationUseCase {
 }
 
 /// Order of `invited` follows the file. Failures are reported per address and never stop the others.
-async fn send_invitations(email: Arc<dyn artiferris_domain::email::EmailPort>, organization_id: Uuid, invitations: Vec<PendingInvitation>) -> (Vec<String>, Vec<String>) {
+async fn send_invitations(email: Arc<dyn artiferris_domain::email::EmailPort>, organization_id: Uuid, actor_id: Uuid, invitations: Vec<PendingInvitation>) -> (Vec<String>, Vec<String>) {
+    // Restored accounts have not chosen a language yet: write in the one of the admin who runs the import.
+    let language = email.language_for(actor_id).await;
     let results = futures::stream::iter(invitations.into_iter().map(|invitation| {
         let email = email.clone();
         async move {
-            let content = crate::email_templates::account_created(&invitation.username, &invitation.activation_url);
+            let content = crate::email_templates::account_created(language, &invitation.username, &invitation.activation_url);
             let sent = email.send(organization_id, &invitation.email, &content.subject, &content.text, &content.html).await;
             (invitation.username, sent)
         }
