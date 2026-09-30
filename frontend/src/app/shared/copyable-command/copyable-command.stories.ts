@@ -23,7 +23,6 @@ export const Default: Story = {
   },
 }
 
-/** A command longer than the container scrolls instead of pushing the button out. */
 export const LongCommand: Story = {
   args: {
     command: `docker pull localhost:4200/o/a-long-organization-name/a-long-repository-name/team/service/api:${'v1.0.0-rc.1-'.repeat(8)}`,
@@ -33,7 +32,6 @@ export const LongCommand: Story = {
   ],
 }
 
-/** Copy puts the exact command on the clipboard and confirms it. */
 export const Copied: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
@@ -47,7 +45,6 @@ export const Copied: Story = {
   },
 }
 
-/** Without clipboard access the failure is reported instead of swallowed. */
 export const CopyFailed: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)

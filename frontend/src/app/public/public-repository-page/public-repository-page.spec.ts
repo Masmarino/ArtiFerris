@@ -30,8 +30,8 @@ function repo(overrides: Partial<RepositorySummary> = {}): RepositorySummary {
   }
 }
 
-// whenStable() never resolves while a test deliberately holds a request open, so just let the
-// resource's async loader run and re-render.
+// whenStable() never resolves while a test holds a request open: just let the loader run and re-
+// render.
 async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve))
   fixture.detectChanges()
@@ -51,8 +51,7 @@ async function render(
         useValue: { paramMap: of(convertToParamMap(params)) },
       },
       {
-        // PackageTree, rendered once the repository resolves, also injects this service and
-        // calls .packages() — it needs a default too, not just getByOwner.
+        // PackageTree also calls .packages(): it needs a default too.
         provide: RepositoriesService,
         useValue: {
           getByOwner: () => of(repo()),

@@ -80,9 +80,8 @@ function fakeMe(overrides: {
   }
 }
 
-// Just enough of a route table that selecting a search result's real router.navigateByUrl()
-// resolves instead of throwing NG04002 against an empty one — AppShell needs the real Router
-// (not a stub) for its routerLink/routerLinkActive/router-outlet usage.
+// Enough routes for navigateByUrl() to resolve instead of throwing NG04002; AppShell needs the real
+// Router for routerLink and router-outlet.
 @Component({ standalone: true, template: '' })
 class DummyRoutedComponent {}
 
@@ -121,7 +120,6 @@ export default meta
 
 type Story = StoryObj<AppShell>
 
-/** A super-admin sees every nav item, the version footer, and their username. */
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -132,9 +130,6 @@ export const Default: Story = {
   },
 }
 
-/** Collapsing the sidebar hides nav labels and the version footer, and swaps the org-brandable
- * logo for ArtiFerris's own square icon mark — but each nav link keeps its accessible name via
- * aria-label/title, and the toggle itself flips label. */
 export const CollapsingTheSidebar: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -154,7 +149,6 @@ export const CollapsingTheSidebar: Story = {
 
 let sessionLoadCalls = 0
 
-/** A transient failure of /api/me keeps the session and offers a retry instead of logging out. */
 export const SessionLoadFailed: Story = {
   beforeEach: () => {
     sessionLoadCalls = 0
@@ -189,7 +183,6 @@ export const SessionLoadFailed: Story = {
   },
 }
 
-/** A plain member never sees Administration or Utilisateurs — staff/super-admin only. */
 export const AsPlainMember: Story = {
   decorators: [
     moduleMetadata({
@@ -209,7 +202,6 @@ export const AsPlainMember: Story = {
   },
 }
 
-/** An organization admin sees Utilisateurs and a link to their own organization's admin page. */
 export const AsOrganizationAdmin: Story = {
   decorators: [
     moduleMetadata({
@@ -230,15 +222,13 @@ export const AsOrganizationAdmin: Story = {
     await waitFor(() =>
       expect(canvas.getByRole('link', { name: /Utilisateurs/ })).toBeInTheDocument(),
     )
-    // Org admins get their own "Administration" link too, scoped to their organization — not
-    // the instance-wide one a super-admin sees.
+    // Org admins get their own "Administration" link, scoped to their organization.
     expect(canvas.getByRole('link', { name: 'Administration' }).getAttribute('href')).toContain(
       '/admin/organizations/org-acme',
     )
   },
 }
 
-/** Typing a query surfaces matching repositories, and selecting one navigates to it. */
 export const SearchingForARepository: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -254,10 +244,6 @@ export const SearchingForARepository: Story = {
   },
 }
 
-/**
- * From two characters on, packages and images from the readable repositories show up in their own
- * category; selecting one navigates to it.
- */
 export const SearchingForAPackage: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -280,7 +266,6 @@ export const SearchingForAPackage: Story = {
   },
 }
 
-/** A package that only exists in a proxy's cache says so. */
 export const SearchingForACachedPackage: Story = {
   decorators: [
     moduleMetadata({
@@ -305,7 +290,6 @@ export const SearchingForACachedPackage: Story = {
   },
 }
 
-/** Without any matching package or image, the category is simply absent. */
 export const SearchingWithoutMatchingPackages: Story = {
   decorators: [
     moduleMetadata({
@@ -326,7 +310,6 @@ export const SearchingWithoutMatchingPackages: Story = {
   },
 }
 
-/** A throttled or failing package search leaves the repositories and users in the bar untouched. */
 export const PackageSearchFailing: Story = {
   decorators: [
     moduleMetadata({
@@ -355,9 +338,6 @@ export const PackageSearchFailing: Story = {
   },
 }
 
-/**
- * When the lists behind the search cannot be loaded, the bar says so instead of "Aucun résultat".
- */
 export const SearchLoadFailed: Story = {
   decorators: [
     moduleMetadata({
@@ -381,7 +361,6 @@ export const SearchLoadFailed: Story = {
   },
 }
 
-/** Opening the user menu shows account and logout actions. */
 export const OpeningTheUserMenu: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -393,7 +372,6 @@ export const OpeningTheUserMenu: Story = {
   },
 }
 
-/** A failed /me load logs the user out instead of leaving the shell stuck loading. */
 export const MeLoadFailed: Story = {
   decorators: [
     moduleMetadata({

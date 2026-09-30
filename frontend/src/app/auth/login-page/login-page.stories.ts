@@ -12,10 +12,6 @@ import { LoginPage } from './login-page'
 import { AuthService } from '../application/auth.service'
 import type { LoginOutcome, SsoConfig } from '../domain/auth.types'
 
-/**
- * A minimal stand-in for AuthService — only the methods each story actually exercises need a real
- * implementation.
- */
 function fakeAuth(overrides: Partial<AuthService> = {}): Partial<AuthService> {
   return {
     getSsoConfig: () => of<SsoConfig>({ type: null, registration_enabled: true }),
@@ -25,14 +21,13 @@ function fakeAuth(overrides: Partial<AuthService> = {}): Partial<AuthService> {
   }
 }
 
-/** Fills in and submits the local-login form — shared by every story that needs to get past it. */
 async function submitLoginForm(
   canvasElement: HTMLElement,
   username = 'florian',
   password = 'hunter2',
 ) {
   const canvas = within(canvasElement)
-  // Required-field labels get a trailing " *" appended by GbtInput — match by prefix.
+  // GbtInput appends " *" to required-field labels: match by prefix.
   await userEvent.type(await canvas.findByLabelText(/^Nom d'utilisateur/), username)
   await userEvent.type(canvas.getByLabelText(/^Mot de passe/), password)
   await userEvent.click(canvas.getByRole('button', { name: 'Se connecter' }))
@@ -50,7 +45,6 @@ export default meta
 
 type Story = StoryObj<LoginPage>
 
-/** Local login form, with a way into the public explorer for visitors without an account. */
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const link = await within(canvasElement).findByRole('link', {
@@ -60,9 +54,6 @@ export const Default: Story = {
   },
 }
 
-/**
- * Sent back here after an action that ended every session (password change, MFA factor removal).
- */
 export const AfterSessionsWereEnded: Story = {
   decorators: [
     moduleMetadata({
@@ -134,7 +125,6 @@ export const InvalidCredentials: Story = {
   },
 }
 
-/** The password hasher is saturated: a retry hint instead of "Identifiants invalides". */
 export const ServerBusy: Story = {
   decorators: [
     moduleMetadata({
@@ -158,7 +148,6 @@ export const ServerBusy: Story = {
   },
 }
 
-/** A login that requires a second factor the account already has enrolled (TOTP + passkey). */
 export const MfaRequired: Story = {
   decorators: [
     moduleMetadata({
@@ -187,7 +176,6 @@ export const MfaRequired: Story = {
   },
 }
 
-/** A fresh account with no factor enrolled yet — routes straight into MfaEnrollmentPage. */
 export const MfaSetupRequired: Story = {
   decorators: [
     moduleMetadata({

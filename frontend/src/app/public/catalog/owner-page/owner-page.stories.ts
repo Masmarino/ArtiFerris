@@ -52,7 +52,6 @@ export default meta
 
 type Story = StoryObj<OwnerPage>
 
-/** `/@alice`: display name, handle, counts, then the owner's entries. */
 export const PersonalOwner: Story = {
   decorators: scenario({ username: 'alice' }, () =>
     of(ownerSummary({ slug: 'alice', display_name: 'Alice Martin' })),
@@ -69,7 +68,6 @@ export const PersonalOwner: Story = {
   },
 }
 
-/** `/o/acme`: no handle, the search is restricted to the organization. */
 export const Organization: Story = {
   decorators: scenario({ slug: 'acme' }, () =>
     of(ownerSummary({ kind: 'organization', slug: 'acme', display_name: 'Acme Corp' })),
@@ -86,7 +84,6 @@ export const Organization: Story = {
   },
 }
 
-/** Only repositories so far: the zero counts are left out. */
 export const OnlyRepositories: Story = {
   decorators: scenario({ username: 'alice' }, () =>
     of(ownerSummary({ slug: 'alice', repository_count: 1, package_count: 0, image_count: 0 })),
@@ -98,7 +95,6 @@ export const OnlyRepositories: Story = {
   },
 }
 
-/** The format filter narrows the owner's entries. */
 export const FilteredByFormat: Story = {
   decorators: scenario({ username: 'alice' }, () => of(ownerSummary({ slug: 'alice' }))),
   play: async ({ canvasElement }) => {
@@ -121,7 +117,6 @@ export const Loading: Story = {
   },
 }
 
-/** Nothing public, or no such account: the same answer for both. */
 export const NotFound: Story = {
   decorators: scenario({ username: 'ghost' }, () => of(null)),
   play: async ({ canvasElement }) => {
@@ -138,7 +133,6 @@ export const NotFound: Story = {
 
 let attempts = 0
 
-/** A failed load can be retried. */
 export const ErrorWithRetry: Story = {
   decorators: scenario({ username: 'alice' }, () =>
     ++attempts % 2 === 1

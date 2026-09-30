@@ -114,7 +114,6 @@ export default meta
 
 type Story = StoryObj<PublicRepositoryPage>
 
-/** A public hosted npm repository, with its usage instructions and package list. */
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -122,7 +121,6 @@ export const Default: Story = {
   },
 }
 
-/** A private or unknown repository shows a not-found message, never which of the two it was. */
 export const NotFound: Story = {
   decorators: [
     moduleMetadata({
@@ -161,7 +159,6 @@ export const Loading: Story = {
   },
 }
 
-/** A server error is reported as a failure, not as "not found". */
 export const LoadFailed: Story = {
   decorators: [
     moduleMetadata({
@@ -184,7 +181,6 @@ export const LoadFailed: Story = {
   },
 }
 
-/** Reached at /o/:slug/:repoName: resolved by organization slug, package links stay under /o. */
 export const OrganizationRepository: Story = {
   decorators: [moduleMetadata({ providers: [withOrgRoute('ui-kit')] })],
   play: async ({ canvasElement }) => {

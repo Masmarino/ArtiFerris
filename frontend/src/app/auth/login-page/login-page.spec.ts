@@ -24,8 +24,8 @@ describe('LoginPage', () => {
     httpMock = TestBed.inject(HttpTestingController)
   })
 
-  // ngOnInit fires GET /api/auth/sso/config on every component creation — flush it with
-  // `{ type: null }` (local login) unless a test wants to exercise the LDAP or OIDC path.
+  // ngOnInit fires GET /api/auth/sso/config: flush it with { type: null } (local login) unless a
+  // test wants LDAP or OIDC.
   function flushSsoConfig(type: 'ldap' | 'oidc' | null = null, registrationEnabled = true): void {
     httpMock
       .expectOne('/api/auth/sso/config')
@@ -91,7 +91,7 @@ describe('LoginPage', () => {
     const fixture = TestBed.createComponent(LoginPage)
     fixture.detectChanges()
 
-    // The SSO config endpoint must not be hit — the fragment-token path returns early.
+    // The fragment-token path returns before the SSO config request.
     httpMock.expectNone('/api/auth/sso/config')
 
     expect(completeExternalLoginSpy).toHaveBeenCalledWith('abc123')
@@ -294,7 +294,7 @@ describe('LoginPage', () => {
     component.submit()
     expect(component.submitting()).toBe(true)
 
-    // A second submit attempt while the first request is still pending must be a no-op.
+    // A second submit while the first is pending is a no-op (or expectOne would find two requests).
     component.submit()
 
     // If the guard didn't work, a second matching request would exist here and
@@ -358,12 +358,11 @@ describe('LoginPage', () => {
     expect(component.mfaToken()).toBe('pending-token')
   })
 
-  // Regression test: an account with only a passkey (no TOTP ever confirmed) used to still
-  // see a "enter your code" field on this screen — meaningless and confusing, since no such
-  // code exists. The verify step must show only the factor(s) the account actually has.
+  // Regression: a passkey-only account used to see an "enter your code" field, though it has no
+  // such code.
   it('shows only the passkey button, not the code form, when the account has no TOTP', () => {
-    // passkeysSupported() is read once at construction — jsdom has no WebAuthn API by
-    // default, so this must be in place before the component is created.
+    // passkeysSupported() is read at construction and jsdom has no WebAuthn: set this before
+    // creating the component.
     Object.defineProperty(navigator, 'credentials', {
       configurable: true,
       value: { create: () => Promise.resolve() },

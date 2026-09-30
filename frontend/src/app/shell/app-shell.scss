@@ -18,7 +18,7 @@
     flex-direction: column;
     gap: 0.25rem;
 
-    // Icon-only rail — no room for the group toggle or submenus, hidden from the template.
+    // Icon-only rail: no room for the group toggle or submenus.
     &--collapsed .app-shell__nav-link {
       justify-content: center;
       padding: 0.625rem;
@@ -109,8 +109,8 @@
     font-size: 0.75rem;
   }
 
-  // Nested inside Gabarit's own <header> (flex, next to the mobile burger toggle) —
-  // needs to grow into the remaining width for the grid below to make sense.
+  // Inside Gabarit's <header> (flex, next to the burger toggle): grow into the remaining width for
+  // the grid below.
   &__header {
     flex: 1;
     min-width: 0;

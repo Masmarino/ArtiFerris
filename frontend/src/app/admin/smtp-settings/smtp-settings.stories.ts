@@ -63,7 +63,6 @@ export default meta
 
 type Story = StoryObj<SmtpSettingsAdmin>
 
-/** SMTP has never been configured: defaults only, no errors shown before a save is attempted. */
 export const NotConfigured: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -87,7 +86,6 @@ export const Loading: Story = {
   },
 }
 
-/** Stored settings are loaded; the password itself is never sent back, only that one is set. */
 export const Configured: Story = {
   decorators: [withSmtp(fakeSmtp({ get: () => of(CONFIGURED) }))],
   play: async ({ canvasElement }) => {
@@ -103,7 +101,6 @@ export const Configured: Story = {
 }
 
 const scopedSmtp = fakeSmtp({ get: fn(() => of(CONFIGURED)) })
-/** Embedded in one organization's admin page: read and write are scoped to it. */
 export const ScopedToAnOrganization: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [withSmtp(scopedSmtp)],
@@ -119,7 +116,6 @@ export const ScopedToAnOrganization: Story = {
   },
 }
 
-/** Saving an empty form reveals every field error and never calls the API. */
 export const ValidationErrors: Story = {
   decorators: [withSmtp(fakeSmtp())],
   play: async ({ canvasElement }) => {
@@ -176,7 +172,6 @@ export const InvalidSenderAddress: Story = {
 }
 
 const savingSmtp = fakeSmtp({ update: fn(() => NEVER) })
-/** The save request is in flight: the button shows its busy state and can't be clicked again. */
 export const Saving: Story = {
   decorators: [withSmtp(savingSmtp)],
   play: async ({ canvasElement }) => {
@@ -225,7 +220,6 @@ export const SavedSuccessfully: Story = {
 }
 
 const keepPasswordSmtp = fakeSmtp({ get: () => of(CONFIGURED) })
-/** With a password already stored, leaving the field blank omits it from the update. */
 export const SavingWithoutChangingThePassword: Story = {
   decorators: [withSmtp(keepPasswordSmtp)],
   play: async ({ canvasElement }) => {
@@ -271,10 +265,6 @@ const passwordUnreadableSmtp = fakeSmtp({
     }),
 })
 
-/**
- * The stored password cannot be decrypted by this server: a warning is shown and the password has
- * to be typed again.
- */
 export const PasswordUnreadable: Story = {
   decorators: [withSmtp(passwordUnreadableSmtp)],
   play: async ({ canvasElement }) => {
@@ -302,9 +292,6 @@ const keptPasswordRefusedSmtp = fakeSmtp({
   ),
 })
 
-/**
- * Changing the host without retyping the password is refused: the server's own message is shown.
- */
 export const KeptPasswordRefusedAfterChangingTheHost: Story = {
   decorators: [withSmtp(keptPasswordRefusedSmtp)],
   play: async ({ canvasElement }) => {
@@ -342,7 +329,6 @@ export const SaveFailed: Story = {
   },
 }
 
-/** "Envoyer" stays disabled until a recipient is typed. */
 export const TestEmailNeedsARecipient: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

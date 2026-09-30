@@ -5,12 +5,10 @@ import { provideHttpClientTesting } from '@angular/common/http/testing'
 import { filter, firstValueFrom } from 'rxjs'
 import { routes } from './app.routes'
 
-// Identifies which loadComponent() a URL resolved to, without waiting for guards to pass or
-// the component to actually load — RoutesRecognized fires once matching is done, before either.
-// Each loadComponent closure's source text ends in `.then((m) => m.<ClassName>)`, which is enough
-// to tell two routes apart without loading them. (The dynamic import's path argument itself gets
-// compiled to a chunk reference under Vite, not the literal source string, so match on the class
-// name rather than the file path.)
+// Tells which loadComponent() a URL resolved to, without loading it: RoutesRecognized fires before
+// guards and loading.
+// A loadComponent closure ends in `.then((m) => m.<ClassName>)`, so match on the class name (Vite
+// compiles the path to a chunk reference).
 async function matchedComponentName(url: string): Promise<string> {
   TestBed.configureTestingModule({
     providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
@@ -20,8 +18,7 @@ async function matchedComponentName(url: string): Promise<string> {
     router.events.pipe(filter((e): e is RoutesRecognized => e instanceof RoutesRecognized)),
   )
   router.navigateByUrl(url).catch(() => {
-    // A guard rejecting the navigation still fires RoutesRecognized first — that's all this test
-    // needs.
+    // A guard rejecting the navigation still fires RoutesRecognized first.
   })
   const event = await recognized
   let route = event.state.root

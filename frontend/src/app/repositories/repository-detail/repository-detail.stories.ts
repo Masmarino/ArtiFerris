@@ -112,9 +112,8 @@ const meta: Meta<RepositoryDetail> = {
     moduleMetadata({
       providers: [
         withRoute('repo-1'),
-        // A real Router (via provideRouter) tries to match the Storybook iframe's own URL
-        // against the (empty) route table and errors — this component only ever calls
-        // .navigate(), so a plain stub sidesteps that entirely.
+        // A real Router would match the Storybook iframe URL against an empty route table and
+        // error; a stub is enough, since this page only calls .navigate().
         { provide: Router, useValue: { navigate: () => Promise.resolve(true) } },
         { provide: RepositoriesService, useValue: fakeRepositories() },
         { provide: PermissionsService, useValue: fakePermissions() },
@@ -127,10 +126,8 @@ export default meta
 
 type Story = StoryObj<RepositoryDetail>
 
-/** A hosted repo, as its admin: rename, usage instructions, and every management tab. */
 export const Default: Story = {}
 
-/** A proxy repo shows the mirrored remote URL on its overview tab. */
 export const ProxyRepository: Story = {
   decorators: [
     moduleMetadata({
@@ -146,7 +143,6 @@ export const ProxyRepository: Story = {
   },
 }
 
-/** A group repo gets its own "Dépôts membres" tab, resolving member ids to names. */
 export const GroupRepository: Story = {
   decorators: [
     moduleMetadata({
@@ -197,7 +193,6 @@ export const NoPermissionsGranted: Story = {
   },
 }
 
-/** A non-admin never sees the permissions/settings tabs or the rename control. */
 export const AsNonAdmin: Story = {
   decorators: [
     moduleMetadata({
@@ -211,8 +206,8 @@ export const AsNonAdmin: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    // The repo name only ever renders as visible text inside the (admin-only) rename input —
-    // wait on something every viewer sees instead: the always-present "Aperçu" tab.
+    // The repo name only shows inside the admin-only rename input: wait on the "Aperçu" tab, which
+    // every viewer sees.
     await waitFor(() => expect(canvas.getByRole('tab', { name: 'Aperçu' })).toBeInTheDocument())
     expect(canvas.queryByRole('tab', { name: "Droits d'accès" })).not.toBeInTheDocument()
     expect(canvas.queryByRole('tab', { name: 'Paramètres' })).not.toBeInTheDocument()
@@ -258,14 +253,12 @@ export const InvalidQuota: Story = {
   },
 }
 
-/** Typing a username in the grant form surfaces search results to pick from. */
 export const SearchingForAUserToGrant: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await userEvent.click(await canvas.findByRole('tab', { name: "Droits d'accès" }))
-    // Under this addon's test runner this story's component tree can end up mounted twice in
-    // the same canvas (a render-check pass plus the interaction pass) — the most recently
-    // mounted copy is the live one the play function actually drives.
+    // Under this addon's runner the tree can be mounted twice in one canvas: the last copy is the
+    // live one.
     const usernameInputs = await waitFor(() => {
       const inputs = canvas.getAllByPlaceholderText("Nom d'utilisateur")
       expect(inputs.length).toBeGreaterThan(0)
@@ -333,7 +326,6 @@ function personalRepoProviders(
   })
 }
 
-/** A private personal project: its owner can publish it from the settings tab. */
 export const VisibilityOfAPrivatePersonalProject: Story = {
   decorators: [personalRepoProviders(PERSONAL_REPO)],
   play: async ({ canvasElement }) => {
@@ -366,7 +358,6 @@ export const VisibilityOfAPublicPersonalProject: Story = {
   },
 }
 
-/** Organization repositories are only made public by a super-admin, and proxies never. */
 export const NoVisibilityControlForAnOrganizationRepository: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

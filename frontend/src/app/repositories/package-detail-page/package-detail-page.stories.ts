@@ -178,7 +178,6 @@ export default meta
 
 type Story = StoryObj<PackageDetailPage>
 
-/** An npm package with a clean security audit and no dependency findings. */
 export const NpmPackage: Story = {
   decorators: [
     moduleMetadata({
@@ -201,7 +200,6 @@ export const NpmPackage: Story = {
   },
 }
 
-/** No download this week: the line is not drawn. */
 export const NpmPackageWithoutDownloads: Story = {
   decorators: [
     moduleMetadata({
@@ -222,11 +220,6 @@ export const NpmPackageWithoutDownloads: Story = {
   },
 }
 
-/**
- * The install command comes from the owner's registry URL; the README sits between the versions and
- * the security card.
- */
-/** The backend only sent the newest 200 versions. */
 export const NpmPackageWithTruncatedVersions: Story = {
   decorators: [
     moduleMetadata({
@@ -249,7 +242,6 @@ export const NpmPackageWithTruncatedVersions: Story = {
   },
 }
 
-/** The backend only sent the newest 100 tags. */
 export const DockerImageWithTruncatedTags: Story = {
   decorators: [
     moduleMetadata({
@@ -300,7 +292,6 @@ export const NpmPackageWithoutReadme: Story = {
   },
 }
 
-/** Known advisories on the published versions, plus a dependency-tree finding. */
 export const NpmPackageWithVulnerabilities: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -309,7 +300,6 @@ export const NpmPackageWithVulnerabilities: Story = {
   },
 }
 
-/** npm's advisory database being unreachable shouldn't block viewing the package itself. */
 export const NpmAuditUnreachable: Story = {
   decorators: [
     moduleMetadata({
@@ -334,7 +324,6 @@ export const NpmAuditUnreachable: Story = {
   },
 }
 
-/** A 429 from the audit route is the server limiting requests, not npm being down. */
 export const NpmAuditRateLimited: Story = {
   decorators: [
     withRepositories({
@@ -361,13 +350,12 @@ export const NpmAuditBusy: Story = {
   },
 }
 
-/** Filtering dependency findings by severity narrows the list. */
 export const FilteringDependencyFindingsBySeverity: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await waitFor(() => expect(canvas.getByText('lodash@4.17.15')).toBeInTheDocument())
-    // gbt-select's trigger has no aria-label/aria-labelledby when the severity filter is
-    // unlabelled — only the placeholder text as its (unnamed, per accname) content.
+    // gbt-select's trigger has no accessible name when the filter is unlabelled: only the
+    // placeholder.
     await userEvent.click(canvas.getByRole('combobox'))
     await userEvent.click(await canvas.findByRole('option', { name: 'Élevée' }))
     await waitFor(() =>
@@ -378,7 +366,6 @@ export const FilteringDependencyFindingsBySeverity: Story = {
   },
 }
 
-/** A read-only viewer never sees delete/rescan actions. */
 export const AsReadOnlyViewer: Story = {
   decorators: [
     moduleMetadata({
@@ -400,7 +387,6 @@ export const AsReadOnlyViewer: Story = {
   },
 }
 
-/** A Docker image with a clean scan. */
 export const DockerImage: Story = {
   decorators: [
     moduleMetadata({
@@ -442,7 +428,6 @@ export const DockerImageWithoutDownloads: Story = {
   },
 }
 
-/** The pull command targets the latest tag; each tag shows its size ("—" when unknown). */
 export const DockerImageWithPullCommandAndSizes: Story = {
   decorators: [moduleMetadata({ providers: [withRoute('docker', 'acme-api')] })],
   play: async ({ canvasElement }) => {
@@ -456,7 +441,6 @@ export const DockerImageWithPullCommandAndSizes: Story = {
   },
 }
 
-/** A Docker image with a known CVE from the last scan. */
 export const DockerImageWithVulnerabilities: Story = {
   decorators: [moduleMetadata({ providers: [withRoute('docker', 'acme-api')] })],
   play: async ({ canvasElement }) => {
@@ -562,7 +546,6 @@ export const DockerScanLoading: Story = {
 }
 
 const npmLoadFails = withRouterSpy()
-/** A package that can't be loaded sends the user back to its repository. */
 export const NpmLoadFailed: Story = {
   decorators: [
     npmLoadFails.decorator,
@@ -590,7 +573,6 @@ export const DockerLoadFailed: Story = {
 }
 
 const dockerEmpty = withRouterSpy()
-/** An image whose last tag was deleted has nothing left to manage, so the page leaves. */
 export const DockerImageWithoutTags: Story = {
   decorators: [
     moduleMetadata({ providers: [withRoute('docker', 'acme-api')] }),
@@ -609,7 +591,6 @@ const depScan = withRepositories({
   getDependencyAudit: fn(() => of(null)),
   scanDependencyTree: fn(() => of(DEP_AUDIT)),
 })
-/** No scan has ever run on the latest version; a writer can start one. */
 export const DependencyScanNeverRun: Story = {
   decorators: [depScan],
   play: async ({ canvasElement }) => {
@@ -633,7 +614,6 @@ export const DependencyAuditFailed: Story = {
   },
 }
 
-/** Dependency trees too big to cover entirely are flagged as partially scanned. */
 export const DependencyAuditTruncated: Story = {
   decorators: [
     withRepositories({ getDependencyAudit: () => of({ ...DEP_AUDIT, truncated: true }) }),
@@ -683,7 +663,6 @@ const manyVersions = Array.from({ length: 25 }, (_, i) => ({
   deprecated_message: null,
   shasum: `sha-${i}`,
 }))
-/** Version history is paged 20 at a time. */
 export const PaginatedVersionHistory: Story = {
   decorators: [
     withRepositories({

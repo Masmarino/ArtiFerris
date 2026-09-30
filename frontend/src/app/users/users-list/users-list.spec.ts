@@ -207,8 +207,7 @@ describe('UsersList', () => {
     flushInitialLoad(httpMock, [PUBLIC_USER, ACME_USER])
     fixture.componentInstance.selectedOrganizationId.set('ALL')
 
-    // Both services cache their list() — a bare reload() with no intervening mutation
-    // replays from cache rather than issuing a second request.
+    // Both services cache list(): a bare reload() replays from cache.
     fixture.componentInstance.reload()
 
     expect(fixture.componentInstance.selectedOrganizationId()).toBe('ALL')

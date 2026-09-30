@@ -153,7 +153,6 @@ function rowOf(table: HTMLElement, text: string): HTMLElement {
   return row
 }
 
-/** Super-admin view: actor names and repository names resolved, blocked accounts listed. */
 export const Populated: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -169,9 +168,6 @@ export const Populated: Story = {
   },
 }
 
-/**
- * Actor comes from the payload username first, then the users lookup, then the raw id, then a dash.
- */
 export const ActorResolution: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -183,10 +179,6 @@ export const ActorResolution: Story = {
   },
 }
 
-/**
- * Details column: source IP for failed logins/password changes, action and repository for denied
- * access.
- */
 export const EventDetails: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -203,7 +195,6 @@ export const EventDetails: Story = {
   },
 }
 
-/** Lookups for names failing must not break the page: raw ids are shown instead. */
 export const NameLookupsFailed: Story = {
   decorators: [
     moduleMetadata({
@@ -233,7 +224,6 @@ export const NameLookupsFailed: Story = {
   },
 }
 
-/** Blocked accounts: whole minutes rounded up, and "moins d'une minute" under a minute. */
 export const BlockedAccounts: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -310,7 +300,6 @@ const ACCOUNT_EVENTS: AuditEntry[] = [
   },
 ]
 
-/** Successful logins and credential changes read in French, next to the failures. */
 export const AccountEvents: Story = {
   decorators: [
     moduleMetadata({
@@ -339,9 +328,6 @@ const pagedQuery = fn<AuditService['query']>((filter) =>
   of(filter?.cursor === 'page-2' ? page([EVENTS[4]], null) : page(EVENTS.slice(0, 4), 'page-2')),
 )
 
-/**
- * The instance-level log (super-admin, no organization) pages the same way, failed logins included.
- */
 export const LoadMore: Story = {
   decorators: [
     moduleMetadata({
@@ -370,7 +356,6 @@ export const LoadMore: Story = {
   },
 }
 
-/** While older events exist, the summary and the export say what they cover. */
 export const PartialCoverageNotes: Story = {
   decorators: [
     moduleMetadata({
@@ -389,7 +374,6 @@ export const PartialCoverageNotes: Story = {
   },
 }
 
-/** With events still on the server, the export pages through all of them. */
 export const CsvDownloadFetchesEveryPage: Story = {
   decorators: [
     moduleMetadata({
@@ -421,7 +405,6 @@ export const CsvDownloadFetchesEveryPage: Story = {
   },
 }
 
-/** A slow export shows its progress and can be cancelled without producing a file. */
 export const CsvExportInProgress: Story = {
   decorators: [
     moduleMetadata({
@@ -454,7 +437,6 @@ export const CsvExportInProgress: Story = {
   },
 }
 
-/** A failed next page keeps the rows on screen and lets the reader retry. */
 export const LoadMoreFailed: Story = {
   decorators: [
     moduleMetadata({
@@ -500,7 +482,6 @@ function withUnlock(audit: Partial<AuditService>, confirmed = true) {
   })
 }
 
-/** Login keys show the username and get an unlock button; an MFA key shows raw and gets none. */
 export const BlockedKeysAndUnlockButtons: Story = {
   decorators: [withUnlock({ blockedAccounts: () => of(UNLOCK_KEYS) })],
   play: async ({ canvasElement }) => {
@@ -517,9 +498,6 @@ const unlockUsername = fn(() => {
   aliceUnlocked = true
   return of(undefined)
 })
-/**
- * Confirming unlocks by the bare username and re-fetches the list, which no longer has the account.
- */
 export const UnlockingAnAccount: Story = {
   beforeEach: () => {
     aliceUnlocked = false
@@ -563,9 +541,6 @@ export const UnlockCancelled: Story = {
   },
 }
 
-/**
- * The backend refuses (403) or does not know the account (404): a French toast, and the row stays.
- */
 export const UnlockForbidden: Story = {
   beforeEach: () => unlockToast.error.mockClear(),
   decorators: [
@@ -663,10 +638,6 @@ const scopedBlocked = fn<AuditService['blockedAccounts']>(() => of(BLOCKED))
 const scopedUsers = fn<UsersService['list']>(() => of(USERS))
 const scopedMembers = fn<OrganizationMembersService['list']>(() => of(MEMBERS))
 
-/**
- * Embedded in an organization's admin page: scoped query, member names, and no blocked-accounts
- * panel.
- */
 export const ScopedToOrganization: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [
@@ -696,10 +667,6 @@ export const ScopedToOrganization: Story = {
   },
 }
 
-/**
- * Members lookup is the only source of names in an organization: the actor id maps to a member
- * username.
- */
 export const ScopedActorFromMembers: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [
@@ -721,7 +688,6 @@ export const ScopedActorFromMembers: Story = {
   },
 }
 
-/** Exports the rows on screen, with resolved actor and details columns. */
 export const CsvDownload: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -771,10 +737,6 @@ const ORG_B_EVENTS: AuditEntry[] = [
   },
 ]
 
-/**
- * Switching organization while the first request is still in flight: its late response must not
- * overwrite the new organization's rows.
- */
 export const SwitchOrganizationWhileLoading: Story = {
   decorators: [
     moduleMetadata({

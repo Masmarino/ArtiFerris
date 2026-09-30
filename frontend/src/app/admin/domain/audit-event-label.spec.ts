@@ -11,8 +11,8 @@ const entry = (event_type: string, payload: unknown): AuditEntry => ({
 })
 
 describe('audit event labels', () => {
-  // Every `event_type` the backend can store: the enums of crates/artiferris-domain (audit.rs,
-  // package_repository.rs, permission.rs). Add a variant there, add it here and label it.
+  // Every event_type the backend can store (enums in crates/artiferris-domain). Add a variant
+  // there, add it here.
   const BACKEND_EVENT_TYPES = [
     // SecurityEvent
     'LoginFailed',

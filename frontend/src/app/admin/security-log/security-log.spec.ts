@@ -76,8 +76,7 @@ describe('SecurityLog', () => {
 
     expect(fixture.nativeElement.textContent).not.toContain('Chargement…')
 
-    // Drain the remaining requests this component fires on init so later
-    // tests in this file don't inherit an unflushed backlog.
+    // Drain the requests fired on init so later tests do not inherit a backlog.
     httpMock.expectOne('/api/users').flush([])
     httpMock.expectOne('/api/repositories').flush([])
     httpMock.expectOne('/api/admin/security/blocked').flush([])
@@ -390,7 +389,7 @@ describe('SecurityLog', () => {
     expect(createObjectURL).toHaveBeenCalled()
     const blob = createObjectURL.mock.calls[0][0] as Blob
     expect(blob.type).toContain('text/csv')
-    // Revoked a moment later: some browsers only start reading the blob after click() returns.
+    // Revoked a moment later: some browsers read the blob after click() returns.
     expect(revokeObjectURL).not.toHaveBeenCalled()
     vi.advanceTimersByTime(1000)
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock')
@@ -486,12 +485,9 @@ describe('SecurityLog', () => {
       (r) => r.url === '/api/audit/events' && r.params.get('organization_id') === 'org-2',
     )
     httpMock.expectOne('/api/organizations/org-2/users').flush([])
-    // repositoriesService.list() caches its result via shareReplay — the first flush above
-    // already satisfied this second effect run too, so no second request is issued here.
+    // list() caches via shareReplay: the first flush already satisfied this second run.
 
-    // Resolve the current org-2 request first, then the stale org-1 request second —
-    // this is the racy order the guard exists to handle: a slow first request that
-    // finally resolves after a faster second request has already applied its result.
+    // Resolve org-2 first, then the stale org-1: the racy order the guard handles.
     org2Req.flush(
       page([
         {
@@ -547,8 +543,7 @@ describe('SecurityLog', () => {
     expect(fixture.componentInstance.loadFailed()).toBe(true)
     expect(fixture.nativeElement.textContent).not.toContain('Chargement…')
 
-    // Drain the other in-flight requests fired by this same effect run so this
-    // test doesn't leave a backlog for the next one.
+    // Drain the other in-flight requests of this effect run.
     httpMock.expectOne('/api/users').flush([])
     httpMock.expectOne('/api/repositories').flush([])
     httpMock.expectOne('/api/admin/security/blocked').flush([])

@@ -57,7 +57,6 @@ function fakeOrgs(
 const toast = { success: fn(), error: fn() }
 const pageTitle = { title: signal('') }
 
-/** Stands in for the confirmation dialog the component opens before clearing the provider. */
 function fakeConfirm(answer = true) {
   return { ask: fn(() => Promise.resolve(answer)) }
 }
@@ -132,7 +131,6 @@ export default meta
 
 type Story = StoryObj<OrganizationDetail>
 
-/** No identity provider: the organization uses local accounts, so there's nothing to revert. */
 export const LocalAccounts: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -172,7 +170,6 @@ export const LoadFailed: Story = {
   },
 }
 
-/** When the provider lookup fails there is no form to save defaults over the real configuration. */
 export const IdentityProviderLookupFailed: Story = {
   decorators: [
     withOrgs(
@@ -190,9 +187,6 @@ export const IdentityProviderLookupFailed: Story = {
   },
 }
 
-/**
- * With a stored bind password, leaving the field blank keeps it, so the form is already saveable.
- */
 export const LdapConfigured: Story = {
   decorators: [withOrgs(fakeOrgs(LDAP))],
   play: async ({ canvasElement }) => {
@@ -235,7 +229,6 @@ export const OidcConfigured: Story = {
   },
 }
 
-/** Switching the provider type swaps the LDAP fields for the OIDC ones. */
 export const SwitchingToOidc: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -299,7 +292,6 @@ export const UpdatingOidcWithoutChangingTheSecret: Story = {
 }
 
 const firstOidc = fakeOrgs()
-/** With no secret stored yet, the OIDC form needs one before it can be saved. */
 export const ConfiguringOidcFromScratch: Story = {
   decorators: [withOrgs(firstOidc)],
   play: async ({ canvasElement }) => {
@@ -379,9 +371,6 @@ const keptSecretRefused = fakeOrgs(LDAP, {
   ),
 })
 
-/**
- * Changing the server without retyping the secret is refused: the server's own message is shown.
- */
 export const KeptSecretRefusedAfterChangingTheServer: Story = {
   decorators: [withOrgs(keptSecretRefused)],
   play: async ({ canvasElement }) => {
@@ -402,9 +391,6 @@ export const KeptSecretRefusedAfterChangingTheServer: Story = {
   },
 }
 
-/**
- * A 409 on save means the stored secret is unreadable: the toast says so and the warning appears.
- */
 export const SaveAnswersSecretUnreadable: Story = {
   decorators: [
     withOrgs(
@@ -431,10 +417,6 @@ export const SaveAnswersSecretUnreadable: Story = {
   },
 }
 
-/**
- * The stored secret cannot be decrypted by this server: a warning replaces the "local accounts"
- * line and the secret must be typed again.
- */
 export const StoredSecretUnreadable: Story = {
   decorators: [
     withOrgs(
@@ -457,7 +439,6 @@ export const StoredSecretUnreadable: Story = {
   },
 }
 
-/** An OIDC issuer must be https: the field says so and saving stays disabled. */
 export const HttpIssuerRefused: Story = {
   decorators: [withOrgs(fakeOrgs())],
   play: async ({ canvasElement }) => {

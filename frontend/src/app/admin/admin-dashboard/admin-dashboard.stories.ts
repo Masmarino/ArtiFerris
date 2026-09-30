@@ -129,16 +129,14 @@ export default meta
 
 type Story = StoryObj<AdminDashboard>
 
-// The same total can also appear in a chart's accessible data table or legend —
-// scope the assertion to the stat card itself, identified by its heading. `gbt-card`
-// (the host element), not `.gbt-card` (an inner box), stays an ancestor of the heading
-// across Gabarit's internal markup changes.
+// The total can also appear in a chart's data table or legend: scope to the stat card by its
+// heading
+// (gbt-card, the host, rather than .gbt-card, an inner box).
 function statCardValue(canvas: ReturnType<typeof within>, heading: string): string | null {
   const card = canvas.getByRole('heading', { name: heading }).closest('gbt-card')
   return card ? (within(card as HTMLElement).getByText(/^\d+$/).textContent ?? null) : null
 }
 
-/** Totals, both charts and the recent-activity list all populated. */
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -148,7 +146,6 @@ export const Default: Story = {
   },
 }
 
-/** A brand new instance: no activity yet, no repositories, no history. */
 export const Empty: Story = {
   decorators: [
     moduleMetadata({
@@ -174,7 +171,6 @@ export const Empty: Story = {
   },
 }
 
-/** A failing load says so and offers a retry; the other cards keep what they got. */
 export const LoadFailed: Story = {
   decorators: [
     moduleMetadata({
@@ -195,7 +191,6 @@ export const LoadFailed: Story = {
   },
 }
 
-/** Changing the storage evolution window re-fetches only that chart's history. */
 export const ChangingTheStorageEvolutionWindow: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -206,10 +201,6 @@ export const ChangingTheStorageEvolutionWindow: Story = {
   },
 }
 
-/**
- * Nothing has answered yet: no stat cards, every chart shows its empty message and the activity
- * list its empty state (the page has no spinner).
- */
 export const Loading: Story = {
   decorators: [
     moduleMetadata({
@@ -233,7 +224,6 @@ export const Loading: Story = {
   },
 }
 
-/** Totals not received yet while the rest of the page is already populated. */
 export const StatsStillLoading: Story = {
   decorators: [
     moduleMetadata({
@@ -259,7 +249,6 @@ const MANY_EVENTS: AuditEntry[] = Array.from({ length: 12 }, (_, i) => ({
   actor_id: 'u1',
 }))
 
-/** The recent-activity card lists at most the ten newest events. */
 export const RecentActivityIsCappedAtTen: Story = {
   decorators: [
     moduleMetadata({
@@ -280,7 +269,6 @@ export const RecentActivityIsCappedAtTen: Story = {
   },
 }
 
-/** More events than the fetch holds: the activity chart says the older days are under-counted. */
 export const ActivityChartIsPartial: Story = {
   decorators: [
     moduleMetadata({
@@ -303,9 +291,6 @@ export const ActivityChartIsPartial: Story = {
 const storageHistory = fn<AdminMetricsService['history']>(() => of(HISTORY))
 const countsHistory = fn<AdminMetricsService['history']>(() => of(HISTORY))
 
-/**
- * Only the storage chart re-queries when its own window changes; the counts chart keeps its data.
- */
 export const StorageWindowRefetchesItsHistory: Story = {
   beforeEach: () => {
     storageHistory.mockClear()
@@ -331,7 +316,6 @@ export const StorageWindowRefetchesItsHistory: Story = {
   },
 }
 
-/** The counts chart has its own window: changing it does not touch the storage chart's request. */
 export const CountsWindowRefetchesItsHistory: Story = {
   decorators: [
     moduleMetadata({

@@ -24,7 +24,6 @@ function fakeExport(overrides: Partial<ExportService> = {}): Partial<ExportServi
   }
 }
 
-/** Stands in for the confirmation dialog the component opens before importing. */
 function fakeConfirm(answer = true) {
   return { ask: fn(() => Promise.resolve(answer)) }
 }
@@ -53,7 +52,6 @@ export default meta
 
 type Story = StoryObj<ExportAdmin>
 
-/** Downloading the configuration export triggers a browser download, no error shown. */
 export const DownloadingTheExport: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -89,7 +87,6 @@ export const ExportFailed: Story = {
   },
 }
 
-/** Confirming the import shows the resulting report. */
 const confirmImport = fakeConfirm(true)
 export const ImportingAConfiguration: Story = {
   decorators: [withConfirm(confirmImport)],
@@ -109,7 +106,6 @@ export const ImportingAConfiguration: Story = {
   },
 }
 
-/** Declining the confirmation dialog makes no request and shows no report. */
 const confirmDeclined = fakeConfirm(false)
 export const DecliningTheConfirmation: Story = {
   decorators: [withConfirm(confirmDeclined)],

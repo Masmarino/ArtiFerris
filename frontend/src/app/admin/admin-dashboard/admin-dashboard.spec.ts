@@ -32,14 +32,11 @@ describe('AdminDashboard', () => {
     history: unknown[] = [],
   ) {
     httpMock.expectOne('/api/admin/stats').flush(stats)
-    // The recent-activity list is derived client-side from this same bounded query — see
-    // AdminDashboard.
     httpMock
       .expectOne((r) => r.url === '/api/audit/events' && r.params.has('from'))
       .flush({ entries: activityEntries, next_cursor: null })
     httpMock.expectOne('/api/repositories').flush(repositories)
-    // Two independent requests — one per evolution chart, each with its
-    // own duration control (see AdminDashboard's storage/counts split).
+    // Two independent requests: one per chart.
     const historyRequests = httpMock.match((r) => r.url === '/api/admin/metrics/history')
     expect(historyRequests.length).toBe(2)
     historyRequests.forEach((req) => req.flush(history))

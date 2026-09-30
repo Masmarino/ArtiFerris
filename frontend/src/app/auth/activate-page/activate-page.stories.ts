@@ -38,10 +38,8 @@ export default meta
 
 type Story = StoryObj<ActivatePage>
 
-/** A valid activation link — the normal, expected entry point. */
 export const Default: Story = {}
 
-/** Someone opened the page directly, with no `?token=` in the URL. */
 export const MissingToken: Story = {
   decorators: [moduleMetadata({ providers: [withToken(null)] })],
 }
@@ -59,7 +57,7 @@ export const ExpiredOrInvalidToken: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    // Required-field labels get a trailing " *" appended by GbtInput — match by prefix.
+    // GbtInput appends " *" to required-field labels: match by prefix.
     await userEvent.type(await canvas.findByLabelText(/^Nouveau mot de passe/), 'hunter2222')
     await userEvent.type(canvas.getByLabelText(/^Confirmer le mot de passe/), 'hunter2222')
     await userEvent.click(canvas.getByRole('button', { name: 'Activer mon compte' }))
@@ -71,7 +69,6 @@ export const ExpiredOrInvalidToken: Story = {
   },
 }
 
-/** The client-side mismatch check, before the form is even submitted. */
 export const PasswordMismatch: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

@@ -45,7 +45,6 @@ export default meta
 
 type Story = StoryObj<ExplorerPage>
 
-/** One card per catalog, then the search across every format. */
 export const Default: Story = {
   decorators: scenario(() => of(CATALOG_INFOS)),
   play: async ({ canvasElement }) => {
@@ -72,7 +71,6 @@ const POPULAR = [
 const popularOrRecent = (query: CatalogQuery) =>
   of(searchResult(query.sort === 'popular' ? POPULAR : RESULTS))
 
-/** The most downloaded entries of the week sit above the recent listing. */
 export const PopularThisWeek: Story = {
   decorators: scenario(() => of(CATALOG_INFOS), popularOrRecent),
   play: async ({ canvasElement }) => {
@@ -86,7 +84,6 @@ export const PopularThisWeek: Story = {
   },
 }
 
-/** The popular section has its own spinner and never blocks the rest. */
 export const PopularLoading: Story = {
   decorators: scenario(
     () => of(CATALOG_INFOS),
@@ -101,9 +98,6 @@ export const PopularLoading: Story = {
 
 let popularAttempts = 0
 
-/**
- * A failing popular section reports it on its own, keeps the search working, and can be retried.
- */
 export const PopularFailed: Story = {
   decorators: scenario(
     () => of(CATALOG_INFOS),
@@ -139,7 +133,6 @@ export const CatalogsLoading: Story = {
 
 let attempts = 0
 
-/** The catalog cards can fail on their own without taking the search down, and be retried. */
 export const CatalogsFailed: Story = {
   decorators: scenario(() =>
     ++attempts % 2 === 1
@@ -158,7 +151,6 @@ export const CatalogsFailed: Story = {
   },
 }
 
-/** A fresh instance: empty catalogs and a welcome state instead of results. */
 export const EmptyInstance: Story = {
   decorators: scenario(
     () => of(CATALOG_INFOS.map((catalog) => ({ ...catalog, entry_count: 0 }))),

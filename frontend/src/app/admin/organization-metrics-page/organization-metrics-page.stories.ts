@@ -34,7 +34,6 @@ export default meta
 
 type Story = StoryObj<OrganizationMetricsPage>
 
-/** Stat cards on top, then the embedded storage usage. */
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -50,7 +49,6 @@ export const Default: Story = {
   },
 }
 
-/** A brand-new organization: zero counts are still shown, and the usage section is empty. */
 export const EmptyOrganization: Story = {
   decorators: [
     moduleMetadata({
@@ -73,7 +71,6 @@ export const EmptyOrganization: Story = {
   },
 }
 
-/** Stats not loaded yet: the stat cards stay hidden while the usage section renders. */
 export const StatsPending: Story = {
   decorators: [
     moduleMetadata({
@@ -91,7 +88,6 @@ export const StatsPending: Story = {
 const scopedStats = fn<AdminMetricsService['stats']>(() => of(STATS))
 const scopedUsage = fn<AdminMetricsService['usage']>(() => of(USAGES))
 
-/** Both the stats and the embedded usage are requested for the same organization. */
 export const ScopedToOrganization: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [
@@ -108,7 +104,6 @@ export const ScopedToOrganization: Story = {
   },
 }
 
-/** The page is reused when a super-admin switches organization: stats and usage both re-fetch. */
 export const SwitchOrganization: Story = {
   decorators: [
     moduleMetadata({

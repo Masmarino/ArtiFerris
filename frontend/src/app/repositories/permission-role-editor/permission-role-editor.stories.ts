@@ -21,7 +21,6 @@ export default meta
 
 type Story = StoryObj<PermissionRoleEditor>
 
-/** Editing a user's access on a repository. */
 export const ForUser: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -32,7 +31,6 @@ export const ForUser: Story = {
   },
 }
 
-/** Editing a repository's access for a user, seen from the user's side. */
 export const ForRepository: Story = {
   args: { label: 'acme-npm', subjectKind: 'repository', currentRole: 'admin' },
   play: async ({ canvasElement }) => {
@@ -74,7 +72,6 @@ export const ChangingTheRole: Story = {
   },
 }
 
-/** While a save or revoke is in flight, both actions are disabled. */
 export const Saving: Story = {
   args: { saving: true },
   play: async ({ canvasElement }) => {
@@ -118,7 +115,6 @@ export const RevokingRepositoryAccess: Story = {
 }
 
 const askDeclined = fn(() => Promise.resolve(false))
-/** Declining the confirmation leaves the permission untouched. */
 export const RevokeDeclined: Story = {
   decorators: [
     moduleMetadata({ providers: [{ provide: ConfirmService, useValue: { ask: askDeclined } }] }),

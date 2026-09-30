@@ -51,7 +51,6 @@ export default meta
 
 type Story = StoryObj<HealthStatusPage>
 
-/** A healthy instance: database and storage both up, comfortable gauges. */
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -61,7 +60,6 @@ export const Default: Story = {
   },
 }
 
-/** Database down and storage nearly full — both statuses and details surface. */
 export const Degraded: Story = {
   decorators: [
     moduleMetadata({

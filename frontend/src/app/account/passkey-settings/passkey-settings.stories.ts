@@ -43,7 +43,6 @@ function fakeAuthenticatorCredential() {
   }
 }
 
-/** Replaces navigator.credentials for the story; returns the cleanup Storybook runs afterwards. */
 function stubCredentials(value: Partial<CredentialsContainer> | undefined): () => void {
   Object.defineProperty(navigator, 'credentials', { configurable: true, value })
   return () => {
@@ -103,7 +102,6 @@ export const Loading: Story = {
   },
 }
 
-/** No WebAuthn in the browser: only the error, no list and no "Ajouter" button. */
 export const BrowserWithoutPasskeySupport: Story = {
   beforeEach: () => stubCredentials(undefined),
   play: async ({ canvasElement }) => {
@@ -126,7 +124,6 @@ export const Empty: Story = {
   },
 }
 
-/** Each passkey has its own password field; its delete button stays disabled until it is filled. */
 export const WithPasskeys: Story = {
   decorators: [withServices(fakeMfa({ listPasskeys: () => of([MACBOOK, YUBIKEY]) }))],
   play: async ({ canvasElement }) => {
@@ -164,7 +161,6 @@ export const CancellingTheAddForm: Story = {
   },
 }
 
-/** The register button stays disabled until the new key has a name. */
 export const RegisterNeedsAName: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -180,7 +176,6 @@ let passkeysAfterRegistration: PasskeySummary[] = [MACBOOK]
 const registerMfa = fakeMfa({ listPasskeys: fn(() => of(passkeysAfterRegistration)) })
 const registerToasts = new ToastService()
 
-/** The full ceremony runs against a faked authenticator; the list is reloaded afterwards. */
 export const RegisteringAPasskey: Story = {
   decorators: [withServices(registerMfa, registerToasts)],
   beforeEach: () => {
@@ -215,10 +210,6 @@ export const RegisteringAPasskey: Story = {
 const cancelledCeremonyMfa = fakeMfa()
 const cancelledCeremonyToasts = new ToastService()
 
-/**
- * The user dismisses the browser's passkey prompt: nothing is sent to the server, the form stays
- * open.
- */
 export const BrowserCeremonyFails: Story = {
   decorators: [withServices(cancelledCeremonyMfa, cancelledCeremonyToasts)],
   beforeEach: () => {
@@ -285,7 +276,6 @@ export const ServerRejectsTheCredential: Story = {
 const deleteMfa = fakeMfa({ listPasskeys: fn(() => of([MACBOOK, YUBIKEY])) })
 const deleteSignOut = fn()
 
-/** Deleting a passkey ends the session on the backend: the user is signed out straight away. */
 export const DeletingAPasskey: Story = {
   decorators: [withServices(deleteMfa, new ToastService(), deleteSignOut)],
   beforeEach: () => deleteSignOut.mockClear(),

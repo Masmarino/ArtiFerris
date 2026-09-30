@@ -22,7 +22,7 @@ function fakeAuth(overrides: Partial<AuthService> = {}): Partial<AuthService> {
 
 async function fillRegisterForm(canvasElement: HTMLElement) {
   const canvas = within(canvasElement)
-  // Required-field labels get a trailing " *" appended by GbtInput — match by prefix.
+  // GbtInput appends " *" to required-field labels: match by prefix.
   await userEvent.type(await canvas.findByLabelText(/^Nom d'utilisateur/), 'florian')
   await userEvent.type(canvas.getByLabelText(/^Adresse e-mail/), 'florian@example.com')
   await userEvent.type(canvas.getByLabelText(/^Mot de passe/), 'hunter2222')
@@ -40,10 +40,8 @@ export default meta
 
 type Story = StoryObj<RegisterPage>
 
-/** The registration form, before it's ever been submitted. */
 export const Default: Story = {}
 
-/** After a successful registration, the account still needs its first MFA factor. */
 export const AfterSubmitEntersMfaSetup: Story = {
   play: async ({ canvasElement }) => {
     await fillRegisterForm(canvasElement)

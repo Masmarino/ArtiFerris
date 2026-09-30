@@ -31,7 +31,6 @@ export default meta
 
 type Story = StoryObj<UsageInstructions>
 
-/** A hosted npm repository can be published to as well as installed from. */
 export const NpmHosted: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -42,7 +41,6 @@ export const NpmHosted: Story = {
   },
 }
 
-/** A proxy or group repository is read-only, so there is no publish step. */
 export const NpmProxy: Story = {
   args: { repository: { ...REPO, repo_type: 'proxy', remote_url: 'https://registry.npmjs.org' } },
   play: async ({ canvasElement }) => {
@@ -80,7 +78,6 @@ export const DockerProxy: Story = {
   },
 }
 
-/** The anonymous public view swaps the "create an API token" link for a login link. */
 export const PublicViewLoginLink: Story = {
   args: { apiTokenLink: '/login', apiTokenLinkLabel: 'Se connecter' },
   play: async ({ canvasElement }) => {

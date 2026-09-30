@@ -37,9 +37,8 @@ function render(
   return { fixture, httpMock, ask }
 }
 
-// `render()`'s paramMap is a single-emission `of(...)` — fine for most tests, but
-// tests that simulate navigating between packages (Angular reuses this component
-// across route param changes) need to push new param maps after creation.
+// render()'s paramMap emits once: tests that navigate between packages push new ones after
+// creation.
 function renderNavigable(params: { id?: string; format?: string; name?: string } = {}) {
   const paramMap$ = new BehaviorSubject(
     convertToParamMap({
@@ -66,9 +65,7 @@ function renderNavigable(params: { id?: string; format?: string; name?: string }
   return { fixture, httpMock, paramMap$ }
 }
 
-// The delete/rescan buttons only render for a viewer with at least `write`
-// on the repository — tests exercising those buttons must flush this
-// request with a role that grants it.
+// Delete and rescan need at least `write` on the repository: flush the role request accordingly.
 function flushRepository(httpMock: HttpTestingController, repositoryId: string, myRole = 'write') {
   httpMock.expectOne(`/api/repositories/${repositoryId}`).flush({
     id: repositoryId,
@@ -228,7 +225,7 @@ describe('PackageDetailPage', () => {
     )
     httpMock.expectOne('/api/repositories/repo-1/packages/npm/left-pad/versions/1.0.0').flush(null)
 
-    // The delete cascaded (last version gone) — the refetch 404s and the page navigates back.
+    // The delete cascaded (last version gone): the refetch 404s and the page navigates back.
     httpMock
       .expectOne('/api/repositories/repo-1/packages/npm/left-pad')
       .flush(null, { status: 404, statusText: 'Not Found' })
@@ -1176,10 +1173,7 @@ describe('PackageDetailPage', () => {
     httpMock.expectOne('/api/repositories/repo-2/packages/npm/right-pad')
     const repoReqB = httpMock.expectOne('/api/repositories/repo-2')
 
-    // Flush the CURRENT package's (B) response first, then the STALE package's (A)
-    // response second — this is the actually racy order the stillCurrent() guard
-    // exists to handle: a slow first request that finally resolves after a faster
-    // second request has already applied its result.
+    // Flush B (current) first, then the stale A: the racy order the stillCurrent() guard handles.
     repoReqB.flush({
       id: 'repo-2',
       name: 'repo-2',

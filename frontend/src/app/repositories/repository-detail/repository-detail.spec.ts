@@ -77,8 +77,7 @@ describe('RepositoryDetail', () => {
       retention_keep_last_n: null,
       my_role: 'admin',
     })
-    // Non-empty group_members triggers a lookup to resolve member names for
-    // the table (see repository-detail.ts's reload()).
+    // A non-empty group_members triggers a lookup of member names.
     httpMock.expectOne('/api/repositories').flush([{ id: 'member-1', name: 'member-repo' }])
 
     expect(fixture.componentInstance.repository()?.group_members).toEqual(['member-1'])
@@ -175,8 +174,7 @@ describe('RepositoryDetail', () => {
 
     const text = fixture.nativeElement.textContent as string
     expect(text).toContain('member-repo')
-    // No name could be resolved for this one — falls back to the raw id
-    // rather than showing nothing.
+    // No name resolved: falls back to the raw id.
     expect(text).toContain('ghost-id')
   })
 
@@ -275,13 +273,11 @@ describe('RepositoryDetail', () => {
       retention_keep_last_n: null,
       my_role: 'admin',
     })
-    // Non-empty group_members triggers a lookup to resolve member names for
-    // the table (see repository-detail.ts's reload()).
+    // A non-empty group_members triggers a lookup of member names.
     httpMock.expectOne('/api/repositories').flush([{ id: 'member-1', name: 'member-repo' }])
     fixture.detectChanges()
 
-    // Simulate the skolln-table (rowClick) output firing, exactly as it would at runtime,
-    // to actually exercise the template's (rowClick)="removeMember($event.id)" binding.
+    // Simulates the table's (rowClick) output, to exercise the removeMember binding.
     const tableDebugElement = fixture.debugElement.query(By.directive(Table))
     tableDebugElement.triggerEventHandler('rowClick', { id: 'member-1' })
     await fixture.whenStable()
@@ -791,10 +787,9 @@ describe('RepositoryDetail', () => {
   })
 
   it('shows the public overview instead of an error for a viewer with only implicit public read', () => {
-    // A public repository's own permissions list is refused (403/404) to a caller with no explicit
-    // grant — the server still reports my_role: 'read' for that implicit bypass, so the frontend
-    // cannot tell this case apart from an explicit read grant by role alone; either way, that
-    // expected refusal must not block the page.
+    // An implicit read on a public repository gets 403/404 on the permissions list, with my_role
+    // 'read' like an explicit grant:
+    // the page must not be blocked.
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),

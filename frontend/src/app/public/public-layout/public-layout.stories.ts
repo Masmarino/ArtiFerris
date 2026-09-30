@@ -51,7 +51,6 @@ export default meta
 
 type Story = StoryObj<PublicLayout>
 
-/** Logo, quick search and login link in the header, the page's own content projected below. */
 export const Default: Story = {
   decorators: [suggesting()],
   play: async ({ canvasElement }) => {
@@ -70,7 +69,6 @@ export const Default: Story = {
   },
 }
 
-/** A signed-in visitor gets a way back to their dashboard instead of "Se connecter". */
 export const SignedIn: Story = {
   decorators: [
     suggesting(),
@@ -88,7 +86,6 @@ export const SignedIn: Story = {
   },
 }
 
-/** Submitting the header search opens the explorer with the text. */
 export const HeaderSearch: Story = {
   decorators: [suggesting()],
   play: async ({ canvasElement }) => {
@@ -105,7 +102,6 @@ export const HeaderSearch: Story = {
   },
 }
 
-/** On a catalog page the header search stays on that catalog. */
 export const HeaderSearchOnCatalogPage: Story = {
   decorators: [
     suggesting(),
@@ -130,7 +126,6 @@ export const HeaderSearchOnCatalogPage: Story = {
   },
 }
 
-/** Typing in the header search suggests packages, and picking one opens its page. */
 export const HeaderSuggestions: Story = {
   decorators: [
     suggesting([catalogSuggestion({ name: 'left-pad' }), dockerSuggestion({ name: 'left-proxy' })]),

@@ -12,7 +12,6 @@ export default meta
 
 type Story = StoryObj<ReadmeView>
 
-/** Headings, links, inline and block code, quote, lists and a table. */
 export const RichReadme: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -24,7 +23,6 @@ export const RichReadme: Story = {
   },
 }
 
-/** No README: a discreet empty state under the same heading. */
 export const NoReadme: Story = {
   args: { html: null },
   play: async ({ canvasElement }) => {
@@ -34,7 +32,6 @@ export const NoReadme: Story = {
   },
 }
 
-/** Long strings wrap, code and tables scroll inside the card, images shrink to fit. */
 export const OverflowingContent: Story = {
   args: { html: OVERFLOW_README_HTML },
   decorators: [

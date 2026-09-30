@@ -47,10 +47,7 @@ const referenced = new Set(
 const defined = new Set(leafKeys(fr))
 const plural = /_(one|other)$/
 
-/**
- * Every error code the API can send: the ones of the two error enums, and the ones a route sets
- * itself.
- */
+/** Every error code the API can send: both error enums, and those a route sets itself. */
 function apiErrorCodes(): string[] {
   const crates = join(process.cwd(), '..', 'crates')
   const enumCodes = [

@@ -31,9 +31,8 @@ function withRoute(id: string | null) {
   }
 }
 
-// A real Router (via provideRouter) tries to match the Storybook iframe's own URL against the
-// (empty) route table and errors — this page's children only ever call .navigate(), so a plain
-// stub sidesteps that entirely.
+// A real Router would match the Storybook iframe URL against an empty route table and error; a stub
+// is enough, since this page only calls .navigate().
 const routerStub = { provide: Router, useValue: { navigate: () => Promise.resolve(true) } }
 
 const meta: Meta<OrganizationsPage> = {
@@ -54,7 +53,6 @@ export default meta
 
 type Story = StoryObj<OrganizationsPage>
 
-/** A super-admin with no organization selected sees only the list. */
 export const OrganizationsListOnly: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -80,7 +78,6 @@ const SECURITY_ENTRY = {
   actor_id: 'u-alice',
 }
 
-/** Fakes for everything the ten tabs of the detail panel inject, scoped to one organization. */
 function fakeDetailServices() {
   const audit = {
     query: fn((filter: { aggregate_type?: string }) =>
@@ -194,9 +191,6 @@ async function openTab(canvas: ReturnType<typeof within>, name: string) {
 }
 
 const superAdminDetail = fakeDetailServices()
-/**
- * A super-admin on /admin/organizations/:id sees the list next to the selected organization's tabs.
- */
 export const SuperAdminWithOrganizationSelected: Story = {
   decorators: [superAdminDetail.decorator],
   play: async ({ canvasElement }) => {
@@ -225,9 +219,6 @@ export const SuperAdminWithOrganizationSelected: Story = {
 }
 
 const orgAdminDetail = fakeDetailServices()
-/**
- * A plain organization admin never sees the organizations list, only their own organization's tabs.
- */
 export const OrganizationAdminSeesOnlyTheirOrganization: Story = {
   decorators: [orgAdminDetail.decorator, asOrganizationAdmin()],
   play: async ({ canvasElement }) => {
@@ -275,9 +266,6 @@ export const AuditLogTab: Story = {
 }
 
 const securityDetail = fakeDetailServices()
-/**
- * Scoped to an organization, the security log leaves out the instance-wide blocked-accounts panel.
- */
 export const SecurityLogTab: Story = {
   decorators: [securityDetail.decorator],
   play: async ({ canvasElement }) => {

@@ -1,7 +1,6 @@
 import { createPasskeyCredential, getPasskeyAssertion, passkeysSupported } from './webauthn-browser'
 
-// A small fake buffer so the round trip through the browser API mock is realistic — a non-empty
-// binary payload, not just an empty ArrayBuffer.
+// A non-empty binary payload, so the round trip is realistic.
 const SAMPLE_BYTES = new Uint8Array([1, 2, 3, 4, 5, 250, 251, 252])
 const SAMPLE_BASE64URL = 'AQIDBAX6-_w'
 
@@ -67,15 +66,14 @@ describe('createPasskeyCredential', () => {
       response: { attestationObject: string; clientDataJSON: string }
     }
 
-    // The challenge and user id passed to the real browser API must be actual ArrayBuffers, not the
-    // base64url strings the server sent.
+    // The challenge and user id given to the browser must be ArrayBuffers, not base64url strings.
     const sentPublicKey = capturedOptions!.publicKey!
     expect(sentPublicKey.challenge instanceof ArrayBuffer).toBe(true)
     expect(new Uint8Array(sentPublicKey.challenge as ArrayBuffer)).toEqual(SAMPLE_BYTES)
     expect(sentPublicKey.user.id instanceof ArrayBuffer).toBe(true)
     expect(sentPublicKey.excludeCredentials?.[0].id instanceof ArrayBuffer).toBe(true)
 
-    // The credential handed back to the server must be base64url strings again.
+    // The credential returned to the server must be base64url strings again.
     expect(result.rawId).toBe(SAMPLE_BASE64URL)
     expect(result.response.attestationObject).toBe(SAMPLE_BASE64URL)
     expect(result.response.clientDataJSON).toBe(SAMPLE_BASE64URL)

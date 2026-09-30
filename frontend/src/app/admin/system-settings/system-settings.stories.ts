@@ -83,7 +83,6 @@ export default meta
 
 type Story = StoryObj<SystemSettingsAdmin>
 
-/** Current values loaded into the form, no errors shown before a save is attempted. */
 export const Loaded: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -118,7 +117,6 @@ export const Loading: Story = {
 }
 
 const scopedSettings = fakeSettings()
-/** Embedded in one organization's admin page: read and write are scoped to it. */
 export const ScopedToAnOrganization: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [withSettings(scopedSettings)],
@@ -133,7 +131,6 @@ export const ScopedToAnOrganization: Story = {
 }
 
 const outOfRangeSettings = fakeSettings()
-/** Every field is bounded; an out-of-range value blocks the save and names the allowed range. */
 export const OutOfRangeValues: Story = {
   decorators: [withSettings(outOfRangeSettings)],
   play: async ({ canvasElement }) => {
@@ -234,7 +231,6 @@ export const SaveFailed: Story = {
 const SEO = "Autoriser l'indexation par les moteurs de recherche"
 
 const seoOffSettings = fakeSettings()
-/** A super-admin on the public organization can switch search-engine indexing on. */
 export const SeoIndexingOff: Story = {
   args: { organizationId: PUBLIC_ORGANIZATION_ID },
   decorators: [withSettings(seoOffSettings), asUser(true)],
@@ -284,7 +280,6 @@ export const SeoIndexingOn: Story = {
 const seoHiddenForAdminSettings = fakeSettings({
   get: () => of({ ...SETTINGS, seo_indexing_enabled: true }),
 })
-/** Only a super-admin sees the section; the loaded value still goes back untouched on save. */
 export const SeoSectionHiddenForNonSuperAdmin: Story = {
   args: { organizationId: PUBLIC_ORGANIZATION_ID },
   decorators: [withSettings(seoHiddenForAdminSettings), asUser(false)],
@@ -304,7 +299,6 @@ export const SeoSectionHiddenForNonSuperAdmin: Story = {
   },
 }
 
-/** The switch lives on the public organization only. */
 export const SeoSectionHiddenOnAnotherOrganization: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [asUser(true)],
