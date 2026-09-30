@@ -184,7 +184,6 @@ impl OidcAuthPort for OpenidConnectAuthAdapter {
             .await
             .map_err(|e| describe(&e))?;
 
-        // id_token_verifier() checks the signature and client_id; claims() also checks the nonce.
         let expected_nonce = Nonce::new(claims.nonce);
         let id_token = token_response.id_token().ok_or_else(|| DomainError::Infrastructure("oidc token response had no id_token".to_string()))?;
         let id_token_verifier = client.id_token_verifier();
@@ -350,7 +349,6 @@ mod tests {
     #[tokio::test]
     async fn an_issuer_url_pointing_at_a_private_address_is_rejected_before_discovery() {
         let adapter = OpenidConnectAuthAdapter::new("jwt-secret".to_string());
-        // Port 1 on loopback: nothing listens there, so without the guard this would fail with a connection error instead of the SSRF rejection asserted below.
         let config = OidcConfig { issuer_url: "https://127.0.0.1:1".to_string(), client_id: "artiferris".to_string(), client_secret: "s3cret!".to_string() };
 
         let err = adapter

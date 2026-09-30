@@ -38,8 +38,6 @@ impl BackupCodePort for PostgresBackupCodeRepository {
     }
 
     async fn try_consume(&self, user_id: Uuid, plaintext_code: &str) -> Result<bool, DomainError> {
-        // Each stored hash is individually salted (M-5), so the plaintext can't be re-hashed and
-        // looked up by exact equality: fetch this user's still-unused candidates and verify each.
         let candidates = sqlx::query!("SELECT id, code_hash FROM mfa_backup_codes WHERE user_id = $1 AND used_at IS NULL", user_id)
             .fetch_all(&self.pool)
             .await
@@ -79,7 +77,6 @@ mod tests {
 
     async fn seed_user(pool: &PgPool) -> Uuid {
         let users = PostgresUserRepository::new(pool.clone());
-        // Unique per call — some tests seed more than one user, and the username column is unique.
         let username = format!("mfauser{}", &Uuid::new_v4().simple().to_string()[..8]);
         let user = User {
             id: Uuid::new_v4(),

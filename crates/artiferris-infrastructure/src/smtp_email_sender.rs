@@ -65,7 +65,6 @@ impl EmailPort for SmtpEmailSender {
         let Some(preferences) = &self.preferences else {
             return Language::FALLBACK;
         };
-        // A notification must go out even when the preference cannot be read.
         match preferences.language(user_id).await {
             Ok(language) => language.unwrap_or(Language::FALLBACK),
             Err(e) => {

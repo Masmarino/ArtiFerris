@@ -119,7 +119,6 @@ mod tests {
     async fn enrolled(repo: &PostgresTotpCredentialRepository, user_id: Uuid) -> DateTime<Utc> {
         let created_at = Utc::now();
         assert!(repo.begin_enrollment(user_id, SECRET, created_at).await.unwrap());
-        // Postgres keeps microseconds only; confirm against what was actually stored.
         repo.get(user_id).await.unwrap().unwrap().created_at
     }
 
@@ -142,7 +141,6 @@ mod tests {
         assert_eq!(found.secret, SECRET);
         assert!(!found.confirmed);
         assert_eq!(found.last_used_step, None);
-        // Postgres timestamptz only keeps microsecond precision.
         assert_eq!(found.created_at.timestamp_micros(), created_at.timestamp_micros());
     }
 

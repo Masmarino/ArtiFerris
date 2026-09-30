@@ -533,7 +533,6 @@ mod tests {
         let users = Arc::new(FakeUserRepository::new());
         let create = CreateUserUseCase::new(users.clone(), Arc::new(FakePasswordHasher));
         let admin_id = create.execute(Uuid::new_v4(), "admin", "sup3r-s3cret!", true).await.unwrap();
-        // A plain user must not count as a replacement administrator.
         create.execute(Uuid::new_v4(), "regular", "sup3r-s3cret!", false).await.unwrap();
 
         let delete = DeleteUserUseCase::new(users.clone());

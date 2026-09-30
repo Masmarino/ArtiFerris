@@ -103,7 +103,6 @@ pub async fn require_readable_personal_repository_by_name<'a>(
     .await
 }
 
-/// Delegates to the shared primitive — kept here so npm's routes keep importing `require_same_organization` from `crate::authz` unchanged.
 pub fn require_same_organization(user: &NpmAuthUser, organization_id: Uuid) -> Result<(), StatusCode> {
     authz_primitives::require_same_organization(user, organization_id).map_err(map_access_error)
 }
@@ -258,8 +257,6 @@ mod tests {
 
     #[test]
     fn an_npm_format_group_repository_passes_require_npm_format_repository() {
-        // Documents that require_npm_format_repository checks FORMAT only, not repo_type —
-        // require_hosted is the separate check for hosted-vs-proxy-vs-group (B-19).
         let repo = repo(Uuid::new_v4(), RepositoryFormat::Npm, RepositoryType::Group);
         assert!(require_npm_format_repository(&repo).is_ok());
     }
@@ -381,7 +378,6 @@ mod tests {
             }
         }
 
-        /// Every repository seeded below needs a real organization row (foreign key).
         async fn create_org(state: &NpmState, id: Uuid, slug: &str) {
             state
                 .organizations

@@ -262,7 +262,6 @@ mod tests {
 
         use_case.execute(organization_id, "second-member", "Shared@Acme.example", "sup3r-s3cret!").await.unwrap();
 
-        // Whether an email is taken must not show in the response, and an unproven address claims nothing.
         assert!(users.find_by_verified_email(organization_id, "shared@acme.example").await.unwrap().is_none());
     }
 }

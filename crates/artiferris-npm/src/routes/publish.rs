@@ -221,7 +221,6 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
-    /// Mirrors `routes/metadata.rs`'s `test_state` — no shared test-support module for the HTTP-router `NpmState` builder.
     async fn test_state(pool: PgPool, root: &std::path::Path) -> NpmState {
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
         let repositories = Arc::new(PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string()));
@@ -344,8 +343,6 @@ mod tests {
         .unwrap();
     }
 
-    /// Same as `seed_user_with_active_token`, but with a caller-chosen username — needed to hit
-    /// `/u/{username}/...` routes. Mirrors `routes/metadata.rs`'s identical helper.
     async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: Uuid, username: &str, plaintext_token: &str) -> Uuid {
         let user_id = Uuid::new_v4();
         sqlx::query!(
@@ -369,8 +366,6 @@ mod tests {
         user_id
     }
 
-    /// Creates `owner_user_id`'s personal organization and a hosted npm project inside it,
-    /// returning the new repository's id. Mirrors `routes/metadata.rs`'s identical helper.
     async fn create_personal_project(pool: &PgPool, owner_user_id: Uuid, project_name: &str) -> Uuid {
         let organizations = Arc::new(PostgresOrganizationRepository::new(pool.clone()));
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
@@ -620,7 +615,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
-    /// Proves `require_hosted` is actually wired up at this route, not just unit-tested in `authz.rs`.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn publishing_against_a_proxy_repository_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -746,8 +740,6 @@ mod tests {
         let proxy_repo_id = Uuid::new_v4();
         seed_repository(&pool, org_id, proxy_repo_id, "npm", "proxy").await;
         let proxy_repo_name = format!("repo-{proxy_repo_id}");
-        // Same organization as both repositories, but deliberately no `seed_permission` call —
-        // genuinely unauthorized, not merely cross-org (which is already 404 before any type check).
         let _user_id = seed_user_with_active_token(&pool, org_id, "acme-token").await;
 
         let tarball_b64 = base64::engine::general_purpose::STANDARD.encode(b"tarball-bytes");
@@ -776,7 +768,6 @@ mod tests {
         assert_eq!(hosted_response.status(), StatusCode::FORBIDDEN, "role must be checked before repository type, so a plain permission denial (403) comes back either way");
     }
 
-    // ---- B-13: personal-namespace write support ----
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn publishing_to_a_personal_project_by_its_owner_succeeds(pool: PgPool) {
@@ -842,7 +833,6 @@ mod tests {
         );
     }
 
-    // ---- B-1 / B-12 / B-13 / B-16 ----
 
     struct Fixture {
         state: NpmState,

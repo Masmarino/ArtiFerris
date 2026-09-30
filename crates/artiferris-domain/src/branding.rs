@@ -21,7 +21,6 @@ pub struct BrandingSettings {
 #[async_trait]
 pub trait BrandingPort: Send + Sync {
     async fn get(&self, organization_id: Uuid) -> Result<BrandingSettings, DomainError>;
-    /// Each change writes `audit` in the same transaction.
     async fn set_logo(&self, organization_id: Uuid, asset: &BrandingAsset, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError>;
     async fn clear_logo(&self, organization_id: Uuid, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError>;
     async fn set_favicon(&self, organization_id: Uuid, asset: &BrandingAsset, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError>;

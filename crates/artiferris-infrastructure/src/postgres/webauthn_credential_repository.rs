@@ -108,8 +108,6 @@ mod tests {
         let listed = repo.list_for_user(user_id).await.unwrap();
         assert_eq!(listed.len(), 1);
         let found = listed.into_iter().next().unwrap();
-        // Postgres timestamptz only keeps microsecond precision, so compare created_at
-        // at that granularity rather than against Utc::now()'s full nanosecond value.
         assert_eq!(
             WebauthnCredential { created_at: found.created_at, ..credential.clone() },
             found

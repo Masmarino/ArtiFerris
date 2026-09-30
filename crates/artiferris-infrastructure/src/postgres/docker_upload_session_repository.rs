@@ -61,7 +61,6 @@ impl DockerUploadSessionPort for PostgresDockerUploadSessionRepository {
         let staging_path = self.staging_path_for(id);
         let staging_path_str = staging_path.to_string_lossy().to_string();
 
-        // The advisory lock makes count-then-insert exact.
         let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", format!("docker-uploads:{package_repository_id}")).execute(&mut *tx).await.infra_err()?;
         let open = sqlx::query_scalar!(
@@ -146,7 +145,6 @@ impl DockerUploadSessionPort for PostgresDockerUploadSessionRepository {
         let lock = self.session_lock(id);
         let _writing = lock.lock().await;
 
-        // Being written to counts as activity, so a slow upload isn't swept from under itself.
         let row = sqlx::query!("UPDATE docker_blob_uploads SET expires_at = now() + interval '1 hour' WHERE id = $1 RETURNING staging_path, bytes_received, sealed_at", id)
             .fetch_optional(&self.pool)
             .await
@@ -174,7 +172,6 @@ impl DockerUploadSessionPort for PostgresDockerUploadSessionRepository {
         let outcome: Result<(), DomainError> = async {
             while let Some(part) = chunk.next().await {
                 let part = part?;
-                // A single chunk can take longer than the hour a session lives; keep it from being swept while it arrives.
                 if last_refresh.elapsed() >= self.refresh_interval {
                     let refreshed = sqlx::query!("UPDATE docker_blob_uploads SET expires_at = now() + interval '1 hour' WHERE id = $1", id).execute(&self.pool).await.infra_err()?;
                     if refreshed.rows_affected() == 0 {
@@ -365,7 +362,6 @@ mod tests {
         seed_repository(&pool, repository_id).await;
         let sessions = Arc::new(PostgresDockerUploadSessionRepository::new(pool.clone(), dir.path()).with_refresh_interval(std::time::Duration::from_millis(50)));
         let session = sessions.create(repository_id).await.unwrap();
-        // Ten parts, one every 100 ms.
         let slow: ByteStream = Box::pin(futures_util::stream::unfold(0u8, |sent| async move {
             if sent == 10 {
                 return None;
@@ -378,7 +374,6 @@ mod tests {
             tokio::spawn(async move { sessions.append_stream(session.id, slow, None, u64::MAX).await })
         };
 
-        // What an hour of streaming does to the expiry, then a sweep, with the chunk still arriving.
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         sqlx::query!("UPDATE docker_blob_uploads SET expires_at = now() - interval '1 minute' WHERE id = $1", session.id).execute(&pool).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
@@ -486,7 +481,6 @@ mod tests {
         seed_repository(&pool, repository_id).await;
         let sessions = PostgresDockerUploadSessionRepository::new(pool, dir.path());
         let session = sessions.create(repository_id).await.unwrap();
-        // Simulate a prior crash: bytes already on disk, but the DB row was never updated to match.
         tokio::fs::write(&session.staging_path, b"stray-bytes-from-a-crash").await.unwrap();
 
         let new_offset = sessions.append_chunk(session.id, b"real-chunk", Some(0)).await.unwrap();
@@ -655,7 +649,6 @@ mod tests {
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), MAX_OPEN_UPLOADS_PER_REPOSITORY, "the refused session left no staging file");
         sessions.create(other_repository_id).await.unwrap();
 
-        // Expired sessions no longer count.
         sqlx::query!("UPDATE docker_blob_uploads SET expires_at = now() - interval '1 hour' WHERE package_repository_id = $1", repository_id).execute(&pool).await.unwrap();
         sessions.create(repository_id).await.unwrap();
     }

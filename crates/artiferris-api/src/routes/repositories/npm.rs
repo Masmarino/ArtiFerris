@@ -273,8 +273,6 @@ mod tests {
     use tower::ServiceExt;
 
 
-    /// #75: viewing a public repository's security-audit findings is treated the same as viewing
-    /// its package content — open to anyone, `AuthUser` or not.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_anonymous_caller_can_read_the_dependency_audit_for_a_public_npm_package(pool: sqlx::PgPool) {
         use artiferris_domain::npm_audit::{DependencyAuditFinding, DependencyAuditResult, NpmAdvisory};

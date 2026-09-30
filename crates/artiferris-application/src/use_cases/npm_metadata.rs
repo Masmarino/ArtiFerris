@@ -100,7 +100,6 @@ impl GetNpmPackageMetadataUseCase {
                                 metadata_fetched_at: None,
                                 cached_metadata: None,
                             };
-                            // Two cold requests race here; both get the same row.
                             self.packages.create_package(&created).await?
                         }
                     };
@@ -125,11 +124,9 @@ fn build_metadata_document(name: &NpmPackageName, versions: Vec<NpmPackageVersio
     for v in versions {
         let mut manifest = v.manifest;
         if let Some(obj) = manifest.as_object_mut() {
-            // The row's identity wins over the manifest's.
             obj.insert("name".to_string(), json!(name.as_str()));
             obj.insert("version".to_string(), json!(v.version.as_str()));
             obj.insert("dist".to_string(), json!({ "shasum": v.shasum, "integrity": v.integrity }));
-            // npm's protocol wants the deprecation message as the field's value; absence means "not deprecated".
             if v.deprecated {
                 if let Some(message) = &v.deprecated_message {
                     obj.insert("deprecated".to_string(), json!(message));
@@ -409,7 +406,6 @@ mod tests {
 
         let use_case = GetNpmPackageMetadataUseCase::new(packages, repositories, Arc::new(FakeRemoteRegistry::new()));
 
-        // Sanity check: the member really does hold the package, so the assertion below is explained by the policy, not a missing package.
         assert!(use_case.execute_hosted(forbidden_member_id, &name).await.unwrap().is_some());
 
         let result = use_case.execute(group_id, &name, |_repo: &PackageRepositorySummary| async { false }).await.unwrap();

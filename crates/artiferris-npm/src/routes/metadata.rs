@@ -129,7 +129,6 @@ async fn get_tarball_personal(
     connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>,
     user: Option<NpmAuthUser>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    // Same ordering note as `get_metadata_personal`.
     let (repo, _caller) =
         require_readable_personal_repository_by_name(&state, user.as_ref(), &username, &repo).await.map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
 
@@ -329,9 +328,6 @@ mod tests {
         user_id
     }
 
-    /// Same as `seed_user_with_active_token`, but with a caller-chosen username — needed to hit
-    /// `/u/{username}/...` routes, which address a user by their real, stable username rather
-    /// than the throwaway `user-{uuid}` names the other helper generates.
     async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: Uuid, username: &str, plaintext_token: &str) -> Uuid {
         let user_id = Uuid::new_v4();
         sqlx::query!(
@@ -368,9 +364,6 @@ mod tests {
             .unwrap();
     }
 
-    /// Attaches `member_id` to `group_id` through the repository event store — the same events the
-    /// API's add-group-member route emits, so the projection the group traversal later reads is
-    /// built by production code rather than by hand-written SQL.
     async fn attach_group_member(pool: &PgPool, group_id: Uuid, member_id: Uuid) {
         use artiferris_domain::package_repository::{PackageRepositoryEvent, PackageRepositoryEventStorePort};
         let store = PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string());
@@ -558,7 +551,6 @@ mod tests {
         seed_repository(&pool, acme_id, repo_id, "npm", "hosted").await;
         let repo_name = format!("repo-{repo_id}");
 
-        // Publish a real package first, so the assertion below is explained by the org check, not a missing package.
         let acme_user_id = seed_user_with_active_token(&pool, acme_id, "acme-owns-this-package").await;
         seed_permission(&pool, acme_user_id, repo_id, "read").await;
         let package_name = NpmPackageName::parse("acme-widget").unwrap();
@@ -569,12 +561,10 @@ mod tests {
             .await
             .unwrap();
 
-        // Belongs to "other", but holds a valid grant on acme's repository — a stale cross-org grant.
         let other_user_id = seed_user_with_active_token(&pool, other_id, "plaintext-token").await;
         seed_permission(&pool, other_user_id, repo_id, "read").await;
         let app = crate::router(state);
 
-        // Sanity check: acme's own user can fetch the package it just published.
         let acme_get = app
             .clone()
             .oneshot(
@@ -667,14 +657,10 @@ mod tests {
         );
     }
 
-    /// Creates `owner_user_id`'s personal organization and a project inside it, returning the new
-    /// repository's id — mirrors the setup `ResolvePersonalRepositoryUseCase`'s own tests use.
     async fn create_personal_project(pool: &PgPool, owner_user_id: Uuid, project_name: &str) -> Uuid {
         create_personal_project_with_format(pool, owner_user_id, project_name, RepositoryFormat::Npm).await
     }
 
-    /// Same as `create_personal_project`, but lets the caller pick the repository format — used to
-    /// seed a Docker-format personal repository for the npm format-check ordering regression test.
     async fn create_personal_project_with_format(pool: &PgPool, owner_user_id: Uuid, project_name: &str, format: RepositoryFormat) -> Uuid {
         let organizations = Arc::new(PostgresOrganizationRepository::new(pool.clone()));
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
@@ -831,8 +817,6 @@ mod tests {
             .await
             .unwrap();
 
-        // Mallory belongs to an unrelated organization and holds no grant on alice's personal
-        // repository — she must not even learn that it exists.
         let other_id = Uuid::new_v4();
         state
             .organizations
@@ -1067,7 +1051,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    // ---- M-10: reject a spoofed Host rather than reflect it into the tarball URL ----
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_spoofed_host_header_is_rejected_rather_than_reflected_into_the_tarball_url(pool: sqlx::PgPool) {
@@ -1150,7 +1133,6 @@ mod tests {
             "a spoofed Host on the personal-namespace route must be rejected rather than reflected into the tarball URL, even though this route resolves its repository purely from the path"
         );
 
-        // The legitimate counterpart: a real Host must still work and produce a correctly-formed tarball URL.
         let legitimate = app
             .oneshot(Request::builder().uri("/u/alice/my-lib/my-lib").header("host", "artiferris.localhost").body(Body::empty()).unwrap())
             .await
@@ -1276,27 +1258,19 @@ mod tests {
             headers
         };
 
-        // Same suffix, but no subdomain-separating dot: sibling label, not a subdomain.
         assert!(request_base_url(&state, &reject("notartiferris.localhost"), "some-repo").is_err(), "a host that merely ends with the base domain's characters, without a leading dot, must not match");
         assert!(request_base_url(&state, &reject("evil-artiferris.localhost"), "some-repo").is_err(), "a hyphenated sibling label must not match either");
-        // Base domain as a PREFIX, not a suffix: the base domain owns nothing past it.
         assert!(request_base_url(&state, &reject("artiferris.localhost.evil.example"), "some-repo").is_err(), "the base domain appearing as a prefix must not satisfy the suffix check");
-        // Unrelated host entirely.
         assert!(request_base_url(&state, &reject("evil.example"), "some-repo").is_err());
-        // The suffix matches but the prefix is not a plain hostname.
         for hostile in ["evil.example/x.artiferris.localhost", "evil.example#.artiferris.localhost", "evil.example?.artiferris.localhost", "a@evil.example/.artiferris.localhost", "evil\\.artiferris.localhost", "evil .artiferris.localhost"] {
             assert!(request_base_url(&state, &reject(hostile), "some-repo").is_err(), "{hostile:?}");
         }
 
-        // The base domain itself, and a genuine subdomain, must both be accepted.
         assert!(request_base_url(&state, &reject("artiferris.localhost"), "some-repo").is_ok(), "the base domain itself must be accepted");
         assert!(request_base_url(&state, &reject("acme.artiferris.localhost"), "some-repo").is_ok(), "a genuine subdomain must be accepted");
     }
 
-    // ---- C-1: per-member authorization on group traversal, exercised through the real routes ----
 
-    /// Every request below targets acme's subdomain, so `ResolvedOrganization` lands on the
-    /// organization the group and its member live in.
     fn acme_get(uri: String, token: Option<&str>) -> Request<Body> {
         let builder = Request::builder().method("GET").uri(uri).header("host", "acme.artiferris.localhost");
         match token {
@@ -1347,14 +1321,11 @@ mod tests {
         create_org(&state, acme_id, "acme").await;
         let (group_id, group_name, _member_id, member_name) = seed_group_over_a_private_member(&state, &pool, acme_id).await;
 
-        // Read on the GROUP only — the whole point is that this must not reach into the member.
         let reader_id = seed_user_with_active_token(&pool, acme_id, "reader-token").await;
         seed_permission(&pool, reader_id, group_id, "read").await;
 
         let app = crate::router(state);
 
-        // Sanity: the package genuinely exists and is genuinely readable by someone who holds Read
-        // on the member, so the assertions below are explained by the policy, not a broken fixture.
         let direct = app.clone().oneshot(acme_get(format!("/{member_name}/secret-widget"), Some("owner-token"))).await.unwrap();
         assert_eq!(direct.status(), StatusCode::OK, "sanity check: the member's package must be readable directly by a caller holding Read on the member");
 
@@ -1418,11 +1389,8 @@ mod tests {
         let (group_id, group_name, member_id, _member_name) = seed_group_over_a_private_member(&state, &pool, acme_id).await;
         mark_repository_public(&pool, group_id).await;
 
-        // Holds Read on the private member and nothing on the group — the group being public is
-        // what gets them past the top level.
         let reader_id = seed_user_with_active_token(&pool, acme_id, "reader-token").await;
         seed_permission(&pool, reader_id, member_id, "read").await;
-        // A stale grant on the member, held by someone outside the member's organization.
         let outsider_id = seed_user_with_active_token(&pool, other_id, "outsider-token").await;
         seed_permission(&pool, outsider_id, member_id, "read").await;
 
@@ -1498,8 +1466,6 @@ mod tests {
         let bytes = axum::body::to_bytes(tarball.into_body(), usize::MAX).await.unwrap();
         assert_eq!(bytes, Bytes::from_static(b"personal-group-tarball-bytes"));
 
-        // The other half: relaxing the organization match for a personal org must not make the
-        // member readable to someone holding no grant on it. Mallory is an authenticated stranger.
         seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "mallory", "mallory-token").await;
         let stranger = app
             .clone()

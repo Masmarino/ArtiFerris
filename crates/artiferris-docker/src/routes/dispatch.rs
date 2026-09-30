@@ -351,7 +351,6 @@ async fn handle_get_personal(
     dispatch_get(state, repo, rest, user, client, tags_query, location_base, || resolve_personal_organization_id(&resolve_state, &username, &resolve_repo)).await
 }
 
-/// Only the blob case gets the lightweight `head_blob` treatment; other HEAD requests fall back to the same GET handlers.
 async fn handle_head_personal(
     State(state): State<DockerState>,
     Path((username, repo, rest)): Path<(String, String, String)>,
@@ -521,7 +520,6 @@ mod tests {
     async fn a_request_for_an_unknown_personal_project_is_not_found(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool.clone(), dir.path()).await;
-        // Any valid Bearer token — resolution fails before the granted scope is ever inspected.
         let token = state.token_issuer.issue(seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await, Uuid::new_v4(), false, None).unwrap();
         let app = crate::router(state);
 
@@ -591,7 +589,6 @@ mod tests {
             .await
             .unwrap();
         let mallory_id = seed_user_with_active_token(&pool, other_org_id, "mallory-token").await;
-        // A completely unscoped token — a stranger's, not merely one without the right action.
         let mallory_token = state.token_issuer.issue(mallory_id, other_org_id, false, None).unwrap();
         let app = crate::router(state);
 
@@ -727,7 +724,6 @@ mod tests {
         let personal_host = format!("u{}.artiferris.localhost", &alice_id.simple().to_string()[..24]);
         let app = crate::router(state.clone());
 
-        // The owner herself, holding a matching granted scope, can still reach it this way.
         let owner_token = issue_test_token(&state, alice_id, repo_id, &repo_name, "myimage", &["pull"]);
         let owner_response = app
             .clone()
@@ -744,7 +740,6 @@ mod tests {
             .unwrap();
         assert_eq!(owner_response.status(), StatusCode::OK, "sanity check: the owner must still be able to reach her own project this way");
 
-        // A stranger, holding a completely unscoped token, must not learn it exists.
         let other_org_id = Uuid::new_v4();
         state
             .organizations
@@ -791,7 +786,6 @@ mod tests {
         let alice_id = seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "alice", "alice-token").await;
         create_personal_project(&pool, alice_id, "secret-lib", RepositoryFormat::Docker).await;
 
-        // A stranger, holding a completely unscoped token — no grant on alice's project at all.
         let other_org_id = Uuid::new_v4();
         state
             .organizations
@@ -809,7 +803,6 @@ mod tests {
         let mallory_token = state.token_issuer.issue(mallory_id, other_org_id, false, None).unwrap();
         let app = crate::router(state);
 
-        // "myimage/blobs/uploads/" parses to BlobUploadStart — a write-shaped operation GET never handles.
         let existing_response = app
             .clone()
             .oneshot(
@@ -885,7 +878,6 @@ mod tests {
             .unwrap();
         assert_eq!(put_response.status(), StatusCode::CREATED);
 
-        // No Authorization header at all — an anonymous pull against a public repository.
         let get_response = app
             .oneshot(Request::builder().method("GET").uri(format!("/{repo_name}/myimage/manifests/latest")).body(Body::empty()).unwrap())
             .await
@@ -937,7 +929,6 @@ mod tests {
             .unwrap();
         assert_eq!(put_response.status(), StatusCode::CREATED);
 
-        // Repository stays private — same request, still no Authorization header.
         let get_response = app
             .oneshot(Request::builder().method("GET").uri(format!("/{repo_name}/myimage/manifests/latest")).body(Body::empty()).unwrap())
             .await
@@ -988,7 +979,6 @@ mod tests {
             .unwrap();
         assert_eq!(put_response.status(), StatusCode::CREATED);
 
-        // No Authorization header, reached via /u/{username}/{repo}/... rather than an org subdomain.
         let get_response =
             app.oneshot(Request::builder().method("GET").uri("/u/alice/my-image/myimage/manifests/latest").body(Body::empty()).unwrap()).await.unwrap();
 
@@ -1037,7 +1027,6 @@ mod tests {
             .unwrap();
         assert_eq!(put_response.status(), StatusCode::CREATED);
 
-        // Project stays private — same request, still no Authorization header.
         let get_response =
             app.oneshot(Request::builder().method("GET").uri("/u/alice/my-image/myimage/manifests/latest").body(Body::empty()).unwrap()).await.unwrap();
 
@@ -1093,7 +1082,6 @@ mod tests {
             .unwrap();
         assert_eq!(put_response.status(), StatusCode::CREATED);
 
-        // A real, authenticated stranger — a different organization, no grant on this repository at all.
         let other_org_id = Uuid::new_v4();
         state
             .organizations
@@ -1142,8 +1130,6 @@ mod tests {
         let app = crate::router(state);
         let body = manifest_body(&Digest::of(b"unused-config-bytes"));
 
-        // No Authorization header at all — same discipline as `DockerAuthUser`'s own
-        // `a_missing_authorization_header_is_rejected` test.
         let response = app
             .oneshot(
                 Request::builder()
@@ -1201,7 +1187,6 @@ mod tests {
             .await
             .unwrap();
 
-        // The real handshake: no Basic credentials at all.
         let token_response =
             app.clone().oneshot(Request::builder().uri("/token").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(token_response.status(), StatusCode::OK);
@@ -1235,7 +1220,6 @@ mod tests {
         let repository_id = Uuid::new_v4();
         seed_repository(&pool, PUBLIC_ORGANIZATION_ID, repository_id, "docker", "hosted").await;
         let repo_name = format!("repo-{repository_id}");
-        // Deliberately not marked public.
         let app = crate::router(state);
 
         let token_response =

@@ -77,7 +77,6 @@ impl NpmAuditPort for HttpNpmAuditClient {
 mod tests {
     use super::*;
 
-    // Ground truth against a long-published, immutable, known-vulnerable version.
     #[tokio::test]
     #[ignore = "requires network access to registry.npmjs.org"]
     async fn finds_known_advisories_for_a_real_vulnerable_package() {
@@ -136,7 +135,6 @@ mod tests {
         let endpoint = format!("http://{}/advisories", listener.local_addr().unwrap());
         tokio::spawn(async move {
             let (_socket, _) = listener.accept().await.unwrap();
-            // Accepts the connection and never answers.
             std::future::pending::<()>().await;
         });
         let client = HttpNpmAuditClient::with_endpoint(endpoint, std::time::Duration::from_millis(300));

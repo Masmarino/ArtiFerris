@@ -65,7 +65,6 @@ impl GetManifestUseCase {
             }
         }
         let remote_url = repo.remote_url.as_deref().ok_or_else(|| ApplicationError::InvalidDockerPayload("proxy repository has no remote_url configured".into()))?;
-        // `None` means the remote genuinely 404'd — a real "not found", not an infra failure.
         let Some((bytes, content_type)) = self.remote.fetch_manifest(remote_url, image_name, reference, repo.remote_username.as_deref(), repo.remote_password.as_deref()).await? else {
             return Ok(None);
         };
@@ -75,7 +74,6 @@ impl GetManifestUseCase {
                 return Err(ApplicationError::DockerDigestMismatch { expected: requested.as_str().to_string(), computed: digest.as_str().to_string() });
             }
         }
-        // Caching the fetched manifest locally is the route layer's job, not this use case's.
         Ok(Some(DockerManifest {
             id: Uuid::new_v4(),
             package_repository_id: repository_id,

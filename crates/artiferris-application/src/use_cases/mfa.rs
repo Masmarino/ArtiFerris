@@ -197,8 +197,6 @@ impl ConfirmTotpUseCase {
     /// Returns the plaintext backup codes — the only time they are ever visible; only their hashes are persisted.
     pub async fn execute(&self, user_id: Uuid, username: &str, code: &str) -> Result<Vec<String>, ApplicationError> {
         let credential = self.totp.get(user_id).await?.ok_or(ApplicationError::MfaNotEnrolled)?;
-        // Without this guard, any still-valid code for an already-confirmed credential lets a
-        // caller re-trigger backup-code regeneration — destroying the victim's existing set (C-4).
         if credential.confirmed {
             return Err(ApplicationError::MfaAlreadyEnabled);
         }
@@ -242,7 +240,6 @@ impl VerifyTotpUseCase {
         let credential = self.totp.get(user_id).await?.filter(|c| c.confirmed).ok_or(ApplicationError::MfaNotEnrolled)?;
         let totp = build_totp(&credential.secret, "")?;
         let step = totp.check_current(code).ok_or(ApplicationError::InvalidMfaCode)?;
-        // Reject an already-accepted step. Not enough alone under concurrency — set_last_used_step below is the real compare-and-swap.
         if credential.last_used_step.is_some_and(|last| step as i64 <= last) {
             return Err(ApplicationError::InvalidMfaCode);
         }
@@ -263,9 +260,6 @@ impl VerifyBackupCodeUseCase {
     }
 
     pub async fn execute(&self, user_id: Uuid, code: &str) -> Result<(), ApplicationError> {
-        // `try_consume` takes the plaintext code, not a pre-hashed value: each stored hash carries
-        // its own salt (M-5), so there is no exact stored value to hash toward — the port itself
-        // must fetch this user's candidate hashes and verify each via `verify_backup_code`.
         if self.backup_codes.try_consume(user_id, code).await? {
             Ok(())
         } else {
@@ -421,8 +415,6 @@ mod tests {
         async fn try_consume(&self, user_id: Uuid, plaintext_code: &str) -> Result<bool, DomainError> {
             let mut by_user = self.by_user.lock().unwrap();
             let Some(codes) = by_user.get_mut(&user_id) else { return Ok(false) };
-            // Salted hashes can't be looked up by exact value: check the plaintext against every
-            // still-unused stored hash for this user, same as the real Postgres implementation.
             let Some(matching_hash) = codes.iter().find(|(hash, used)| !**used && verify_backup_code(plaintext_code, hash)).map(|(hash, _)| hash.clone()) else {
                 return Ok(false);
             };
@@ -818,8 +810,6 @@ mod tests {
         let original_codes =
             ConfirmTotpUseCase::new(totp_port.clone(), backup_codes.clone(), Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user_id, "florian", &code).await.unwrap();
 
-        // The same code is still within its valid window (skew=1) — a second confirm call must not
-        // silently regenerate the backup codes it already issued.
         let err = ConfirmTotpUseCase::new(totp_port, backup_codes.clone(), Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user_id, "florian", &code).await.unwrap_err();
 
         assert!(matches!(err, ApplicationError::MfaAlreadyEnabled));
@@ -853,13 +843,11 @@ mod tests {
         let code = code_for(&enrollment.secret_base32, "florian");
         ConfirmTotpUseCase::new(totp_port.clone(), backup_codes, Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user_id, "florian", &code).await.unwrap();
 
-        // The confirm step already consumed this code; login must reject it as a replay too.
         let verify = VerifyTotpUseCase::new(totp_port);
         let err = verify.execute(user_id, &code).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidMfaCode));
     }
 
-    /// The in-memory pre-check alone can't see a concurrent winner — only the CAS result can.
     #[tokio::test]
     async fn verify_totp_rejects_the_code_when_the_atomic_advance_loses_the_race() {
         struct AlwaysLosesTheRace(Arc<FakeTotp>);
@@ -996,8 +984,6 @@ mod tests {
 
     #[test]
     fn two_backup_codes_with_the_same_plaintext_hash_differently_due_to_salt() {
-        // Simulates two different users/enrollments generating the identical plaintext code by
-        // coincidence — their stored hashes must differ because each has its own random salt.
         let hash_a = hash_backup_code("abc123");
         let hash_b = hash_backup_code("abc123");
         assert_ne!(hash_a, hash_b, "identical plaintext must still produce different stored hashes across calls, via a random salt");
@@ -1037,7 +1023,6 @@ mod tests {
         let verify = VerifyBackupCodeUseCase::new(backup_codes.clone());
         verify.execute(user_id, "legacy-code").await.expect("a still-unused legacy backup code must keep working after the M-5 salting fix");
 
-        // Single-use, same as a salted code.
         let err = verify.execute(user_id, "legacy-code").await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidMfaCode));
     }

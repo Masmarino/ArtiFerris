@@ -852,7 +852,6 @@ mod tests {
         let (challenge_id, _ccr) = start.execute(user_id, "florian", Some("s3cret!")).await.unwrap();
 
         let finish = FinishPasskeyRegistrationUseCase::new(webauthn, credentials, ceremonies, Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new()));
-        // Proves `take()` removes the entry: the second attempt must fail at ceremony lookup, not crypto.
         let _ = finish.execute(user_id, Uuid::new_v4(), challenge_id, &fake_register_response(), "My key").await;
         let err = finish.execute(user_id, Uuid::new_v4(), challenge_id, &fake_register_response(), "My key").await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidMfaCode));

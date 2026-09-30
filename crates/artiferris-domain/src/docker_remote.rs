@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use crate::docker_registry::{ByteStream, Digest, DockerImageName};
 use crate::error::DomainError;
 
-/// A blob response whose body has not been read yet.
 pub struct RemoteBlob {
     /// What the remote declared, if it did. Not trusted: the body is verified as it is stored.
     pub content_length: Option<u64>,

@@ -122,7 +122,6 @@ impl DownloadNpmTarballUseCase {
             HashSet::new(),
             move |repository_id| self.execute_hosted_stream(repository_id, name, version),
             move |repository_id, repo| async move {
-                // A tarball that is cached is streamed from disk, never read into memory.
                 if let Some(cached) = self.execute_hosted_stream(repository_id, name, version).await? {
                     return Ok(Some(cached));
                 }
@@ -146,7 +145,6 @@ impl DownloadNpmTarballUseCase {
         version: &NpmVersion,
     ) -> Result<Option<Fill>, ApplicationError> {
         let _turn = self.fills.lock((repository_id, name.as_str().to_string(), version.as_str())).await;
-        // Tarballs are immutable once fetched, so a cached one is served as it is.
         if let Some(package) = self.packages.find_package(repository_id, name).await? {
             if self.packages.find_version(package.id, version).await?.is_some() {
                 return Ok(Some(Fill::AlreadyCached));
@@ -154,7 +152,6 @@ impl DownloadNpmTarballUseCase {
         }
         let _slot = self.fill_slots.acquire().await.map_err(|_| artiferris_domain::error::DomainError::Infrastructure("the proxy fetch limiter is closed".to_string()))?;
 
-        // Not cached: the tarball URL must come from the cached metadata document.
         let Some(package) = self.packages.find_package(repository_id, name).await? else {
             return Ok(None);
         };
@@ -175,7 +172,6 @@ impl DownloadNpmTarballUseCase {
             .remote_url
             .as_deref()
             .ok_or_else(|| ApplicationError::InvalidNpmPayload("proxy repository has no remote_url configured".into()))?;
-        // A genuine 404 from the remote means the tarball doesn't exist upstream — not an error.
         let Some(tarball_bytes) =
             self.remote.fetch_tarball(remote_url, tarball_url, repo.remote_username.as_deref(), repo.remote_password.as_deref()).await?
         else {
@@ -197,7 +193,6 @@ impl DownloadNpmTarballUseCase {
         .await
         .map_err(|e| artiferris_domain::error::DomainError::Infrastructure(e.to_string()))?;
 
-        // A tampered copy from another host must not be cached for good.
         check_advertised_checksums(&manifest, &shasum, &integrity)?;
 
         let filename = format!("{}-{}.tgz", name.as_str().rsplit('/').next().unwrap_or(name.as_str()), version.as_str());
@@ -220,7 +215,6 @@ impl DownloadNpmTarballUseCase {
             origin: NpmPackageOrigin::ProxyCache,
         };
         match self.packages.insert_version(&npm_version).await {
-            // A concurrent request cached the same version first, under the same key.
             Ok(()) | Err(artiferris_domain::error::DomainError::NpmVersionAlreadyExists) => {}
             Err(e) => return Err(e.into()),
         }

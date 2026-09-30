@@ -275,7 +275,6 @@ mod tests {
         manifests.insert_manifest(&m, &[]).await.unwrap();
         manifests.set_tag(hosted_id, &image_name, "v1", m.id).await.unwrap();
         let mut next_layer = vec![hosted_id];
-        // 12 layers keep the depth under the cap while giving thousands of paths.
         for _ in 0..12 {
             let layer = vec![Uuid::new_v4(), Uuid::new_v4()];
             for &id in &layer {
@@ -535,7 +534,6 @@ mod tests {
         let name = DockerImageName::parse("myimage").unwrap();
         let m = manifest(repository_id, &name);
         manifests.insert_manifest(&m, &[]).await.unwrap();
-        // Two tags on the SAME image must still surface it only once.
         manifests.set_tag(repository_id, &name, "v1", m.id).await.unwrap();
         manifests.set_tag(repository_id, &name, "v2", m.id).await.unwrap();
 
@@ -565,8 +563,6 @@ mod tests {
         manifests.set_tag(in_other_org, &name, "latest", other_manifest.id).await.unwrap();
 
         let user_id = Uuid::new_v4();
-        // Readable in BOTH repositories — proves the organization filter, not the
-        // permission filter, is what excludes the other organization's repository.
         let permissions = Arc::new(FakePermissions::new(vec![(user_id, in_queried_org, Role::Read), (user_id, in_other_org, Role::Read)]));
         let use_case = ListDockerRegistryCatalogUseCase::new(repositories, permissions, manifests);
 
@@ -659,7 +655,6 @@ mod tests {
         manifests.insert_manifest(&m, &[]).await.unwrap();
         manifests.set_tag(repository_id, &name, "latest", m.id).await.unwrap();
 
-        // No explicit grants at all — visibility must come purely from `is_public`.
         let permissions = Arc::new(FakePermissions::new(vec![]));
         let use_case = ListDockerRegistryCatalogUseCase::new(repositories, permissions, manifests);
 
@@ -680,7 +675,6 @@ mod tests {
         manifests.insert_manifest(&m, &[]).await.unwrap();
         manifests.set_tag(repository_id, &name, "latest", m.id).await.unwrap();
 
-        // No explicit grants at all — a super-admin must still see everything.
         let permissions = Arc::new(FakePermissions::new(vec![]));
         let use_case = ListDockerRegistryCatalogUseCase::new(repositories, permissions, manifests);
 

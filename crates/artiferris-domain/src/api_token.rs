@@ -25,7 +25,6 @@ impl ApiToken {
     }
 }
 
-/// A token with the facts about its owner that admin oversight needs.
 #[derive(Debug, Clone)]
 pub struct ApiTokenWithOwner {
     pub token: ApiToken,
@@ -85,7 +84,6 @@ mod tests {
         assert!(!token.is_active());
     }
 
-    /// B-6: `ApiToken` previously had no expiry field at all — tokens lived forever.
     #[test]
     fn a_token_with_a_future_expiry_is_active() {
         let token = ApiToken {

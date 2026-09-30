@@ -175,8 +175,6 @@ mod tests {
     use tower::ServiceExt;
     use uuid::Uuid;
 
-    /// Mirrors `routes/metadata.rs`'s `test_state` — this crate has no shared
-    /// test-support module for the HTTP-router `NpmState` builder.
     async fn test_state(pool: PgPool, root: &std::path::Path) -> NpmState {
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
         let repositories = Arc::new(PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string()));
@@ -276,8 +274,6 @@ mod tests {
         .unwrap();
     }
 
-    /// Same as `seed_user_with_active_token`, but with a caller-chosen username — needed to hit
-    /// `/u/{username}/...` routes. Mirrors `routes/metadata.rs`'s identical helper.
     async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: Uuid, username: &str, plaintext_token: &str) -> Uuid {
         let user_id = Uuid::new_v4();
         sqlx::query!(
@@ -301,8 +297,6 @@ mod tests {
         user_id
     }
 
-    /// Creates `owner_user_id`'s personal organization and a hosted npm project inside it,
-    /// returning the new repository's id. Mirrors `routes/metadata.rs`'s identical helper.
     async fn create_personal_project(pool: &PgPool, owner_user_id: Uuid, project_name: &str) -> Uuid {
         let organizations = Arc::new(PostgresOrganizationRepository::new(pool.clone()));
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
@@ -501,7 +495,6 @@ mod tests {
         );
     }
 
-    // ---- B-13: personal-namespace write support ----
 
     fn put_personal_dist_tag(app: axum::Router, username: &str, repo_name: &str, tag: &str, raw_body: &str, bearer: &str) -> impl std::future::Future<Output = axum::response::Response> {
         let request = Request::builder()

@@ -102,7 +102,6 @@ impl PostgresPackageRepositoryStore {
         let repo_type = repo_type_from_str(&repo_type)
             .ok_or_else(|| EventStoreError::Storage(format!("unknown repo_type {repo_type}")))?;
 
-        // Only a Group repository can have members — skip the query for Hosted/Proxy, the overwhelming majority of lookups.
         let members = if repo_type == RepositoryType::Group {
             sqlx::query_scalar!(
                 "SELECT member_repository_id FROM package_repository_group_members WHERE group_repository_id = $1 ORDER BY position",
@@ -211,7 +210,6 @@ impl PostgresPackageRepositoryStore {
         events: Vec<PackageRepositoryEvent>,
         actor_id: Uuid,
     ) -> Result<(), EventStoreError> {
-        // Advisory lock first: `FOR UPDATE` below takes no lock on a brand-new aggregate (zero rows), so two first-appends could race.
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", repository_id.to_string())
             .execute(&mut **tx)
             .await
@@ -236,7 +234,6 @@ impl PostgresPackageRepositoryStore {
             next_version += 1;
             let event = self.encrypt_secrets(event);
             let payload = serde_json::to_value(&event).storage_err()?;
-            // The Created event is the first thing a repository's events can look its organization up from.
             let created_in = match &event {
                 PackageRepositoryEvent::Created { organization_id, .. } => Some(*organization_id),
                 _ => None,
@@ -278,8 +275,6 @@ impl PersonalProjectProvisioningPort for PostgresPackageRepositoryStore {
 
         self.append_in_tx(&mut tx, repository_id, 0, vec![repository_event], actor_id).await?;
 
-        // Only a Granted event is valid here — checked after the repository-side insert above, so
-        // a rejection still rolls that insert back too.
         if !matches!(permission_event, PermissionEvent::Granted { .. }) {
             return Err(EventStoreError::Storage("PersonalProjectProvisioningPort::create_with_owner_grant requires a Granted event".to_string()));
         }
@@ -461,7 +456,6 @@ impl PackageRepositoryQueryPort for PostgresPackageRepositoryStore {
         .await
         .storage_err()?;
 
-        // One batched query for every repository's group members, not one per row.
         let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
         let member_rows = sqlx::query!(
             "SELECT group_repository_id, member_repository_id FROM package_repository_group_members \
@@ -507,7 +501,6 @@ impl PackageRepositoryQueryPort for PostgresPackageRepositoryStore {
         .await
         .storage_err()?;
 
-        // One batched query for every repository's group members, not one per row.
         let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
         let member_rows = sqlx::query!(
             "SELECT group_repository_id, member_repository_id FROM package_repository_group_members \
@@ -576,8 +569,6 @@ impl RepositoryDeletionSweepPort for PostgresPackageRepositoryStore {
                     result.reclaimed_docker_blob_digests.extend(outcome);
                 }
                 Err(e) => {
-                    // Logged, not propagated: one repository's failure must not stop the sweep from
-                    // reclaiming the rest of the batch. See the comment above.
                     tracing::warn!(repository_id = %repository_id, error = %e, "repository deletion sweep failed to hard-delete a repository; it will be retried on the next run");
                 }
             }
@@ -618,11 +609,6 @@ impl PostgresPackageRepositoryStore {
     async fn hard_delete_one_repository(&self, repository_id: Uuid) -> Result<Vec<String>, artiferris_domain::error::DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
 
-        // Collected before the DELETE below cascades away `docker_manifests`/`docker_manifest_blobs` —
-        // this is what `docker_blobs.reference_count` needs decremented for once those rows are gone,
-        // since the cascade itself never reaches `docker_blobs` (see the port's doc comment for why).
-        // One row per `docker_manifest_blobs` link (duplicates included) — mirrors `DeleteManifestUseCase`,
-        // which decrements once per row, not once per distinct digest.
         let orphaned_docker_blob_digests: Vec<String> = sqlx::query_scalar!(
             "SELECT dmb.blob_digest FROM docker_manifest_blobs dmb \
              JOIN docker_manifests dm ON dm.id = dmb.manifest_id \
@@ -633,23 +619,12 @@ impl PostgresPackageRepositoryStore {
         .await
         .infra_err()?;
 
-        // A `docker_repository_blobs` link row means "this repository has this blob", independent of
-        // any manifest — a proxy repository links every blob it fetches without ever calling
-        // `increment_ref` (see `docker_blob_get.rs`'s `execute_proxy`). The cascade below drops ALL
-        // of this repository's link rows, so without this list a link-only digest's last link would
-        // vanish here and its `docker_blobs` row (and file) would leak forever.
         let all_linked_digests: Vec<String> =
             sqlx::query_scalar!("SELECT DISTINCT blob_digest FROM docker_repository_blobs WHERE package_repository_id = $1", repository_id)
                 .fetch_all(&mut *tx)
                 .await
                 .infra_err()?;
 
-        // Deduplicated union of both lists, with no assumption that one contains the other (a
-        // manifest-backed digest usually also has its own link row, but that's not relied on here).
-        // The decrement further down stays scoped to `orphaned_docker_blob_digests` alone: only
-        // manifest pushes call `increment_ref`, so a link-only digest's count is already correct —
-        // possibly reflecting some OTHER repository's own live manifest reference — and must not be
-        // touched by this repository's hard-delete.
         let reclaim_candidate_digests: Vec<String> = orphaned_docker_blob_digests
             .iter()
             .cloned()
@@ -658,50 +633,23 @@ impl PostgresPackageRepositoryStore {
             .into_iter()
             .collect();
 
-        // Finding 1 (fix round 1): `package_repository_group_members_member_fk` (member_repository_id)
-        // has no ON DELETE action, so hard-deleting a repository that's still listed as some OTHER,
-        // still-live group's member would otherwise fail with a foreign-key violation. This repository's
-        // OWN membership rows as a GROUP (group_repository_id) are already handled by that column's
-        // ON DELETE CASCADE, via the projection delete below — this only needs to clear rows where
-        // it's the MEMBER. `group_resolve.rs` already tolerates a member row surviving after its
-        // target soft-deletes (it's just dropped at resolve time), which is exactly the state this
-        // leaves behind until the hard-delete sweep reaches it.
         sqlx::query!("DELETE FROM package_repository_group_members WHERE member_repository_id = $1", repository_id)
             .execute(&mut *tx)
             .await
             .infra_err()?;
 
-        // The real hard delete — everything else FK'd `ON DELETE CASCADE` to this row (npm_packages,
-        // docker_manifests, docker_tags, docker_repository_blobs, docker_blob_uploads, and this
-        // repository's own package_repository_group_members rows as a group) goes with it.
         let deleted = sqlx::query!("DELETE FROM package_repository_projections WHERE id = $1", repository_id)
             .execute(&mut *tx)
             .await
             .infra_err()?;
 
         if deleted.rows_affected() == 0 {
-            // Raced with something else that already removed this row (e.g. an overlapping sweep
-            // run) — nothing left to decrement either, since the digests above were collected from
-            // manifests that belonged to a repository that, it turns out, was already gone.
             tx.commit().await.infra_err()?;
             return Ok(Vec::new());
         }
 
         let mut reclaimed_docker_blob_digests = Vec::new();
         if !reclaim_candidate_digests.is_empty() {
-            // Finding 3 (fix round 1): the decrement — and the deletion of any blob it brings to
-            // zero — now happens IN THIS SAME TRANSACTION as the cascade above, via a batched SQL
-            // decrement, rather than a post-commit Rust loop calling `decrement_ref_and_delete_if_zero`
-            // once per digest (the original B-39 shape). That loop stopped at its first error, and by
-            // the time it ran, the `docker_manifest_blobs` rows that would let a future sweep run
-            // rediscover the remaining digests were already gone — a crash or transient error
-            // partway through permanently over-counted every digest after it. Doing this here means
-            // the reference-count bookkeeping is durably committed alongside the cascade itself, not
-            // dependent on a Rust loop finishing.
-            //
-            // Deliberately scoped to `orphaned_docker_blob_digests` alone, not the wider
-            // `reclaim_candidate_digests` union above — see that union's own comment for why. An
-            // empty array here is a safe no-op: `unnest()` on it just produces zero rows.
             sqlx::query!(
                 "UPDATE docker_blobs SET reference_count = reference_count - counts.cnt \
                  FROM (SELECT blob_digest, COUNT(*) AS cnt FROM unnest($1::text[]) AS blob_digest GROUP BY blob_digest) counts \
@@ -712,17 +660,6 @@ impl PostgresPackageRepositoryStore {
             .await
             .infra_err()?;
 
-            // Deletes only the blobs that both hit zero AND have no remaining `docker_repository_blobs`
-            // link (a blob can still be linked to a DIFFERENT, non-doomed repository even once no
-            // manifest references it — see that table's schema comment). Filtering with NOT EXISTS
-            // means this never attempts a delete that would violate that link's FK in the ordinary
-            // case, so there's no error to catch or roll back here. (`decrement_ref_and_delete_if_zero`
-            // used to roll back its OWN decrement whenever it hit that FK violation on its analogous
-            // DELETE; fix round 2, N1 closed that by running that DELETE in its own savepoint instead.)
-            // The decrement above always survives here regardless of whether the row itself could be
-            // deleted. The candidate list is the widened union — a link-only digest whose
-            // reference_count was already 0 and whose only link was this repository's own (just
-            // cascaded away above) is just as reclaimable here as a manifest-backed one.
             let rows = sqlx::query!(
                 "DELETE FROM docker_blobs \
                  WHERE digest = ANY($1) AND reference_count <= 0 \
@@ -998,7 +935,6 @@ mod tests {
             )
             .await
             .unwrap();
-        // A member must be a real repository row — member_repository_id is FK-constrained.
         store
             .append(
                 member_id,
@@ -1058,7 +994,6 @@ mod tests {
                 .await
                 .unwrap();
         }
-        // A member must be a real repository row — member_repository_id is FK-constrained.
         for (member_id, name) in [(member_a, "member-a"), (member_b, "member-b")] {
             store
                 .append(
@@ -1421,9 +1356,6 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, EventStoreError::Storage(_)), "expected a Storage error rejecting the non-Granted event, got {err:?}");
 
-        // Nothing committed: not the repository's projection row, not its domain_events row, not a
-        // permission_projections row — proving the earlier repository-side insert rolled back along
-        // with the rejected permission event, rather than surviving as an ungranted orphan.
         assert!(store.find_by_id(repository_id).await.unwrap().is_none());
         let event_count = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM domain_events WHERE aggregate_type = 'PackageRepository' AND aggregate_id = $1",
@@ -1588,8 +1520,6 @@ mod tests {
         let repository_id = Uuid::new_v4();
         create_and_soft_delete_backdated(&store, repository_id, "doomed-repo", 31).await;
 
-        // A dependent row in one of the cascading tables — proves the cascade actually fires, not just
-        // that the projection row disappears.
         let blob_digest = Digest::of(b"cascade-orphaned-layer");
         seed_docker_blob(&pool, &blob_digest, "sha256/ab/cd/cascade-orphaned-layer", 1).await;
         let manifest_id = seed_manifest_with_blob(&pool, repository_id, &blob_digest).await;
@@ -1661,8 +1591,6 @@ mod tests {
         let blob_digest = Digest::of(b"shared-across-two-repositories");
         seed_docker_blob(&pool, &blob_digest, "sha256/ab/cd/shared-across-two-repositories", 1).await;
         seed_manifest_with_blob(&pool, doomed_repository_id, &blob_digest).await;
-        // The blob was also uploaded directly to the still-alive repository (independent of any
-        // manifest referencing it there — see docker_repository_blobs's schema comment).
         sqlx::query!(
             "INSERT INTO docker_repository_blobs (package_repository_id, blob_digest) VALUES ($1, $2)",
             other_repository_id,
@@ -1712,8 +1640,6 @@ mod tests {
         let docker_blobs = std::sync::Arc::new(crate::filesystem_docker_blob_store::FilesystemDockerBlobStore::new(pool.clone(), blob_dir.path()));
         let digest = Digest::of(b"proxy-cached-layer-never-in-a-manifest");
         docker_blobs.write(&digest, b"proxy-cached-layer-never-in-a-manifest").await.unwrap();
-        // No manifest ever references this digest, and it's never incremented — `reference_count`
-        // stays at 0, exactly a proxy cache's link-only row.
         docker_blobs.link_to_repository(repository_id, &digest).await.unwrap();
         let file_path = blob_dir.path().join(expected_storage_key(&digest));
         assert!(file_path.exists(), "sanity check: the file exists before the sweep runs");
@@ -1817,8 +1743,6 @@ mod tests {
         let blob_digest = Digest::of(b"link-only-for-doomed-manifest-for-live");
         seed_docker_blob(&pool, &blob_digest, "sha256/ab/cd/link-only-for-doomed-manifest-for-live", 1).await;
         seed_manifest_with_blob(&pool, live_repository_id, &blob_digest).await;
-        // The doomed repository only ever linked this digest (e.g. it proxy-cached it) — it never
-        // pushed a manifest referencing it, so it must not be a source of this digest's decrement.
         sqlx::query!(
             "INSERT INTO docker_repository_blobs (package_repository_id, blob_digest) VALUES ($1, $2)",
             doomed_repository_id,
@@ -1827,8 +1751,6 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        // The live repository's own link row from the upload that preceded its manifest push — kept
-        // so the DELETE's NOT EXISTS guard alone can't mask a decrement-scope bug behind a row deletion.
         sqlx::query!(
             "INSERT INTO docker_repository_blobs (package_repository_id, blob_digest) VALUES ($1, $2)",
             live_repository_id,
@@ -1914,11 +1836,6 @@ mod tests {
             .await
             .unwrap();
 
-        // The member is later soft-deleted — `group_resolve.rs` already expects a soft-deleted
-        // member to keep appearing in the group's `group_members` list (it's simply dropped at
-        // resolve time, since `find_by_id` filters `deleted_at IS NULL`), which is exactly the state
-        // that leaves the stale `package_repository_group_members` row behind for the sweep to deal
-        // with, 30+ days later.
         store.append(member_id, 1, vec![PackageRepositoryEvent::Deleted { repository_id: member_id }], Uuid::new_v4()).await.unwrap();
         sqlx::query!("UPDATE package_repository_projections SET deleted_at = now() - interval '31 days' WHERE id = $1", member_id)
             .execute(&pool)
@@ -1956,7 +1873,6 @@ mod tests {
         .unwrap();
         assert!(membership_after.is_none(), "the stale group membership row must be cleaned up along with the member");
 
-        // The still-live group itself must be completely untouched by any of this.
         let group_summary = store.find_by_id(group_id).await.unwrap();
         assert!(group_summary.is_some(), "the still-live group must survive the sweep");
         assert!(group_summary.unwrap().group_members.is_empty(), "the group's member list must no longer include the hard-deleted repository");

@@ -562,8 +562,6 @@ async fn list_my_projects(State(state): State<AppState>, user: AuthUser) -> Resu
         return Ok(Json(Vec::new()));
     };
     let owner = state.organizations.find_by_id(organization_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-    // Scoped at the database level instead of filtering a full-table `list_all()` read in
-    // application code (M-21, B-7).
     let org_repos = state.repositories.list_by_organization(organization_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let roles: std::collections::HashMap<Uuid, Role> =
         state.permissions.list_for_user(user.id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.into_iter().collect();

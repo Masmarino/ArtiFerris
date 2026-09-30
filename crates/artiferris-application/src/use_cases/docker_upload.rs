@@ -136,7 +136,6 @@ impl CompleteBlobUploadUseCase {
                 computed: computed.as_str().to_string(),
             });
         }
-        // The staged file already holds these exact bytes — adopt it in place, no second full copy.
         self.blobs.adopt_staged_file(&computed, &session.staging_path, size_bytes).await?;
         self.blobs.link_to_repository(session.package_repository_id, &computed).await?;
         self.sessions.delete(session_id).await?;
@@ -239,7 +238,6 @@ mod tests {
         let use_case = patch_use_case(sessions);
         use_case.execute(session.id, repository_id, b"hello ", None).await.unwrap();
 
-        // A retried or reordered chunk claiming to start at 0 when 6 bytes are already staged.
         let err = use_case.execute(session.id, repository_id, b"world", Some(0)).await.unwrap_err();
 
         assert!(matches!(err, ApplicationError::DockerChunkOffsetMismatch { expected: 6, got: 0 }), "got {err:?}");

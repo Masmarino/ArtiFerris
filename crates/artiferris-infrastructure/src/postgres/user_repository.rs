@@ -216,9 +216,6 @@ impl UserRepositoryPort for PostgresUserRepository {
     async fn delete_unless_last_super_admin(&self, id: Uuid, audit: Option<&AdminAuditRecord>) -> Result<bool, DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
 
-        // Serializes any operation that could change the super-admin count —
-        // a per-row lock isn't enough since two concurrent ops can each
-        // target a different admin.
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext('user_super_admin_guard'))")
             .execute(&mut *tx)
             .await

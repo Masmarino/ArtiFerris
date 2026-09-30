@@ -213,7 +213,6 @@ mod tests {
         assert!(!cache.is_valid(&users, user_id, valid_after - chrono::Duration::seconds(1)).await.unwrap());
     }
 
-    /// The reason this type exists: repeated data-plane requests must not each cost a lookup.
     #[tokio::test]
     async fn a_repeat_check_within_the_ttl_does_not_hit_the_repository_again() {
         let cache = TokensValidAfterCache::new(Duration::from_secs(30));
@@ -236,7 +235,6 @@ mod tests {
 
         assert!(cache.is_valid(&users, user_id, issued_at).await.unwrap());
 
-        // Revoked after the entry was cached — the warm entry still says "valid".
         fake.set_tokens_valid_after(issued_at + chrono::Duration::seconds(1));
         assert!(cache.is_valid(&users, user_id, issued_at).await.unwrap(), "within the TTL the stale value is the accepted tradeoff");
         assert_eq!(fake.lookups(), 1);

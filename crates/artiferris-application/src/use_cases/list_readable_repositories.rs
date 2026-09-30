@@ -48,16 +48,11 @@ impl ListReadableRepositoriesUseCase {
         };
 
         if caller.is_super_admin {
-            // A super-admin's listing is inherently cross-organization — there is no single
-            // `organization_id` to scope a query by here, unlike every branch below.
             return Ok(self.repositories.list_all().await?.into_iter().filter_map(|r| readable(r, Role::Admin, true)).collect());
         }
-        // An organization admin sees every repository in their own org with Admin, regardless
-        // of which domain the request came in on — so this scopes by the caller's organization, not the resolved one.
         if caller.is_organization_admin {
             return Ok(self.repositories.list_by_organization(caller.organization_id).await?.into_iter().filter_map(|r| readable(r, Role::Admin, true)).collect());
         }
-        // One batched lookup instead of one `find_role` per repository.
         let roles: HashMap<Uuid, Role> = self.permissions.list_for_user(caller.user_id).await?.into_iter().collect();
         // A regular member only sees repositories in the resolved organization, even if they
         // have stray permission grants elsewhere — scoped at the database level instead of

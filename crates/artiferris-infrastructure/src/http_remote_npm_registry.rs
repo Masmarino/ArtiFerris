@@ -17,7 +17,6 @@ pub struct HttpRemoteNpmRegistry {
 
 impl HttpRemoteNpmRegistry {
     pub fn new() -> Self {
-        // No redirect-following, or a malicious upstream could 302 past the SSRF guard.
         Self {
             client: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
@@ -119,7 +118,6 @@ mod tests {
         assert!(tarball.to_string().contains("plain http"), "{tarball}");
     }
 
-    // Ground truth against a real, stable public package.
     #[tokio::test]
     #[ignore = "requires network access to registry.npmjs.org"]
     async fn fetches_real_metadata_from_npmjs() {
@@ -156,7 +154,6 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {
             let (_socket, _) = listener.accept().await.unwrap();
-            // Accept the connection but never write a response — simulates a hung upstream.
             std::future::pending::<()>().await;
         });
 
@@ -179,7 +176,6 @@ mod tests {
         assert!(started.elapsed() < std::time::Duration::from_secs(35), "the client's own configured 30s request timeout must fire before this test's outer bound");
     }
 
-    // These tests bypass ensure_public_host to fetch directly from a local wiremock server (which is loopback).
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -254,7 +250,6 @@ mod tests {
         assert_eq!(doc["dist-tags"]["latest"], "3.0.1");
     }
 
-    // Same SSRF-guard adaptation as `a_404_metadata_response_is_not_found_not_an_error` above.
     #[tokio::test]
     async fn a_404_tarball_response_is_not_found_not_an_error() {
         let server = MockServer::start().await;

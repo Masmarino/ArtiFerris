@@ -157,8 +157,6 @@ mod tests {
         let acme_push_token = crate::route_test_support::issue_test_token_for_org(&state, acme_user_id, acme_id, false, acme_repo_id, &acme_repo_name, "myimage", &["push"]);
         let app = crate::router(state.clone());
 
-        // Inlined rather than the shared push helpers, which assume the public organization
-        // — this repository lives in "acme".
         let config_bytes: &[u8] = b"acme-config-bytes";
         let config_digest = artiferris_domain::docker_registry::Digest::of(config_bytes);
         let blob_response = app
@@ -199,8 +197,6 @@ mod tests {
             .unwrap();
         assert_eq!(manifest_response.status(), StatusCode::CREATED);
 
-        // Same super-admin scope query, but hitting the OTHER organization's own subdomain —
-        // must not see "acme"'s repository at all, regardless of read permissions.
         let other_user_id = seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await;
         seed_permission(&pool, other_user_id, acme_repo_id, "read").await;
         let catalog_token = state.token_issuer.issue(other_user_id, other_id, false, None).unwrap();

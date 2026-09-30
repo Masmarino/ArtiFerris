@@ -47,7 +47,6 @@ impl PutManifestUseCase {
                 return Err(ApplicationError::DockerDigestMismatch { expected: claimed.as_str().to_string(), computed: digest.as_str().to_string() });
             }
         }
-        // Parsed only to extract digests below — the manifest stores raw_body verbatim, not this.
         let parsed: serde_json::Value =
             serde_json::from_slice(raw_body).map_err(|e| ApplicationError::InvalidDockerPayload(e.to_string()))?;
 
@@ -230,7 +229,6 @@ mod tests {
         let body = sample_manifest_body(config_digest.as_str());
         let body_bytes = serde_json::to_vec(&body).unwrap();
 
-        // "!" is outside the OCI tag grammar `[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}`.
         let result =
             use_case.execute(repository_id, &name, "latest!", DockerMediaType::DockerV2Manifest, &body_bytes, Uuid::new_v4()).await;
 
@@ -433,7 +431,6 @@ mod tests {
         .await
         .unwrap();
 
-        // Two distinct blobs, each 20 bytes — individually under the quota (with their manifest bodies), together over it.
         let blob_a = Digest::of(b"blob-content-aaaa");
         let blob_b = Digest::of(b"blob-content-bbbb");
         for digest in [&blob_a, &blob_b] {

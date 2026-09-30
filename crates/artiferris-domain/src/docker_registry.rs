@@ -16,10 +16,8 @@ pub type ByteStream = BoxStream<'static, Result<Bytes, DomainError>>;
 /// Its claims (role, organization) are a snapshot from issuance, so this is how long a role change can go unnoticed.
 pub const DOCKER_ACCESS_TOKEN_TTL_SECONDS: i64 = 120;
 
-/// Unfinished blob uploads one repository may have open at a time.
 pub const MAX_OPEN_UPLOADS_PER_REPOSITORY: usize = 32;
 
-/// Most tags one repository may hold, across all its images.
 pub const MAX_TAGS_PER_REPOSITORY: i64 = 10_000;
 
 /// What each tag counts for against a repository's quota, on top of the manifest bodies and blobs.
@@ -174,7 +172,6 @@ pub trait DockerBlobStorePort: Send + Sync {
     async fn read_stream(&self, digest: &Digest) -> Result<ByteStream, DomainError>;
     /// Records that `digest` was uploaded to `repository_id`, independent of any manifest referencing it yet.
     async fn link_to_repository(&self, repository_id: Uuid, digest: &Digest) -> Result<(), DomainError>;
-    /// One half of blob-read authorization (see `link_to_repository`); the other is `DockerManifestRepositoryPort::blob_is_reachable`.
     async fn is_uploaded_to_repository(&self, repository_id: Uuid, digest: &Digest) -> Result<bool, DomainError>;
     /// Removes `digest`'s `link_to_repository` row for `repository_id`, once it's stale: callers must
     /// only invoke this after confirming (e.g. via `DockerManifestRepositoryPort::blob_is_reachable`)
@@ -189,9 +186,7 @@ pub trait DockerBlobStorePort: Send + Sync {
     async fn unlink_from_repository_if_unreferenced(&self, repository_id: Uuid, digest: &Digest) -> Result<(), DomainError>;
     async fn exists(&self, digest: &Digest) -> Result<bool, DomainError>;
     async fn size_if_exists(&self, digest: &Digest) -> Result<Option<u64>, DomainError>;
-    /// Batched form of `exists`: which of `digests` are present, in one query.
     async fn existing_digests(&self, digests: &[Digest]) -> Result<std::collections::HashSet<String>, DomainError>;
-    /// Batched form of `size_if_exists`: total size of whichever of `digests` exist (missing ones contribute 0).
     async fn sum_sizes(&self, digests: &[Digest]) -> Result<u64, DomainError>;
     async fn increment_ref(&self, digest: &Digest) -> Result<(), DomainError>;
     /// Batched form of `increment_ref` — callers must pass already-deduplicated digests.
@@ -221,9 +216,7 @@ pub trait DockerBlobStorePort: Send + Sync {
 pub struct BlobSweepReport {
     pub links_removed: usize,
     pub blobs_removed: usize,
-    /// Blobs whose `reference_count` disagreed with the manifests actually referencing them.
     pub counts_corrected: usize,
-    /// Half-written files an interrupted write left behind.
     pub temp_files_removed: usize,
 }
 
@@ -257,7 +250,6 @@ pub trait DockerUploadSessionPort: Send + Sync {
     /// Streams the staged content from disk to hash it — a chunked upload can be gigabytes.
     async fn hash_staged_file(&self, id: Uuid) -> Result<(Digest, u64), DomainError>;
     async fn delete(&self, id: Uuid) -> Result<(), DomainError>;
-    /// Bytes staged across every open session of the repository.
     async fn staged_bytes_for_repository(&self, package_repository_id: Uuid) -> Result<u64, DomainError>;
     /// Deletes every session past its `expires_at`, removing its staging file too. Returns the count
     /// removed. Called periodically by a background sweep — see `SweepExpiredDockerUploadsUseCase` (M-13).
@@ -306,7 +298,6 @@ pub trait DockerManifestRepositoryPort: Send + Sync {
     /// Deletes the manifest and gives up its blob references in one transaction, so a failure leaves the counts as they were.
     async fn delete_manifest(&self, repository_id: Uuid, image_name: &DockerImageName, digest: &Digest) -> Result<(), DomainError>;
     async fn list_tags(&self, repository_id: Uuid, image_name: &DockerImageName) -> Result<Vec<String>, DomainError>;
-    /// Not deduplicated — callers must dedupe if needed.
     async fn list_repository_image_names(&self, repository_id: Uuid) -> Result<Vec<DockerImageName>, DomainError>;
     /// Batched form of `list_repository_image_names` across several repositories in one query.
     async fn list_image_names_for_repositories(&self, repository_ids: &[Uuid]) -> Result<Vec<(Uuid, DockerImageName)>, DomainError>;
@@ -356,7 +347,6 @@ impl DockerScopeRequest {
         Some(Self { resource_type, name, actions: actions_part.split(',').map(|s| s.to_string()).collect() })
     }
 
-    /// The repository is the first path segment; the rest is the image name.
     pub fn artiferris_repository_name(&self) -> &str {
         self.name.split('/').next().unwrap_or(&self.name)
     }
@@ -387,7 +377,6 @@ pub struct DockerAccessClaims {
 
 #[async_trait]
 pub trait DockerTokenIssuerPort: Send + Sync {
-    /// For a token the server mints for itself, not tied to any API token.
     fn issue(&self, user_id: Uuid, organization_id: Uuid, is_super_admin: bool, granted_scope: Option<DockerGrantedScope>) -> Result<String, DomainError>;
     /// Remembers the API token, so revoking it can end this one too.
     fn issue_for_api_token(&self, api_token_id: Uuid, user_id: Uuid, organization_id: Uuid, is_super_admin: bool, granted_scope: Option<DockerGrantedScope>) -> Result<String, DomainError>;

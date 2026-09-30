@@ -47,7 +47,6 @@ impl FilesystemDockerBlobStore {
 
         finish_atomic_write(tmp_path, target).await.infra_err()?;
 
-        // A re-write of an identical digest must not reset reference_count, but it does restart the grace period the sweep gives an unlinked blob.
         sqlx::query!(
             "INSERT INTO docker_blobs (digest, size_bytes, storage_key, reference_count) VALUES ($1, $2, $3, 0) \
              ON CONFLICT (digest) DO UPDATE SET created_at = now()",
@@ -100,7 +99,6 @@ impl FilesystemDockerBlobStore {
         let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", digest.as_str()).execute(&mut *tx).await.infra_err()?;
 
-        // A push racing the guard below surfaces as a foreign-key violation, which leaves the blob alone.
         let mut savepoint = tx.begin().await.infra_err()?;
         let deleted = match sqlx::query!(
             "DELETE FROM docker_blobs WHERE digest = $1 AND created_at < $2 AND reference_count <= 0 \
@@ -154,9 +152,6 @@ impl FilesystemDockerBlobStore {
         if !row.exists {
             let _ = fs::remove_file(self.root.join(storage_key)).await;
         }
-        // Read-only besides the lock: committing vs. letting this roll back is inconsequential
-        // either way, but committing matches how the rest of this file already treats lock-only
-        // transactions (e.g. the "nothing to delete" branches of phase 1 above).
         tx.commit().await.infra_err()?;
         Ok(())
     }
@@ -189,10 +184,8 @@ impl DockerBlobStorePort for FilesystemDockerBlobStore {
             fs::create_dir_all(parent).await.infra_err()?;
         }
         let tmp_path = target.with_file_name(format!("{hex}.tmp-{}", Uuid::new_v4()));
-        // Also covers the future being dropped mid-stream (client gone, deadline hit).
         let _tmp = TempFileGuard::new(tmp_path.clone());
 
-        // Hashed a chunk at a time as it arrives, so neither the blob nor its hash ever waits on a whole-file pass.
         let mut file = fs::File::create(&tmp_path).await.infra_err()?;
         let mut hasher = Sha256::new();
         let mut size: u64 = 0;
@@ -226,10 +219,6 @@ impl DockerBlobStorePort for FilesystemDockerBlobStore {
         let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", digest.as_str()).execute(&mut *tx).await.infra_err()?;
 
-        // Deliberately not atomic_write: the bytes are already staged on disk by a prior
-        // chunked-upload write, so this only needs the final rename onto `target`, not a
-        // fresh create-temp-then-write-then-rename cycle. A same-sized file already stored under this digest
-        // is kept (it holds the same content and may be being read); one of another size is replaced.
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).await.infra_err()?;
         }
@@ -240,7 +229,6 @@ impl DockerBlobStorePort for FilesystemDockerBlobStore {
             _ => fs::rename(staging_path, &target).await.infra_err()?,
         }
 
-        // Same as `write`: the count is kept, the sweep's grace period restarts.
         sqlx::query!(
             "INSERT INTO docker_blobs (digest, size_bytes, storage_key, reference_count) VALUES ($1, $2, $3, 0) \
              ON CONFLICT (digest) DO UPDATE SET created_at = now()",
@@ -395,14 +383,11 @@ impl DockerBlobStorePort for FilesystemDockerBlobStore {
 
     async fn remove_reclaimed_blob_files(&self, digests: &[Digest]) {
         for digest in digests {
-            // Every digest here came from a `docker_blobs.digest` the sweep's own transaction just
-            // deleted, so this is a defensive skip, not an expected path.
             let Ok(hex) = Self::hex_part(digest) else {
                 tracing::warn!(digest = %digest.as_str(), "repository deletion sweep reported a digest with an unsupported algorithm; skipping its file removal");
                 continue;
             };
             let storage_key = Self::storage_key(hex);
-            // Re-checks under the digest lock that the row is still absent: a write for this digest could have recreated it since the sweep committed.
             if let Err(e) = self.remove_file_if_still_absent(digest, &storage_key).await {
                 tracing::warn!(digest = %digest.as_str(), storage_key, error = %e, "failed to remove an on-disk Docker blob file during the repository deletion sweep; its docker_blobs row is already gone");
             }
@@ -476,7 +461,6 @@ impl DockerBlobStorePort for FilesystemDockerBlobStore {
     async fn sweep_unreferenced_blobs(&self, older_than: chrono::DateTime<chrono::Utc>) -> Result<BlobSweepReport, DomainError> {
         let temp_files_removed = remove_stale_temp_files(&self.root, STALE_TEMP_FILE_AGE).await;
 
-        // A count left too high by a crash or an old bug would keep a blob from ever being reclaimed.
         let counts_corrected = sqlx::query!(
             "UPDATE docker_blobs b SET reference_count = actual.references \
              FROM ( \
@@ -754,7 +738,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = FilesystemDockerBlobStore::new(pool, dir.path());
 
-        // Must not panic or error even though nothing was ever written at this digest.
         store.remove_reclaimed_blob_files(&[Digest::of(b"never-written")]).await;
     }
 
@@ -796,14 +779,8 @@ mod tests {
         let digest = Digest::of(b"sweep-race-repro");
         store.write(&digest, b"original-bytes").await.unwrap();
 
-        // The sweep's own transaction already deleted the row (its DELETE ... RETURNING digest is
-        // what reported this digest as reclaimed) — reproduced directly here rather than through the
-        // full sweep, mirroring how the test above sets up the same starting state.
         sqlx::query!("DELETE FROM docker_blobs WHERE digest = $1", digest.as_str()).execute(&pool).await.unwrap();
 
-        // Right here — after the sweep's commit but before `remove_reclaimed_blob_files` runs — a
-        // concurrent write for the SAME digest lands and succeeds, because nothing holds the digest
-        // lock open past the sweep's own (simulated) commit above.
         store.write(&digest, b"new-bytes-from-concurrent-write").await.unwrap();
 
         store.remove_reclaimed_blob_files(&[digest.clone()]).await;
@@ -846,9 +823,6 @@ mod tests {
         store.write(&digest, b"phase-2-connection-failure-repro").await.unwrap();
         store.increment_ref(&digest).await.unwrap();
 
-        // Holds the digest's advisory lock from a normal, non-starved connection, so phase 1 —
-        // once it acquires the starved pool's one connection — blocks waiting for the lock
-        // WITHOUT releasing that connection back to the pool.
         let mut blocker_tx = pool.begin().await.unwrap();
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", digest.as_str()).execute(&mut *blocker_tx).await.unwrap();
 
@@ -882,10 +856,6 @@ mod tests {
         }
         assert!(observed_phase_1_blocked, "phase 1 never blocked on the digest's advisory lock — this test isn't exercising the real code path");
 
-        // Queues for the starved pool's one connection WHILE phase 1 still holds it checked out.
-        // The oneshot signal (not a fixed sleep) proves the bystander has actually issued its
-        // `acquire()` call — and so is genuinely in the pool's wait queue — before the lock below
-        // is released.
         let (queued_tx, queued_rx) = tokio::sync::oneshot::channel();
         let bystander_handle = {
             let starved_pool = starved_pool.clone();
@@ -899,8 +869,6 @@ mod tests {
         };
         queued_rx.await.unwrap();
 
-        // Phase 1 completes (decrement + delete + commit), releasing the starved pool's
-        // connection straight to the already-queued bystander — ahead of phase 2's own request.
         blocker_tx.commit().await.unwrap();
 
         let bystander_conn = bystander_handle.await.unwrap().unwrap();
@@ -973,7 +941,6 @@ mod tests {
 
         store.increment_ref_all(&[a.clone(), b.clone()]).await.unwrap();
 
-        // Each started at 0 — one decrement reaching exactly 0 proves the batched bump was +1, not 0 or +2.
         assert!(release(&store, &a).await.unwrap());
         assert!(release(&store, &b).await.unwrap());
     }
@@ -1039,7 +1006,6 @@ mod tests {
         seed_manifest_with_blobs(&pool, repository_id, &[&base_layer, &app_layer]).await;
         seed_manifest_with_blobs(&pool, repository_id, &[&base_layer]).await;
 
-        // Each layer once, plus the two manifest bodies (`{}`, as seeded).
         let used = store.used_bytes_for_repository(repository_id).await.unwrap();
         assert_eq!(used, b"base-layer".len() as u64 + b"app-layer-content".len() as u64 + 2 * 2);
     }
@@ -1161,7 +1127,6 @@ mod tests {
         store.write(&digest, b"n1-repro").await.unwrap();
         store.increment_ref(&digest).await.unwrap();
 
-        // The link's own transaction, held open uncommitted across the whole race below.
         let mut linker_tx = pool.begin().await.unwrap();
         sqlx::query!(
             "INSERT INTO docker_repository_blobs (package_repository_id, blob_digest) VALUES ($1, $2) \
@@ -1186,8 +1151,6 @@ mod tests {
             })
         };
 
-        // Wait until the decrement's DELETE is actually blocked on the linker's lock, isolated to this
-        // test's own (sqlx::test-provisioned) database so it can't be confused by unrelated activity.
         let mut observed_blocked = false;
         for _ in 0..500 {
             let blocked: (i64,) = sqlx::query_as(
@@ -1205,8 +1168,6 @@ mod tests {
         }
         assert!(observed_blocked, "the decrement's DELETE never entered a lock wait — this test isn't actually exercising the race it claims to");
 
-        // Only now does the link commit, guaranteeing the DELETE was genuinely blocked — not just
-        // "probably" — when the FK became checkable.
         linker_tx.commit().await.unwrap();
 
         let result = decrement_handle.await.unwrap();
@@ -1253,9 +1214,6 @@ mod tests {
         store.write(&digest, b"original-bytes").await.unwrap();
         store.increment_ref(&digest).await.unwrap();
 
-        // This test's own deterministic gate: holds the SAME digest-scoped advisory lock the fix
-        // adds, from a separate connection, kept open (uncommitted) until both background tasks below
-        // have genuinely joined its wait queue.
         let mut blocker_tx = pool.begin().await.unwrap();
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", digest.as_str()).execute(&mut *blocker_tx).await.unwrap();
 
@@ -1272,7 +1230,6 @@ mod tests {
             })
         };
 
-        // Wait until the decrement has genuinely joined the blocker's lock wait queue.
         let mut observed_decrement_blocked = false;
         for _ in 0..500 {
             let blocked: (i64,) = sqlx::query_as(
@@ -1306,9 +1263,6 @@ mod tests {
             })
         };
 
-        // Wait until BOTH the decrement and the write are queued behind the blocker's lock — proving
-        // the write genuinely tried to land while the decrement was still mid-flight, not merely
-        // after it had already finished.
         let mut observed_both_blocked = false;
         for _ in 0..500 {
             let blocked: (i64,) = sqlx::query_as(
@@ -1329,9 +1283,6 @@ mod tests {
             "the write never joined the decrement's lock wait queue — this test isn't exercising genuine concurrency"
         );
 
-        // Release the gate: the decrement, having queued first, is granted the lock next. It runs
-        // phase 1 to completion (decrement + delete + commit, releasing the lock again) — but that's
-        // all phase 1 does; the file removal happens in phase 2, a SEPARATE, later lock acquisition.
         blocker_tx.commit().await.unwrap();
 
         let decrement_result = decrement_handle.await.unwrap();
@@ -1340,9 +1291,6 @@ mod tests {
         let write_result = write_handle.await.unwrap();
         assert!(write_result.is_ok(), "the write must succeed once phase 1's transaction (and the digest lock) is released — got {write_result:?}");
 
-        // Ghost-row check: the row the write just (re)created must have a real file behind it, not
-        // one the decrement's phase 2 removed after the fact — proving phase 2's re-check correctly
-        // detected the write's row and skipped the file removal.
         assert!(store.exists(&digest).await.unwrap(), "the write, which ran after phase 1's delete, must have recreated the row");
         assert_eq!(
             store.read(&digest).await.unwrap(),
@@ -1369,7 +1317,6 @@ mod tests {
         store.write(&digest, b"original-bytes").await.unwrap();
         store.increment_ref(&digest).await.unwrap();
 
-        // Phase 1: deletes the now-unreferenced row, committing — which releases the digest lock.
         sqlx::query!("UPDATE docker_blobs SET reference_count = reference_count - 1 WHERE digest = $1", digest.as_str()).execute(&pool).await.unwrap();
         let deleted_storage_key = store
             .delete_row_if_unreferenced_now(&digest)
@@ -1377,18 +1324,10 @@ mod tests {
             .unwrap()
             .expect("the blob had exactly one reference and no links — phase 1 must have deleted the row");
 
-        // Right here — in the gap between phase 1's commit and phase 2's lock re-acquisition — a
-        // concurrent write for the SAME digest lands and succeeds, because the digest lock is free:
-        // nothing in phase 1's design holds it open past its own commit above.
         store.write(&digest, b"new-bytes-from-concurrent-write").await.unwrap();
 
-        // Phase 2: re-acquires the digest lock and re-checks whether the row still doesn't exist. It
-        // must find the row the write just recreated and skip removing the file — that file is the
-        // write's, not phase 1's, and must survive untouched.
         store.remove_file_if_still_absent(&digest, &deleted_storage_key).await.unwrap();
 
-        // Nothing was lost: the concurrent write's row and file are both fully intact, with no ghost
-        // state on either side.
         assert!(store.exists(&digest).await.unwrap(), "the write, which landed in the phase 1/phase 2 gap, must have recreated the row");
         assert_eq!(
             store.read(&digest).await.unwrap(),
@@ -1412,8 +1351,6 @@ mod tests {
         let storage_key = FilesystemDockerBlobStore::storage_key(FilesystemDockerBlobStore::hex_part(&digest).unwrap());
         let target_path = dir.path().join(&storage_key);
 
-        // Holds the digest lock from a separate connection, forcing the write below to queue
-        // behind it — same gate pattern as the other tests in this module.
         let mut blocker_tx = pool.begin().await.unwrap();
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", digest.as_str()).execute(&mut *blocker_tx).await.unwrap();
 
@@ -1447,8 +1384,6 @@ mod tests {
         }
         assert!(observed_blocked, "the write never joined the digest lock's wait queue — this test isn't exercising the boundary it claims to");
 
-        // Confirmed blocked on the lock: if the rename or the INSERT ran before acquiring it,
-        // one of these would already be visible.
         assert!(!target_path.exists(), "the rename must not happen before the write holds the digest lock");
         assert!(!store.exists(&digest).await.unwrap(), "the row must not appear before the write holds the digest lock");
 
@@ -1476,8 +1411,6 @@ mod tests {
         store.write(&digest, b"orphaned-after-manifest-delete").await.unwrap();
         store.link_to_repository(repository_id, &digest).await.unwrap();
 
-        // No manifest ever references this digest — mirrors `DeleteManifestUseCase` having already
-        // deleted the manifest row (and its `docker_manifest_blobs` cascade) before this is called.
         store.unlink_from_repository_if_unreferenced(repository_id, &digest).await.unwrap();
 
         assert!(!store.is_uploaded_to_repository(repository_id, &digest).await.unwrap(), "the stale link row must be gone");
@@ -1532,7 +1465,6 @@ mod tests {
         store.link_to_repository(other_repository_id, &elsewhere).await.unwrap();
         seed_manifest_with_blobs(&pool, repository_id, &[&referenced]).await;
 
-        // The seeded manifest's body (`{}`) counts too.
         let expected = (b"referenced-and-linked".len() + b"uploaded-only".len() + 2) as u64;
         assert_eq!(store.used_bytes_for_repository(repository_id).await.unwrap(), expected);
         let batch = store.used_bytes_for_repositories(&[repository_id, other_repository_id]).await.unwrap();
@@ -1699,7 +1631,6 @@ mod tests {
         let store = FilesystemDockerBlobStore::new(pool, dir.path());
         let digest = Digest::of(b"layer-bytes");
         let hex = digest.as_str().strip_prefix("sha256:").unwrap();
-        // A non-empty directory where the blob file belongs: the final rename cannot succeed.
         let target = dir.path().join(FilesystemDockerBlobStore::storage_key(hex));
         std::fs::create_dir_all(target.join("occupied")).unwrap();
 

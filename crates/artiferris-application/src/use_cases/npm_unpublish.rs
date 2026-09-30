@@ -164,7 +164,6 @@ mod tests {
             origin: NpmPackageOrigin::Local,
         }).await.unwrap();
 
-        // `latest` points at the version we're about to unpublish.
         packages.set_dist_tag(package_id, "latest", &v2).await.unwrap();
         assert_eq!(packages.list_dist_tags(package_id).await.unwrap().len(), 1);
 
@@ -177,9 +176,6 @@ mod tests {
             "dangling `latest` dist-tag should have been removed when the version it pointed at was unpublished, found: {remaining_tags:?}"
         );
 
-        // The other version is untouched, and the package itself still exists
-        // (v1 remains), so this isn't just an artifact of the whole-package
-        // cascade deleting the dist-tags table wholesale.
         assert!(packages.find_package(repository_id, &name).await.unwrap().is_some());
         assert!(packages.find_version(package_id, &v1).await.unwrap().is_some());
     }

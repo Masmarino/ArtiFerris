@@ -129,7 +129,6 @@ impl EventPublisherPort for PostgresEventPublisher {
             filter.organization_id,
             filter.cursor.map(|c| c.occurred_at),
             filter.cursor.map(|c| c.id),
-            // One extra row tells whether another page follows.
             page_size + 1
         )
         .fetch_all(&self.pool)
@@ -158,8 +157,6 @@ impl EventPublisherPort for PostgresEventPublisher {
     async fn publish_npm_event(&self, event: NpmPackageEvent, npm_package_id: Uuid, package_repository_id: Uuid, actor_id: Option<Uuid>) -> Result<(), EventStoreError> {
         let payload = serde_json::to_value(&event).storage_err()?;
 
-        // `version` must increment per aggregate — advisory-lock-then-append,
-        // same pattern as PermissionStore/PackageRepositoryStore.
         let mut tx = self.pool.begin().await.storage_err()?;
 
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", npm_package_id.to_string())
@@ -199,7 +196,6 @@ impl EventPublisherPort for PostgresEventPublisher {
     async fn publish_docker_event(&self, event: DockerRegistryEvent, package_repository_id: Uuid, actor_id: Option<Uuid>) -> Result<(), EventStoreError> {
         let payload = serde_json::to_value(&event).storage_err()?;
 
-        // Same advisory-lock-then-append pattern as `publish_npm_event`.
         let mut tx = self.pool.begin().await.storage_err()?;
 
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", package_repository_id.to_string())
@@ -588,7 +584,6 @@ mod tests {
         insert_event_at(&pool, None, "UserInvited", chrono::Utc::now() - chrono::Duration::days(500)).await;
         sqlx::query("ANALYZE domain_events").execute(&pool).await.unwrap();
         let mut connection = pool.acquire().await.unwrap();
-        // A table this small is scanned in full anyway; this asks which index the planner would pick.
         sqlx::query("SET enable_seqscan = off").execute(&mut *connection).await.unwrap();
 
         let plan: Vec<(String,)> = sqlx::query_as(sqlx::AssertSqlSafe(format!("EXPLAIN {PRUNE_AUDIT_EVENTS}"))).bind(chrono::Utc::now() - chrono::Duration::days(365)).bind(5_000_i64).fetch_all(&mut *connection).await.unwrap();
@@ -650,7 +645,6 @@ mod tests {
         legacy("Security", Uuid::new_v4().to_string(), "LoginFailed", serde_json::json!({}), 1, None).await;
 
         sqlx::raw_sql(include_str!("../../migrations/0008_audit_organization_scope.sql")).execute(&pool).await.unwrap();
-        // Applying it a second time changes nothing.
         sqlx::raw_sql(include_str!("../../migrations/0008_audit_organization_scope.sql")).execute(&pool).await.unwrap();
         let already_stamped: i64 = sqlx::query_scalar("SELECT count(*) FROM domain_events WHERE organization_id IS NOT NULL").fetch_one(&pool).await.unwrap();
         assert_eq!(already_stamped, 0, "the migration itself leaves the old rows alone");

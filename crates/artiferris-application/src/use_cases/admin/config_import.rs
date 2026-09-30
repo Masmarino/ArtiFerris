@@ -86,11 +86,9 @@ impl ImportConfigurationUseCase {
                 return Err(ApplicationError::ImportTooLarge(format!("the file lists {entries} {what}, at most {MAX_IMPORT_ENTRIES} can be imported at once")));
             }
         }
-        // Held until the write is committed. The nil id never belongs to a repository.
         let import_lock = self.lock.acquire_repository_lock(Uuid::nil()).await?;
 
         ensure_single_tenant(&self.organizations.list_all().await?)?;
-        // Guard: instance must be empty except for the caller.
         if !self.repositories.list_all().await?.is_empty() {
             return Err(ApplicationError::InstanceNotEmpty);
         }
@@ -98,7 +96,6 @@ impl ImportConfigurationUseCase {
         if existing_users.iter().any(|u| u.id != actor_id) {
             return Err(ApplicationError::InstanceNotEmpty);
         }
-        // Restored users join the acting admin's own organization — the export carries no organization of its own.
         let actor = existing_users.iter().find(|u| u.id == actor_id).ok_or(ApplicationError::ActingAdminNotFound)?;
         let restore_organization_id = actor.organization_id;
         let restore_organization = crate::use_cases::invitation::require_organization(self.organizations.as_ref(), restore_organization_id).await?;
@@ -110,14 +107,12 @@ impl ImportConfigurationUseCase {
             unusable_password_hash: crate::use_cases::invitation::unusable_password_hash(self.hasher.as_ref()).await?,
         };
 
-        // Planning is CPU work proportional to the file; it must not hold a runtime worker.
         let Plan { batch, mut report, pending_invitations } =
             tokio::task::spawn_blocking(move || plan_import(import, context)).await.map_err(|e| DomainError::Infrastructure(format!("planning the import failed: {e}")))?;
 
         self.importer.apply(&batch).await?;
         drop(import_lock);
 
-        // Its own task: a client that disconnects mid-import must not leave the rest of the invitations unsent.
         let email = self.email.clone();
         let mailed = tokio::spawn(send_invitations(email, restore_organization_id, actor_id, pending_invitations));
         let (invited, failed) = mailed.await.map_err(|e| DomainError::Infrastructure(format!("sending the invitations failed: {e}")))?;
@@ -129,7 +124,6 @@ impl ImportConfigurationUseCase {
 
 /// Order of `invited` follows the file. Failures are reported per address and never stop the others.
 async fn send_invitations(email: Arc<dyn artiferris_domain::email::EmailPort>, organization_id: Uuid, actor_id: Uuid, invitations: Vec<PendingInvitation>) -> (Vec<String>, Vec<String>) {
-    // Restored accounts have not chosen a language yet: write in the one of the admin who runs the import.
     let language = email.language_for(actor_id).await;
     let results = futures::stream::iter(invitations.into_iter().map(|invitation| {
         let email = email.clone();
@@ -364,7 +358,6 @@ fn plan_permissions(exported: &[ExportedPermission], restored_user_ids: &HashSet
             report.failed.push(format!("permission for {}: repository {} was never created", permission.user_id, permission.repository_id));
             continue;
         };
-        // A pair listed twice becomes two events of one stream, the later role winning.
         let position = *stream_positions.entry((permission.user_id, repository_id)).or_insert_with(|| {
             batch.permission_streams.push(PermissionStream { user_id: permission.user_id, repository_id, events: Vec::new() });
             batch.permission_streams.len() - 1
@@ -410,8 +403,6 @@ mod tests {
             if repo.deleted || repo.name.is_none() {
                 return None;
             }
-            // The aggregate itself doesn't track organization_id, so pull it from the Created
-            // event, mirroring how the real Postgres projection persists it as its own column.
             let organization_id = events
                 .iter()
                 .find_map(|event| match event {
@@ -739,7 +730,6 @@ mod tests {
                 ExportedUser { id: member_id, username: "member".to_string(), is_super_admin: false, created_at: Utc::now(), email: None },
             ],
             repositories: vec![
-                // Group listed before its member: proves forward references are handled.
                 ExportedRepository { id: group_id, name: "my-group".to_string(), format: RepositoryFormat::Npm, repo_type: RepositoryType::Group, remote_url: None, remote_username: None, remote_password: None, group_members: vec![hosted_id], quota_bytes: None, retention_keep_last_n: None },
                 ExportedRepository { id: hosted_id, name: "my-hosted".to_string(), format: RepositoryFormat::Npm, repo_type: RepositoryType::Hosted, remote_url: None, remote_username: None, remote_password: None, group_members: vec![], quota_bytes: Some(1024), retention_keep_last_n: Some(5) },
             ],
@@ -780,7 +770,6 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_import_with_a_clear_error_when_the_acting_admins_own_user_row_is_gone() {
-        // The instance-empty guards above only check OTHER users — a caller whose own row is gone sails right past them.
         let caller_id = Uuid::new_v4();
         let users = Arc::new(FakeUsers::seeded(vec![]));
         let use_case = import_use_case(users, Arc::new(FakePackageRepositoryStore::new()), Arc::new(FakePermissionStore::new()), Arc::new(FakeSystemSettings { settings: Mutex::new(HashMap::new()) }), Arc::new(FakeInvitations::new()), Arc::new(FakeEmail::new()));
@@ -970,7 +959,6 @@ mod tests {
         let permissions = Arc::new(FakePermissionStore::new());
         let settings = Arc::new(FakeSystemSettings { settings: Mutex::new(HashMap::new()) });
         let use_case = import_use_case(users, repos.clone(), permissions, settings, Arc::new(FakeInvitations::new()), Arc::new(FakeEmail::new()));
-        // The normal shape of an export: no credentials, since they're never included in it.
         let import = ConfigurationImport {
             users: vec![],
             repositories: vec![ExportedRepository {
@@ -1035,7 +1023,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_user_whose_insert_fails_does_not_get_permissions_or_an_invitation_entry() {
-        // A permission referencing the colliding user's id must fail, not silently target an orphaned user_id.
         let caller_id = Uuid::new_v4();
         let users = Arc::new(FakeUsers::seeded(vec![User { id: caller_id, username: Username::parse("admin").unwrap(), password_hash: "h".to_string(), is_super_admin: true, is_organization_admin: false, organization_id: Uuid::new_v4(), created_at: Utc::now(), tokens_valid_after: Utc::now(), email: None }]));
         let mut import = sample_import();
@@ -1167,7 +1154,6 @@ mod tests {
         };
         let (first, second) = (use_case(users.clone()), use_case(users.clone()));
 
-        // Repositories only: the users check would otherwise catch the second import by itself.
         let repositories_only = || ConfigurationImport { users: vec![], permissions: vec![], ..sample_import() };
 
         let (a, b) = tokio::join!(first.execute(repositories_only(), caller_id), second.execute(repositories_only(), caller_id));

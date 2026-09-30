@@ -23,8 +23,6 @@ pub(super) async fn list_permissions(State(state): State<AppState>, user: AuthUs
     let repo = state.repositories.find_by_id(id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
     require_management_access(&state, &user, repo.organization_id, id, Role::Read, "view permissions").await?;
     let entries = state.permissions.list_for_repository(id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    // Scoped at the database level to exactly the handful of user_ids in `entries`, instead of an
-    // unbounded `list_all()` load of every user in the system (M-21, B-7).
     let user_ids: Vec<Uuid> = entries.iter().map(|(user_id, _)| *user_id).collect();
     let users = state.users.find_by_ids(&user_ids).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let username_by_id: std::collections::HashMap<Uuid, String> = users.into_iter().map(|u| (u.id, u.username.as_str().to_string())).collect();

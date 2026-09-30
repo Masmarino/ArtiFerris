@@ -47,8 +47,6 @@ impl FilesystemStorageBackend {
 impl StorageBackendPort for FilesystemStorageBackend {
     async fn write(&self, repository_id: Uuid, path: &str, data: &[u8]) -> Result<(), StorageError> {
         let target = self.object_path(repository_id, path)?;
-        // Use the full name as the temp-file prefix (not with_extension, which
-        // would collide "pkg.tgz"/"pkg.sig" on the same "pkg.tmp" staging file).
         let file_name = target.file_name().ok_or_else(|| StorageError::Io(format!("object path has no file name: {path:?}")))?;
         let tmp_name_prefix = file_name.to_string_lossy().into_owned();
         atomic_write(&target, &tmp_name_prefix, data).await.map_err(|e| StorageError::Io(e.to_string()))?;
@@ -70,8 +68,6 @@ impl StorageBackendPort for FilesystemStorageBackend {
         let target = self.object_path(repository_id, path)?;
         match fs::remove_file(&target).await {
             Ok(()) => Ok(()),
-            // Deleting something that's already gone is a no-op, not a failure — this also
-            // makes concurrent deletes of the same object race-free (both callers succeed).
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(StorageError::Io(e.to_string())),
         }
@@ -98,7 +94,6 @@ impl StorageBackendPort for FilesystemStorageBackend {
     async fn volume_space(&self) -> Result<VolumeSpace, StorageError> {
         let root = self.root.clone();
         tokio::task::spawn_blocking(move || {
-            // statvfs fails on a path that doesn't exist yet.
             std::fs::create_dir_all(&root).map_err(|e| StorageError::Io(e.to_string()))?;
             statvfs(&root)
         })
@@ -136,7 +131,6 @@ fn directory_size(dir: &Path) -> std::pin::Pin<Box<dyn std::future::Future<Outpu
         while let Some(entry) = entries.next_entry().await? {
             let metadata = match entry.metadata().await {
                 Ok(metadata) => metadata,
-                // Deleted since the listing.
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(e) => return Err(e),
             };

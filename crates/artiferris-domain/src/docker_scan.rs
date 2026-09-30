@@ -10,7 +10,6 @@ pub struct DockerVulnerability {
     pub id: String,
     pub package_name: String,
     pub installed_version: String,
-    /// `None` when no fix is published yet.
     pub fixed_version: Option<String>,
     /// Trivy's own string (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`/`UNKNOWN`), not normalized.
     pub severity: String,

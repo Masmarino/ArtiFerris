@@ -114,7 +114,6 @@ impl ExportConfigurationUseCase {
             .map(|(user_id, repository_id, role)| ExportedPermission { user_id, repository_id, role })
             .collect();
 
-        // A single-tenant instance has one real organization, the public one, so these are the settings import restores.
         let system_settings = self.system_settings.get(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID).await?;
 
         Ok(ConfigurationExport {
@@ -131,7 +130,6 @@ impl ExportConfigurationUseCase {
                     format: r.format,
                     repo_type: r.repo_type,
                     remote_url: r.remote_url,
-                    // Never exported — see ImportReport.proxy_credentials_needed on the import side.
                     remote_username: None,
                     remote_password: None,
                     group_members: r.group_members,

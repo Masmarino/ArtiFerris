@@ -87,9 +87,6 @@ where
                     tracing::warn!(repository_id = %repo.id, "group nesting is too deep, not descending further");
                     return Ok(None);
                 }
-                // Fetched concurrently, not one round trip per member. A member id with no matching
-                // row (soft-deleted, or otherwise vanished since it was added) is dropped here rather
-                // than hard-failing the whole group (C-5) — only a genuine port error still propagates.
                 let member_ids: Vec<Uuid> = {
                     let seen = visited.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                     repo.group_members.iter().copied().filter(|id| !seen.contains(id)).collect()
@@ -283,7 +280,6 @@ mod tests {
 
     #[tokio::test]
     async fn two_groups_referencing_each_other_are_caught_by_the_cycle_guard() {
-        // The exact scenario resolve_in_group's own doc comment warns about.
         let org = Uuid::new_v4();
         let group_a = Uuid::new_v4();
         let group_b = Uuid::new_v4();
@@ -460,7 +456,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_diamond_of_nested_groups_costs_one_visit_per_repository_not_one_per_path() {
-        // Over 4000 paths, 25 repositories.
         let (store, top, all) = diamond_ladder(12);
         let repositories: Arc<dyn PackageRepositoryQueryPort> = Arc::new(store);
         let authorized = Arc::new(Mutex::new(0usize));

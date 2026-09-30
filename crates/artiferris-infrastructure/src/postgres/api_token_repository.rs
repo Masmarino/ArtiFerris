@@ -89,7 +89,6 @@ impl ApiTokenRepositoryPort for PostgresApiTokenRepository {
     }
 
     async fn list_for_user(&self, user_id: Uuid) -> Result<Vec<ApiToken>, DomainError> {
-        // Revoked tokens are filtered out entirely, not returned with revoked_at set.
         let rows = sqlx::query_as!(
             TokenRow,
             "SELECT id, user_id, token_hash, label, created_at, last_used_at, revoked_at, expires_at FROM api_tokens WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",

@@ -227,9 +227,6 @@ pub async fn seed_permission(pool: &PgPool, user_id: Uuid, repository_id: Uuid, 
     .unwrap();
 }
 
-/// Same as `seed_user_with_active_token`, but with a caller-chosen username — needed to hit
-/// `/u/{username}/...` routes, which address a user by their real, stable username rather than
-/// the throwaway `user-{uuid}` names `seed_user_with_active_token` generates.
 pub async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: Uuid, username: &str, plaintext_token: &str) -> Uuid {
     let user_id = Uuid::new_v4();
     sqlx::query!(
@@ -253,8 +250,6 @@ pub async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: U
     user_id
 }
 
-/// Reserves `owner_user_id`'s personal organization and creates a project inside it, returning the
-/// new repository's id — mirrors the setup `ResolvePersonalRepositoryUseCase`'s own tests use.
 pub async fn create_personal_project(
     pool: &PgPool,
     owner_user_id: Uuid,
@@ -292,7 +287,6 @@ pub async fn create_personal_group_over_a_personal_member(
     let group_id = create_project.execute(owner_user_id, group_name, format, RepositoryType::Group).await.unwrap();
     let member_id = create_project.execute(owner_user_id, member_name, format, RepositoryType::Hosted).await.unwrap();
 
-    // Attached through the event store — the same event the API's add-group-member route emits.
     let (version, _) = repository_store.load(group_id).await.unwrap();
     repository_store
         .append(

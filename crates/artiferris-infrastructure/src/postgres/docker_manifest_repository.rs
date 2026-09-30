@@ -93,10 +93,8 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
     }
 
     async fn insert_manifest(&self, manifest: &DockerManifest, blob_digests: &[Digest]) -> Result<(Uuid, bool), DomainError> {
-        // Transactional so a crash mid-insert can't leave the manifest row without its blob rows.
         let mut tx = self.pool.begin().await.infra_err()?;
 
-        // Idempotent for a re-pushed byte-identical manifest. `RETURNING id` distinguishes "inserted" from "already present" so the caller gets the real, persisted id either way.
         let inserted = sqlx::query!(
             "INSERT INTO docker_manifests (id, package_repository_id, image_name, digest, media_type, body, created_at) \
              VALUES ($1, $2, $3, $4, $5, $6, $7) \
@@ -212,8 +210,6 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
             }
         }
 
-        // From here down: the same body as `insert_manifest`, against this already-open `tx` instead of
-        // one it opens and commits itself.
         let inserted = sqlx::query!(
             "INSERT INTO docker_manifests (id, package_repository_id, image_name, digest, media_type, body, created_at) \
              VALUES ($1, $2, $3, $4, $5, $6, $7) \
@@ -254,7 +250,6 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
         .await
         .infra_err()?;
 
-        // Only on a real insert — an idempotent re-push of byte-identical content returned above and never reaches here, so a re-push can't double-count a ref.
         sqlx::query!("UPDATE docker_blobs SET reference_count = reference_count + 1 WHERE digest = ANY($1)", &wanted as &[&str])
             .execute(&mut *tx)
             .await
@@ -265,7 +260,6 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
     }
 
     async fn insert_manifest_list_members(&self, list_manifest_id: Uuid, member_digests: &[Digest]) -> Result<(), DomainError> {
-        // Transactional and idempotent: a retry after a partial failure must not PK-violate.
         let mut tx = self.pool.begin().await.infra_err()?;
         let member_digest_strs: Vec<&str> = member_digests.iter().map(|d| d.as_str()).collect();
         sqlx::query!(
@@ -299,7 +293,6 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
 
     async fn set_tag(&self, repository_id: Uuid, image_name: &DockerImageName, tag: &str, manifest_id: Uuid) -> Result<(), DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
-        // Keeps a reclaim of this manifest from deleting it, and the tag with it, while the tag is being set.
         sqlx::query!("SELECT id FROM docker_manifests WHERE id = $1 FOR KEY SHARE", manifest_id).fetch_optional(&mut *tx).await.infra_err()?;
         let previous = sqlx::query_scalar!(
             "SELECT manifest_id FROM docker_tags WHERE package_repository_id = $1 AND image_name = $2 AND tag = $3 FOR UPDATE",
@@ -328,7 +321,6 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
         .await
         .infra_err()?;
         sqlx::query!("UPDATE docker_manifests SET untagged_since = NULL WHERE id = $1 AND untagged_since IS NOT NULL", manifest_id).execute(&mut *tx).await.infra_err()?;
-        // The retention grace period for the manifest the tag left runs from now, if that was its last tag.
         if let Some(previous) = previous.filter(|previous| *previous != manifest_id) {
             sqlx::query!(
                 "UPDATE docker_manifests m SET untagged_since = now() WHERE m.id = $1 AND NOT EXISTS (SELECT 1 FROM docker_tags t WHERE t.manifest_id = m.id)",
@@ -374,7 +366,6 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
     }
 
     async fn list_repository_image_names(&self, repository_id: Uuid) -> Result<Vec<DockerImageName>, DomainError> {
-        // An untagged manifest reachable only by digest doesn't surface here.
         let rows = sqlx::query!(
             "SELECT DISTINCT image_name FROM docker_tags WHERE package_repository_id = $1 ORDER BY image_name",
             repository_id
@@ -393,7 +384,6 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
         .fetch_all(&self.pool)
         .await
         .infra_err()?;
-        // An unparseable row is skipped rather than poisoning the whole batched result.
         Ok(rows.into_iter().filter_map(|r| DockerImageName::parse(&r.image_name).ok().map(|name| (r.package_repository_id, name))).collect())
     }
 
@@ -509,7 +499,6 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
         .fetch_all(&self.pool)
         .await
         .infra_err()?;
-        // A row that no longer parses is skipped rather than failing the listing.
         Ok(rows
             .into_iter()
             .filter_map(|r| match (DockerImageName::parse(&r.image_name), Digest::parse(&r.digest)) {
@@ -543,7 +532,6 @@ impl DockerManifestRepositoryPort for PostgresDockerManifestRepository {
 
     async fn delete_untagged_manifest(&self, repository_id: Uuid, image_name: &DockerImageName, digest: &Digest, untagged_before: DateTime<Utc>) -> Result<bool, DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
-        // Locked first and checked second: a check made in the locking statement can't see a tag committed while it waited.
         let untagged = sqlx::query!(
             "SELECT m.id FROM docker_manifests m \
              WHERE m.package_repository_id = $1 AND m.image_name = $2 AND m.digest = $3 AND COALESCE(m.untagged_since, m.created_at) < $4 \
@@ -617,7 +605,6 @@ mod tests {
         .unwrap();
     }
 
-    // Postgres enforces the FK to docker_blobs, unlike the in-memory fake.
     async fn seed_blob(pool: &sqlx::PgPool, digest: &Digest) {
         sqlx::query!(
             "INSERT INTO docker_blobs (digest, size_bytes, storage_key, reference_count, created_at) \
@@ -736,7 +723,6 @@ mod tests {
         assert_eq!(first_id, manifest.id);
         assert!(first_inserted);
 
-        // A second insert of the identical (repository, image, digest) must return the pre-existing row's id, not the caller's own unpersisted one.
         let mut second_attempt = sample_manifest(repository_id, &image_name);
         second_attempt.id = Uuid::new_v4();
         assert_ne!(second_attempt.id, manifest.id);
@@ -815,7 +801,6 @@ mod tests {
         let member_a = Digest::of(b"amd64-manifest");
         let member_b = Digest::of(b"arm64-manifest");
 
-        // Simulates a client retry after a member was already recorded on a prior attempt.
         repo.insert_manifest_list_members(list_manifest.id, &[member_a.clone()]).await.unwrap();
         repo.insert_manifest_list_members(list_manifest.id, &[member_a.clone(), member_b.clone()]).await.unwrap();
 
@@ -1006,7 +991,6 @@ mod tests {
         repo.insert_manifest(&new_manifest, &[]).await.unwrap();
         repo.set_tag(repository_id, &image_name, "1.0.0", old_manifest.id).await.unwrap();
         repo.set_tag(repository_id, &image_name, "latest", new_manifest.id).await.unwrap();
-        // Force a deterministic ordering rather than relying on two `now()` calls landing microseconds apart.
         sqlx::query!(
             "UPDATE docker_tags SET updated_at = now() - interval '1 hour' WHERE package_repository_id = $1 AND tag = '1.0.0'",
             repository_id
@@ -1086,9 +1070,7 @@ mod tests {
         link(&pool, repository_id, &layer).await;
         let first = sample_manifest(repository_id, &image_name);
 
-        // Three listings of a 40-byte layer are 40 bytes, not 120 (which would not fit in 100).
         repo.insert_manifest_with_checks(repository_id, &first, &[layer.clone(), layer.clone(), layer.clone()], Some(100)).await.unwrap();
-        // A second manifest over the same layer adds only its own 20-byte body.
         let mut second = sample_manifest(repository_id, &image_name);
         second.id = Uuid::new_v4();
         second.digest = Digest::of(b"another manifest");
@@ -1105,12 +1087,9 @@ mod tests {
         padded.body = vec![b' '; 3000];
         padded.digest = Digest::of(&padded.body);
 
-        // A 3000-byte body, no blobs at all.
         assert_eq!(repo.insert_manifest_with_checks(repository_id, &padded, &[], Some(2999)).await.unwrap_err(), DomainError::StorageQuotaExceeded);
         let (id, _) = repo.insert_manifest_with_checks(repository_id, &padded, &[], Some(3000)).await.unwrap();
-        // Re-pushing what is already stored adds nothing, however tight the quota.
         repo.insert_manifest_with_checks(repository_id, &padded, &[], Some(3000)).await.unwrap();
-        // Each tag costs a fixed amount on top.
         repo.set_tag(repository_id, &image_name, "v1", id).await.unwrap();
         let mut second = sample_manifest(repository_id, &image_name);
         second.id = Uuid::new_v4();
@@ -1183,7 +1162,6 @@ mod tests {
         let index = manifest_aged(&repo, repository_id, &image_name, b"index", 30).await;
         repo.set_tag(repository_id, &image_name, "multi", index.id).await.unwrap();
         repo.insert_manifest_list_members(index.id, &[member.digest.clone()]).await.unwrap();
-        // The same digest under another image name is not covered by that image's list.
         let same_digest_elsewhere = {
             let mut m = sample_manifest(repository_id, &other_image);
             m.digest = member.digest.clone();
@@ -1256,7 +1234,6 @@ mod tests {
         let manifest = manifest_aged(&repo, repository_id, &image_name, b"revived", 30).await;
         let cutoff = chrono::Utc::now() - chrono::Duration::days(7);
 
-        // Somebody tags the digest between the sweep's listing and its delete.
         repo.set_tag(repository_id, &image_name, "revived", manifest.id).await.unwrap();
         assert!(!repo.delete_untagged_manifest(repository_id, &image_name, &manifest.digest, cutoff).await.unwrap());
         assert!(repo.find_manifest_by_digest(repository_id, &image_name, &manifest.digest).await.unwrap().is_some());
@@ -1275,7 +1252,6 @@ mod tests {
         let manifest = manifest_aged(&repo, repository_id, &image_name, b"revived", 30).await;
         let cutoff = chrono::Utc::now() - chrono::Duration::days(7);
 
-        // What `set_tag` holds until it commits: the manifest row and the new tag.
         let mut tagging = pool.begin().await.unwrap();
         sqlx::query!("SELECT id FROM docker_manifests WHERE id = $1 FOR KEY SHARE", manifest.id).fetch_one(&mut *tagging).await.unwrap();
         sqlx::query!("INSERT INTO docker_tags (package_repository_id, image_name, tag, manifest_id) VALUES ($1, 'myimage', 'revived', $2)", repository_id, manifest.id).execute(&mut *tagging).await.unwrap();
@@ -1337,7 +1313,6 @@ mod tests {
         let cutoff = chrono::Utc::now() - chrono::Duration::days(7);
         assert!(repo.list_untagged_manifests(repository_id, cutoff).await.unwrap().is_empty(), "nothing is reclaimable at the first sweep after the upgrade");
 
-        // A second run keeps the dates.
         sqlx::raw_sql(include_str!("../../migrations/0010_docker_manifest_untagged_since.sql")).execute(&pool).await.unwrap();
         assert_eq!(untagged_since(untagged).await, Some(started));
     }

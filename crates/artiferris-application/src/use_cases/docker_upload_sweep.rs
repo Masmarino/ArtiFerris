@@ -46,7 +46,6 @@ mod tests {
     async fn sweeping_reports_the_count_removed_by_the_port() {
         let sessions = Arc::new(FakeUploadSessions::new());
         let start = StartBlobUploadUseCase::new(sessions.clone());
-        // Fresh sessions aren't expired, so the fake port's sweep removes none of them.
         start.execute(Uuid::new_v4()).await.unwrap();
         start.execute(Uuid::new_v4()).await.unwrap();
 

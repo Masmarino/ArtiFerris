@@ -92,7 +92,6 @@ impl SweepRetentionUseCase {
                 if rank < keep_n {
                     continue;
                 }
-                // Fresh, per-version query right before the delete decision — see method doc.
                 let protected: HashSet<String> = self
                     .npm_packages
                     .list_dist_tags_for_packages(&[package.id])
@@ -367,14 +366,10 @@ mod tests {
         };
         packages.create_package(&package).await.unwrap();
         let now = Utc::now();
-        // Newest-first candidates for deletion beyond keep_n=1: 1.1.0 is checked before 1.0.0.
         seed_npm_version(&packages, &storage, repository_id, package.id, "1.0.0", now - Duration::days(2)).await;
         seed_npm_version(&packages, &storage, repository_id, package.id, "1.1.0", now - Duration::days(1)).await;
         seed_npm_version(&packages, &storage, repository_id, package.id, "2.0.0", now).await;
 
-        // No dist-tag exists when the sweep starts. As soon as the sweep's first dist-tag query
-        // returns (for 1.1.0, the first deletion candidate), simulate a concurrent
-        // `npm dist-tag add` landing on the OLDER 1.0.0 — the next candidate in line.
         let package_id = package.id;
         let packages_for_hook = packages.clone();
         *packages.after_first_list_dist_tags_for_packages.lock().unwrap() = Some(Box::new(move || {
@@ -452,7 +447,6 @@ mod tests {
         manifests.insert_manifest(&latest, &[]).await.unwrap();
         manifests.set_tag_at(repository_id, &image_name, "1.0.0", v1.id, now - Duration::days(2)).await;
         manifests.set_tag_at(repository_id, &image_name, "1.1.0", v2.id, now - Duration::days(1)).await;
-        // Oldest, but protected by name.
         manifests.set_tag_at(repository_id, &image_name, "latest", latest.id, now - Duration::days(3)).await;
 
         let use_case = use_case_with(
@@ -480,7 +474,6 @@ mod tests {
         let image_name = artiferris_domain::docker_registry::DockerImageName::parse("my-app").unwrap();
         let now = Utc::now();
 
-        // "v3" and "stable" share a digest (common in CI/CD); "v2" is separate and older.
         let shared_build = docker_manifest(repository_id, &image_name, b"shared-build", now);
         let v2 = docker_manifest(repository_id, &image_name, b"v2", now - Duration::days(1));
         manifests.insert_manifest(&shared_build, &[]).await.unwrap();
@@ -574,7 +567,6 @@ mod tests {
         manifest
     }
 
-    /// Re-tagging `prod` on a six-month-old digest is a rollback, and must survive.
     #[tokio::test]
     async fn a_tag_moved_back_onto_an_old_digest_survives_the_sweep() {
         let repositories = Arc::new(FakeDockerRepositories::new());

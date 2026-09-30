@@ -79,7 +79,6 @@ mod tests {
     use axum::Router;
     use tower::ServiceExt;
 
-    // Same local pattern as every other route/middleware test module (see organization_middleware.rs).
     fn test_config() -> Config {
         Config {
             database_url: String::new(),
@@ -135,7 +134,6 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let app = router(state);
 
-        // Neither a well-formed JWT nor even the right scheme.
         let response = app.oneshot(Request::builder().uri("/").header("authorization", "Bearer not-a-jwt").body(Body::empty()).unwrap()).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -164,7 +162,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    // Verifies this file's own doc comment on AuthUser.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_token_for_a_deleted_user_is_rejected(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());

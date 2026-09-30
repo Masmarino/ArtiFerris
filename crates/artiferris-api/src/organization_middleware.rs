@@ -60,9 +60,6 @@ mod tests {
     use artiferris_domain::organization::OrganizationSlug;
     use tower::ServiceExt;
 
-    // This crate has no shared test Config helper — every route test module defines its own
-    // local copy (see crates/artiferris-api/src/routes/repositories.rs's own `test_config()` for
-    // the established pattern this mirrors).
     fn test_config() -> Config {
         Config {
             database_url: String::new(),

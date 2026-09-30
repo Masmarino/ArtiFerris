@@ -107,9 +107,6 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
-    /// Mirrors the `NpmState` builder duplicated in `routes/metadata.rs`,
-    /// `authz.rs` and `organization_resolution.rs` — this crate has no shared
-    /// test-support module (see `routes/metadata.rs`'s own note on this).
     async fn test_state(pool: PgPool, root: &std::path::Path) -> NpmState {
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
         let repositories = Arc::new(PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string()));
@@ -280,7 +277,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
 
-        // Wrong auth scheme entirely — `TypedHeader<Authorization<Bearer>>` extraction fails.
         let response = request(state, Some("Basic dXNlcjpwYXNz")).await;
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -291,7 +287,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
 
-        // No token with this hash exists in the database at all.
         let response = request(state, Some("Bearer this-token-was-never-issued")).await;
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -309,8 +304,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "a revoked token must not authenticate");
     }
 
-    /// B-6: an API token minted before a password change must not survive it, same as a
-    /// session JWT already does via `tokens_valid_after`.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_api_token_created_before_a_password_change_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -327,7 +320,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "a token created before tokens_valid_after was bumped must be rejected");
     }
 
-    /// B-6: `ApiToken` previously had no expiry at all — tokens lived forever.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_expired_api_token_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();

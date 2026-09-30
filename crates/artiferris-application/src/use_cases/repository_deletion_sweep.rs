@@ -29,19 +29,11 @@ impl RepositoryDeletionSweepUseCase {
     pub async fn execute(&self) -> Result<usize, ApplicationError> {
         let result = self.repositories.hard_delete_repositories_past_grace_period().await?;
 
-        // Best-effort: the reference-count decrement and the `docker_blobs` row deletion already
-        // committed inside the port call above, so a failure removing any one file here is logged,
-        // not propagated — it can never re-inflate a reference count or block a future cleanup pass.
-        // `remove_reclaimed_blob_files` re-locks and re-checks each digest before touching its file,
-        // closing the race where a concurrent write for the same digest lands in the gap between the
-        // port call's commit above and this call.
         let reclaimed_digests: Vec<Digest> = result
             .reclaimed_docker_blob_digests
             .iter()
             .filter_map(|d| match Digest::parse(d) {
                 Ok(digest) => Some(digest),
-                // Every digest here came from a `docker_blobs.digest` the port call itself just
-                // deleted, so this can't actually happen — kept as a defensive skip-and-log.
                 Err(e) => {
                     tracing::warn!(digest = %d, error = %e, "repository deletion sweep reported a malformed digest; skipping its file removal");
                     None
@@ -50,9 +42,6 @@ impl RepositoryDeletionSweepUseCase {
             .collect();
         self.blobs.remove_reclaimed_blob_files(&reclaimed_digests).await;
 
-        // Best-effort on-disk cleanup for each swept repository's own storage directory (Finding 2,
-        // fix round 1) — a no-op for a Docker-format repository, which never had one. Also logged,
-        // not propagated: the repository's DB rows are already gone by this point regardless.
         for repository_id in &result.swept_repository_ids {
             if let Err(e) = self.storage.delete_repository(*repository_id).await {
                 tracing::warn!(repository_id = %repository_id, error = %e, "repository deletion sweep hard-deleted a repository's rows but failed to remove its on-disk storage directory");

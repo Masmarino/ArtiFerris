@@ -125,7 +125,6 @@ mod tests {
 
         let claims = issuer.verify(&token).unwrap();
 
-        // `iat` is truncated to whole seconds, so `before` can round up past it by under a second.
         assert!(claims.issued_at >= before - Duration::seconds(1), "issued_at {} predates issuance", claims.issued_at);
         assert!(claims.issued_at <= after, "issued_at {} postdates issuance", claims.issued_at);
     }

@@ -30,7 +30,6 @@ pub struct PostgresPublicCatalog {
     slot_wait: Duration,
 }
 
-/// A statement cut short by the timeout is load, not a fault.
 fn query_err(error: sqlx::Error) -> DomainError {
     match &error {
         sqlx::Error::Database(db) if db.code().as_deref() == Some(QUERY_CANCELED) => DomainError::Busy("the public catalog query took too long".to_string()),
@@ -88,7 +87,6 @@ macro_rules! public_repositories {
 
 macro_rules! public_filter {
     () => {
-        // The owner's page may be closed, and so may the whole instance's (the public organization's row).
         "p.repo_type = 'hosted' AND p.is_public AND p.deleted_at IS NULL AND COALESCE(ss.public_page_enabled, true) \
          AND COALESCE((SELECT i.public_page_enabled FROM system_settings i JOIN organizations io ON io.id = i.organization_id WHERE io.is_public), true)"
     };
@@ -413,7 +411,6 @@ impl PublicCatalogPort for PostgresPublicCatalog {
         let rows = self.run(query, i64::from(query.per_page), offset, false, None).await?;
         let total = match rows.first() {
             Some(row) => row.total,
-            // A page past the end has no rows to carry the window count, so ask for the first row of the result instead.
             None if offset > 0 => self.run(query, 1, 0, false, None).await?.first().map_or(0, |row| row.total),
             None => 0,
         };
@@ -526,7 +523,6 @@ impl PostgresPublicCatalog {
         let text = query.text.as_deref().map(str::to_lowercase);
         let escaped = text.as_deref().map(escape_like);
         let prefix = escaped.as_ref().map(|e| format!("{e}%"));
-        // Two typed characters are a prefix, not a substring: "im" would otherwise match half the catalog on every keystroke.
         let contains = match (&escaped, names_only && text.as_deref().is_some_and(|t| t.chars().count() < 3)) {
             (Some(_), true) => prefix.clone(),
             (escaped, _) => escaped.as_ref().map(|e| format!("%{e}%")),
@@ -542,7 +538,6 @@ impl PostgresPublicCatalog {
             _ => &[],
         };
         let scope = if text.is_some() { CANDIDATES_WITH_TEXT } else { CANDIDATES_WITHOUT_TEXT };
-        // Only compile-time constants are assembled into the statement (`order` is one of three literals); user text is only ever bound.
         let sql = format!("{}{scope}{CANDIDATES_COMMON}{}", repositories_cte(&query.scope), SEARCH_TAIL.replace("__ORDER__", order));
         let (mut tx, _slot) = self.begin().await?;
         sqlx::query_as(AssertSqlSafe(sql))
@@ -821,7 +816,6 @@ mod tests {
 
         assert!(names(&pool, &query(Some("%"))).await.is_empty());
         assert_eq!(names(&pool, &query(Some("_"))).await, vec!["snake_case"]);
-        // Two characters, so the fuzzy tier stays out of it: were "_" a wildcard, "p_" would match "plain".
         assert!(names(&pool, &query(Some("p_"))).await.is_empty());
     }
 

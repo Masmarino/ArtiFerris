@@ -211,10 +211,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    /// M-17 fix round 1: `check_version` used to do its own inline `verify()` call and never
-    /// consulted `tokens_valid_after`, so a token for a holder who no longer exists in the DB
-    /// (deleted, or otherwise unseeded) still 200'd. Now routed through `Option<DockerAuthUser>`,
-    /// which rejects an unknown holder the same way every data-serving route does.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn version_check_with_a_token_for_an_unknown_holder_is_rejected(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -243,7 +239,6 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let token = json["token"].as_str().unwrap();
         assert_eq!(token, json["access_token"].as_str().unwrap());
-        // Never a real, verifiable token — same rejection path as any other garbage bearer value.
         assert!(state.token_issuer.verify(token).is_err());
     }
 

@@ -867,10 +867,8 @@ mod tests {
             })
             .await
             .unwrap();
-        // Non-super-admin caller in the public organization.
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "public-regular", "sup3r-s3cret!", false).await.unwrap();
         let token = state.authenticate_user.execute("public-regular", "sup3r-s3cret!").await.unwrap();
-        // The target username exists, but only in a different ("acme") organization.
         state.create_user.execute(acme_id, "acme-florian", "sup3r-s3cret!", false).await.unwrap();
         let app = build_router(state);
 
@@ -942,7 +940,6 @@ mod tests {
             })
             .await
             .unwrap();
-        // Caller belongs to the public organization, not acme.
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "public-regular", "sup3r-s3cret!", false).await.unwrap();
         let token = state.authenticate_user.execute("public-regular", "sup3r-s3cret!").await.unwrap();
         state.create_user.execute(acme_id, "acme-florian", "sup3r-s3cret!", false).await.unwrap();
@@ -1141,8 +1138,6 @@ mod tests {
         let repo_id =
             state.create_repository.execute(acme_id, "acme-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, org_admin_id).await.unwrap();
         state.grant_permission.execute(target_id, repo_id, Role::Write, org_admin_id).await.unwrap();
-        // Also give the target a personal project, to prove it's filtered out alongside the
-        // normal-org grant being kept.
         state.reserve_personal_organization.execute(target_id).await.unwrap();
         state.create_user_project.execute(target_id, "target-secret-lib", RepositoryFormat::Npm, RepositoryType::Hosted).await.unwrap();
 
@@ -1348,7 +1343,6 @@ mod tests {
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
         state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         state.create_user.execute(acme_id, "acme-user", "sup3r-s3cret!", false).await.unwrap();
-        // A super-admin in a different organization must never show up in the org-admin's view.
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
@@ -1382,7 +1376,6 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::FORBIDDEN);
     }
 
-    // --- An organization admin's reach into their own organization's users ---
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_organization_admin_can_get_a_user_in_their_own_organization(pool: sqlx::PgPool) {
@@ -1528,7 +1521,6 @@ mod tests {
             .await
             .unwrap();
 
-        // No SMTP configured, so this 500s past authorization — what matters is it isn't 403/404.
         assert_ne!(response.status(), axum::http::StatusCode::FORBIDDEN);
         assert_ne!(response.status(), axum::http::StatusCode::NOT_FOUND);
     }

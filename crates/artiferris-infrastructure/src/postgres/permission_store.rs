@@ -54,8 +54,6 @@ pub(crate) async fn append_in_tx(
         return Ok(());
     }
 
-    // Advisory lock first: `FOR UPDATE` below takes no lock on a
-    // brand-new aggregate (zero rows), so two first-appends could race.
     sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", aggregate_id(user_id, repository_id))
         .execute(&mut **tx)
         .await

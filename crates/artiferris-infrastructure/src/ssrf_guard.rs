@@ -206,18 +206,15 @@ mod tests {
 
     #[test]
     fn a_cgnat_address_is_rejected() {
-        // 100.64.0.0/10 spans 100.64.0.0-100.127.255.255 (second octet's top 2 bits are 01).
         assert!(is_private_or_reserved("100.64.0.1".parse().unwrap()));
         assert!(is_private_or_reserved("100.100.0.1".parse().unwrap()));
         assert!(is_private_or_reserved("100.127.255.255".parse().unwrap()));
-        // Just outside the range on both sides.
         assert!(!is_private_or_reserved("100.63.255.255".parse().unwrap()));
         assert!(!is_private_or_reserved("100.128.0.0".parse().unwrap()));
     }
 
     #[test]
     fn the_full_zero_slash_eight_range_is_rejected() {
-        // Not just the single unspecified address (0.0.0.0) — the whole first-octet-zero range.
         assert!(is_private_or_reserved("0.0.0.0".parse().unwrap()));
         assert!(is_private_or_reserved("0.1.2.3".parse().unwrap()));
         assert!(is_private_or_reserved("0.255.255.255".parse().unwrap()));
@@ -225,48 +222,34 @@ mod tests {
 
     #[test]
     fn the_ietf_protocol_assignment_range_is_rejected() {
-        // 192.0.0.0/24 — distinct from 192.0.2.0/24 (documentation), checked below.
         assert!(is_private_or_reserved("192.0.0.1".parse().unwrap()));
         assert!(is_private_or_reserved("192.0.0.255".parse().unwrap()));
     }
 
     #[test]
     fn the_documentation_range_is_still_rejected_and_is_distinct_from_ietf_protocol_assignment() {
-        // 192.0.2.0/24 (RFC 5737) is adjacent to, but not the same as, 192.0.0.0/24 above —
-        // already covered by the pre-existing `is_documentation()` check, must stay covered.
         assert!(is_private_or_reserved("192.0.2.1".parse().unwrap()));
-        // And the un-widened middle of the /24 between them must stay open.
         assert!(!is_private_or_reserved("192.0.1.1".parse().unwrap()));
     }
 
     #[test]
     fn the_benchmarking_range_is_rejected() {
-        // 198.18.0.0/15 spans the two consecutive /16s 198.18.0.0/16 and 198.19.0.0/16.
         assert!(is_private_or_reserved("198.18.0.1".parse().unwrap()));
         assert!(is_private_or_reserved("198.19.255.255".parse().unwrap()));
-        // Just outside the range on both sides.
         assert!(!is_private_or_reserved("198.17.255.255".parse().unwrap()));
         assert!(!is_private_or_reserved("198.20.0.0".parse().unwrap()));
     }
 
     #[test]
     fn the_reserved_240_range_is_rejected() {
-        // 240.0.0.0/4 spans 240.0.0.0-255.255.255.255 (first octet's top 4 bits are 1111).
         assert!(is_private_or_reserved("240.0.0.1".parse().unwrap()));
         assert!(is_private_or_reserved("250.1.2.3".parse().unwrap()));
-        // 255.255.255.255 is already caught by `is_broadcast()` — the widened range overlaps it
-        // (harmless redundancy), but must not exclude it either.
         assert!(is_private_or_reserved("255.255.255.255".parse().unwrap()));
-        // Just outside the range and not caught by any other rule (224.0.0.0-239.255.255.255,
-        // immediately below 240.0.0.0/4, is entirely multicast, so it's not a useful boundary
-        // probe here — it's already rejected for an unrelated reason).
         assert!(!is_private_or_reserved("223.255.255.255".parse().unwrap()));
     }
 
     #[test]
     fn an_ipv4_compatible_ipv6_address_is_rejected() {
-        // The deprecated `::a.b.c.d` form, distinct from the IPv4-mapped `::ffff:a.b.c.d` form
-        // (already covered via `to_ipv4_mapped()`, exercised by `rejects_an_ipv4_mapped_private_address`).
         assert!(is_private_or_reserved("::10.0.0.1".parse().unwrap()));
     }
 

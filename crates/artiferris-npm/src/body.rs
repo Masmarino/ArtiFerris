@@ -21,7 +21,6 @@ type Rejection = (StatusCode, Json<serde_json::Value>);
 /// Who a body comes from, for the limit on bodies one client or user may have in flight.
 pub struct BodyCaller {
     pub user_id: Uuid,
-    /// `RequestGuard::client_bucket`.
     pub client: String,
 }
 

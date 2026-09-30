@@ -192,8 +192,6 @@ mod tests {
         Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()
     }
 
-    /// Deliberately distinct from any real sniffed content-type, so a test can tell whether
-    /// GetBrandingUseCase fell back to these or served the operator's own upload.
     fn test_defaults() -> BrandingDefaults {
         BrandingDefaults {
             logo: BrandingAsset { bytes: b"default-logo".to_vec(), content_type: "image/default-logo".to_string() },

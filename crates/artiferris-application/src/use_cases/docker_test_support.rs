@@ -319,7 +319,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
         Ok(self.manifests.lock().unwrap().values().find(|m| m.package_repository_id == repository_id && &m.image_name == image_name && &m.digest == digest).cloned())
     }
     async fn insert_manifest(&self, manifest: &DockerManifest, blob_digests: &[Digest]) -> Result<(Uuid, bool), DomainError> {
-        // Mirrors the real ON CONFLICT DO NOTHING: an existing (repository, image, digest) keeps its id.
         let existing_id = self
             .manifests
             .lock()
@@ -359,7 +358,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
                 }
                 None => 0,
             };
-            // Mirrors `FakeDockerBlobStore::used_bytes_for_repository`, which always reports zero pre-existing usage (no per-repository tracking).
             let used_bytes: u64 = 0;
             if used_bytes + added_bytes > quota as u64 {
                 return Err(DomainError::StorageQuotaExceeded);
@@ -388,7 +386,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
         let key = (repository_id, image_name.as_str().to_string(), tag.to_string());
         self.tags.lock().unwrap().insert(key.clone(), manifest_id);
         self.tag_updates.lock().unwrap().push(key.clone());
-        // Strictly later than every earlier `set_tag`, like a real clock would be.
         let mut times = self.tag_times.lock().unwrap();
         let latest = times.values().max().copied().unwrap_or(chrono::DateTime::<chrono::Utc>::MIN_UTC);
         times.insert(key, chrono::Utc::now().max(latest + chrono::Duration::microseconds(1)));
@@ -408,7 +405,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
         Ok(self.tags.lock().unwrap().keys().filter(|(rid, name, _)| *rid == repository_id && name == image_name.as_str()).map(|(_, _, tag)| tag.clone()).collect())
     }
     async fn list_repository_image_names(&self, repository_id: Uuid) -> Result<Vec<DockerImageName>, DomainError> {
-        // Intentionally not deduplicating — ListCatalogUseCase is the sole place responsible for that.
         let names: Vec<String> = self.tags.lock().unwrap().keys().filter(|(rid, _, _)| *rid == repository_id).map(|(_, name, _)| name.clone()).collect();
         names.into_iter().map(|n| DockerImageName::parse(&n)).collect()
     }
@@ -432,7 +428,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
         let mut seen = std::collections::HashSet::new();
         let mut per_image_count: HashMap<String, i64> = HashMap::new();
         let mut pairs: Vec<(String, String)> = Vec::new();
-        // Newest update first, like `ORDER BY updated_at DESC`; a tag re-pushed later counts once, at its latest update.
         for (rid, name, tag) in tag_updates.iter().rev() {
             if *rid != repository_id || !image_names.contains(name) || !tags.contains_key(&(*rid, name.clone(), tag.clone())) || !seen.insert((name.clone(), tag.clone())) {
                 continue;
@@ -451,7 +446,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
         let tag_updates = self.tag_updates.lock().unwrap();
         let tags = self.tags.lock().unwrap();
         let mut latest: HashMap<String, Uuid> = HashMap::new();
-        // Walked oldest to newest, so the last write per image wins — mirrors `ORDER BY updated_at DESC LIMIT 1`.
         for (rid, name, tag) in tag_updates.iter() {
             if *rid != repository_id || !image_names.contains(name) {
                 continue;

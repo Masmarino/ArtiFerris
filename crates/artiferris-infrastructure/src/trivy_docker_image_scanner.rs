@@ -52,8 +52,6 @@ impl DockerImageScannerPort for TrivyDockerImageScanner {
         platform: Option<&str>,
         mint_registry_token: &(dyn Fn() -> Result<String, DomainError> + Send + Sync),
     ) -> Result<Vec<DockerVulnerability>, DomainError> {
-        // Bounds how many trivy processes can run at once — unbounded concurrent pushes must not
-        // fork-bomb the host (M-12).
         let _permit = self.concurrency.acquire().await.map_err(|_| DomainError::Infrastructure("scanner shut down".to_string()))?;
 
         let image_ref = build_image_ref(&self.registry_host, repository_name, image_name, reference);
@@ -234,7 +232,6 @@ mod tests {
         std::fs::write(&fake_trivy, "#!/bin/sh\nenv\n").unwrap();
         std::fs::set_permissions(&fake_trivy, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-        // A real variable in this process, so the check fails if the child ever inherits the parent's environment.
         unsafe { std::env::set_var("ARTIFERRIS_TEST_CANARY_SECRET", "canary-secret-value") };
         let command = scan_command(fake_trivy.as_os_str(), "127.0.0.1:8080/r/i:t", None, std::path::Path::new("/tmp/cfg"), std::env::vars());
 
@@ -329,11 +326,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_scan_that_runs_too_long_is_killed_and_times_out() {
-        // Requires the scanner's process-invocation to be injectable for a test — see Step 3's
-        // `run_scan_command` extraction. Construct a scanner (or call the extracted helper directly)
-        // with a command that sleeps past the configured timeout (e.g. `Command::new("sleep").arg("2")`)
-        // and a short test-only timeout override, and assert the call returns an error within a bounded
-        // wall-clock window rather than the full sleep duration.
         let mut command = tokio::process::Command::new("sleep");
         command.arg("2");
         let started = std::time::Instant::now();
@@ -363,7 +355,6 @@ mod tests {
                 let in_flight = in_flight.clone();
                 let max_observed = max_observed.clone();
                 tokio::spawn(async move {
-                    // Mirrors what `scan` does: hold a permit for the duration of the subprocess.
                     let _permit = concurrency.acquire().await.unwrap();
                     let current = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
                     max_observed.fetch_max(current, Ordering::SeqCst);

@@ -47,7 +47,6 @@ impl SystemSettings {
 #[async_trait]
 pub trait SystemSettingsPort: Send + Sync {
     async fn get(&self, organization_id: Uuid) -> Result<SystemSettings, DomainError>;
-    /// `audit` is written in the same transaction as the change.
     async fn update(&self, organization_id: Uuid, settings: &SystemSettings, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError>;
 }
 

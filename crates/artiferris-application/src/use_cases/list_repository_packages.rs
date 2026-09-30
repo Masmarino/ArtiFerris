@@ -126,8 +126,6 @@ impl ListRepositoryPackagesUseCase {
             versions_by_package.entry(v.npm_package_id).or_default().push(v);
         }
 
-        // Snapshot each package's newest version id *before* consuming the map below — that's
-        // the version whose audit results the summary circle is drawn from.
         let mut latest_version_id_by_package: HashMap<Uuid, Uuid> = HashMap::new();
         for (package_id, versions) in &mut versions_by_package {
             versions.sort_by_key(|v| std::cmp::Reverse(v.published_at));
@@ -386,8 +384,6 @@ mod tests {
         new_manifest.digest = Digest::of(b"a different manifest body");
         manifests.insert_manifest(&old_manifest, &[]).await.unwrap();
         manifests.insert_manifest(&new_manifest, &[]).await.unwrap();
-        // "1.0.0" is set first (older), "latest" repointed afterwards (more recent) — the
-        // summary must come from "latest"'s manifest, not "1.0.0"'s.
         manifests.set_tag(repository_id, &name, "1.0.0", old_manifest.id).await.unwrap();
         manifests.set_tag(repository_id, &name, "latest", new_manifest.id).await.unwrap();
         scans

@@ -657,7 +657,6 @@ mod tests {
             .unwrap();
         assert_eq!(retried_from_zero.status(), StatusCode::RANGE_NOT_SATISFIABLE);
 
-        // The correctly-offset chunk still succeeds afterward.
         let second_patch = app
             .oneshot(
                 Request::builder()

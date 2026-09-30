@@ -347,7 +347,6 @@ mod tests {
     use axum::http::Request;
     use tower::ServiceExt;
 
-    // Local copy of the established per-file pattern (see repositories.rs's own `test_config()`/`bearer()`).
     fn test_config() -> Config {
         Config {
             database_url: String::new(),
@@ -365,7 +364,6 @@ mod tests {
         }
     }
 
-    // These tests aren't about organization scoping, so the public organization is a fine default for both accounts.
     async fn bearer(state: &AppState, organization_id: uuid::Uuid, username: &str, password: &str, is_super_admin: bool) -> String {
         state.create_user.execute(organization_id, username, password, is_super_admin).await.unwrap();
         state.authenticate_user.execute(username, password).await.unwrap()

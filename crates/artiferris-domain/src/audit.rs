@@ -67,7 +67,6 @@ pub enum SecurityEvent {
 }
 
 impl SecurityEvent {
-    /// The form that gets stored.
     pub fn normalized(self) -> Self {
         match self {
             SecurityEvent::LoginFailed { username, ip } => SecurityEvent::LoginFailed { username: recorded_username(&username), ip },
@@ -158,7 +157,6 @@ impl From<&IdentityProviderConfig> for IdentityProviderSummary {
     }
 }
 
-/// Everything about an organization's SMTP settings except the password.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SmtpSettingsSummary {
     pub host: String,
@@ -189,7 +187,6 @@ pub struct SettingChange {
     pub after: serde_json::Value,
 }
 
-/// One entry per setting whose value differs, sorted by name.
 pub fn system_settings_changes(before: &SystemSettings, after: &SystemSettings) -> Vec<SettingChange> {
     let as_map = |settings: &SystemSettings| -> BTreeMap<String, serde_json::Value> {
         match serde_json::to_value(settings) {
@@ -236,7 +233,6 @@ pub enum AdminAuditEvent {
     SmtpSettingsChanged { organization_id: Uuid, before: Option<SmtpSettingsSummary>, after: SmtpSettingsSummary, password_changed: bool },
     SystemSettingsChanged { organization_id: Uuid, changes: Vec<SettingChange> },
     BrandingChanged { organization_id: Uuid, asset: BrandingAsset, cleared: bool },
-    /// Instance-wide: the export covers every user, so it belongs to no organization.
     ConfigurationExported { users: usize, repositories: usize, permissions: usize },
     ConfigurationImported { users_created: usize, repositories_created: usize, permissions_granted: usize, failures: usize },
 }
@@ -294,7 +290,6 @@ pub struct AdminAuditRecord {
     pub actor_id: Option<Uuid>,
 }
 
-/// The same for a security event.
 #[derive(Debug, Clone)]
 pub struct SecurityAuditRecord {
     pub event: SecurityEvent,
@@ -371,7 +366,6 @@ pub struct AuditCursor {
 #[derive(Debug, Clone, Default)]
 pub struct AuditQueryFilter {
     pub aggregate_type: Option<String>,
-    /// Applied at the SQL level, before `LIMIT`.
     pub exclude_aggregate_type: Option<String>,
     pub aggregate_id: Option<String>,
     pub actor_id: Option<Uuid>,
@@ -393,7 +387,6 @@ impl AuditQueryFilter {
 #[derive(Debug, Clone)]
 pub struct AuditPage {
     pub entries: Vec<AuditEntry>,
-    /// `None` on the last page.
     pub next_cursor: Option<AuditCursor>,
 }
 

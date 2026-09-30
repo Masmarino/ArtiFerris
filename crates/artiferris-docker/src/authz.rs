@@ -73,8 +73,6 @@ pub async fn require_readable_repository_by_name<'a>(
     if repo.is_public {
         return Ok((repo, None));
     }
-    // No Authorization header at all on a private repository is indistinguishable from a
-    // nonexistent one — same 404-not-401 discipline as everywhere else in this file.
     let user = user.ok_or(StatusCode::NOT_FOUND)?;
     let is_personal = resolve_is_personal(state, user, &repo).await?;
     Ok((repo, Some((user, is_personal))))
@@ -88,7 +86,6 @@ pub async fn resolve_personal_repository(state: &DockerState, username: &str, re
     state.resolve_personal_repository.execute(username, repo_name).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)
 }
 
-/// Delegates to the shared primitive — kept here so docker's routes keep importing `require_same_organization` from `crate::authz` unchanged.
 pub fn require_same_organization(user: &DockerAuthUser, organization_id: Uuid) -> Result<(), StatusCode> {
     authz_primitives::require_same_organization(user, organization_id).map_err(map_access_error)
 }
@@ -379,7 +376,6 @@ mod tests {
             let repo_id = Uuid::new_v4();
             seed_repository(&pool, personal_org_id, repo_id, "docker", "hosted").await;
             let repo_name = format!("repo-{repo_id}");
-            // The owner's real organization is unrelated to the personal org — that's the whole point.
             let owner = user(false, Uuid::new_v4());
 
             let (found, is_personal) = require_repository_by_name(&state, &owner, personal_org_id, &repo_name).await.unwrap();
@@ -404,7 +400,6 @@ mod tests {
             }),
         };
 
-        // Same name ("backend") but a different resolved repository id.
         let result = require_granted_action(&user, repo_b_id, "backend", "pull");
 
         assert_eq!(result, Err(StatusCode::FORBIDDEN));

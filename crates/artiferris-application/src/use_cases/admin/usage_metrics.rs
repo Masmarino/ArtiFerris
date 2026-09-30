@@ -35,7 +35,6 @@ impl GetUsageMetricsUseCase {
         let repos = self.repositories.list_all().await?;
 
         let docker_ids: Vec<Uuid> = repos.iter().filter(|r| r.format == RepositoryFormat::Docker).map(|r| r.id).collect();
-        // Docker blobs are content-addressed and deduped globally, not per-repository — one batched query for all of them.
         let docker_usage = self.docker_blobs.used_bytes_for_repositories(&docker_ids).await?;
 
         let npm_repos: Vec<_> = repos.iter().filter(|r| r.format == RepositoryFormat::Npm).collect();
@@ -88,7 +87,6 @@ mod tests {
 
     #[tokio::test]
     async fn computes_usage_metrics_for_a_docker_repository_from_the_blob_store_not_the_storage_backend() {
-        // Guards against silently falling back to storage.used_bytes() (always 0 for Docker).
         let repo_id = Uuid::new_v4();
         let repos = Arc::new(FakeRepositoryQuery {
             repos: vec![PackageRepositorySummary {

@@ -296,12 +296,10 @@ mod tests {
     #[test]
     fn eviction_never_unblocks_an_actively_blocked_key() {
         let throttle = LoginThrottle::new();
-        // Block "victim" first, at a small cap so it's easy to trip.
         throttle.record_failure("victim", 2, LOGIN_ATTEMPT_WINDOW);
         throttle.record_failure("victim", 2, LOGIN_ATTEMPT_WINDOW);
         assert!(throttle.is_throttled("victim", 2, LOGIN_ATTEMPT_WINDOW));
 
-        // Flood past the cap with distinct fresh keys, each under its own limit (not blocked).
         for i in 0..MAX_TRACKED_USERNAMES {
             throttle.record_failure(&format!("attacker-{i}"), MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW);
         }

@@ -323,12 +323,9 @@ pub struct PackageRepositorySummary {
     pub repo_type: RepositoryType,
     pub remote_url: Option<String>,
     pub remote_username: Option<String>,
-    /// Never returned by the API.
     pub remote_password: Option<String>,
     pub group_members: Vec<Uuid>,
-    /// `None` means unlimited.
     pub quota_bytes: Option<i64>,
-    /// `None` means automatic cleanup is disabled for this repository.
     pub retention_keep_last_n: Option<i32>,
     pub is_public: bool,
 }
@@ -384,7 +381,6 @@ pub trait RepositoryQuotaLockPort: Send + Sync {
     async fn acquire_repository_lock(&self, repository_id: Uuid) -> Result<Box<dyn RepositoryLockGuard>, EventStoreError>;
 }
 
-/// Result of `RepositoryDeletionSweepPort::hard_delete_repositories_past_grace_period`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HardDeleteSweepResult {
     pub repositories_removed: usize,

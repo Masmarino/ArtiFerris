@@ -123,7 +123,6 @@ mod tests {
     use sqlx::PgPool;
     use tower::ServiceExt;
 
-    /// No `:repository`/`*rest` params, so `DockerAuthUser` gets exercised in isolation without `dispatch.rs`'s routing machinery.
     fn router(state: DockerState) -> Router {
         async fn handler(user: DockerAuthUser) -> Json<serde_json::Value> {
             Json(json!({
@@ -200,7 +199,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
 
-        // Wrong auth scheme entirely — `TypedHeader<Authorization<Bearer>>` extraction fails.
         let response = request(state, Some("Basic dXNlcjpwYXNz")).await;
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -211,7 +209,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
 
-        // Not a JWT at all — three-part structural decoding fails immediately.
         let response = request(state, Some("Bearer not-a-real-jwt")).await;
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -233,7 +230,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// A syntactically valid, correctly-shaped token whose signature has been tampered with must not verify.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_token_with_a_tampered_signature_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -295,7 +291,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// The other half of the same check — the common case must not regress into a blanket 401.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_token_issued_after_the_users_tokens_valid_after_is_accepted(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -320,7 +315,6 @@ mod tests {
         set_tokens_valid_after(&pool, user_id, -3600).await;
         let token = state.token_issuer.issue(user_id, Uuid::new_v4(), false, None).unwrap();
 
-        // Warms the cache entry for this user.
         let response = request(state.clone(), Some(&format!("Bearer {token}"))).await;
         assert_eq!(response.status(), StatusCode::OK, "the token must work before anything revokes it");
 

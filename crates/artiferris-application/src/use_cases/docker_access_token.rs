@@ -42,13 +42,9 @@ impl IssueDockerAccessTokenUseCase {
             return Err(ApplicationError::InactiveApiToken);
         }
         let user = self.users.find_by_id(token.user_id).await?.ok_or(ApplicationError::InvalidCredentials)?;
-        // A password change bumps tokens_valid_after — an API token created before that must not
-        // survive it, same as a session JWT (B-6).
         if token.created_at < user.tokens_valid_after {
             return Err(ApplicationError::InactiveApiToken);
         }
-        // Only touch last_used_at once the token has passed every validity check — a
-        // rejected/stale token shouldn't be recorded as "used".
         let _ = self.api_tokens.touch_last_used_at(token.id, Utc::now()).await;
 
         let granted_scope = match scope.and_then(DockerScopeRequest::parse) {
@@ -93,9 +89,6 @@ impl IssueDockerAccessTokenUseCase {
                 } else {
                     self.permissions.find_role(user.id, repository.id).await?
                 };
-                // A public repository implies at least Read, mirroring the public-repo bypass
-                // applied to the data-plane routes elsewhere — without this, an anonymous or
-                // no-grant caller's docker pull of a public repo is incorrectly denied (B-22).
                 let role = match role {
                     Some(r) => Some(r),
                     None if repository.is_public => Some(Role::Read),
@@ -193,7 +186,6 @@ mod tests {
         async fn set_super_admin_unless_last(&self, _id: Uuid, _is_super_admin: bool, _audit: Option<&artiferris_domain::audit::AdminAuditRecord>) -> Result<bool, DomainError> { Ok(true) }
     }
 
-    // Keyed by (organization_id, name), not name alone — names are only unique per-org, and the cross-org test below relies on seeding two same-named repos.
     struct FakeRepositories(Mutex<HashMap<(Uuid, String), PackageRepositorySummary>>);
     #[async_trait]
     impl PackageRepositoryQueryPort for FakeRepositories {
@@ -209,7 +201,6 @@ mod tests {
         }
     }
 
-    // Keyed by slug, mirroring `PostgresOrganizationRepository`'s uniqueness constraint.
     struct FakeOrganizations(Mutex<HashMap<artiferris_domain::organization::OrganizationSlug, artiferris_domain::organization::Organization>>);
     #[async_trait]
     impl artiferris_domain::organization::OrganizationRepositoryPort for FakeOrganizations {
@@ -270,7 +261,6 @@ mod tests {
         }
     }
 
-    /// Fixed so tests can insert repositories in the test user's own org without threading an id through every call site.
     const ORG_ID: Uuid = Uuid::from_u128(1);
 
     fn regular_user(id: Uuid) -> User {
@@ -353,8 +343,6 @@ mod tests {
     async fn a_token_created_before_tokens_valid_after_is_rejected() {
         let user_id = Uuid::new_v4();
         let mut user = regular_user(user_id);
-        // Password changed strictly after the token was minted (token's created_at is `now()` at
-        // harness construction below).
         user.tokens_valid_after = chrono::Utc::now() + chrono::Duration::seconds(60);
         let h = harness(user);
 
@@ -367,7 +355,6 @@ mod tests {
     async fn a_token_created_after_tokens_valid_after_still_works() {
         let user_id = Uuid::new_v4();
         let mut user = regular_user(user_id);
-        // Password changed strictly before the token was minted.
         user.tokens_valid_after = chrono::Utc::now() - chrono::Duration::seconds(60);
         let h = harness(user);
 
@@ -422,7 +409,6 @@ mod tests {
         let h = harness(regular_user(Uuid::new_v4()));
         let repo = PackageRepositorySummary { id: Uuid::new_v4(), organization_id: ORG_ID, name: "myrepo".into(), format: RepositoryFormat::Docker, repo_type: RepositoryType::Hosted, remote_url: None, remote_username: None, remote_password: None, quota_bytes: None, retention_keep_last_n: None, is_public: true, group_members: vec![] };
         h.repositories.0.lock().unwrap().insert((ORG_ID, "myrepo".into()), repo.clone());
-        // Deliberately no `permissions` entry — a public repository must grant Read without one.
 
         h.use_case.execute(ORG_ID, "plaintext-token", Some("repository:myrepo/myimage:pull,push")).await.unwrap();
 
@@ -463,7 +449,6 @@ mod tests {
         let h = harness(admin);
         let repo = PackageRepositorySummary { id: Uuid::new_v4(), organization_id: ORG_ID, name: "myrepo".into(), format: RepositoryFormat::Docker, repo_type: RepositoryType::Hosted, remote_url: None, remote_username: None, remote_password: None, quota_bytes: None, retention_keep_last_n: None, is_public: false, group_members: vec![] };
         h.repositories.0.lock().unwrap().insert((ORG_ID, "myrepo".into()), repo);
-        // Deliberately no `permissions` entry — the super-admin bypass must not need one.
 
         h.use_case.execute(ORG_ID, "plaintext-token", Some("repository:myrepo/myimage:pull,push")).await.unwrap();
 
@@ -480,7 +465,6 @@ mod tests {
         let h = harness(org_admin);
         let repo = PackageRepositorySummary { id: Uuid::new_v4(), organization_id: ORG_ID, name: "myrepo".into(), format: RepositoryFormat::Docker, repo_type: RepositoryType::Hosted, remote_url: None, remote_username: None, remote_password: None, quota_bytes: None, retention_keep_last_n: None, is_public: false, group_members: vec![] };
         h.repositories.0.lock().unwrap().insert((ORG_ID, "myrepo".into()), repo);
-        // Deliberately no `permissions` entry — the org-admin bypass must not need one.
 
         h.use_case.execute(ORG_ID, "plaintext-token", Some("repository:myrepo/myimage:pull,push")).await.unwrap();
 
@@ -540,7 +524,6 @@ mod tests {
         h.repositories.0.lock().unwrap().insert((ORG_ID, "backend".into()), repo_in_org_a.clone());
         h.repositories.0.lock().unwrap().insert((other_org_id, "backend".into()), repo_in_org_b.clone());
         h.permissions.0.lock().unwrap().insert((h.user_id, repo_in_org_a.id), Role::Read);
-        // Deliberately no permission entry for repo_in_org_b — the id must come from resolving the name against ORG_ID, never a name-only lookup.
 
         h.use_case.execute(ORG_ID, "plaintext-token", Some("repository:backend/image:pull")).await.unwrap();
 
@@ -579,8 +562,6 @@ mod tests {
         let (_, granted) = h.issuer.0.lock().unwrap().clone().unwrap();
         let granted = granted.unwrap();
         assert_eq!(granted.actions, vec!["pull".to_string()]);
-        // The granted scope's own name is stripped to the bare shape `require_granted_action` on
-        // the data-route side expects — never the client-facing `u/{username}/{repo}/...` form.
         assert_eq!(granted.name, "my-lib/myimage");
         assert_eq!(granted.granted_repository_id, Some(repo.id));
     }
@@ -607,7 +588,6 @@ mod tests {
         let h = harness(regular_user(Uuid::new_v4()));
         let repo = seed_personal_repository(&h, h.user_id, "my-lib");
         h.permissions.0.lock().unwrap().insert((h.user_id, repo.id), Role::Write);
-        // A real org id that has nothing to do with the personal org — proves it's ignored.
         let unrelated_requested_org = Uuid::new_v4();
 
         h.use_case.execute(unrelated_requested_org, "plaintext-token", Some("repository:u/alice/my-lib/myimage:pull,push")).await.unwrap();

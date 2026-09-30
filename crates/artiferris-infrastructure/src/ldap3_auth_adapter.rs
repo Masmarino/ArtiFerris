@@ -130,7 +130,6 @@ mod tests {
 
         let result = adapter.authenticate(&config, "florian", "").await;
 
-        // Asserting on the message, not just is_err() — a connection failure here would also produce an Err, masking a removed check.
         let err = result.unwrap_err();
         assert!(format!("{err}").contains("empty password"), "got {err:?}");
     }
@@ -319,7 +318,6 @@ mod tests {
 
     #[test]
     fn a_single_match_with_an_empty_value_list_for_the_email_attribute_is_treated_as_missing() {
-        // An empty Vec for the key takes the same "missing" path as the key being absent.
         let entries = vec![entry("uid=florian,ou=people,dc=corp,dc=example", vec![("mail", vec![])])];
 
         let result = extract_single_match(entries, "mail");

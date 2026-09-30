@@ -774,7 +774,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = crate::route_test_support::test_state(pool.clone(), dir.path()).await;
 
-        // Proves the positive case: a non-public org's own Host header resolves to its own data.
         let acme_id = Uuid::new_v4();
         state
             .organizations
@@ -844,7 +843,6 @@ mod tests {
             .unwrap();
         assert_eq!(get_response.status(), StatusCode::OK);
         let returned = axum::body::to_bytes(get_response.into_body(), usize::MAX).await.unwrap();
-        // Byte-exact: proves the manifest actually pushed under "acme" was the one returned.
         assert_eq!(returned.to_vec(), body);
     }
 
@@ -940,7 +938,6 @@ mod tests {
         let repo_name = format!("repo-{repo_id}");
         let app = crate::router(state.clone());
 
-        // Push a real manifest first, so the assertion below is explained by the org check, not a missing manifest.
         let acme_user_id = crate::route_test_support::seed_user_with_active_token(&pool, acme_id, "acme-owns-this-manifest").await;
         let acme_token = crate::route_test_support::issue_test_token_for_org(&state, acme_user_id, acme_id, false, repo_id, &repo_name, "myimage", &["push", "pull"]);
         let config_bytes = b"cross-org-replay-config-bytes";
@@ -976,7 +973,6 @@ mod tests {
             .unwrap();
         assert_eq!(put_response.status(), StatusCode::CREATED);
 
-        // Sanity check: acme's own token can fetch the manifest it just pushed.
         let acme_get = app
             .clone()
             .oneshot(
@@ -1015,11 +1011,7 @@ mod tests {
         );
     }
 
-    // ---- C-1: per-member authorization on group traversal, exercised through the real routes ----
 
-    /// Attaches `member_id` to `group_id` through the repository event store — the same events the
-    /// API's add-group-member route emits, so the projection the group traversal later reads is
-    /// built by production code rather than by hand-written SQL.
     async fn attach_group_member(pool: &sqlx::PgPool, group_id: Uuid, member_id: Uuid) {
         use artiferris_domain::package_repository::{PackageRepositoryEvent, PackageRepositoryEventStorePort};
         let store = artiferris_infrastructure::postgres::package_repository_store::PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string());
@@ -1059,7 +1051,6 @@ mod tests {
         seed_repository(&pool, PUBLIC_ORGANIZATION_ID, group_id, "docker", "group").await;
         let group_name = format!("repo-{group_id}");
         attach_group_member(&pool, group_id, member_id).await;
-        // The member stays private; only the group wrapping it is public.
         mark_repository_public(&pool, group_id).await;
 
         let state = test_state(pool.clone(), dir.path()).await;
@@ -1129,8 +1120,6 @@ mod tests {
         let alice_id = seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "alice", "alice-token").await;
         let (group_id, member_id) = create_personal_group_over_a_personal_member(&pool, alice_id, "my-group", "my-image", RepositoryFormat::Docker).await;
 
-        // Alice's own org is the public org; both projects live in her personal org — exactly the
-        // mismatch the old policy rejected on.
         let push_token = issue_test_token(&state, alice_id, member_id, "my-image", "myimage", &["push", "pull"]);
         let group_pull_token = issue_test_token(&state, alice_id, group_id, "my-group", "myimage", &["pull"]);
         let app = crate::router(state);

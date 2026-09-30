@@ -248,7 +248,6 @@ impl NpmPackageRepositoryPort for PostgresNpmPackageRepository {
         if let Some(id) = inserted {
             return Ok(id);
         }
-        // A concurrent request created it first.
         let existing = sqlx::query_scalar!(
             "SELECT id FROM npm_packages WHERE package_repository_id = $1 AND name = $2",
             package.package_repository_id,
@@ -339,7 +338,6 @@ impl NpmPackageRepositoryPort for PostgresNpmPackageRepository {
             NpmPackageOrigin::Local => "local",
             NpmPackageOrigin::ProxyCache => "proxy_cache",
         };
-        // Transactional: a version row must never persist without its counter row.
         let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!(
             "INSERT INTO npm_package_versions \
@@ -394,7 +392,6 @@ impl NpmPackageRepositoryPort for PostgresNpmPackageRepository {
         if was_unpublished(&mut *tx, package.package_repository_id, &package.name, &release).await? {
             return Err(DomainError::NpmVersionAlreadyExists);
         }
-        // Build metadata takes no part in precedence, so `1.0.0+b` is `1.0.0` again.
         let held = sqlx::query!(
             "SELECT count(*) AS \"versions!\", COALESCE(SUM(octet_length(manifest::text)), 0)::BIGINT AS \"manifest_bytes!\", \
                     COALESCE(bool_or(split_part(version, '+', 1) = $2), false) AS \"same_release!\" \
@@ -472,7 +469,6 @@ impl NpmPackageRepositoryPort for PostgresNpmPackageRepository {
             return Ok(UnpublishVersionOutcome::VersionNotFound);
         };
         record_unpublished(&mut tx, repository_id, name, version).await?;
-        // A tag left pointing at a removed version would make `npm install` unresolvable.
         sqlx::query!("DELETE FROM npm_dist_tags WHERE npm_package_id = $1 AND version = $2", package_id, version.as_str()).execute(&mut *tx).await.infra_err()?;
         let has_versions = sqlx::query!("SELECT EXISTS(SELECT 1 FROM npm_package_versions WHERE npm_package_id = $1) AS \"exists!\"", package_id)
             .fetch_one(&mut *tx)
@@ -544,7 +540,6 @@ impl NpmPackageRepositoryPort for PostgresNpmPackageRepository {
 
     async fn set_dist_tag(&self, npm_package_id: Uuid, tag: &str, version: &NpmVersion) -> Result<(), DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
-        // The row `lock_package` takes: an unpublish in flight finishes first, and the check below sees what it removed.
         sqlx::query!("SELECT id FROM npm_packages WHERE id = $1 FOR UPDATE", npm_package_id).fetch_optional(&mut *tx).await.infra_err()?;
         let exists = sqlx::query!("SELECT EXISTS(SELECT 1 FROM npm_package_versions WHERE npm_package_id = $1 AND version = $2) AS \"exists!\"", npm_package_id, version.as_str())
             .fetch_one(&mut *tx)
@@ -1007,7 +1002,6 @@ mod tests {
         let package = sample_package(repository_id, "left-pad");
         repo.publish_version(&package, &sample_version(package.id, "1.0.0"), &[]).await.unwrap();
 
-        // An unpublish of the last version, stopped just before it deletes the package.
         let mut unpublish_tx = pool.begin().await.unwrap();
         let locked = lock_package(&mut unpublish_tx, repository_id, &package.name).await.unwrap().unwrap();
         let publish = {
@@ -1015,7 +1009,6 @@ mod tests {
             let package = sample_package(repository_id, "left-pad");
             tokio::spawn(async move { repo.publish_version(&package, &sample_version(package.id, "2.0.0"), &["latest".to_string()]).await })
         };
-        // The publish is queued behind the lock.
         let mut queued = false;
         for _ in 0..500 {
             let waiting: (i64,) = sqlx::query_as("SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE '%FOR UPDATE%'").fetch_one(&pool).await.unwrap();
@@ -1059,7 +1052,6 @@ mod tests {
         repo.publish_version(&package, &sample_version(package.id, "1.0.0"), &[]).await.unwrap();
         let package_id = repo.publish_version(&package, &sample_version(package.id, "2.0.0"), &[]).await.unwrap();
 
-        // An unpublish of 2.0.0 that has deleted the version and not committed yet.
         let mut unpublish_tx = pool.begin().await.unwrap();
         lock_package(&mut unpublish_tx, repository_id, &package.name).await.unwrap().unwrap();
         sqlx::query!("DELETE FROM npm_package_versions WHERE npm_package_id = $1 AND version = '2.0.0'", package_id).execute(&mut *unpublish_tx).await.unwrap();
