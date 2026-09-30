@@ -16,6 +16,9 @@ import { authInterceptor } from './auth/auth.interceptor'
 import { TranslocoHttpLoader } from './transloco-loader'
 import { registerLocaleData } from '@angular/common'
 import localeFr from '@angular/common/locales/fr'
+import localeEs from '@angular/common/locales/es'
+import localeIt from '@angular/common/locales/it'
+import localeDe from '@angular/common/locales/de'
 import { apiTokenProviders } from './tokens/infrastructure/api-token.providers'
 import { authProviders } from './auth/infrastructure/auth.providers'
 import { mfaProviders } from './account/infrastructure/mfa.providers'
@@ -30,7 +33,17 @@ import { organizationMembersProviders } from './admin/infrastructure/organizatio
 import { catalogProviders } from './public/catalog/infrastructure/catalog.providers'
 import { provideArtiferrisIcons } from './shared/register-icons'
 import { provideTranslator } from './shared/i18n/translator'
-registerLocaleData(localeFr)
+import {
+  FALLBACK_LANGUAGE,
+  LANGUAGE_LOCALES,
+  SUPPORTED_LANGUAGES,
+  detectBrowserLanguage,
+} from './shared/i18n/languages'
+
+// English needs no registration: it is the locale data Angular ships built in.
+for (const data of [localeFr, localeEs, localeIt, localeDe]) {
+  registerLocaleData(data)
+}
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -38,14 +51,12 @@ export const appConfig: ApplicationConfig = {
     provideArtiferrisIcons(),
     provideRouter(routes),
     provideHttpClient(withInterceptors([authInterceptor])),
-    {
-      provide: LOCALE_ID,
-      useValue: 'fr-FR',
-    },
+    // The browser's language, English when it is not translated (see pickLanguage).
+    { provide: LOCALE_ID, useFactory: () => LANGUAGE_LOCALES[detectBrowserLanguage()] },
     provideTransloco({
       config: {
-        availableLangs: ['fr'],
-        defaultLang: 'fr',
+        availableLangs: SUPPORTED_LANGUAGES,
+        defaultLang: FALLBACK_LANGUAGE,
         reRenderOnLangChange: true,
         prodMode: !isDevMode(),
       },
@@ -57,7 +68,10 @@ export const appConfig: ApplicationConfig = {
     // loaded before the first component is created.
     provideAppInitializer(() => {
       const transloco = inject(TranslocoService)
-      return firstValueFrom(transloco.load(transloco.getActiveLang()), { defaultValue: undefined })
+      const language = detectBrowserLanguage()
+      transloco.setActiveLang(language)
+      document.documentElement.lang = language
+      return firstValueFrom(transloco.load(language), { defaultValue: undefined })
     }),
     // Feature port -> adapter bindings (hexagonal architecture) — each
     // feature owns its own providers array; this just spreads them in.
