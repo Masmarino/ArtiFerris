@@ -46,6 +46,12 @@ impl BodyBudget {
         Self { semaphore: Arc::new(Semaphore::new(total_bytes.div_ceil(UNIT_BYTES))), in_flight: Arc::default() }
     }
 
+    /// The most bodies any one client or user has in flight right now.
+    pub fn most_in_flight_from_one_client(&self) -> usize {
+        let in_flight = self.in_flight.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        in_flight.values().copied().max().unwrap_or(0)
+    }
+
     /// `None` when that many bytes aren't free right now. Never waits, so requests don't pile up behind large ones.
     pub fn try_reserve(&self, bytes: usize) -> Option<BodyReservation> {
         let units = u32::try_from(bytes.div_ceil(UNIT_BYTES).max(1)).ok()?;
@@ -176,6 +182,7 @@ mod tests {
         let budget = BodyBudget::new(1024 * 1024);
         let held: Vec<_> = (0..MAX_BODIES_PER_CLIENT).map(|_| budget.admit(&client("a"), 1024).unwrap()).collect();
 
+        assert_eq!(budget.most_in_flight_from_one_client(), MAX_BODIES_PER_CLIENT);
         assert_eq!(budget.admit(&client("a"), 1024).err(), Some(Refusal::TooManyFromOneClient));
         assert!(budget.admit(&client("b"), 1024).is_ok(), "another client is not affected");
         let mixed = vec!["b".to_string(), "a".to_string()];
