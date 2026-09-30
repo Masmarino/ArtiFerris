@@ -121,6 +121,8 @@ function fakeDetailServices() {
         session_ttl_hours: 24,
         registration_enabled: true,
         seo_indexing_enabled: false,
+        seo_indexing_blocked: false,
+        public_page_enabled: true,
       }),
     ),
     update: fn(() => of(undefined)),

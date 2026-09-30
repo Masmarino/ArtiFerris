@@ -71,7 +71,7 @@ mod tests {
         let org_id = Uuid::new_v4();
         let settings = Arc::new(FakeSystemSettings { settings: Mutex::new(HashMap::new()) });
         let use_case = UpdateSystemSettingsUseCase::new(settings.clone());
-        let updated = SystemSettings { max_login_attempts: 5, login_attempt_window_seconds: 60, session_ttl_hours: 1, registration_enabled: false, seo_indexing_enabled: false };
+        let updated = SystemSettings { max_login_attempts: 5, login_attempt_window_seconds: 60, session_ttl_hours: 1, registration_enabled: false, seo_indexing_enabled: false, seo_indexing_blocked: false, public_page_enabled: true };
 
         use_case.execute(org_id, updated, None).await.unwrap();
 

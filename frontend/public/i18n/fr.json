@@ -1030,7 +1030,9 @@
         "login_attempt_window_seconds": "Fenêtre de tentatives (s)",
         "session_ttl_hours": "Durée de session (h)",
         "registration_enabled": "Inscription ouverte",
-        "seo_indexing_enabled": "Indexation par les moteurs de recherche"
+        "seo_indexing_enabled": "Indexation par les moteurs de recherche",
+        "seo_indexing_blocked": "Moteurs de recherche bloqués",
+        "public_page_enabled": "Page publique"
       },
       "details": {
         "via": "Via {{ method }}",
@@ -1272,6 +1274,13 @@
       "seo": "Référencement",
       "allowIndexing": "Autoriser l'indexation par les moteurs de recherche",
       "seoHint": "Désactivée, le catalogue public envoie « noindex », le robots.txt interdit tout et le plan du site est vide.",
+      "publicPage": "Page publique",
+      "publicPageEnabled": "Afficher la page publique de l'organisation",
+      "publicPageEnabledInstance": "Afficher les pages publiques de l'instance",
+      "publicPageHint": "Désactivée, les pages du catalogue public de l'organisation répondent comme si rien n'était publié : introuvables pour les visiteurs, absentes de la recherche et du plan du site.",
+      "publicPageHintInstance": "Désactivée, le catalogue public de toute l'instance est fermé : plus aucune page n'est servie et le référencement est coupé.",
+      "blockIndexing": "Bloquer les moteurs de recherche pour cette organisation",
+      "blockIndexingHint": "Les pages restent visibles, mais envoient « noindex » et sont absentes du plan du site.",
       "saved": "Paramètres enregistrés."
     }
   },

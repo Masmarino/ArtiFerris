@@ -57,6 +57,8 @@ export class SystemSettingsAdmin {
   readonly sessionTtlHours = signal('')
   readonly registrationEnabled = signal(true)
   readonly seoIndexingEnabled = signal(false)
+  readonly seoIndexingBlocked = signal(false)
+  readonly publicPageEnabled = signal(true)
   readonly loading = signal(true)
   readonly loadFailed = signal(false)
   readonly saving = signal(false)
@@ -78,6 +80,8 @@ export class SystemSettingsAdmin {
           this.sessionTtlHours.set(String(settings.session_ttl_hours))
           this.registrationEnabled.set(settings.registration_enabled)
           this.seoIndexingEnabled.set(settings.seo_indexing_enabled)
+          this.seoIndexingBlocked.set(settings.seo_indexing_blocked)
+          this.publicPageEnabled.set(settings.public_page_enabled)
           this.loading.set(false)
         },
         error: () => {
@@ -90,12 +94,20 @@ export class SystemSettingsAdmin {
     })
   }
 
-  // Only the public organization's row carries the switch, and only a super-admin may change it.
-  readonly showSeoIndexing = computed(
-    () =>
-      this.me.isSuperAdmin() &&
-      (this.organizationId() ?? this.me.organizationId()) === PUBLIC_ORGANIZATION_ID,
+  // The public organization's row stands for the whole instance: its indexing switch and its public-page switch belong to a super-admin.
+  private readonly isInstanceScope = computed(
+    () => (this.organizationId() ?? this.me.organizationId()) === PUBLIC_ORGANIZATION_ID,
   )
+
+  readonly showSeoIndexing = computed(() => this.me.isSuperAdmin() && this.isInstanceScope())
+
+  /** Closing the public pages: an organization's own, or the whole instance's for a super-admin. */
+  readonly showPublicPage = computed(() => !this.isInstanceScope() || this.me.isSuperAdmin())
+
+  readonly publicPageForInstance = this.isInstanceScope
+
+  /** Keeping search engines away from one organization; the instance has its indexing switch instead. */
+  readonly showBlockIndexing = computed(() => !this.isInstanceScope())
 
   value(key: FieldSpec['key']): string {
     return this[key]()
@@ -141,6 +153,8 @@ export class SystemSettingsAdmin {
           session_ttl_hours: Number(this.sessionTtlHours()),
           registration_enabled: this.registrationEnabled(),
           seo_indexing_enabled: this.seoIndexingEnabled(),
+          seo_indexing_blocked: this.seoIndexingBlocked(),
+          public_page_enabled: this.publicPageEnabled(),
         },
         this.organizationId(),
       )

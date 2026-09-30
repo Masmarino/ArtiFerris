@@ -469,7 +469,7 @@ mod tests {
 
     #[tokio::test]
     async fn an_owner_summary_is_passed_through_for_a_valid_owner() {
-        let summary = OwnerSummary { kind: OwnerKind::Personal, slug: "alice".into(), display_name: "alice".into(), repository_count: 1, package_count: 2, image_count: 3 };
+        let summary = OwnerSummary { kind: OwnerKind::Personal, slug: "alice".into(), display_name: "alice".into(), repository_count: 1, package_count: 2, image_count: 3, indexing_blocked: false };
         let catalog = Arc::new(RecordingCatalog { seen: Mutex::new(vec![]), counts: vec![], owners_asked: Mutex::new(vec![]), summary: Some(summary.clone()), suggested: Mutex::new(vec![]) });
 
         let found = GetOwnerSummaryUseCase::new(catalog.clone()).execute("personal", "Alice").await.unwrap();

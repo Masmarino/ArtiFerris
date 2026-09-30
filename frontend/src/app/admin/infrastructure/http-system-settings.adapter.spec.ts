@@ -27,6 +27,8 @@ describe('HttpSystemSettingsAdapter', () => {
       session_ttl_hours: 12,
       registration_enabled: true,
       seo_indexing_enabled: true,
+      seo_indexing_blocked: false,
+      public_page_enabled: true,
     })
   })
 
@@ -40,6 +42,8 @@ describe('HttpSystemSettingsAdapter', () => {
         session_ttl_hours: 1,
         registration_enabled: false,
         seo_indexing_enabled: true,
+        seo_indexing_blocked: false,
+        public_page_enabled: true,
       })
       .subscribe()
     const req = httpMock.expectOne('/api/admin/settings')
@@ -50,6 +54,8 @@ describe('HttpSystemSettingsAdapter', () => {
       session_ttl_hours: 1,
       registration_enabled: false,
       seo_indexing_enabled: true,
+      seo_indexing_blocked: false,
+      public_page_enabled: true,
     })
     req.flush(null)
   })

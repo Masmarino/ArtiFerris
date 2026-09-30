@@ -1030,7 +1030,9 @@
         "login_attempt_window_seconds": "Ventana de intentos (s)",
         "session_ttl_hours": "Duración de la sesión (h)",
         "registration_enabled": "Registro abierto",
-        "seo_indexing_enabled": "Indexación por los motores de búsqueda"
+        "seo_indexing_enabled": "Indexación por los motores de búsqueda",
+        "seo_indexing_blocked": "Motores de búsqueda bloqueados",
+        "public_page_enabled": "Página pública"
       },
       "details": {
         "via": "Mediante {{ method }}",
@@ -1272,6 +1274,13 @@
       "seo": "Posicionamiento",
       "allowIndexing": "Permitir la indexación por los motores de búsqueda",
       "seoHint": "Si está desactivada, el catálogo público envía «noindex», el robots.txt lo prohíbe todo y el mapa del sitio está vacío.",
+      "publicPage": "Página pública",
+      "publicPageEnabled": "Mostrar la página pública de la organización",
+      "publicPageEnabledInstance": "Mostrar las páginas públicas de la instancia",
+      "publicPageHint": "Desactivada, las páginas del catálogo público de la organización responden como si no hubiera nada publicado: no se encuentran para los visitantes y desaparecen de la búsqueda y del mapa del sitio.",
+      "publicPageHintInstance": "Desactivada, el catálogo público de toda la instancia queda cerrado: no se sirve ninguna página y la indexación se corta.",
+      "blockIndexing": "Bloquear los motores de búsqueda para esta organización",
+      "blockIndexingHint": "Las páginas siguen visibles, pero envían «noindex» y no aparecen en el mapa del sitio.",
       "saved": "Ajustes guardados."
     }
   },

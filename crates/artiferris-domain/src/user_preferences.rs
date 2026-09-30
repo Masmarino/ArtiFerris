@@ -29,6 +29,42 @@ impl Language {
             .ok_or_else(|| DomainError::UnsupportedLanguage(raw.chars().take(16).collect()))
     }
 
+    /// The first translated language of an `Accept-Language` header, in order of preference (`q` values, then position), by the primary
+    /// subtag alone (`fr-CA` is French). Anything that says nothing usable, an absent header included, gives the fallback.
+    pub fn from_accept_language(header: &str) -> Language {
+        const MAX_RANGES: usize = 32;
+        let mut ranges: Vec<(u32, usize, &str)> = header
+            .split(',')
+            .take(MAX_RANGES)
+            .enumerate()
+            .filter_map(|(position, range)| {
+                let mut parts = range.split(';');
+                let tag = parts.next()?.trim();
+                let quality = parts.find_map(|param| param.trim().strip_prefix("q=").or_else(|| param.trim().strip_prefix("Q="))).map_or(Some(1000), |q| q.trim().parse::<f32>().ok().map(|q| (q.clamp(0.0, 1.0) * 1000.0) as u32))?;
+                (quality > 0).then_some((quality, position, tag))
+            })
+            .collect();
+        ranges.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        ranges
+            .into_iter()
+            .find_map(|(_, _, tag)| {
+                let primary = tag.split(['-', '_']).next().unwrap_or("").to_ascii_lowercase();
+                Language::parse(&primary).ok()
+            })
+            .unwrap_or(Language::FALLBACK)
+    }
+
+    /// The `og:locale` of a page written in this language.
+    pub fn og_locale(&self) -> &'static str {
+        match self {
+            Language::En => "en_US",
+            Language::Fr => "fr_FR",
+            Language::Es => "es_ES",
+            Language::It => "it_IT",
+            Language::De => "de_DE",
+        }
+    }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             Language::En => "en",
@@ -65,6 +101,33 @@ mod tests {
     fn the_fallback_is_english_and_supported() {
         assert_eq!(Language::FALLBACK.as_str(), "en");
         assert!(SUPPORTED_LANGUAGES.contains(&Language::FALLBACK));
+    }
+
+    #[test]
+    fn the_accept_language_header_picks_the_first_translated_language_by_preference() {
+        for (header, expected) in [
+            ("fr-CA,fr;q=0.9,en;q=0.8", Language::Fr),
+            ("de-AT", Language::De),
+            ("DE_de", Language::De),
+            ("ja,pt-BR;q=0.9,it;q=0.5,fr;q=0.4", Language::It),
+            ("en;q=0.3, es;q=0.8", Language::Es),
+            ("fr;q=0, de;q=0.1", Language::De),
+            ("es, it", Language::Es),
+            ("*", Language::En),
+            ("ja, zh-CN", Language::En),
+            ("", Language::En),
+            ("fr;q=nonsense", Language::En),
+            ("constructor, toString", Language::En),
+        ] {
+            assert_eq!(Language::from_accept_language(header), expected, "{header:?}");
+        }
+    }
+
+    #[test]
+    fn every_language_has_an_og_locale_that_starts_with_its_code() {
+        for language in SUPPORTED_LANGUAGES {
+            assert!(language.og_locale().starts_with(language.as_str()), "{language:?}");
+        }
     }
 
     #[test]

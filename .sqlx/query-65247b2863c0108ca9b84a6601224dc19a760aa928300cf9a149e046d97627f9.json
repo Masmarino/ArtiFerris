@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT max_login_attempts, login_attempt_window_seconds, session_ttl_hours, registration_enabled, seo_indexing_enabled FROM system_settings WHERE organization_id = $1",
+  "query": "SELECT max_login_attempts, login_attempt_window_seconds, session_ttl_hours, registration_enabled, seo_indexing_enabled, public_page_enabled, seo_indexing_blocked FROM system_settings WHERE organization_id = $1",
   "describe": {
     "columns": [
       {
@@ -57,6 +57,28 @@
             "name": "seo_indexing_enabled"
           }
         }
+      },
+      {
+        "ordinal": 5,
+        "name": "public_page_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "system_settings",
+            "name": "public_page_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "seo_indexing_blocked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "system_settings",
+            "name": "seo_indexing_blocked"
+          }
+        }
       }
     ],
     "parameters": {
@@ -69,8 +91,10 @@
       false,
       false,
       false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "dc9e5ae90a91861fca54312cffe95ff10fbd4023f0f72e8c4d7f56256e3a6383"
+  "hash": "65247b2863c0108ca9b84a6601224dc19a760aa928300cf9a149e046d97627f9"
 }

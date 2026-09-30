@@ -1030,7 +1030,9 @@
         "login_attempt_window_seconds": "Versuchszeitfenster (s)",
         "session_ttl_hours": "Sitzungsdauer (h)",
         "registration_enabled": "Registrierung offen",
-        "seo_indexing_enabled": "Indexierung durch Suchmaschinen"
+        "seo_indexing_enabled": "Indexierung durch Suchmaschinen",
+        "seo_indexing_blocked": "Suchmaschinen gesperrt",
+        "public_page_enabled": "Öffentliche Seite"
       },
       "details": {
         "via": "Über {{ method }}",
@@ -1272,6 +1274,13 @@
       "seo": "Suchmaschinenoptimierung",
       "allowIndexing": "Indexierung durch Suchmaschinen erlauben",
       "seoHint": "Wenn deaktiviert, sendet der öffentliche Katalog „noindex“, die robots.txt verbietet alles und die Sitemap ist leer.",
+      "publicPage": "Öffentliche Seite",
+      "publicPageEnabled": "Öffentliche Seite der Organisation anzeigen",
+      "publicPageEnabledInstance": "Öffentliche Seiten der Instanz anzeigen",
+      "publicPageHint": "Deaktiviert, antworten die Seiten der Organisation im öffentlichen Katalog, als wäre nichts veröffentlicht: für Besucher nicht auffindbar, nicht in der Suche und nicht in der Sitemap.",
+      "publicPageHintInstance": "Deaktiviert, ist der gesamte öffentliche Katalog der Instanz geschlossen: keine Seite wird ausgeliefert und die Indexierung ist aus.",
+      "blockIndexing": "Suchmaschinen für diese Organisation sperren",
+      "blockIndexingHint": "Die Seiten bleiben sichtbar, senden aber „noindex“ und fehlen in der Sitemap.",
       "saved": "Einstellungen gespeichert."
     }
   },

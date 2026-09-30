@@ -34,6 +34,34 @@
         </section>
       }
 
+      @if (showPublicPage()) {
+        <section class="seo">
+          <h3>{{ 'admin.system.publicPage' | transloco }}</h3>
+          <gbt-checkbox
+            [label]="
+              (publicPageForInstance() ? 'admin.system.publicPageEnabledInstance' : 'admin.system.publicPageEnabled')
+                | transloco
+            "
+            [ngModel]="publicPageEnabled()"
+            (ngModelChange)="publicPageEnabled.set($event)"
+          />
+          <p class="seo__hint">
+            {{
+              (publicPageForInstance() ? 'admin.system.publicPageHintInstance' : 'admin.system.publicPageHint')
+                | transloco
+            }}
+          </p>
+          @if (showBlockIndexing()) {
+            <gbt-checkbox
+              [label]="'admin.system.blockIndexing' | transloco"
+              [ngModel]="seoIndexingBlocked()"
+              (ngModelChange)="seoIndexingBlocked.set($event)"
+            />
+            <p class="seo__hint">{{ 'admin.system.blockIndexingHint' | transloco }}</p>
+          }
+        </section>
+      }
+
       <gbt-button
         [text]="'common.save' | transloco"
         [loading]="saving()"

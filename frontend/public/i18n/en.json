@@ -1030,7 +1030,9 @@
         "login_attempt_window_seconds": "Attempt window (s)",
         "session_ttl_hours": "Session duration (h)",
         "registration_enabled": "Registration open",
-        "seo_indexing_enabled": "Search engine indexing"
+        "seo_indexing_enabled": "Search engine indexing",
+        "seo_indexing_blocked": "Search engines blocked",
+        "public_page_enabled": "Public page"
       },
       "details": {
         "via": "Via {{ method }}",
@@ -1272,6 +1274,13 @@
       "seo": "Search engine optimization",
       "allowIndexing": "Allow indexing by search engines",
       "seoHint": "When disabled, the public catalog sends “noindex”, robots.txt disallows everything and the sitemap is empty.",
+      "publicPage": "Public page",
+      "publicPageEnabled": "Show the organization's public page",
+      "publicPageEnabledInstance": "Show the instance's public pages",
+      "publicPageHint": "When disabled, the organization's pages of the public catalog answer as if nothing was published: not found for visitors, absent from search and from the sitemap.",
+      "publicPageHintInstance": "When disabled, the whole instance's public catalog is closed: no page is served and indexing is off.",
+      "blockIndexing": "Keep search engines away from this organization",
+      "blockIndexingHint": "Pages stay visible but send “noindex” and are left out of the sitemap.",
       "saved": "Settings saved."
     }
   },
