@@ -233,20 +233,22 @@ describe('ApiTokensAdmin', () => {
     expect(fixture.nativeElement.textContent).not.toContain('a-user')
   })
 
-  it('tells the admin when the list hit the 500-token page limit', () => {
+  it('tells the admin when the list hit the 500-token page limit, revoked tokens included', () => {
     const { fixture, httpMock } = render()
-    const token = (i: number) => ({
+    const token = (i: number, revoked: boolean) => ({
       id: `t${i}`,
       user_id: 'u1',
       username: 'florian',
       label: `key-${i}`,
       created_at: '2026-01-01T00:00:00Z',
       last_used_at: null,
-      revoked_at: null,
+      revoked_at: revoked ? '2026-02-01T00:00:00Z' : null,
     })
+    // The limit counts every token the page returned. Revoked ones are plain table rows: 500 active ones would
+    // build 500 buttons and tooltips, which takes longer than the test timeout when the machine is busy.
     flushTokens(
       httpMock,
-      Array.from({ length: 500 }, (_, i) => token(i)),
+      Array.from({ length: 500 }, (_, i) => token(i, i > 0)),
     )
     fixture.detectChanges()
 
