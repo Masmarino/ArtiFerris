@@ -176,14 +176,80 @@ describe('MeService', () => {
       expect(use).toHaveBeenCalledWith('de')
     })
 
-    it('leaves the language alone when the account has not chosen one', () => {
-      const service = setup({ load: () => of({ ...account, language: null }) })
-      const use = vi.spyOn(TestBed.inject(LanguageService), 'use').mockResolvedValue()
+    describe('an account that has not chosen a language yet', () => {
+      beforeEach(() => vi.stubGlobal('navigator', { languages: ['de-AT', 'en'] }))
+      afterEach(() => vi.unstubAllGlobals())
+
+      it('takes the browser language and records it on the account', () => {
+        setActiveLanguage('en')
+        const setLanguage = vi.fn().mockReturnValue(of(undefined))
+        const service = setup({ load: () => of({ ...account, language: null }), setLanguage })
+        const use = vi.spyOn(TestBed.inject(LanguageService), 'use').mockResolvedValue()
+
+        service.load().subscribe()
+
+        expect(use).toHaveBeenCalledWith('de')
+        expect(setLanguage).toHaveBeenCalledWith('de')
+        expect(service.language()).toBe('de')
+      })
+
+      it('falls back to English, recorded too, for a browser whose languages are not translated', () => {
+        vi.stubGlobal('navigator', { languages: ['ja'] })
+        const setLanguage = vi.fn().mockReturnValue(of(undefined))
+        const service = setup({ load: () => of({ ...account, language: null }), setLanguage })
+
+        service.load().subscribe()
+
+        expect(setLanguage).toHaveBeenCalledWith('en')
+      })
+
+      it('still signs in when recording fails, and tries again at the next sign-in', () => {
+        const setLanguage = vi.fn().mockReturnValue(throwError(() => new Error('500')))
+        const service = setup({ load: () => of({ ...account, language: null }), setLanguage })
+
+        service.load().subscribe()
+
+        expect(service.username()).toBe('florian')
+        expect(service.language()).toBeNull()
+      })
+    })
+
+    it('never overwrites a language the account already has with the browser one', () => {
+      vi.stubGlobal('navigator', { languages: ['de'] })
+      const setLanguage = vi.fn().mockReturnValue(of(undefined))
+      const service = setup({ load: () => of({ ...account, language: 'it' }), setLanguage })
 
       service.load().subscribe()
 
-      expect(service.language()).toBeNull()
-      expect(use).not.toHaveBeenCalled()
+      expect(setLanguage).not.toHaveBeenCalled()
+      vi.unstubAllGlobals()
+    })
+
+    it('records nothing for a server that predates the setting', () => {
+      const setLanguage = vi.fn()
+      const service = setup({ load: () => of(account), setLanguage })
+
+      service.load().subscribe()
+
+      expect(setLanguage).not.toHaveBeenCalled()
+    })
+
+    it('goes back to the browser language when the session ends, and for the next account', async () => {
+      vi.stubGlobal('navigator', { languages: ['es'] })
+      setActiveLanguage('de')
+      const service = setup({ load: () => of({ ...account, language: 'de' }) })
+      const use = vi.spyOn(TestBed.inject(LanguageService), 'use').mockResolvedValue()
+      const auth = TestBed.inject(AuthService)
+      auth.token.set('session')
+      TestBed.flushEffects()
+      service.load().subscribe()
+      use.mockClear()
+
+      auth.token.set(null)
+      TestBed.flushEffects()
+
+      expect(use).toHaveBeenCalledWith('es')
+      vi.unstubAllGlobals()
     })
 
     it('ignores a saved language the interface does not offer', () => {

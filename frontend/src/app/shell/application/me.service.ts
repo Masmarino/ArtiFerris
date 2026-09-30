@@ -3,7 +3,7 @@ import { Observable, catchError, shareReplay, tap, throwError } from 'rxjs'
 import { AuthService } from '../../auth/application/auth.service'
 import { MeResponse } from '../domain/me.entity'
 import { LanguageService } from '../../shared/i18n/language.service'
-import { isSupported } from '../../shared/i18n/languages'
+import { detectBrowserLanguage, isSupported } from '../../shared/i18n/languages'
 import { ME_PORT } from './me.port'
 
 @Injectable({ providedIn: 'root' })
@@ -38,6 +38,9 @@ export class MeService {
       this.organizationId.set(null)
       this.isOrganizationAdmin.set(false)
       this.language.set(null)
+      // Signing out, or another account signing in: back to what the browser asks for, so the
+      // previous user's language does not linger on the public pages or on a new account.
+      this.showBrowserLanguage()
     })
   }
 
@@ -52,14 +55,7 @@ export class MeService {
           this.organizationId.set(me.organization_id)
           this.isOrganizationAdmin.set(me.is_organization_admin)
           this.language.set(me.language ?? null)
-          // The account's language wins over the one the browser suggested at startup.
-          if (
-            me.language &&
-            isSupported(me.language) &&
-            me.language !== this.languageService.language()
-          ) {
-            void this.languageService.use(me.language)
-          }
+          this.applyAccountLanguage(me.language)
         }),
         // Never cache a failure — a transient error must not permanently strand the user.
         catchError((err: unknown) => {
@@ -70,6 +66,37 @@ export class MeService {
       )
     }
     return this.cached$
+  }
+
+  /**
+   * The account's language wins over the browser's. An account that never chose one (`null`, not
+   * `undefined`, which is a server that predates the setting) takes the browser's language, and
+   * keeps it: that first sign-in records it on the account, so later ones do not depend on the browser.
+   */
+  private applyAccountLanguage(saved: string | null | undefined): void {
+    if (saved && isSupported(saved)) {
+      if (saved !== this.languageService.language()) {
+        void this.languageService.use(saved)
+      }
+      return
+    }
+    if (saved !== null) {
+      return
+    }
+    const browser = detectBrowserLanguage()
+    this.showBrowserLanguage()
+    this.port.setLanguage(browser).subscribe({
+      next: () => this.language.set(browser),
+      // Best effort: the next sign-in tries again, and the interface is already in that language.
+      error: () => undefined,
+    })
+  }
+
+  private showBrowserLanguage(): void {
+    const browser = detectBrowserLanguage()
+    if (browser !== this.languageService.language()) {
+      void this.languageService.use(browser)
+    }
   }
 
   changePassword(currentPassword: string, newPassword: string): Observable<void> {
