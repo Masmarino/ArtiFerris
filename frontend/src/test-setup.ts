@@ -14,7 +14,11 @@ import {
 } from '@jsverse/transloco'
 import { Observable, of } from 'rxjs'
 import fr from '../public/i18n/fr.json'
-import { provideTranslator, registerTranslator } from './app/shared/i18n/translator'
+import {
+  provideTranslator,
+  registerTranslator,
+  setActiveLanguage,
+} from './app/shared/i18n/translator'
 
 /** Serves the real French dictionary synchronously, so specs render the same text as the app. */
 @Injectable()
@@ -61,5 +65,6 @@ beforeEach(() => {
   // Specs that call a translating helper directly, without any TestBed, still get French text;
   // those that do build a TestBed replace this with the real Transloco service.
   registerTranslator(lookup)
+  setActiveLanguage('fr')
   TestBed.configureTestingModule({ providers: i18nProviders })
 })

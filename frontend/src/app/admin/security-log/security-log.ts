@@ -1,9 +1,8 @@
-import { t } from '../../shared/i18n/translator'
+import { activeLocale, t } from '../../shared/i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
-  LOCALE_ID,
   DestroyRef,
   computed,
   effect,
@@ -11,7 +10,7 @@ import {
   input,
   signal,
 } from '@angular/core'
-import { DatePipe } from '@angular/common'
+import { formatLocalizedDate } from '../../shared/i18n/localized-date'
 import { HttpErrorResponse } from '@angular/common/http'
 import { Subscription, last, tap } from 'rxjs'
 import {
@@ -64,7 +63,6 @@ function unlockFailureMessage(error: unknown, username: string): string {
   selector: 'app-security-log',
   standalone: true,
   imports: [TranslocoPipe, Table, DimensionCard, Button, Card, EmptyState, Spinner],
-  providers: [DatePipe],
   templateUrl: './security-log.html',
   styleUrl: './security-log.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -74,7 +72,6 @@ export class SecurityLog {
   private readonly usersService = inject(UsersService)
   private readonly organizationMembersService = inject(OrganizationMembersService)
   private readonly repositoriesService = inject(RepositoriesService)
-  private readonly datePipe = inject(DatePipe)
   private readonly confirmService = inject(ConfirmService)
   private readonly toastService = inject(ToastService)
   private exportRun: Subscription | null = null
@@ -113,7 +110,7 @@ export class SecurityLog {
       .sort((a, b) => b.count - a.count)
   })
 
-  readonly locale = inject(LOCALE_ID)
+  readonly locale = activeLocale()
 
   readonly summaryChartData = computed<DimensionRow[]>(() =>
     this.summary().map((item) => ({ label: item.event_type, value: item.count })),
@@ -131,7 +128,7 @@ export class SecurityLog {
     {
       key: 'occurred_at',
       label: t('common.date'),
-      format: (r) => this.datePipe.transform(r.occurred_at, 'short') ?? '',
+      format: (r) => formatLocalizedDate(r.occurred_at, 'short'),
     },
     { key: 'event_type', label: t('admin.auditLog.columns.event') },
     { key: 'actor', label: t('admin.securityLog.columns.user') },

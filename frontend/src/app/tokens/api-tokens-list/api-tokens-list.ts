@@ -3,7 +3,7 @@ import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms'
-import { DatePipe } from '@angular/common'
+import { formatLocalizedDate } from '../../shared/i18n/localized-date'
 import { HttpErrorResponse } from '@angular/common/http'
 import { Button, EmptyState, GbtInput, Modal, Table, TableColumn } from '@masmarino/gabarit'
 import { API_TOKEN_LIFETIME_DAYS, ApiToken } from '../domain/api-token.entity'
@@ -34,14 +34,12 @@ function createErrorMessage(error: unknown): string {
   selector: 'app-api-tokens-list',
   standalone: true,
   imports: [TranslocoPipe, ReactiveFormsModule, Table, Button, GbtInput, Modal, EmptyState],
-  providers: [DatePipe],
   templateUrl: './api-tokens-list.html',
   styleUrl: './api-tokens-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ApiTokensList implements OnInit {
   private readonly tokenService = inject(ApiTokensApplicationService)
-  private readonly datePipe = inject(DatePipe)
   private readonly confirmService = inject(ConfirmService)
 
   readonly tokens = signal<ApiToken[]>([])
@@ -69,7 +67,7 @@ export class ApiTokensList implements OnInit {
     {
       key: 'created_at',
       label: t('tokens.table.createdAt'),
-      format: (t) => this.datePipe.transform(t.created_at, 'short') ?? '',
+      format: (t) => formatLocalizedDate(t.created_at, 'short'),
     },
   ]
   readonly rowId = (t: ApiToken): string => t.id

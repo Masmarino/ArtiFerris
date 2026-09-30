@@ -1,15 +1,7 @@
-import { t } from '../../shared/i18n/translator'
+import { activeLocale, t } from '../../shared/i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
-import {
-  ChangeDetectionStrategy,
-  Component,
-  LOCALE_ID,
-  OnInit,
-  computed,
-  inject,
-  signal,
-} from '@angular/core'
-import { DatePipe } from '@angular/common'
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core'
+import { LocalizedDatePipe } from '../../shared/i18n/localized-date'
 import { FormsModule } from '@angular/forms'
 import { AdminMetricsService } from '../application/metrics.service'
 import { AdminStats, MetricsSnapshot } from '../domain/metrics.entity'
@@ -53,7 +45,7 @@ const evolutionDaysOptions = (): SelectOption<number>[] => [
     DimensionCard,
     EmptyState,
     LineChart,
-    DatePipe,
+    LocalizedDatePipe,
     Select,
     FormsModule,
   ],
@@ -110,7 +102,7 @@ export class AdminDashboard implements OnInit {
     },
   ])
 
-  readonly locale = inject(LOCALE_ID)
+  readonly locale = activeLocale()
 
   readonly activityChartData = computed<DimensionRow[]>(() => {
     const counts = new Map<string, number>()

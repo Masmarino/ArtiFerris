@@ -2,7 +2,7 @@ import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core'
 import { rxResource, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, RouterLink } from '@angular/router'
-import { DatePipe } from '@angular/common'
+import { LocalizedDatePipe } from '../../shared/i18n/localized-date'
 import { FormsModule } from '@angular/forms'
 import { HttpErrorResponse } from '@angular/common/http'
 import { Button, Card, Select, Spinner, Tab, Tabs } from '@masmarino/gabarit'
@@ -45,7 +45,7 @@ const PAGE_SIZE = 20
     Button,
     Card,
     CopyableCommand,
-    DatePipe,
+    LocalizedDatePipe,
     FormatBytesPipe,
     FormsModule,
     PublicLayout,

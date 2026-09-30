@@ -1,4 +1,5 @@
 import { t } from '../shared/i18n/translator'
+import { LanguageService } from '../shared/i18n/language.service'
 import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
@@ -8,6 +9,7 @@ import {
   OnInit,
   computed,
   effect,
+  untracked,
   inject,
   signal,
   viewChild,
@@ -120,6 +122,9 @@ export class AppShell implements OnInit {
   readonly version = inject(VersionService)
   readonly pageTitle = inject(PageTitleService)
   readonly toastService = inject(ToastService)
+  private readonly languageService = inject(LanguageService)
+  /** Bumped on a language change to re-create the routed view. */
+  readonly viewGeneration = signal(0)
 
   readonly isLoading = signal(true)
   readonly loadFailed = signal(false)
@@ -252,6 +257,21 @@ export class AppShell implements OnInit {
 
   constructor() {
     effect(() => this.pageTitle.title.set(this.routeTitle()))
+    let firstRun = true
+    effect(() => {
+      this.languageService.language()
+      untracked(() => {
+        if (firstRun) {
+          firstRun = false
+          return
+        }
+        this.viewGeneration.update((generation) => generation + 1)
+        const title = this.deepestRouteTitle()
+        if (title) {
+          this.pageTitle.title.set(title)
+        }
+      })
+    })
     this.packageQueries
       .pipe(
         // a too-short query clears at once, a longer one waits for a pause in typing

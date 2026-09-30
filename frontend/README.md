@@ -73,6 +73,13 @@ The language is picked at startup from the browser's `navigator.languages` (`fr-
 English when none of them is translated (`shared/i18n/languages.ts`). Adding a language means a
 new `<lang>.json`, an entry in `LANGUAGE_LOCALES` and its Angular locale data in `app.config.ts`.
 
+The language can change while the app runs (`LanguageService.use('de')`): the dictionary is loaded,
+then `activeLanguage` (a signal) and `<html lang>` follow. What reads `t()` inside a `computed`
+updates by itself; the routed view is re-created (`App` and `AppShell`), so labels built once at
+creation (table columns, option lists) are rebuilt. Dates go through `formatLocalizedDate` /
+the `date` pipe of `shared/i18n/localized-date.ts` — not Angular's `DatePipe`, which is bound to the
+locale the app started in — and the locale is read with `activeLocale()`, not `LOCALE_ID`.
+
 The unit tests load the real `fr.json`, so they still assert the text users see. A spec
 (`shared/i18n/translations.spec.ts`) fails when the code uses a key that `fr.json` does not define,
 or when a key of `fr.json` is used nowhere.

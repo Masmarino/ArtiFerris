@@ -42,10 +42,10 @@ describe('pickLanguage', () => {
 })
 
 describe('detectBrowserLanguage', () => {
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => vi.unstubAllGlobals())
 
   it('reads navigator.languages', () => {
-    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['it-IT', 'en'])
+    vi.stubGlobal('navigator', { languages: ['it-IT', 'en'] })
 
     expect(detectBrowserLanguage()).toBe('it')
   })

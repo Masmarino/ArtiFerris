@@ -12,7 +12,7 @@ import {
 } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router, RouterLink } from '@angular/router'
-import { DatePipe } from '@angular/common'
+import { LocalizedDatePipe } from '../../shared/i18n/localized-date'
 import { FormsModule } from '@angular/forms'
 import { map } from 'rxjs'
 import { Button, Card, EmptyState, Select, Spinner } from '@masmarino/gabarit'
@@ -59,7 +59,7 @@ class ShortDigestPipe implements PipeTransform {
   imports: [
     TranslocoPipe,
     Button,
-    DatePipe,
+    LocalizedDatePipe,
     RouterLink,
     Card,
     CopyableCommand,

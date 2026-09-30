@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
 import { By } from '@angular/platform-browser'
-import { DatePipe } from '@angular/common'
+import { formatLocalizedDate } from '../../shared/i18n/localized-date'
 import { AccountPage } from './account-page'
 import { MeService } from '../../shell/application/me.service'
 import { SessionSettings } from '../session-settings/session-settings'
@@ -49,7 +49,7 @@ describe('AccountPage', () => {
 
     expect(text).toContain('florian')
     expect(text).toContain('Super-administrateur')
-    const expectedDate = new DatePipe('en-US').transform('2026-01-01T00:00:00Z', 'medium')
+    const expectedDate = formatLocalizedDate('2026-01-01T00:00:00Z', 'medium')
     expect(text).toContain(expectedDate)
   })
 
