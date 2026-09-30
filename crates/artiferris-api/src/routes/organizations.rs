@@ -42,7 +42,7 @@ async fn create_organization(
     user: AuthUser,
     Json(body): Json<CreateOrganizationRequest>,
 ) -> Result<(StatusCode, Json<OrganizationResponse>), (StatusCode, Json<ErrorResponse>)> {
-    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let id = state
         .create_organization
         .execute(&body.slug, &body.display_name)
@@ -54,7 +54,7 @@ async fn create_organization(
 }
 
 async fn list_organizations(State(state): State<AppState>, user: AuthUser) -> Result<Json<Vec<OrganizationResponse>>, (StatusCode, Json<ErrorResponse>)> {
-    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let all = state.organizations.list_all().await.map_err(|e| application_error_response("failed to list organizations", e.into()))?;
     Ok(Json(
         all.into_iter()
@@ -65,13 +65,13 @@ async fn list_organizations(State(state): State<AppState>, user: AuthUser) -> Re
 }
 
 async fn get_organization(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<Json<OrganizationResponse>, (StatusCode, Json<ErrorResponse>)> {
-    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let org = state
         .organizations
         .find_by_id(id)
         .await
         .map_err(|e| application_error_response("failed to get organization", e.into()))?
-        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "organization not found".to_string() })))?;
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("organization not found".to_string()))))?;
     Ok(Json(OrganizationResponse { id: org.id, slug: org.slug.as_str().to_string(), display_name: org.display_name, is_public: org.is_public }))
 }
 
@@ -85,7 +85,7 @@ struct OrganizationMemberResponse {
 }
 
 async fn list_organization_members(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<Json<Vec<OrganizationMemberResponse>>, (StatusCode, Json<ErrorResponse>)> {
-    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let members: Vec<_> = state
         .users
         .list_all()
@@ -122,7 +122,7 @@ async fn invite_organization_member(
     Path(id): Path<Uuid>,
     Json(body): Json<InviteOrganizationMemberRequest>,
 ) -> Result<(StatusCode, Json<OrganizationMemberResponse>), (StatusCode, Json<ErrorResponse>)> {
-    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     // is_super_admin is never read from this request — an org-scoped invite can never grant it.
     let member_id = state
         .invite_user
@@ -146,8 +146,8 @@ async fn set_organization_member_admin(
     Path((id, user_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<SetOrganizationMemberAdminRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
-    let not_found = || (StatusCode::NOT_FOUND, Json(ErrorResponse { error: "user not found".to_string() }));
+    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
+    let not_found = || (StatusCode::NOT_FOUND, Json(ErrorResponse::message("user not found".to_string())));
     let target = state
         .users
         .find_by_id(user_id)
@@ -160,7 +160,7 @@ async fn set_organization_member_admin(
     }
     // Same carve-out as delete_user and resend_invitation: a super-admin is a global account, not the organization admin's to touch.
     if target.is_super_admin && !user.is_super_admin {
-        return Err((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() })));
+        return Err((StatusCode::FORBIDDEN, Json(ErrorResponse::message("forbidden".to_string()))));
     }
     // Only a change that actually flips the flag is recorded.
     let audit = (target.is_organization_admin != body.is_organization_admin).then(|| {
@@ -180,7 +180,7 @@ async fn set_organization_member_admin(
 }
 
 async fn get_identity_provider(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
-    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let config = match state.identity_providers.get(id).await {
         Ok(config) => config,
         Err(artiferris_domain::error::DomainError::SecretUnreadable(_)) => {
@@ -249,7 +249,7 @@ const KEPT_SECRET_DESTINATION_CHANGED_LDAP: &str = "re-enter the bind password w
 const KEPT_SECRET_DESTINATION_CHANGED_OIDC: &str = "re-enter the client secret when changing the issuer URL or the client id";
 
 fn bad_request(message: &str) -> (StatusCode, Json<ErrorResponse>) {
-    (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: message.to_string() }))
+    (StatusCode::BAD_REQUEST, Json(ErrorResponse::message(message.to_string())))
 }
 
 /// Hosts and DNs compare without regard to case; a stored secret is only kept for the destination it was entered for.
@@ -271,7 +271,7 @@ async fn set_identity_provider(
     Path(id): Path<Uuid>,
     Json(body): Json<SetIdentityProviderRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
 
     let secret_changed = match &body {
         SetIdentityProviderRequest::Ldap { bind_password, .. } => bind_password.as_deref().is_some_and(|secret| !secret.trim().is_empty()),
@@ -295,10 +295,10 @@ async fn set_identity_provider(
                 }
             };
             if server_url.trim().is_empty() || bind_dn.trim().is_empty() || user_search_base.trim().is_empty() || user_search_filter.trim().is_empty() || email_attribute.trim().is_empty() {
-                return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "all LDAP fields except bind_password (when updating) are required".to_string() })));
+                return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::message("all LDAP fields except bind_password (when updating) are required".to_string()))));
             }
             if !(server_url.starts_with("ldaps://") || server_url.starts_with("ldap://")) {
-                return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "server_url must start with ldaps:// or ldap:// (ldap:// is upgraded with StartTLS)".to_string() })));
+                return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::message("server_url must start with ldaps:// or ldap:// (ldap:// is upgraded with StartTLS)".to_string()))));
             }
             artiferris_domain::sso::IdentityProviderConfig::Ldap(artiferris_domain::sso::LdapConfig { server_url, bind_dn, bind_password, user_search_base, user_search_filter, email_attribute })
         }
@@ -319,7 +319,7 @@ async fn set_identity_provider(
                 }
             };
             if issuer_url.trim().is_empty() || client_id.trim().is_empty() {
-                return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "issuer_url and client_id are required".to_string() })));
+                return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::message("issuer_url and client_id are required".to_string()))));
             }
             artiferris_domain::sso::IdentityProviderConfig::Oidc(artiferris_domain::sso::OidcConfig { issuer_url, client_id, client_secret })
         }
@@ -332,7 +332,7 @@ async fn set_identity_provider(
 }
 
 async fn clear_identity_provider(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let before = previous_identity_provider(&state, id).await;
     let audit = AdminAuditRecord { event: AdminAuditEvent::IdentityProviderCleared { organization_id: id, before }, actor_id: Some(user.id) };
     state.identity_providers.clear(id, Some(&audit)).await.map_err(|e| application_error_response("failed to clear identity provider", e.into()))?;

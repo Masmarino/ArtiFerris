@@ -9,7 +9,7 @@ import { Button, EmptyState, GbtInput, Modal, Table, TableColumn } from '@masmar
 import { API_TOKEN_LIFETIME_DAYS, ApiToken } from '../domain/api-token.entity'
 import { ApiTokensApplicationService } from '../application/api-tokens.application-service'
 import { ConfirmService } from '../../shared/confirm.service'
-import { badRequestMessage } from '../../shared/api-error'
+import { badRequestMessage, errorCode } from '../../shared/api-error'
 
 const MAX_LABEL_LENGTH = 100
 
@@ -21,11 +21,12 @@ function createErrorMessage(error: unknown): string {
   if (status === 401 || status === 403) {
     return t('tokens.errors.wrongPassword')
   }
+  if (errorCode(error) === 'invalid_credentials') {
+    return t('tokens.errors.wrongPassword')
+  }
   const message = badRequestMessage(error)
   if (message) {
-    return message.toLowerCase().includes('invalid credentials')
-      ? t('tokens.errors.wrongPassword')
-      : message
+    return message
   }
   return t('tokens.errors.createFailed')
 }

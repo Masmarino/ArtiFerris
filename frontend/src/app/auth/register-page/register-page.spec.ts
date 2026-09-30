@@ -54,7 +54,11 @@ describe('RegisterPage', () => {
   it('surfaces a duplicate-username error', () => {
     authServiceSpy.register.mockReturnValue(
       throwError(
-        () => new HttpErrorResponse({ status: 400, error: { error: 'username already taken' } }),
+        () =>
+          new HttpErrorResponse({
+            status: 400,
+            error: { error: 'username already in use', code: 'username_taken' },
+          }),
       ),
     )
     component.form.setValue({
@@ -74,7 +78,10 @@ describe('RegisterPage', () => {
         () =>
           new HttpErrorResponse({
             status: 400,
-            error: { error: 'public self-registration is not available on this organization' },
+            error: {
+              error: 'public self-registration is not available on this organization',
+              code: 'registration_unavailable',
+            },
           }),
       ),
     )
@@ -95,7 +102,10 @@ describe('RegisterPage', () => {
         () =>
           new HttpErrorResponse({
             status: 400,
-            error: { error: 'public self-registration is currently disabled' },
+            error: {
+              error: 'public self-registration is currently disabled',
+              code: 'registration_disabled',
+            },
           }),
       ),
     )
@@ -113,7 +123,11 @@ describe('RegisterPage', () => {
   it('surfaces an invalid-username error', () => {
     authServiceSpy.register.mockReturnValue(
       throwError(
-        () => new HttpErrorResponse({ status: 400, error: { error: 'invalid username: 1a' } }),
+        () =>
+          new HttpErrorResponse({
+            status: 400,
+            error: { error: 'invalid username: 1a', code: 'invalid_username' },
+          }),
       ),
     )
     component.form.setValue({

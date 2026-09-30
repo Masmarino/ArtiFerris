@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http'
 import {
   badRequestBlobMessage,
   badRequestMessage,
+  errorCode,
   isSecretUnreadable,
   overloadMessage,
   rejectionMessage,
@@ -111,5 +112,54 @@ describe('badRequestBlobMessage', () => {
     ['a JSON without a message', new HttpErrorResponse({ status: 400, error: blob('{}') })],
   ])('returns null for %s', async (_label, error) => {
     expect(await badRequestBlobMessage(error)).toBeNull()
+  })
+})
+
+describe('error codes', () => {
+  const failure = (status: number, body: unknown) => new HttpErrorResponse({ status, error: body })
+
+  it('reads the code of the body, and none from anything else', () => {
+    expect(errorCode(failure(400, { error: 'x', code: 'username_taken' }))).toBe('username_taken')
+    expect(errorCode(failure(400, { error: 'x' }))).toBeNull()
+    expect(errorCode(failure(400, { error: 'x', code: 3 }))).toBeNull()
+    expect(errorCode(failure(400, { error: 'x', code: '' }))).toBeNull()
+    expect(errorCode(failure(400, null))).toBeNull()
+    expect(errorCode(new Error('boom'))).toBeNull()
+  })
+
+  it('shows our translation of a known code instead of the server wording', () => {
+    const error = failure(400, { error: 'username already in use', code: 'username_taken' })
+
+    expect(badRequestMessage(error)).toBe('Ce nom d’utilisateur est déjà pris.')
+    expect(rejectionMessage(failure(409, { error: 'x', code: 'repository_name_taken' }))).toBe(
+      'Ce nom de dépôt est déjà pris.',
+    )
+  })
+
+  it('is not affected by a rewording of the server text', () => {
+    const reworded = failure(400, {
+      error: 'a completely different sentence',
+      code: 'invalid_email',
+    })
+
+    expect(badRequestMessage(reworded)).toBe('Adresse e-mail invalide.')
+  })
+
+  it('falls back to the server text for a code it has no translation for', () => {
+    const error = failure(400, { error: 'something new', code: 'a_code_from_the_future' })
+
+    expect(badRequestMessage(error)).toBe('something new')
+  })
+
+  it('falls back to the server text when there is no code', () => {
+    expect(badRequestMessage(failure(400, { error: 'old server wording' }))).toBe(
+      'old server wording',
+    )
+  })
+
+  it('translates the code of an error body that arrives as a Blob', async () => {
+    const body = new Blob([JSON.stringify({ error: 'x', code: 'invalid_smtp_settings' })])
+
+    expect(await badRequestBlobMessage(failure(400, body))).toBe('Paramètres SMTP invalides.')
   })
 })

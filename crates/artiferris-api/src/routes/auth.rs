@@ -173,7 +173,7 @@ async fn login(
     if !username_throttle.reserve_with(&state.login_throttle, &ip_key) {
         return Err((
             StatusCode::TOO_MANY_REQUESTS,
-            Json(ErrorResponse { error: "too many failed login attempts, try again later".to_string() }),
+            Json(ErrorResponse::message("too many failed login attempts, try again later".to_string())),
         ));
     }
 
@@ -188,14 +188,14 @@ async fn login(
             // Only handed back, not wiped — a shared IP (NAT/office) must not have its
             // failures reset by one unrelated account's successful login.
             state.login_throttle.release(&ip_key);
-            let user_id = state.token_issuer.verify(&token).map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?.user_id;
+            let user_id = state.token_issuer.verify(&token).map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?.user_id;
             // mfa_setup_required tells the client whether to go to /mfa/setup/* or /mfa/verify.
             let factors = mfa_factors(&state, user_id).await.map_err(|e| application_error_response("failed to check MFA status", e))?;
             // `JwtMfaPendingTokenIssuer` ignores this ttl and always uses its own fixed, short lifetime.
             let mfa_token = state
                 .mfa_pending_token_issuer
                 .issue(user_id, chrono::Duration::minutes(5))
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
             Ok(Json(LoginResponse {
                 token: None,
                 mfa_token: Some(mfa_token),
@@ -212,7 +212,7 @@ async fn login(
         }
         Err(_) => {
             crate::state::record_security_event(&state, SecurityEvent::LoginFailed { username, ip }, None).await;
-            Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error: "invalid credentials".to_string() })))
+            Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse::message("invalid credentials".to_string()))))
         }
     }
 }
@@ -230,12 +230,12 @@ async fn register(
     if !state.login_throttle.reserve(&throttle_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW) {
         return Err((
             StatusCode::TOO_MANY_REQUESTS,
-            Json(ErrorResponse { error: "too many registration attempts, try again later".to_string() }),
+            Json(ErrorResponse::message("too many registration attempts, try again later".to_string())),
         ));
     }
 
     if !resolved_org.0.is_public {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "public self-registration is not available on this organization".to_string() })));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::coded("registration_unavailable", "public self-registration is not available on this organization"))));
     }
 
     let settings = state
@@ -244,7 +244,7 @@ async fn register(
         .await
         .map_err(|e| application_error_response("failed to check system settings", e))?;
     if !settings.registration_enabled {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "public self-registration is currently disabled".to_string() })));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::coded("registration_disabled", "public self-registration is currently disabled"))));
     }
 
     let user_id = state
@@ -256,7 +256,7 @@ async fn register(
     let mfa_token = state
         .mfa_pending_token_issuer
         .issue(user_id, chrono::Duration::minutes(5))
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     Ok(Json(LoginResponse { token: None, mfa_token: Some(mfa_token), mfa_setup_required: true, mfa_has_totp: false, mfa_has_passkey: false }))
 }
 
@@ -269,7 +269,7 @@ async fn sso_config(State(state): State<AppState>, resolved_org: ResolvedOrganiz
             tracing::error!("the identity provider of organization {} is hidden from the login page: {detail}", resolved_org.0.id);
             None
         }
-        Err(_) => return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() }))),
+        Err(_) => return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string())))),
     };
     let provider_type = config.map(|c| match c {
         artiferris_domain::sso::IdentityProviderConfig::Ldap(_) => SsoProviderType::Ldap,
@@ -279,7 +279,7 @@ async fn sso_config(State(state): State<AppState>, resolved_org: ResolvedOrganiz
         .get_system_settings
         .execute(resolved_org.0.id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     Ok(Json(SsoConfigResponse { provider_type, registration_enabled: resolved_org.0.is_public && settings.registration_enabled }))
 }
 
@@ -327,27 +327,27 @@ async fn sso_oidc_login(
 ) -> Result<(axum_extra::extract::cookie::CookieJar, axum::response::Redirect), (StatusCode, Json<ErrorResponse>)> {
     // Every start is a discovery round-trip to the identity provider. A callback that signs the person in hands it back.
     if !state.login_throttle.reserve(&oidc_start_key(&state, &headers, connect_info), OIDC_START_MAX_ATTEMPTS, LOGIN_ATTEMPT_WINDOW) {
-        return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: "too many login attempts, try again later".to_string() })));
+        return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many login attempts, try again later".to_string()))));
     }
     let config = state
         .identity_providers
         .get(resolved_org.0.id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     let Some(artiferris_domain::sso::IdentityProviderConfig::Oidc(oidc_config)) = config else {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "this organization has no OIDC identity provider configured".to_string() })));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::message("this organization has no OIDC identity provider configured".to_string()))));
     };
 
     let binding_secret = uuid::Uuid::new_v4().to_string();
     let cookie = oidc_binding_cookie(&state, &binding_secret)
-        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "failed to start oidc login".to_string() })))?;
+        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("failed to start oidc login".to_string()))))?;
 
     let callback_url = oidc_callback_url(&state, &resolved_org);
     let redirect_url = state
         .oidc_auth
         .build_redirect(&oidc_config, resolved_org.0.id, &callback_url, &binding_secret)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "failed to start oidc login".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("failed to start oidc login".to_string()))))?;
     Ok((jar.add(cookie), axum::response::Redirect::to(&redirect_url)))
 }
 
@@ -367,29 +367,29 @@ async fn sso_oidc_callback(
     axum::extract::Query(query): axum::extract::Query<OidcCallbackQuery>,
 ) -> Result<(axum_extra::extract::cookie::CookieJar, axum::response::Redirect), (StatusCode, Json<ErrorResponse>)> {
     let (Some(code), Some(raw_state)) = (query.code, query.state) else {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "missing code or state".to_string() })));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::message("missing code or state".to_string()))));
     };
 
     // Reserved before anything is looked up or recorded, handed back on success.
     let bucket = peer_ip_bucket(&state, &headers, connect_info);
     let budget_key = format!("oidc-callback:{bucket}");
     if !state.login_throttle.reserve(&budget_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW) {
-        return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: "too many failed login attempts, try again later".to_string() })));
+        return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many failed login attempts, try again later".to_string()))));
     }
 
     let config = state
         .identity_providers
         .get(resolved_org.0.id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     let Some(artiferris_domain::sso::IdentityProviderConfig::Oidc(oidc_config)) = config else {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "this organization has no OIDC identity provider configured".to_string() })));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::message("this organization has no OIDC identity provider configured".to_string()))));
     };
 
     // Nothing is audited until the state proves this browser started a login here: the Host header alone picks the tenant, so anyone could fill its log otherwise.
     let binding_secret = jar.get(oidc_binding_cookie_name(&state)).map(|c| c.value().to_string());
     let Some(binding_secret) = binding_secret.filter(|secret| state.oidc_auth.state_is_valid(&raw_state, resolved_org.0.id, secret)) else {
-        return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error: "invalid credentials".to_string() })));
+        return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse::message("invalid credentials".to_string()))));
     };
 
     let callback_url = oidc_callback_url(&state, &resolved_org);
@@ -401,7 +401,7 @@ async fn sso_oidc_callback(
         Ok(identity) => identity,
         Err(_) => {
             crate::state::record_security_event(&state, SecurityEvent::OidcLoginFailed { organization_id: resolved_org.0.id }, None).await;
-            return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error: "invalid credentials".to_string() })));
+            return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse::message("invalid credentials".to_string()))));
         }
     };
 
@@ -410,7 +410,7 @@ async fn sso_oidc_callback(
         // Same 401 whether the exchange failed or the account was blocked afterward.
         Err(ApplicationError::InvalidCredentials) => {
             crate::state::record_security_event(&state, SecurityEvent::OidcLoginFailed { organization_id: resolved_org.0.id }, None).await;
-            return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error: "invalid credentials".to_string() })));
+            return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse::message("invalid credentials".to_string()))));
         }
         Err(e) => return Err(application_error_response("failed to provision sso user", e)),
     };
@@ -447,9 +447,9 @@ async fn sso_ldap_login(
         .identity_providers
         .get(resolved_org.0.id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() })))?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     let Some(artiferris_domain::sso::IdentityProviderConfig::Ldap(ldap_config)) = config else {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "this organization has no LDAP identity provider configured".to_string() })));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::message("this organization has no LDAP identity provider configured".to_string()))));
     };
 
     let ip = peer_ip(&state, &headers, connect_info);
@@ -460,7 +460,7 @@ async fn sso_ldap_login(
     if !username_throttle.reserve_with(&state.login_throttle, &ip_key) {
         return Err((
             StatusCode::TOO_MANY_REQUESTS,
-            Json(ErrorResponse { error: "too many failed login attempts, try again later".to_string() }),
+            Json(ErrorResponse::message("too many failed login attempts, try again later".to_string())),
         ));
     }
 
@@ -471,7 +471,7 @@ async fn sso_ldap_login(
     };
     let Some(identity) = authenticated else {
         record_ldap_login_failure(&state, username, ip).await;
-        return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error: "invalid credentials".to_string() })));
+        return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse::message("invalid credentials".to_string()))));
     };
 
     match state.provision_sso_user.execute(resolved_org.0.id, &identity).await {
@@ -495,7 +495,7 @@ async fn sso_ldap_login(
             record_ldap_login_failure(&state, username, ip).await;
             match e {
                 // Same 401 whether the directory bind failed or the account was blocked afterward.
-                ApplicationError::InvalidCredentials => Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error: "invalid credentials".to_string() }))),
+                ApplicationError::InvalidCredentials => Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse::message("invalid credentials".to_string())))),
                 e => Err(application_error_response("failed to provision sso user", e)),
             }
         }
@@ -505,11 +505,11 @@ async fn sso_ldap_login(
 type ApiError = (StatusCode, Json<ErrorResponse>);
 
 fn internal_error() -> ApiError {
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() }))
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string())))
 }
 
 fn invalid_mfa_token() -> ApiError {
-    (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error: "invalid or expired mfa token".to_string() }))
+    (StatusCode::UNAUTHORIZED, Json(ErrorResponse::message("invalid or expired mfa token".to_string())))
 }
 
 /// A start costs server memory and needs nothing but a pending `mfa_token`, so each client gets a budget of them. A finished ceremony hands its start back.
@@ -524,7 +524,7 @@ fn reserve_passkey_start(state: &AppState, headers: &HeaderMap, connect_info: Re
 }
 
 fn too_many_attempts() -> ApiError {
-    (StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: "too many failed attempts, try again later".to_string() }))
+    (StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many failed attempts, try again later".to_string())))
 }
 
 /// The account behind a valid `mfa_token`. Refused once the account has revoked its tokens since the token was minted (password change, sign out everywhere, demotion).
@@ -607,7 +607,7 @@ async fn verify_mfa(State(state): State<AppState>, Json(body): Json<MfaVerifyReq
         Err(_) => {
             let method = if body.code.is_some() { "totp" } else { "backup_code" };
             crate::state::record_security_event(&state, SecurityEvent::MfaVerificationFailed { user_id, method: method.to_string() }, Some(user_id)).await;
-            Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error: "invalid code".to_string() })))
+            Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse::message("invalid code".to_string()))))
         }
     }
 }
@@ -670,7 +670,7 @@ async fn finish_mfa_passkey(
         }
         Err(_) => {
             crate::state::record_security_event(&state, SecurityEvent::PasskeyVerificationFailed { user_id }, Some(user_id)).await;
-            Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error: "passkey verification failed".to_string() })))
+            Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse::message("passkey verification failed".to_string()))))
         }
     }
 }
@@ -1813,6 +1813,43 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"], "public self-registration is currently disabled");
+    }
+
+    async fn error_body(response: axum::response::Response) -> serde_json::Value {
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_refused_registration_carries_a_stable_code_next_to_its_message(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let mut settings = state.get_system_settings.execute(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID).await.unwrap();
+        settings.registration_enabled = false;
+        state.update_system_settings.execute(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, settings, None).await.unwrap();
+        let app = build_router(state);
+
+        let body = error_body(app.oneshot(register_request("florian", "florian@example.com", "sup3r-s3cret!")).await.unwrap()).await;
+
+        assert_eq!(body["code"], "registration_disabled");
+        assert_eq!(body["error"], "public self-registration is currently disabled");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn registration_errors_are_told_apart_by_code_not_by_wording(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let app = build_router(state);
+        app.clone().oneshot(register_request("florian", "florian@example.com", "sup3r-s3cret!")).await.unwrap();
+
+        let cases = [
+            (register_request("florian", "other@example.com", "sup3r-s3cret!"), "username_taken"),
+            (register_request("marie", "not-an-email", "sup3r-s3cret!"), "invalid_email"),
+            (register_request("marie", "marie@example.com", "short"), "password_too_short"),
+            (register_request("ab", "marie@example.com", "sup3r-s3cret!"), "invalid_username"),
+        ];
+        for (request, code) in cases {
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert!(response.status().is_client_error());
+            assert_eq!(error_body(response).await["code"], code);
+        }
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

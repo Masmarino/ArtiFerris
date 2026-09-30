@@ -995,7 +995,9 @@ mod tests {
     async fn one_user_cannot_have_more_than_a_few_publish_bodies_in_flight(pool: PgPool) {
         let f = fixture(&pool).await;
         let stalled: Vec<_> = (0..artiferris_application::body_budget::MAX_BODIES_PER_CLIENT).map(|_| tokio::spawn(f.app.clone().oneshot(stalled_publish(&f, 1024)))).collect();
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        // Each publish clears auth and DB work before it takes a slot, which is slow on a busy CI runner: wait for all the slots to
+        // be taken rather than for a while, or the probe below steals one and is admitted instead of turned away.
+        wait_until(|| f.state.guard.body_budget.most_in_flight_from_one_client() == artiferris_application::body_budget::MAX_BODIES_PER_CLIENT).await;
 
         let response = f.app.clone().oneshot(stalled_publish(&f, 1024)).await.unwrap();
 
@@ -1003,8 +1005,18 @@ mod tests {
         for task in stalled {
             task.abort();
         }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        wait_until(|| f.state.guard.body_budget.most_in_flight_from_one_client() == 0).await;
         assert_eq!(publish_document(&f, "writer-token", widget_document("1.0.0")).await, StatusCode::CREATED, "the slots come back when the stalled bodies go");
+    }
+
+    async fn wait_until(mut condition: impl FnMut() -> bool) {
+        for _ in 0..500 {
+            if condition() {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        panic!("the condition never came true");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

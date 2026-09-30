@@ -99,3 +99,46 @@ pub enum EventStoreError {
     #[error("storage failure: {0}")]
     Storage(String),
 }
+
+impl DomainError {
+    /// A stable, language-independent name for this error, sent to clients next to the message so they can react to it (and translate it) without matching the wording. Changing one is a breaking change of the API.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::InvalidUsername(..) => "invalid_username",
+            Self::EmailTaken => "email_taken",
+            Self::UsernameTaken => "username_taken",
+            Self::UnsupportedLanguage(..) => "unsupported_language",
+            Self::PasswordTooShort => "password_too_short",
+            Self::InvalidRepositoryName(..) => "invalid_repository_name",
+            Self::InvalidOrganizationSlug(..) => "invalid_organization_slug",
+            Self::ReservedName(..) => "reserved_name",
+            Self::InvalidRemoteUrl(..) => "invalid_remote_url",
+            Self::InvalidForRepositoryType(..) => "invalid_for_repository_type",
+            Self::SelfGroupMembership => "self_group_membership",
+            Self::UnknownGroupMember(..) => "unknown_group_member",
+            Self::GroupMemberFormatMismatch(..) => "group_member_format_mismatch",
+            Self::GroupMemberOrganizationMismatch(..) => "group_member_organization_mismatch",
+            Self::GranteeOrganizationMismatch(..) => "grantee_organization_mismatch",
+            Self::NothingToRevoke => "nothing_to_revoke",
+            Self::AlreadyDeleted => "already_deleted",
+            Self::Infrastructure(..) => "infrastructure_failure",
+            Self::SecretUnreadable(..) => "secret_unreadable",
+            Self::Busy(..) => "busy",
+            Self::ChunkOffsetMismatch { .. } => "chunk_offset_mismatch",
+            Self::Validation(..) => "validation",
+            Self::UploadSessionNotFound => "upload_session_not_found",
+            Self::UploadInProgress => "upload_in_progress",
+            Self::UploadTooLarge => "upload_too_large",
+            Self::DigestMismatch { .. } => "digest_mismatch",
+            Self::RequestTimeout => "request_timeout",
+            Self::TooManyUploads => "too_many_uploads",
+            Self::TooManyTags => "too_many_tags",
+            Self::DockerBlobNotReachable(..) => "docker_blob_not_reachable",
+            Self::StorageQuotaExceeded => "storage_quota_exceeded",
+            Self::NpmVersionAlreadyExists => "npm_version_already_exists",
+            Self::NpmVersionNotFound => "npm_version_not_found",
+            Self::NpmPackageLimit(..) => "npm_package_limit",
+            Self::CommitFailed(..) => "commit_failed",
+        }
+    }
+}

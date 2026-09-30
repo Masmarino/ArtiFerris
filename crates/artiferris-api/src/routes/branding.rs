@@ -53,21 +53,21 @@ fn target_organization_id(user: &AuthUser, resolved_org: &ResolvedOrganization, 
 /// Authenticated counterpart to `get_logo`, so a super-admin can preview another org's branding.
 async fn get_logo_scoped(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let branding = state.get_branding.execute(organization_id).await.map_err(|e| application_error_response("failed to get branding", e))?;
     Ok(([(header::CONTENT_TYPE, branding.logo.content_type), (header::CACHE_CONTROL, "no-cache".to_string())], branding.logo.bytes))
 }
 
 async fn get_favicon_scoped(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let branding = state.get_branding.execute(organization_id).await.map_err(|e| application_error_response("failed to get branding", e))?;
     Ok(([(header::CONTENT_TYPE, branding.favicon.content_type), (header::CACHE_CONTROL, "no-cache".to_string())], branding.favicon.bytes))
 }
 
 async fn set_logo(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>, body: Bytes) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let audit = AdminAuditRecord { event: AdminAuditEvent::BrandingChanged { organization_id, asset: BrandingAsset::Logo, cleared: false }, actor_id: Some(user.id) };
     state.set_branding_logo.execute(organization_id, body.to_vec(), Some(&audit)).await.map_err(|e| application_error_response("failed to set branding logo", e))?;
     Ok(StatusCode::NO_CONTENT)
@@ -75,7 +75,7 @@ async fn set_logo(State(state): State<AppState>, user: AuthUser, resolved_org: R
 
 async fn clear_logo(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let audit = AdminAuditRecord { event: AdminAuditEvent::BrandingChanged { organization_id, asset: BrandingAsset::Logo, cleared: true }, actor_id: Some(user.id) };
     state.clear_branding_logo.execute(organization_id, Some(&audit)).await.map_err(|e| application_error_response("failed to clear branding logo", e))?;
     Ok(StatusCode::NO_CONTENT)
@@ -83,7 +83,7 @@ async fn clear_logo(State(state): State<AppState>, user: AuthUser, resolved_org:
 
 async fn set_favicon(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>, body: Bytes) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let audit = AdminAuditRecord { event: AdminAuditEvent::BrandingChanged { organization_id, asset: BrandingAsset::Favicon, cleared: false }, actor_id: Some(user.id) };
     state.set_branding_favicon.execute(organization_id, body.to_vec(), Some(&audit)).await.map_err(|e| application_error_response("failed to set branding favicon", e))?;
     Ok(StatusCode::NO_CONTENT)
@@ -91,7 +91,7 @@ async fn set_favicon(State(state): State<AppState>, user: AuthUser, resolved_org
 
 async fn clear_favicon(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let audit = AdminAuditRecord { event: AdminAuditEvent::BrandingChanged { organization_id, asset: BrandingAsset::Favicon, cleared: true }, actor_id: Some(user.id) };
     state.clear_branding_favicon.execute(organization_id, Some(&audit)).await.map_err(|e| application_error_response("failed to clear branding favicon", e))?;
     Ok(StatusCode::NO_CONTENT)

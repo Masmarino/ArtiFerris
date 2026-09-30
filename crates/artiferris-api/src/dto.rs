@@ -96,7 +96,21 @@ pub struct MfaVerifyRequest {
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
+    /// For a person, in English; clients should not match on its wording (it can be reworded) but on `code`.
     pub error: String,
+    /// A stable name for the kind of error (see `DomainError::code` / `ApplicationError::code`); absent on the errors that have none yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<&'static str>,
+}
+
+impl ErrorResponse {
+    pub fn message(error: impl Into<String>) -> Self {
+        Self { error: error.into(), code: None }
+    }
+
+    pub fn coded(code: &'static str, error: impl Into<String>) -> Self {
+        Self { error: error.into(), code: Some(code) }
+    }
 }
 
 /// Seconds between two warnings about a service that is busy; a flood of requests would otherwise be a flood of log lines.
@@ -111,32 +125,33 @@ fn busy_log_due(last: &AtomicU64, now: u64) -> bool {
 
 /// Infrastructure-shaped errors are logged server-side and answered with a flat `500`, never echoing raw backend text to the client.
 pub fn application_error_response(context: &str, error: ApplicationError) -> (StatusCode, Json<ErrorResponse>) {
+    let code = error.code();
     match error {
         ApplicationError::EventStore(_) | ApplicationError::Storage(_) | ApplicationError::Domain(DomainError::Infrastructure(_)) => {
             tracing::error!("{context}: {error}");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() }))
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::coded(code, "internal error".to_string())))
         }
         ApplicationError::Domain(DomainError::Busy(_)) => {
             let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_secs());
             if busy_log_due(&LAST_BUSY_LOG, now) {
                 tracing::warn!("{context}: {error} (further ones within {BUSY_LOG_INTERVAL_SECONDS}s are not logged)");
             }
-            (StatusCode::SERVICE_UNAVAILABLE, Json(ErrorResponse { error: "busy, try again shortly".to_string() }))
+            (StatusCode::SERVICE_UNAVAILABLE, Json(ErrorResponse::coded(code, "busy, try again shortly".to_string())))
         }
         // The detail names key fingerprints: for the log, not for the client.
         ApplicationError::Domain(DomainError::SecretUnreadable(_)) => {
             tracing::error!("{context}: {error}");
-            (StatusCode::CONFLICT, Json(ErrorResponse { error: "a secret stored on the server cannot be read, ask an administrator to check the server's encryption keys".to_string() }))
+            (StatusCode::CONFLICT, Json(ErrorResponse::coded(code, "a secret stored on the server cannot be read, ask an administrator to check the server's encryption keys".to_string())))
         }
-        ApplicationError::LastSuperAdmin => (StatusCode::CONFLICT, Json(ErrorResponse { error: error.to_string() })),
-        ApplicationError::PersonalOrganizationAlreadyExists => (StatusCode::CONFLICT, Json(ErrorResponse { error: error.to_string() })),
-        ApplicationError::DependencyScanBusy => (StatusCode::SERVICE_UNAVAILABLE, Json(ErrorResponse { error: error.to_string() })),
-        ApplicationError::DependencyScanRateLimited => (StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse { error: error.to_string() })),
+        ApplicationError::LastSuperAdmin => (StatusCode::CONFLICT, Json(ErrorResponse::coded(code, error.to_string()))),
+        ApplicationError::PersonalOrganizationAlreadyExists => (StatusCode::CONFLICT, Json(ErrorResponse::coded(code, error.to_string()))),
+        ApplicationError::DependencyScanBusy => (StatusCode::SERVICE_UNAVAILABLE, Json(ErrorResponse::coded(code, error.to_string()))),
+        ApplicationError::DependencyScanRateLimited => (StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::coded(code, error.to_string()))),
         // A server misconfiguration, not the caller's fault.
-        ApplicationError::PasskeysUnavailable => (StatusCode::SERVICE_UNAVAILABLE, Json(ErrorResponse { error: error.to_string() })),
+        ApplicationError::PasskeysUnavailable => (StatusCode::SERVICE_UNAVAILABLE, Json(ErrorResponse::coded(code, error.to_string()))),
         // Same "don't confirm existence across a trust boundary" convention as authz::require_same_organization's 404 — here the boundary is per-user, not per-organization.
-        ApplicationError::ApiTokenNotFound => (StatusCode::NOT_FOUND, Json(ErrorResponse { error: error.to_string() })),
-        error => (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: error.to_string() })),
+        ApplicationError::ApiTokenNotFound => (StatusCode::NOT_FOUND, Json(ErrorResponse::coded(code, error.to_string()))),
+        error => (StatusCode::BAD_REQUEST, Json(ErrorResponse::coded(code, error.to_string()))),
     }
 }
 
@@ -171,5 +186,48 @@ mod tests {
         assert!(busy_log_due(&last, 1_000));
         assert!(!busy_log_due(&last, 1_000 + BUSY_LOG_INTERVAL_SECONDS - 1));
         assert!(busy_log_due(&last, 1_000 + BUSY_LOG_INTERVAL_SECONDS));
+    }
+
+    #[test]
+    fn every_mapped_error_carries_the_code_of_its_kind() {
+        let (_, body) = application_error_response("test", ApplicationError::UsernameTaken);
+        assert_eq!(body.0.code, Some("username_taken"));
+
+        let (_, body) = application_error_response("test", ApplicationError::Domain(DomainError::PasswordTooShort));
+        assert_eq!(body.0.code, Some("password_too_short"));
+        assert_eq!(body.0.error, "password must be at least 8 characters");
+
+        let (status, body) = application_error_response("test", ApplicationError::LastSuperAdmin);
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body.0.code, Some("last_super_admin"));
+    }
+
+    #[test]
+    fn an_internal_failure_keeps_its_flat_message_and_leaks_nothing_in_the_code() {
+        let (status, body) = application_error_response("test", ApplicationError::Domain(DomainError::Infrastructure("password=hunter2".to_string())));
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(body.0.error, "internal error");
+        assert_eq!(body.0.code, Some("infrastructure_failure"));
+    }
+
+    #[test]
+    fn a_revoked_api_token_and_wrong_credentials_are_indistinguishable() {
+        let (_, wrong) = application_error_response("test", ApplicationError::InvalidCredentials);
+        let (_, revoked) = application_error_response("test", ApplicationError::InactiveApiToken);
+
+        assert_eq!(wrong.0.code, revoked.0.code);
+        assert_eq!(wrong.0.error, revoked.0.error);
+    }
+
+    #[test]
+    fn codes_are_snake_case_and_a_response_without_one_omits_the_field() {
+        for code in [DomainError::EmailTaken.code(), DomainError::Busy(String::new()).code(), ApplicationError::DockerChunkOffsetMismatch { expected: 0, got: 1 }.code()] {
+            assert!(!code.is_empty() && code.chars().all(|c| c.is_ascii_lowercase() || c == '_'), "{code}");
+        }
+        let json = serde_json::to_value(ErrorResponse::message("plain")).unwrap();
+        assert_eq!(json, serde_json::json!({ "error": "plain" }));
+        let json = serde_json::to_value(ErrorResponse::coded("busy", "plain")).unwrap();
+        assert_eq!(json, serde_json::json!({ "error": "plain", "code": "busy" }));
     }
 }
