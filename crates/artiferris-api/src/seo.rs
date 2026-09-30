@@ -14,6 +14,7 @@ use axum::Router;
 use artiferris_application::use_cases::seo::{catalog_path, owner_path, package_path, parse_route, repository_path, PageMeta, SeoRoute, SITE_NAME};
 use artiferris_domain::organization::PUBLIC_ORGANIZATION_ID;
 use artiferris_domain::public_catalog::{SitemapEntry, SitemapTarget, CATALOG_FORMATS};
+use artiferris_domain::user_preferences::Language;
 use chrono::{DateTime, SecondsFormat, Utc};
 use percent_encoding::percent_decode_str;
 
@@ -71,6 +72,22 @@ fn json_for_script(value: &serde_json::Value) -> String {
     value.to_string().replace('<', "\\u003c").replace('>', "\\u003e").replace('&', "\\u0026").replace('\u{2028}', "\\u2028").replace('\u{2029}', "\\u2029")
 }
 
+/// The document with the `lang` of its `<html>` element set, or as it was when it has no such element.
+fn with_html_lang(document: &str, language: Language) -> String {
+    let Some(start) = document.find("<html") else { return document.to_string() };
+    let Some(tag_end) = document[start..].find('>').map(|end| start + end) else { return document.to_string() };
+    let tag = &document[start..tag_end];
+    let lang = format!(r#"lang="{}""#, language.as_str());
+    let rewritten = match tag.find("lang=\"") {
+        Some(at) => match tag[at + 6..].find('"') {
+            Some(close) => format!("{}{lang}{}", &tag[..at], &tag[at + 6 + close + 1..]),
+            None => return document.to_string(),
+        },
+        None => format!("{tag} {lang}"),
+    };
+    format!("{}{rewritten}{}", &document[..start], &document[tag_end..])
+}
+
 /// Rewrites the app's `index.html` head for one page.
 pub fn render_head(template: &str, meta: &PageMeta, context: &HeadContext<'_>) -> String {
     let robots = if context.indexing_unknown {
@@ -88,6 +105,9 @@ pub fn render_head(template: &str, meta: &PageMeta, context: &HeadContext<'_>) -
         let title = escape_html(&meta.title);
         tags.push(format!(r#"<meta property="og:site_name" content="{}">"#, escape_html(SITE_NAME)));
         tags.push(r#"<meta property="og:type" content="website">"#.to_string());
+        if let Some(language) = meta.language {
+            tags.push(format!(r#"<meta property="og:locale" content="{}">"#, language.og_locale()));
+        }
         tags.push(format!(r#"<meta property="og:title" content="{title}">"#));
         tags.push(format!(r#"<meta property="og:image" content="{}">"#, escape_html(&format!("{base}/api/branding/logo"))));
         tags.push(r#"<meta name="twitter:card" content="summary">"#.to_string());
@@ -112,6 +132,10 @@ pub fn render_head(template: &str, meta: &PageMeta, context: &HeadContext<'_>) -
     let with_title = match (template.find("<title>"), template.find("</title>")) {
         (Some(start), Some(end)) if start < end => format!("{}{title}{}", &template[..start], &template[end + "</title>".len()..]),
         _ => template.replacen("</head>", &format!("{title}</head>"), 1),
+    };
+    let with_title = match (meta.indexable, meta.language) {
+        (true, Some(language)) => with_html_lang(&with_title, language),
+        _ => with_title,
     };
     let injected = format!("    {}\n  ", tags.join("\n    "));
     match with_title.find("</head>") {
@@ -311,9 +335,9 @@ impl SeoState {
     }
 
     /// The metadata of one page and whether the instance lets it be indexed, within the time a page load can afford.
-    async fn head_inputs(&self, route: &SeoRoute) -> Head {
+    async fn head_inputs(&self, route: &SeoRoute, language: Language) -> Head {
         let build = async {
-            let meta = match self.app.seo_pages.execute(route).await {
+            let meta = match self.app.seo_pages.execute(route, language).await {
                 Ok(meta) => meta,
                 Err(e) => {
                     tracing::warn!("could not build the page head, using the generic one: {e}");
@@ -438,11 +462,14 @@ async fn page(State(seo): State<SeoState>, uri: Uri, headers: HeaderMap, connect
     let throttle_key = format!("public-page:{}", peer_ip_bucket(&seo.app, &headers, connect_info));
     let over_budget = seo.app.public_throttle.is_throttled(&throttle_key, PAGE_HEADS_PER_MINUTE, Duration::from_secs(60));
     seo.app.public_throttle.record_failure(&throttle_key, PAGE_HEADS_PER_MINUTE, Duration::from_secs(60));
-    let head = if over_budget { SeoState::unresolved_head(seo.known_indexing()) } else { seo.head_inputs(&route).await };
+    // The URL is the same in every language: the head follows the reader's `Accept-Language`, English for a crawler that sends none.
+    let language = headers.get(header::ACCEPT_LANGUAGE).and_then(|value| value.to_str().ok()).map_or(Language::FALLBACK, Language::from_accept_language);
+    let head = if over_budget { SeoState::unresolved_head(seo.known_indexing()) } else { seo.head_inputs(&route, language).await };
 
     let context = HeadContext { public_url: &seo.app.public_url, indexing_enabled: head.indexing_enabled, has_search_text: has_search_text(&uri), indexing_unknown: head.unknown };
     let mut response = text("text/html; charset=utf-8", render_head(&seo.index_template, &head.meta, &context));
     // The head depends on the indexing switch and on what is public right now; a head that could not be worked out must not be reused.
+    response.headers_mut().insert(header::VARY, HeaderValue::from_static("Accept-Language"));
     response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static(if head.unknown { "no-store" } else { "no-cache" }));
     response
 }
@@ -473,7 +500,7 @@ mod tests {
     const TEMPLATE: &str = "<!doctype html>\n<html lang=\"fr\">\n  <head>\n    <meta charset=\"utf-8\" />\n    <title>ArtiFerris · Artifact Repository</title>\n    <base href=\"/\" />\n  </head>\n  <body><app-root></app-root></body>\n</html>\n";
 
     fn meta(title: &str, description: Option<&str>) -> PageMeta {
-        PageMeta { title: title.to_string(), description: description.map(str::to_string), canonical_path: Some("/@alice/lib".to_string()), indexable: true, structured_data: None }
+        PageMeta { title: title.to_string(), description: description.map(str::to_string), canonical_path: Some("/@alice/lib".to_string()), indexable: true, structured_data: None, language: Some(Language::Fr) }
     }
 
     fn context(indexing_enabled: bool) -> HeadContext<'static> {
@@ -499,6 +526,21 @@ mod tests {
         }
         assert_eq!(html.matches("<title>").count(), 1, "the original title is replaced, not duplicated");
         assert!(!html.contains("Artifact Repository"));
+    }
+
+    #[test]
+    fn the_html_lang_is_replaced_added_or_left_alone() {
+        assert!(with_html_lang("<html lang=\"fr\"><head>", Language::De).starts_with("<html lang=\"de\"><head>"));
+        assert!(with_html_lang("<html class=\"a\" lang=\"fr\" dir=\"ltr\">", Language::Es).starts_with("<html class=\"a\" lang=\"es\" dir=\"ltr\">"));
+        assert!(with_html_lang("<html>", Language::It).starts_with("<html lang=\"it\">"));
+        assert_eq!(with_html_lang("<div>no html element</div>", Language::En), "<div>no html element</div>");
+    }
+
+    #[test]
+    fn a_generic_head_leaves_the_language_of_the_document_alone() {
+        let html = render_head(TEMPLATE, &PageMeta::generic(), &context(true));
+
+        assert!(html.contains(r#"<html lang="fr">"#) && !html.contains("og:locale"), "{html}");
     }
 
     #[test]
@@ -661,8 +703,16 @@ mod tests {
     }
 
     async fn get(state: &AppState, uri: &str) -> (StatusCode, HeaderMap, String) {
+        get_accepting(state, uri, None).await
+    }
+
+    async fn get_accepting(state: &AppState, uri: &str, accept_language: Option<&str>) -> (StatusCode, HeaderMap, String) {
         let app = router(SeoState::new(state.clone(), TEMPLATE.to_string()));
-        let response = app.oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap()).await.unwrap();
+        let mut request = Request::builder().uri(uri);
+        if let Some(accept_language) = accept_language {
+            request = request.header(header::ACCEPT_LANGUAGE, accept_language);
+        }
+        let response = app.oneshot(request.body(Body::empty()).unwrap()).await.unwrap();
         let (status, headers) = (response.status(), response.headers().clone());
         (status, headers, String::from_utf8(axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec()).unwrap())
     }
@@ -678,7 +728,7 @@ mod tests {
         assert_eq!(headers[header::CONTENT_TYPE], "text/html; charset=utf-8");
         assert_eq!(headers[header::CACHE_CONTROL], "no-cache");
         for expected in [
-            "<title>left-pad : paquet npm de Acme Corp | ArtiFerris</title>",
+            "<title>left-pad: npm package by Acme Corp | ArtiFerris</title>",
             r#"<meta name="description" content="Pads strings on the left">"#,
             r#"<link rel="canonical" href="http://localhost:4200/o/acme/open-npm/packages/npm/left-pad">"#,
             r#"content="index, follow""#,
@@ -686,6 +736,29 @@ mod tests {
         ] {
             assert!(html.contains(expected), "missing {expected} in {html}");
         }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_page_head_follows_the_accept_language_of_the_request_and_english_without_one(pool: sqlx::PgPool) {
+        let (state, _) = app_with(pool).await;
+        enable_indexing(&state).await;
+        let uri = "/o/acme/open-npm/packages/npm/left-pad";
+
+        let (_, headers, french) = get_accepting(&state, uri, Some("fr-CA,fr;q=0.9,en;q=0.5")).await;
+        let (_, _, german) = get_accepting(&state, uri, Some("ja, de;q=0.8")).await;
+        let (_, _, unknown) = get_accepting(&state, uri, Some("ja, zh-CN")).await;
+        let (_, _, none) = get(&state, uri).await;
+
+        assert_eq!(headers[header::VARY], "Accept-Language");
+        assert!(french.contains("<title>left-pad : paquet npm de Acme Corp | ArtiFerris</title>"), "{french}");
+        assert!(french.contains(r#"<html lang="fr">"#) && french.contains(r#"<meta property="og:locale" content="fr_FR">"#), "{french}");
+        assert!(german.contains("<title>left-pad: npm-Paket von Acme Corp | ArtiFerris</title>") && german.contains(r#"<html lang="de">"#), "{german}");
+        for english in [&unknown, &none] {
+            assert!(english.contains("<title>left-pad: npm package by Acme Corp | ArtiFerris</title>"), "{english}");
+            assert!(english.contains(r#"<html lang="en">"#) && english.contains(r#"<meta property="og:locale" content="en_US">"#), "{english}");
+        }
+        let canonical = |html: &str| html.lines().find(|l| l.contains("canonical")).map(str::trim).map(str::to_string);
+        assert_eq!(canonical(&french), canonical(&german), "one canonical URL, whatever the language");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -743,7 +816,7 @@ mod tests {
         let (_, _, html) = get(&state, "/artiferris-npm?q=pad").await;
         let (_, _, plain) = get(&state, "/artiferris-npm").await;
 
-        assert!(html.contains("noindex, follow") && html.contains("<title>artiferris-npm : paquets npm publics | ArtiFerris</title>"), "{html}");
+        assert!(html.contains("noindex, follow") && html.contains("<title>artiferris-npm: public npm packages | ArtiFerris</title>"), "{html}");
         assert!(plain.contains("index, follow"), "{plain}");
     }
 
@@ -814,7 +887,7 @@ mod tests {
             assert!(html.contains("<app-root>"), "{uri}: {html}");
         }
         let (_, _, html) = get(&state, "/o/acme/lib.name/packages/npm/socket.io").await;
-        assert!(html.contains("<title>socket.io : paquet npm de Acme Corp | ArtiFerris</title>") && html.contains(r#"content="index, follow""#), "{html}");
+        assert!(html.contains("<title>socket.io: npm package by Acme Corp | ArtiFerris</title>") && html.contains(r#"content="index, follow""#), "{html}");
         let (_, _, sitemap) = get(&state, "/sitemap-1.xml").await;
         assert!(sitemap.contains("/o/acme/lib.name/packages/npm/socket.io"), "the sitemap advertises it, so it must not 404: {sitemap}");
     }

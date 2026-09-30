@@ -465,6 +465,8 @@ Le plan du site est reconstruit par une seule requête à la fois ; les autres r
 
 Les URLs canoniques et celles du plan du site sont construites à partir de `PUBLIC_URL` : elle doit être l'adresse publique réelle de l'instance. Un dépôt privé, inconnu ou supprimé reçoit le même `<head>` générique qu'une page de l'application, pour ne rien révéler.
 
+**La langue de la page** suit l'en-tête `Accept-Language` de la requête (`fr-CA` donne le français ; la première langue traduite par ordre de préférence l'emporte : en, fr, es, it, de) et, sans en-tête ou sans langue traduite, l'anglais. C'est le cas d'un robot, qui n'en envoie en général pas : l'anglais est donc la langue qu'indexe un moteur de recherche. L'URL, elle, est unique : la balise canonique est la même dans toutes les langues, la réponse porte `Vary: Accept-Language`, et `<html lang>`, `og:locale` et `inLanguage` (données structurées) suivent la langue choisie. Une page générique (application, dépôt privé ou inconnu) ne dit rien dans aucune langue et garde le `lang` du document.
+
 ## Référence API — Détails d'un paquet ou d'une image
 
 Les téléchargements sont comptés à la volée : un `GET` d'archive npm, ou un `GET` de manifest Docker par tag, servi directement par un dépôt hosted (ni `HEAD`, ni requête par digest, ni dépôt proxy ou groupe). Un client ne compte qu'une fois par paquet ou image et par heure. Les compteurs sont agrégés en mémoire puis écrits toutes les 30 secondes et à l'arrêt, par jour, sans aucune donnée sur l'utilisateur ; les chiffres sont indicatifs. Les jours de plus de 13 mois sont purgés.

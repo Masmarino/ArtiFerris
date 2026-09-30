@@ -5,7 +5,10 @@ use artiferris_domain::public_catalog::{catalog_format_spec, CatalogEntry, Owner
 use serde_json::{json, Value};
 
 use crate::error::ApplicationError;
+use artiferris_domain::user_preferences::Language;
+
 use crate::use_cases::public_catalog::{format_key, has_control_character};
+use crate::use_cases::seo_text::SeoText;
 
 pub const SITE_NAME: &str = "ArtiFerris";
 /// What the app's `index.html` already carries, kept for every page that is not a public catalog page.
@@ -115,12 +118,14 @@ pub struct PageMeta {
     pub indexable: bool,
     /// Schema.org data, without any markup escaping.
     pub structured_data: Option<Value>,
+    /// The language the title and description are written in. `None` for a generic head, which says nothing in any language.
+    pub language: Option<Language>,
 }
 
 impl PageMeta {
     /// The head every non-catalog page (and every unknown or private target) gets: nothing that reveals whether it exists.
     pub fn generic() -> Self {
-        Self { title: DEFAULT_TITLE.to_string(), description: None, canonical_path: None, indexable: false, structured_data: None }
+        Self { title: DEFAULT_TITLE.to_string(), description: None, canonical_path: None, indexable: false, structured_data: None, language: None }
     }
 }
 
@@ -135,90 +140,86 @@ impl SeoPageUseCase {
         Self { catalog, base_url: base_url.trim_end_matches('/').to_string() }
     }
 
-    pub async fn execute(&self, route: &SeoRoute) -> Result<PageMeta, ApplicationError> {
+    /// `language` is the reader's (see `Language::from_accept_language`): the page's URL is the same in every language, its head is not.
+    pub async fn execute(&self, route: &SeoRoute, language: Language) -> Result<PageMeta, ApplicationError> {
         if !could_name_something(route) {
             return Ok(PageMeta::generic());
         }
+        let text = SeoText(language);
         Ok(match route {
             SeoRoute::Home | SeoRoute::App | SeoRoute::Other => PageMeta::generic(),
             SeoRoute::Explorer => PageMeta {
-                title: title("Explorer les paquets publics"),
-                description: Some("Recherchez parmi les paquets npm et les images Docker publics hébergés sur ArtiFerris.".to_string()),
+                title: title(text.explorer_title()),
+                description: Some(text.explorer_description().to_string()),
                 canonical_path: Some("/explorer".to_string()),
                 indexable: true,
                 structured_data: None,
+                language: Some(language),
             },
-            SeoRoute::Catalog { format } => self.catalog_meta(*format).await?,
-            SeoRoute::Owner(owner) => self.owner_meta(owner).await?,
-            SeoRoute::Repository { owner, repository } => self.repository_meta(owner, repository).await?,
-            SeoRoute::Package { owner, repository, format, name } => self.package_meta(owner, repository, *format, name).await?,
+            SeoRoute::Catalog { format } => self.catalog_meta(*format, &text).await?,
+            SeoRoute::Owner(owner) => self.owner_meta(owner, &text).await?,
+            SeoRoute::Repository { owner, repository } => self.repository_meta(owner, repository, &text).await?,
+            SeoRoute::Package { owner, repository, format, name } => self.package_meta(owner, repository, *format, name, &text).await?,
         })
     }
 
-    async fn catalog_meta(&self, format: RepositoryFormat) -> Result<PageMeta, ApplicationError> {
+    async fn catalog_meta(&self, format: RepositoryFormat, text: &SeoText) -> Result<PageMeta, ApplicationError> {
         let Some(spec) = catalog_format_spec(format) else { return Ok(PageMeta::generic()) };
         let count = self.catalog.entry_counts().await?.into_iter().find(|c| c.format == format).map_or(0, |c| c.entry_count);
-        let noun = match format {
-            RepositoryFormat::Npm => "paquets npm",
-            RepositoryFormat::Docker => "images Docker",
-        };
         Ok(PageMeta {
-            title: title(&format!("{} : {noun} publics", spec.catalog_name)),
-            description: Some(truncate(&format!("Recherchez parmi les {count} {noun} publics hébergés sur ArtiFerris. On installe depuis l'URL de chaque propriétaire."))),
+            title: title(&text.catalog_title(spec.catalog_name, format)),
+            description: Some(truncate(&text.catalog_description(count, format))),
             canonical_path: catalog_path(format),
             indexable: true,
             structured_data: None,
+            language: Some(text.0),
         })
     }
 
-    async fn owner_meta(&self, owner: &OwnerRef) -> Result<PageMeta, ApplicationError> {
+    async fn owner_meta(&self, owner: &OwnerRef, text: &SeoText) -> Result<PageMeta, ApplicationError> {
         let Some(summary) = self.catalog.owner_summary(owner).await? else { return Ok(PageMeta::generic()) };
         Ok(PageMeta {
-            title: title(&format!("{} : paquets et images publics", summary.display_name)),
-            description: Some(truncate(&format!(
-                "{} publie {} et {} sur ArtiFerris.",
-                summary.display_name,
-                plural(summary.package_count, "paquet", "paquets"),
-                plural(summary.image_count, "image", "images")
-            ))),
+            title: title(&text.owner_title(&summary.display_name)),
+            description: Some(truncate(&text.owner_description(&summary.display_name, summary.package_count, summary.image_count))),
             canonical_path: Some(owner_path(owner)),
             indexable: true,
             structured_data: None,
+            language: Some(text.0),
         })
     }
 
-    async fn repository_meta(&self, owner: &OwnerRef, repository: &str) -> Result<PageMeta, ApplicationError> {
+    async fn repository_meta(&self, owner: &OwnerRef, repository: &str, text: &SeoText) -> Result<PageMeta, ApplicationError> {
         let (Some(found), Some(summary)) = (self.catalog.repository(owner, repository).await?, self.catalog.owner_summary(owner).await?) else {
             return Ok(PageMeta::generic());
         };
-        let what = match found.format {
-            RepositoryFormat::Npm => "npm",
-            RepositoryFormat::Docker => "Docker",
-        };
         Ok(PageMeta {
-            title: title(&format!("{} / {} : dépôt {what} public", summary.display_name, found.name)),
-            description: Some(truncate(&format!("Dépôt {what} public « {} » de {} sur ArtiFerris.", found.name, summary.display_name))),
+            title: title(&text.repository_title(&summary.display_name, &found.name, found.format)),
+            description: Some(truncate(&text.repository_description(&summary.display_name, &found.name, found.format))),
             canonical_path: Some(repository_path(owner, repository)),
             indexable: true,
             structured_data: None,
+            language: Some(text.0),
         })
     }
 
-    async fn package_meta(&self, owner: &OwnerRef, repository: &str, format: RepositoryFormat, name: &str) -> Result<PageMeta, ApplicationError> {
+    async fn package_meta(&self, owner: &OwnerRef, repository: &str, format: RepositoryFormat, name: &str, text: &SeoText) -> Result<PageMeta, ApplicationError> {
         let Some(entry) = self.catalog.find_entry(owner, repository, format, name).await? else {
             return Ok(PageMeta::generic());
         };
         let canonical_path = package_path(owner, repository, format, name);
-        let description = package_description(&entry);
-        let structured_data = Some(self.structured_data(&entry, &canonical_path, &description));
-        let what = match format {
-            RepositoryFormat::Npm => "paquet npm",
-            RepositoryFormat::Docker => "image Docker",
-        };
-        Ok(PageMeta { title: title(&format!("{name} : {what} de {}", entry.owner.display_name)), description: Some(description), canonical_path: Some(canonical_path), indexable: true, structured_data })
+        let description = package_description(&entry, text);
+        let structured_data = Some(self.structured_data(&entry, &canonical_path, &description, text.0));
+        Ok(PageMeta {
+            title: title(&text.package_title(name, &entry.owner.display_name, format)),
+            description: Some(description),
+            canonical_path: Some(canonical_path),
+            indexable: true,
+            structured_data,
+            language: Some(text.0),
+        })
     }
 
-    fn structured_data(&self, entry: &CatalogEntry, canonical_path: &str, description: &str) -> Value {
+    fn structured_data(&self, entry: &CatalogEntry, canonical_path: &str, description: &str, language: Language) -> Value {
         let author_type = match entry.owner.kind {
             OwnerKind::Personal => "Person",
             OwnerKind::Organization => "Organization",
@@ -231,6 +232,7 @@ impl SeoPageUseCase {
             },
             "name": entry.name,
             "description": description,
+            "inLanguage": language.as_str(),
             "url": format!("{}{canonical_path}", self.base_url),
             "dateModified": entry.updated_at.to_rfc3339(),
             "author": { "@type": author_type, "name": entry.owner.display_name },
@@ -265,12 +267,11 @@ fn could_name_something(route: &SeoRoute) -> bool {
     }
 }
 
-fn package_description(entry: &CatalogEntry) -> String {
+fn package_description(entry: &CatalogEntry, text: &SeoText) -> String {
     let own = entry.description.as_deref().map(str::trim).filter(|d| !d.is_empty());
-    match (own, entry.format) {
-        (Some(description), _) => truncate(description),
-        (None, RepositoryFormat::Npm) => truncate(&format!("Paquet npm {}{} publié par {} sur ArtiFerris.", entry.name, version_suffix(entry), entry.owner.display_name)),
-        (None, RepositoryFormat::Docker) => truncate(&format!("Image Docker {}{} publiée par {} sur ArtiFerris.", entry.name, version_suffix(entry), entry.owner.display_name)),
+    match own {
+        Some(description) => truncate(description),
+        None => truncate(&text.package_description(&entry.name, &version_suffix(entry), &entry.owner.display_name, entry.format)),
     }
 }
 
@@ -280,10 +281,6 @@ fn version_suffix(entry: &CatalogEntry) -> String {
 
 fn title(page: &str) -> String {
     format!("{page} | {SITE_NAME}")
-}
-
-fn plural(count: i64, one: &str, many: &str) -> String {
-    format!("{count} {}", if count == 1 { one } else { many })
 }
 
 fn truncate(text: &str) -> String {
@@ -303,6 +300,8 @@ mod tests {
     use artiferris_domain::public_catalog::{CatalogEntryCount, CatalogMatch, CatalogOwner, CatalogPage, CatalogQuery, CatalogRepository, CatalogSuggestion, OwnerSummary, SitemapEntry};
     use async_trait::async_trait;
     use chrono::Utc;
+
+    use artiferris_domain::user_preferences::SUPPORTED_LANGUAGES;
 
     use super::*;
 
@@ -432,7 +431,7 @@ mod tests {
         let seo = use_case(FakeCatalog::default());
 
         for route in [SeoRoute::Home, SeoRoute::Other] {
-            assert_eq!(seo.execute(&route).await.unwrap(), PageMeta::generic());
+            assert_eq!(seo.execute(&route, Language::Fr).await.unwrap(), PageMeta::generic());
         }
         assert!(!PageMeta::generic().indexable);
     }
@@ -441,8 +440,8 @@ mod tests {
     async fn the_explorer_and_the_catalogs_describe_themselves() {
         let seo = use_case(FakeCatalog { counts: vec![CatalogEntryCount { format: RepositoryFormat::Npm, entry_count: 12 }], ..Default::default() });
 
-        let explorer = seo.execute(&SeoRoute::Explorer).await.unwrap();
-        let catalog = seo.execute(&SeoRoute::Catalog { format: RepositoryFormat::Npm }).await.unwrap();
+        let explorer = seo.execute(&SeoRoute::Explorer, Language::Fr).await.unwrap();
+        let catalog = seo.execute(&SeoRoute::Catalog { format: RepositoryFormat::Npm }, Language::Fr).await.unwrap();
 
         assert_eq!((explorer.canonical_path.as_deref(), explorer.indexable), (Some("/explorer"), true));
         assert_eq!(catalog.title, "artiferris-npm : paquets npm publics | ArtiFerris");
@@ -454,7 +453,7 @@ mod tests {
     async fn an_owner_page_uses_the_display_name_and_the_counts() {
         let seo = use_case(FakeCatalog { owner: Some(summary("alice", 1, 3)), ..Default::default() });
 
-        let meta = seo.execute(&SeoRoute::Owner(personal("alice"))).await.unwrap();
+        let meta = seo.execute(&SeoRoute::Owner(personal("alice")), Language::Fr).await.unwrap();
 
         assert_eq!(meta.title, "alice : paquets et images publics | ArtiFerris");
         assert_eq!(meta.description.as_deref(), Some("alice publie 1 paquet et 3 images sur ArtiFerris."));
@@ -470,7 +469,7 @@ mod tests {
             SeoRoute::Repository { owner: personal("nobody"), repository: "lib".into() },
             SeoRoute::Package { owner: personal("nobody"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "x".into() },
         ] {
-            assert_eq!(seo.execute(&route).await.unwrap(), PageMeta::generic(), "{route:?}");
+            assert_eq!(seo.execute(&route, Language::Fr).await.unwrap(), PageMeta::generic(), "{route:?}");
         }
     }
 
@@ -478,7 +477,7 @@ mod tests {
     async fn a_repository_page_names_its_format_and_owner() {
         let seo = use_case(FakeCatalog { owner: Some(summary("alice", 1, 0)), repository: Some(CatalogRepository { name: "lib".into(), format: RepositoryFormat::Docker }), ..Default::default() });
 
-        let meta = seo.execute(&SeoRoute::Repository { owner: personal("alice"), repository: "lib".into() }).await.unwrap();
+        let meta = seo.execute(&SeoRoute::Repository { owner: personal("alice"), repository: "lib".into() }, Language::Fr).await.unwrap();
 
         assert_eq!(meta.title, "alice / lib : dépôt Docker public | ArtiFerris");
         assert_eq!(meta.canonical_path.as_deref(), Some("/@alice/lib"));
@@ -489,7 +488,7 @@ mod tests {
         let catalog = FakeCatalog { entries: vec![entry("left-pad", Some("Pads strings on the left"))], ..Default::default() };
         let seo = use_case(catalog);
 
-        let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "left-pad".into() }).await.unwrap();
+        let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "left-pad".into() }, Language::Fr).await.unwrap();
 
         assert_eq!(meta.title, "left-pad : paquet npm de alice | ArtiFerris");
         assert_eq!(meta.description.as_deref(), Some("Pads strings on the left"));
@@ -503,9 +502,38 @@ mod tests {
     async fn a_package_without_a_description_gets_a_sentence_built_from_what_is_known() {
         let seo = use_case(FakeCatalog { entries: vec![entry("widget", Some("   "))], ..Default::default() });
 
-        let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "widget".into() }).await.unwrap();
+        let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "widget".into() }, Language::Fr).await.unwrap();
 
         assert_eq!(meta.description.as_deref(), Some("Paquet npm widget (1.2.3) publié par alice sur ArtiFerris."));
+    }
+
+    #[tokio::test]
+    async fn the_head_is_written_in_the_language_asked_for_and_says_so() {
+        let seo = use_case(FakeCatalog { owner: Some(summary("alice", 1, 3)), entries: vec![entry("widget", None)], counts: vec![CatalogEntryCount { format: RepositoryFormat::Npm, entry_count: 12 }], ..Default::default() });
+        let package = SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "widget".into() };
+
+        let owner_en = seo.execute(&SeoRoute::Owner(personal("alice")), Language::En).await.unwrap();
+        let owner_de = seo.execute(&SeoRoute::Owner(personal("alice")), Language::De).await.unwrap();
+        let package_es = seo.execute(&package, Language::Es).await.unwrap();
+
+        assert_eq!(owner_en.title, "alice: public packages and images | ArtiFerris");
+        assert_eq!(owner_en.description.as_deref(), Some("alice publishes 1 package and 3 images on ArtiFerris."));
+        assert_eq!(owner_en.language, Some(Language::En));
+        assert_eq!(owner_de.description.as_deref(), Some("alice veröffentlicht 1 Paket und 3 Images auf ArtiFerris."));
+        assert_eq!(owner_de.language, Some(Language::De));
+        assert_eq!(package_es.description.as_deref(), Some("Paquete npm widget (1.2.3) publicado por alice en ArtiFerris."));
+        assert_eq!(package_es.structured_data.unwrap()["inLanguage"], "es");
+        assert_eq!(owner_en.canonical_path, owner_de.canonical_path, "one URL, whatever the language");
+    }
+
+    #[tokio::test]
+    async fn a_generic_head_is_in_no_language() {
+        let seo = use_case(FakeCatalog::default());
+
+        for language in SUPPORTED_LANGUAGES {
+            assert_eq!(seo.execute(&SeoRoute::Home, language).await.unwrap(), PageMeta::generic());
+        }
+        assert_eq!(PageMeta::generic().language, None);
     }
 
     #[tokio::test]
@@ -514,7 +542,7 @@ mod tests {
         other_repository.repository_name = "elsewhere".to_string();
         let seo = use_case(FakeCatalog { entries: vec![other_repository, entry("widgets", None)], ..Default::default() });
 
-        let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "widget".into() }).await.unwrap();
+        let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "widget".into() }, Language::Fr).await.unwrap();
 
         assert_eq!(meta, PageMeta::generic());
     }
@@ -524,7 +552,7 @@ mod tests {
         let catalog = Arc::new(FakeCatalog { entries: vec![entry("x", None)], ..Default::default() });
         let seo = SeoPageUseCase::new(catalog.clone(), "https://r.example".to_string());
 
-        seo.execute(&SeoRoute::Package { owner: org("acme"), repository: "lib".into(), format: RepositoryFormat::Docker, name: "x".into() }).await.unwrap();
+        seo.execute(&SeoRoute::Package { owner: org("acme"), repository: "lib".into(), format: RepositoryFormat::Docker, name: "x".into() }, Language::Fr).await.unwrap();
 
         assert_eq!(catalog.looked_up.lock().unwrap().clone(), vec![(org("acme"), "lib".to_string(), RepositoryFormat::Docker, "x".to_string())]);
     }
@@ -547,7 +575,7 @@ mod tests {
             SeoRoute::Owner(personal("al\u{0}ce")),
             SeoRoute::Owner(personal(&"a".repeat(129))),
         ] {
-            assert_eq!(seo.execute(&route).await.unwrap(), PageMeta::generic(), "{route:?}");
+            assert_eq!(seo.execute(&route, Language::Fr).await.unwrap(), PageMeta::generic(), "{route:?}");
         }
         assert!(catalog.looked_up.lock().unwrap().is_empty());
     }
@@ -557,7 +585,7 @@ mod tests {
         let catalog = Arc::new(FakeCatalog { entries: vec![entry(&"a".repeat(214), None)], ..Default::default() });
         let seo = SeoPageUseCase::new(catalog.clone(), "https://r.example".to_string());
 
-        let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "a".repeat(214) }).await.unwrap();
+        let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "a".repeat(214) }, Language::Fr).await.unwrap();
 
         assert!(meta.indexable);
     }

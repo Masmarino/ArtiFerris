@@ -37,6 +37,7 @@ pub mod organization;
 pub mod personal_repository;
 pub mod public_catalog;
 pub mod seo;
+pub mod seo_text;
 pub mod registration;
 pub mod resolve_organization_repository;
 pub mod resolve_personal_repository;

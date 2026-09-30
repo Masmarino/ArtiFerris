@@ -433,6 +433,8 @@ The sitemap is rebuilt by one request at a time; the others get the previous cop
 
 Canonical and sitemap URLs are built from `PUBLIC_URL`, which must be the instance's real public address. A private, unknown or deleted repository gets the same generic `<head>` as any app page, so nothing is revealed.
 
+**The page's language** follows the request's `Accept-Language` header (`fr-CA` gives French; the first translated language in order of preference wins: en, fr, es, it, de) and is English when there is no header or no translated language. That is the case of a crawler, which usually sends none: English is therefore the language a search engine indexes. The URL is unique: the canonical tag is the same in every language, the response carries `Vary: Accept-Language`, and `<html lang>`, `og:locale` and `inLanguage` (structured data) follow the chosen language. A generic page (app, private or unknown repository) says nothing in any language and keeps the document's `lang`.
+
 ## API Reference — Package and image details
 
 Downloads are counted as they happen: a `GET` of an npm tarball, or a `GET` of a Docker manifest by tag, served straight from a hosted repository (not `HEAD`, not a request by digest, not a proxy or group repository). A client counts once per package or image per hour. Counters are aggregated in memory and written every 30 seconds and on shutdown, per day, with no data about the user; figures are indicative. Days older than 13 months are pruned.
