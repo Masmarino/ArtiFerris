@@ -243,7 +243,7 @@ mod tests {
         write_repo.set(organization_id, &sample(), None).await.unwrap();
 
         let read_repo = PostgresIdentityProviderRepository::new(pool, "jwt-secret-b".to_string());
-        assert!(read_repo.get(organization_id).await.is_err(), "a mismatched key must be a hard error, not a silent garbled decrypt (M-9)");
+        assert!(read_repo.get(organization_id).await.is_err(), "a mismatched key must be a hard error, not a silent garbled decrypt");
     }
 
     fn sample_oidc() -> IdentityProviderConfig {

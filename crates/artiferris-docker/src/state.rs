@@ -42,7 +42,7 @@ pub struct DockerState {
     pub public_scheme: String,
     pub token_service: String,
     pub issue_access_token: Arc<IssueDockerAccessTokenUseCase>,
-    /// Throttles `/v2/token` credential guessing by client address — Basic auth here carries no reliable username (M-11).
+    /// Throttles `/v2/token` credential guessing by client address — Basic auth here carries no reliable username.
     pub login_throttle: LoginThrottle,
     /// Client address resolution, the body-memory budget and the download dedupe.
     pub guard: Arc<RequestGuard>,

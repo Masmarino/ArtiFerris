@@ -1714,7 +1714,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK, "an authenticated but unrelated caller must still see a public repository's details");
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["my_role"], "read", "a public repository grants an implicit Read to any caller, including one from an unrelated organization (B-43)");
+        assert_eq!(json["my_role"], "read", "a public repository grants an implicit Read to any caller, including one from an unrelated organization");
     }
 
     /// The same case reached by a same-organization member with no explicit grant: it also gets the implicit public
@@ -1737,7 +1737,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK, "same-organization membership alone must not turn into a 403 just because there's no explicit grant");
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["my_role"], "read", "a public repository grants an implicit Read to any caller, including a same-organization member with no explicit grant (B-43)");
+        assert_eq!(json["my_role"], "read", "a public repository grants an implicit Read to any caller, including a same-organization member with no explicit grant");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

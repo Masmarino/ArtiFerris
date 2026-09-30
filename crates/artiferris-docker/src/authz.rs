@@ -93,17 +93,15 @@ pub fn require_hosted(repo: &PackageRepositorySummary) -> Result<(), StatusCode>
     authz_primitives::require_hosted(repo).map_err(map_access_error)
 }
 
-/// Per-member read policy for group traversal. A private member is checked on its own terms, live, like npm: the
-/// caller's organization (or the group's, for a personal namespace) and at least `Read` on it.
+/// Per-member read policy for group traversal. A private member is checked live, like npm: the caller's organization
+/// (or the group's, for a personal namespace) and at least `Read` on it.
 ///
-/// `top_level_*` describe the repository the request addressed; `top_level_was_authorized` means the token's scope was
-/// verified against that exact repository, which `IssueDockerAccessTokenUseCase` grants only from a live role. That is
-/// what makes a personal group's members reachable: a personal organization's id never equals a real user's
-/// `organization_id`, and members share the group's organization by construction. It only widens the
-/// caller-organization test: a public top-level repository is served without a token, so the flag is `false` there.
+/// `top_level_was_authorized` means the token's scope was verified against the addressed repository from a live role.
+/// That is what makes a personal group's members reachable, since a personal organization's id never equals a real
+/// user's `organization_id`. A public top-level repository is served without a token, so the flag is `false` there.
 ///
-/// Takes the member's fields by value so the returned future outlives the traversal's borrow. A failed lookup reads as
-/// not readable.
+/// Takes the member's fields by value so the future outlives the traversal's borrow. A failed lookup reads as not
+/// readable.
 pub async fn member_is_readable(
     state: &DockerState,
     caller: Option<&DockerAuthUser>,

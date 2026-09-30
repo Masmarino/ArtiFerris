@@ -39,15 +39,10 @@ pub struct BlobQueryParams {
 }
 
 // `dispatch_*` holds the per-verb match once; each `handle_*` wrapper supplies its own `resolve_organization_id`
-// closure.
+// closure. It returns `Result<Uuid, Response>` so each path keeps its own failure shape.
 //
-// The closure returns `Result<Uuid, Response>`, not `StatusCode`, so each path keeps its own failure shape: on the
-// organization path a bad Host is rejected before the closure by `ResolvedOrganization`'s extractor, while on the
-// personal path the closure returns the JSON-enveloped `docker_authz_error` response.
-//
-// `resolve_organization_id().await` must be called inside the matched `parse_operation` arm: the personal lookup hits
-// the database, so calling it before the match would let an unhandled verb or shape reveal a private repository through
-// 405 versus 404 (see `a_wrongly_shaped_personal_request_is_not_an_existence_oracle`).
+// Call it inside the matched `parse_operation` arm: the personal lookup hits the database, so calling it before the
+// match would let an unhandled verb or shape reveal a private repository through 405 versus 404.
 
 #[allow(clippy::too_many_arguments)]
 async fn dispatch_get<F, Fut>(state: DockerState, repository: String, rest: String, user: Option<DockerAuthUser>, client: String, tags_query: TagsQueryParams, location_base: String, resolve_organization_id: F) -> Response

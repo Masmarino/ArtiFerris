@@ -145,7 +145,7 @@ mod tests {
         assert!(!legacy_hash.contains(':'), "sanity: a legacy hash has no salt separator");
         repo.replace_all(user_id, &[legacy_hash], None).await.unwrap();
 
-        assert!(repo.try_consume(user_id, "legacy-code").await.unwrap(), "a still-unused legacy backup code must keep working after the M-5 salting fix");
+        assert!(repo.try_consume(user_id, "legacy-code").await.unwrap(), "a still-unused legacy backup code must keep working after salting was introduced");
         assert!(!repo.try_consume(user_id, "legacy-code").await.unwrap(), "the same code must not be usable twice");
         assert_eq!(repo.count_unused(user_id).await.unwrap(), 0);
     }

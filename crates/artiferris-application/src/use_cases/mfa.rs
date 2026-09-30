@@ -977,7 +977,7 @@ mod tests {
         let legacy_hash = hex::encode(Sha256::digest(b"abc123"));
         assert!(!legacy_hash.contains(':'), "sanity check: a legacy hash has no salt separator");
 
-        assert!(verify_backup_code("abc123", &legacy_hash), "a still-unused legacy backup code must keep verifying after the M-5 salting fix");
+        assert!(verify_backup_code("abc123", &legacy_hash), "a still-unused legacy backup code must keep verifying after salting was introduced");
         assert!(!verify_backup_code("wrong-code", &legacy_hash));
     }
 
@@ -990,7 +990,7 @@ mod tests {
         backup_codes.replace_all(user_id, &[legacy_hash], None).await.unwrap();
 
         let verify = VerifyBackupCodeUseCase::new(backup_codes.clone());
-        verify.execute(user_id, "legacy-code").await.expect("a still-unused legacy backup code must keep working after the M-5 salting fix");
+        verify.execute(user_id, "legacy-code").await.expect("a still-unused legacy backup code must keep working after salting was introduced");
 
         let err = verify.execute(user_id, "legacy-code").await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidMfaCode));
