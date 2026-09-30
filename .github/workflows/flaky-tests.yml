@@ -1,0 +1,104 @@
+name: Flaky tests
+
+# The CI/CD workflow runs each suite once and turns red on the first failure: a test that fails now and then, with no
+# change in the code, is a red run that gets re-run and forgotten. This one runs the suites again and again, on a busy
+# machine (the conditions that make a timing assumption fail), and names the tests that did not pass every time.
+# It never retries a test: a test that passed only the second time is what it looks for.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "How many times each suite is run"
+        default: "5"
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  RUST_VERSION: "1.98.1"
+  NODE_VERSION: "26"
+  RUNS: ${{ github.event.inputs.runs || '5' }}
+
+jobs:
+  frontend:
+    name: Frontend, repeated under load
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Test, several times, with every core busy
+        run: |
+          # As many spinning processes as cores: the tests share the machine, as they do when a PR run is busy.
+          for _ in $(seq "$(nproc)"); do (timeout 5400 sh -c 'while :; do :; done' &); done
+          failed=0
+          for run in $(seq "$RUNS"); do
+            npm test -- --watch=false > "run-$run.log" 2>&1 || { failed=$((failed + 1)); echo "::warning::run $run failed"; }
+          done
+          pkill -f 'while :; do :; done' || true
+          {
+            echo "## Frontend: $failed of $RUNS runs failed"
+            grep -h ' FAIL ' run-*.log | sed 's/\x1b\[[0-9;]*m//g' | sort | uniq -c | sort -rn
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$failed"
+
+  backend:
+    name: Backend, repeated under load
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: postgres:18-alpine3.24@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SQLX_OFFLINE: "true"
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, resolved 2026-09-06
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+
+      - name: Build the tests
+        run: cargo test --workspace --locked --no-run
+
+      - name: Test, several times, with two cores busy
+        run: |
+          for _ in 1 2; do (timeout 10000 sh -c 'while :; do :; done' &); done
+          failed=0
+          for run in $(seq "$RUNS"); do
+            cargo test --workspace --locked --no-fail-fast > "run-$run.log" 2>&1 || { failed=$((failed + 1)); echo "::warning::run $run failed"; }
+          done
+          pkill -f 'while :; do :; done' || true
+          {
+            echo "## Backend: $failed of $RUNS runs failed"
+            grep -h -E '^test .* \.\.\. FAILED$' run-*.log | sort | uniq -c | sort -rn
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$failed"
