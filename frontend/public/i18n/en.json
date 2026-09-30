@@ -1,0 +1,1190 @@
+{
+  "meta": {
+    "locale": "en-US"
+  },
+  "errors": {
+    "overload": {
+      "tooManyRequests": "Too many requests, try again in a moment",
+      "busy": "Service temporarily busy",
+      "timeout": "The request took too long, try again"
+    },
+    "secretUnreadable": "The stored secret is unreadable: enter it again"
+  },
+  "catalog": {
+    "overload": {
+      "tooManyRequests": "Too many requests, wait a moment and try again.",
+      "busy": "The catalog is temporarily busy"
+    },
+    "counts": {
+      "repository_one": "{{ count }} repository",
+      "repository_other": "{{ count }} repositories",
+      "package_one": "{{ count }} package",
+      "package_other": "{{ count }} packages",
+      "image_one": "{{ count }} image",
+      "image_other": "{{ count }} images"
+    },
+    "search": {
+      "resultsFor": "Results for “{{ text }}”",
+      "ariaLabel": "Catalog search",
+      "label": "Search for a package",
+      "placeholder": "Name, description or keyword",
+      "submit": "Search",
+      "sortBy": "Sort by",
+      "searching": "Searching…",
+      "ownerEmptyHeading": "Nothing to show",
+      "ownerEmptyMessage": "This owner has nothing public to show here.",
+      "allFormats": "All formats",
+      "emptyHeading": "Nothing to explore yet",
+      "emptyMessage": "No public content has been published here yet. Make a repository public for it to appear in the catalog.",
+      "noMatchMessage": "No package matches this search. Try another name, a keyword, or a shorter search.",
+      "pagination": "Pagination",
+      "popular": "Popular this week",
+      "recent": "Recently updated",
+      "noExact": "No exact match — here are similar results.",
+      "approximate": "Similar results",
+      "sort": {
+        "all": "All",
+        "relevance": "Relevance",
+        "updated": "Recent",
+        "popular": "Popular"
+      },
+      "errors": {
+        "failed": "The search failed. Check your connection and try again."
+      }
+    },
+    "card": {
+      "by": "by",
+      "updated": "updated {{ ago }}",
+      "keywords": "Keywords"
+    },
+    "suggest": {
+      "by": "by {{ owner }} / {{ repository }}",
+      "label": "Suggestions",
+      "none": "No suggestions"
+    },
+    "page": {
+      "blurbNpm": "All the public npm packages hosted on this instance. Always install from the owner's URL.",
+      "blurbDocker": "All the public Docker images hosted on this instance. Always pull from the owner's URL."
+    },
+    "explorer": {
+      "loadingCatalogs": "Loading catalogs…",
+      "loadingPopular": "Loading popular packages…",
+      "heading": "Explore public packages",
+      "intro": "The public npm packages and Docker images hosted on this instance.",
+      "catalogs": "Catalogs",
+      "popular": "Popular this week",
+      "errors": {
+        "catalogs": "Failed to load the catalogs.",
+        "popular": "Failed to load the popular packages."
+      }
+    },
+    "owner": {
+      "notFoundHeading": "Owner not found",
+      "notFoundMessage": "There is nothing public at this address.",
+      "browse": "Browse the public catalog",
+      "errors": {
+        "loadFailed": "Failed to load the profile. Check your connection and try again."
+      },
+      "title": "Owner"
+    },
+    "layout": {
+      "quickSearch": "Quick search",
+      "searchPlaceholder": "Search for a package…",
+      "myRepositories": "My repositories",
+      "login": "Sign in"
+    }
+  },
+  "severity": {
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "unknown": "Unknown"
+  },
+  "format": {
+    "results_one": "{{ count }} result",
+    "results_other": "{{ count }} results",
+    "suggestions_none": "No suggestions",
+    "suggestions_one": "{{ count }} suggestion available",
+    "suggestions_other": "{{ count }} suggestions available",
+    "selected_one": "{{ count }} selected",
+    "selected_other": "{{ count }} selected",
+    "weeklyDownloads_one": "{{ count }} download this week",
+    "weeklyDownloads_other": "{{ count }} downloads this week",
+    "bytes": {
+      "b": "B",
+      "kb": "KB",
+      "mb": "MB",
+      "gb": "GB",
+      "tb": "TB"
+    },
+    "justNow": "just now"
+  },
+  "auth": {
+    "sessionsEnded": "Your sessions have been closed: sign in again.",
+    "login": {
+      "heading": "Sign in to ArtiFerris",
+      "logoAlt": "ArtiFerris logo",
+      "ssoLinkInvalid": "Invalid or expired sign-in link.",
+      "oidcNotice": "This organization uses single sign-on (OIDC).",
+      "oidcLink": "Sign in with the identity provider",
+      "username": "Username",
+      "password": "Password",
+      "submit": "Sign in",
+      "createAccount": "Create an account",
+      "explorePublic": "Explore public packages",
+      "backupCode": "Backup code",
+      "verificationCode": "Verification code",
+      "verify": "Verify",
+      "useAuthenticatorApp": "Use the authenticator app",
+      "useBackupCode": "Use a backup code",
+      "usePasskey": "Use a passkey",
+      "errors": {
+        "busy": "Service temporarily busy, try again",
+        "tooManyRequests": "Too many attempts, try again later.",
+        "invalidCredentials": "Invalid credentials",
+        "invalidBackupCode": "Invalid backup code.",
+        "invalidCode": "Invalid code.",
+        "passkeyFailed": "Passkey authentication failed."
+      }
+    },
+    "mfaEnrollment": {
+      "required": "Two-factor authentication is mandatory on this account.",
+      "chooseMethod": "Choose a method to continue:",
+      "totpTooltip": "Requires an app such as Google Authenticator, Authy or 1Password.",
+      "totpButton": "Authenticator app (TOTP)",
+      "passkeyTooltip": "Uses Touch ID, Windows Hello or a physical security key.",
+      "passkeyButton": "Passkey",
+      "scanQr": "Scan this QR code with your authenticator app, or enter the code manually:",
+      "qrAlt": "Activation QR code",
+      "verificationCode": "Verification code",
+      "confirm": "Confirm",
+      "back": "Back",
+      "enabled": "Two-factor authentication enabled. Keep these backup codes somewhere safe — each one can only be used once.",
+      "savedCodes": "I have saved these codes",
+      "passkeyName": "Key name (e.g. “MacBook Touch ID”)",
+      "registerPasskey": "Register the passkey",
+      "errors": {
+        "invalidCode": "Invalid code.",
+        "totpSetupFailed": "Failed to set up the authenticator app.",
+        "passkeyFailed": "Failed to register the passkey. Try again."
+      }
+    },
+    "register": {
+      "heading": "Create an ArtiFerris account",
+      "email": "Email address",
+      "submit": "Create my account",
+      "haveAccount": "I already have an account",
+      "errors": {
+        "usernameTaken": "This username is already taken.",
+        "invalidEmail": "Invalid email address.",
+        "passwordTooShort": "The password must be at least 8 characters long.",
+        "notAvailable": "Public sign-up is not available on this organization.",
+        "disabled": "Account creation is currently disabled by the administrator.",
+        "invalidUsername": "Invalid username: 3 to 32 characters, must start with a letter.",
+        "generic": "Unable to create the account. Try again."
+      }
+    },
+    "activate": {
+      "impossibleHeading": "Activation impossible",
+      "tokenMissing": "Invalid activation link: no token provided.",
+      "heading": "Activate your account",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm the password",
+      "mismatch": "The passwords do not match.",
+      "submit": "Activate my account",
+      "errors": {
+        "invalidLink": "This activation link is invalid or has expired. Ask an administrator to send you a new invitation."
+      }
+    }
+  },
+  "common": {
+    "loadingLabel": "Loading",
+    "loading": "Loading…",
+    "select": "Select…",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "close": "Close",
+    "retry": "Retry",
+    "next": "Next",
+    "previous": "Previous",
+    "requiredNote": "Fields marked with an asterisk (*) are required.",
+    "or": "OR",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "copy": "Copy",
+    "delete": "Delete",
+    "name": "Name",
+    "format": "Format",
+    "type": "Type",
+    "add": "Add",
+    "create": "Create",
+    "save": "Save",
+    "newWindow": "(new window)",
+    "loadMore": "Load more",
+    "yes": "Yes",
+    "no": "No",
+    "date": "Date",
+    "saving": "Saving…",
+    "deleting": "Deleting…"
+  },
+  "confirm": {
+    "typeToConfirm": "Type “{{ text }}” to confirm"
+  },
+  "shared": {
+    "copyableCommand": {
+      "copied": "Command copied",
+      "failed": "Unable to copy, select the command manually"
+    },
+    "readme": {
+      "title": "README",
+      "emptyHeading": "No README",
+      "emptyMessage": "This package has no README."
+    }
+  },
+  "shell": {
+    "loadFailed": "Unable to load your session. Check your connection and try again.",
+    "navLabel": "Main navigation",
+    "skipLabel": "Skip to main content",
+    "openMenu": "Open the navigation menu",
+    "closeMenu": "Close the navigation menu",
+    "collapseMenu": "Collapse the menu",
+    "expandMenu": "Expand the menu",
+    "logoAlt": "ArtiFerris",
+    "search": {
+      "placeholder": "Search for a repository or a user...",
+      "clear": "Clear the search",
+      "navigate": "Navigate",
+      "select": "Select",
+      "failed": "The search failed",
+      "noResults": "No results",
+      "failedHint": "Change your input and try again.",
+      "noResultsHint": "Try another search.",
+      "packagesAndImages": "Packages and images",
+      "proxyCache": "proxy cache"
+    },
+    "logout": "Sign out",
+    "collapseItem": "Collapse {{ name }}",
+    "expandItem": "Expand {{ name }}"
+  },
+  "nav": {
+    "account": "My account",
+    "repositories": "Repositories",
+    "myRepository": "My repository",
+    "users": "Users",
+    "administration": "Administration",
+    "organizations": "Organizations",
+    "export": "Export",
+    "explorer": "Explore",
+    "health": "Health",
+    "systemHealth": "System health"
+  },
+  "account": {
+    "profile": {
+      "username": "Username: {{ username }}",
+      "memberSince": "Member since: {{ date }}",
+      "infoHeading": "Information",
+      "superAdminStatus": "Status: Super administrator"
+    },
+    "mfa": {
+      "backupCodesRemaining": "Remaining backup codes: {{ count }}",
+      "heading": "Two-factor authentication (TOTP)",
+      "loadFailed": "Failed to load two-factor authentication.",
+      "notEnabled": "Two-factor authentication is not enabled on this account.",
+      "enable": "Enable",
+      "scanQr": "Scan this QR code with your authenticator app (Google Authenticator, Authy, 1Password…), or enter the code manually:",
+      "enabledWithCodes": "Two-factor authentication enabled. Keep these backup codes somewhere safe — each one can only be used once, in case you lose access to your authenticator app.",
+      "savedCodesReconnect": "I have saved these codes, sign me back in",
+      "enabled": "Two-factor authentication enabled.",
+      "regenerate": {
+        "label": "REGENERATION",
+        "warning": "The old backup codes will stop working immediately and your sessions will be closed.",
+        "button": "Regenerate the backup codes"
+      },
+      "currentPassword": "Current password",
+      "disable": {
+        "label": "DEACTIVATION",
+        "warning": "The account will no longer ask for a code at sign-in. Your sessions will be closed.",
+        "button": "Disable two-factor authentication"
+      },
+      "newBackupCodes": "New backup codes — the old ones no longer work:",
+      "sessionsWillClose": "Your sessions are about to be closed: you will need to sign in again once these codes are saved.",
+      "errors": {
+        "startFailed": "Failed to start the activation. Try again.",
+        "wrongPassword": "Incorrect password.",
+        "disableFailed": "Failed to disable.",
+        "regenerateFailed": "Failed to regenerate."
+      }
+    },
+    "tabs": {
+      "profile": "Profile",
+      "security": "Security",
+      "tokens": "API tokens"
+    },
+    "password": {
+      "heading": "Change password",
+      "current": "Current password",
+      "new": "New password",
+      "confirm": "Confirm the new password",
+      "errors": {
+        "mismatch": "The passwords do not match.",
+        "tooShort": "The password must be at least 8 characters long.",
+        "change": "Incorrect current password or invalid new password."
+      }
+    },
+    "tokens": {
+      "heading": "API tokens"
+    },
+    "passkeys": {
+      "heading": "Passkeys",
+      "emptyHeading": "No passkeys",
+      "emptyMessage": "Add a passkey to sign in without a password.",
+      "registerNew": "Register a new key",
+      "add": "Add a passkey",
+      "unsupported": "Your browser does not support passkeys.",
+      "errors": {
+        "loadFailed": "Failed to load the passkeys."
+      },
+      "registered": "Passkey registered."
+    },
+    "sessions": {
+      "heading": "Sessions",
+      "description": "Revokes all your open sessions, your API tokens and your Docker tokens. Useful if a device is lost or compromised, or if your account uses SSO and has no password to change.",
+      "signOutEverywhere": "Sign out everywhere",
+      "confirmMessage": "All your sessions, API tokens and Docker tokens will be revoked, including this one. You will need to sign in again.",
+      "errors": {
+        "signOutFailed": "Failed to sign out the sessions. Try again."
+      }
+    }
+  },
+  "tokens": {
+    "intro": "Use a token to authenticate <code>npm publish</code>/<code>npm install</code> in your <code>.npmrc</code>.",
+    "create": {
+      "labelTooLong": "The name cannot exceed {{ max }} characters.",
+      "expiresFull": "This token will expire in {{ days }} days.",
+      "expiresShort": "This token will expire in {{ days }} days: enter your password for 365 days.",
+      "heading": "New API token",
+      "name": "Name (e.g. “my laptop”)",
+      "password": "Password (for a long-lived token)",
+      "submit": "Create"
+    },
+    "created": {
+      "expires": "It will expire in {{ days }} days.",
+      "heading": "Token created",
+      "copyNow": "Copy this token now — it will never be shown again.",
+      "done": "I have copied the token"
+    },
+    "empty": {
+      "heading": "No tokens",
+      "message": "Create a token to authenticate your npm publications and installations."
+    },
+    "new": "New token",
+    "table": {
+      "caption": "API tokens",
+      "name": "Name",
+      "createdAt": "Created on"
+    },
+    "errors": {
+      "tooMany": "Too many attempts, try again later.",
+      "createFailed": "Failed to create the token.",
+      "wrongPassword": "Incorrect password.",
+      "revokeFailed": "Failed to revoke the token \"{{ label }}\"."
+    },
+    "revoke": {
+      "heading": "Revoke the token",
+      "confirm": "Revoke",
+      "message": "Revoke the token \"{{ label }}\"? Any npm integration using it will stop working."
+    }
+  },
+  "users": {
+    "detail": {
+      "email": "Email: {{ email }}",
+      "info": "Information",
+      "grant": "Grant",
+      "grantMany": "Grant ({{ count }})",
+      "demoteHint": "Removes all super-administration rights.",
+      "promoteHint": "Gives full access to all organizations and their administration.",
+      "demote": "Demote",
+      "promote": "Promote to super administrator",
+      "promoteConfirm": "Promote \"{{ username }}\" to super administrator?",
+      "demoteConfirm": "Remove the super administrator rank from \"{{ username }}\"?",
+      "promoteHeading": "Promote to super administrator",
+      "demoteHeading": "Remove the super administrator rank",
+      "promoteAction": "Promote",
+      "demoteAction": "Remove",
+      "promoted": "{{ username }} is now a super administrator.",
+      "demoted": "{{ username }} is no longer a super administrator.",
+      "deleteConfirm": "Delete the user \"{{ username }}\"?",
+      "deleted": "User “{{ username }}” deleted.",
+      "errors": {
+        "lastSuperAdmin": "Unable to demote the last super administrator.",
+        "superAdminStatus": "Unable to change the super administrator status.",
+        "resendFailed": "Failed to send the invitation. Check the mail server configuration.",
+        "updateFailed": "Failed to update the access right.",
+        "revokeFailed": "Failed to revoke the access right.",
+        "grantFailed": "Failed to grant access on at least one repository.",
+        "deleteFailed": "Failed to delete the user."
+      },
+      "loadFailed": "Failed to load the user.",
+      "pending": "Status: invitation pending activation",
+      "resend": "Resend the invitation",
+      "permissions": "Access rights",
+      "permissionsCaption": "This user's access rights",
+      "noPermissions": "No access right granted",
+      "repositories": "Repositories",
+      "repositoriesPlaceholder": "Choose one or more repositories",
+      "role": "Role",
+      "deleteHint": "Permanent deletion of the account.",
+      "delete": "Delete the user",
+      "columns": {
+        "repository": "Repository"
+      },
+      "updated": "Access right updated.",
+      "revoked": "Access right revoked.",
+      "granted": "Access right granted.",
+      "resent": "Invitation resent."
+    },
+    "create": {
+      "created": "User “{{ username }}” created.",
+      "heading": "New user",
+      "username": "Username",
+      "email": "Email address",
+      "superAdmin": "Super administrator",
+      "inviteNote": "An email will be sent to this address so that the user can activate their account and choose their password, within 24 hours.",
+      "invite": "Invite",
+      "errors": {
+        "createFailed": "Failed to create the user."
+      }
+    },
+    "list": {
+      "new": "New user",
+      "organization": "Organization",
+      "emptyHeading": "No users",
+      "emptyMessage": "Created or invited users will appear here.",
+      "noResultsHeading": "No results",
+      "noResultsMessage": "No users in this organization. Change the filter to see others.",
+      "caption": "Users",
+      "allOrganizations": "All organizations",
+      "columns": {
+        "username": "Username",
+        "email": "Email",
+        "superAdmin": "Super admin",
+        "invitationPending": "Invitation pending"
+      },
+      "errors": {
+        "loadFailed": "Failed to load the users."
+      }
+    }
+  },
+  "repositories": {
+    "create": {
+      "noMemberAvailable": "No {{ format }} repository available to add for now.",
+      "created": "Repository “{{ name }}” created.",
+      "heading": "New repository",
+      "remoteUrl": "Remote URL",
+      "remoteUsername": "Remote username (optional)",
+      "remotePassword": "Remote password / token (optional)",
+      "remotePasswordPlaceholder": "Leave the username empty for token authentication",
+      "addMember": "Add a member repository",
+      "resolutionOrder": "Resolution order (the first repository that contains the requested package answers):",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "remove": "Remove",
+      "quota": "Quota (MB, empty = unlimited)",
+      "retention": "Keep the last N versions/tags (empty = disabled)",
+      "makePublic": "Make public",
+      "errors": {
+        "quota": "Must be a positive number (or empty for unlimited).",
+        "retention": "Must be a positive integer (or empty to disable).",
+        "publicFailed": "Repository created, but making it public failed.",
+        "createFailed": "Failed to create the repository."
+      }
+    },
+    "createProject": {
+      "created": "Project “{{ name }}” created.",
+      "heading": "New project",
+      "errors": {
+        "publicFailed": "Project created, but making it public failed.",
+        "createFailed": "Failed to create the project."
+      }
+    },
+    "mine": {
+      "emptyHeading": "No personal repository",
+      "emptyMessage": "Create your personal repository to publish your own npm and docker projects.",
+      "createButton": "Create your user repository",
+      "confirmMessage": "This action reserves your personal space so that you can create your own npm and docker projects in it.",
+      "errors": {
+        "checkFailed": "Failed to check your personal repository.",
+        "createFailed": "Failed to create your user repository."
+      }
+    },
+    "tree": {
+      "truncated": "Only the {{ count }} most recent are listed",
+      "noPackagesHeading": "No packages",
+      "noPackagesMessage": "The npm packages published in this repository will appear here.",
+      "noImagesHeading": "No images",
+      "noImagesMessage": "The docker images pushed to this repository will appear here.",
+      "loadMore": "Load more",
+      "loadMoreFailed": "Failed to load the rest.",
+      "errors": {
+        "loadFailed": "Failed to load the packages."
+      }
+    },
+    "permissions": {
+      "titleRepository": "Edit access to the repository {{ label }}",
+      "titleUser": "Edit access of {{ label }}",
+      "revokeRepository": "Revoke access to the repository \"{{ label }}\"?",
+      "revokeUser": "Revoke access of \"{{ label }}\"?",
+      "role": "Role",
+      "revoke": "Revoke",
+      "revokeHeading": "Revoke access"
+    },
+    "share": {
+      "viewPublicPage": "View the public page",
+      "perPackageHint": "· each package or image also has its own page, from the Packages tab.",
+      "private": "This repository is private: it and its packages are only visible to authorized users.",
+      "makePublicHint": "Make it public in the Settings tab to get a link to share.",
+      "anyoneCanView": "Anyone can view and download this repository, without an account, at this address:",
+      "copyLabel": "Copy the public link of the repository"
+    },
+    "usage": {
+      "login": "Sign in:",
+      "dockerLogin": "echo <your-token> | docker login {{ host }} -u <your-username> --password-stdin",
+      "tagAndPush": "Tagging and publishing the image:",
+      "dockerTagPush": "docker tag my-image:latest {{ host }}/{{ path }}/my-image:latest\ndocker push {{ host }}/{{ path }}/my-image:latest",
+      "pull": "Pulling an image:",
+      "dockerPull": "docker pull {{ host }}/{{ path }}/<image>:<tag>",
+      "npmrc": "Add these lines to your <code>.npmrc</code>:",
+      "npmrcContent": "registry={{ origin }}/npm/{{ path }}/\n//{{ host }}/npm/{{ path }}/:_authToken=<your-token>",
+      "createApiToken": "Create an API token"
+    },
+    "vulnerability": {
+      "label_one": "{{ count }} vulnerability of {{ severity }} severity",
+      "label_other": "{{ count }} vulnerabilities of {{ severity }} severity",
+      "severity": {
+        "critical": "critical",
+        "high": "high",
+        "medium": "medium",
+        "low": "low"
+      }
+    },
+    "list": {
+      "newProject": "New project",
+      "newRepository": "New repository",
+      "noProject": "No projects",
+      "noRepository": "No repositories",
+      "noProjectMessage": "Create your first project to publish npm packages or docker images.",
+      "noRepositoryMessage": "Create a repository to start publishing npm packages or docker images.",
+      "noResultsHeading": "No results",
+      "noResultsMessage": "No repository matches the selected organization. Change the filter to see others.",
+      "caption": "Repositories",
+      "columns": {
+        "owner": "Owner"
+      },
+      "errors": {
+        "loadFailed": "Failed to load the repositories."
+      }
+    },
+    "detail": {
+      "remote": "Remote repository:",
+      "membersEmptyAdmin": "Add member repositories to group them behind this repository.",
+      "membersEmpty": "This group contains no repository for now.",
+      "currently": "Currently:",
+      "public": "public",
+      "private": "private",
+      "publicHint": "Everyone can view and download the content of this repository, without authentication. Publishing remains reserved to authorized users.",
+      "privateHint": "Only authorized users can access this repository.",
+      "makePrivate": "Make private",
+      "makePublic": "Make public",
+      "current": "Current:",
+      "unlimited": "unlimited",
+      "retentionDisabled": "disabled",
+      "retentionKeep": "keep the last {{ count }} versions/tags",
+      "retentionHint": "Periodic automatic purge of the oldest npm versions or Docker tags beyond this number, per package/image. Tagged versions (e.g. “latest”) are never deleted.",
+      "dangerMessage": "Deleting a repository is permanent and erases all the packages it contains.",
+      "memberRemoved": "“{{ name }}” removed from the group.",
+      "makePublicMessage": "Anyone, without authentication, will be able to view and download the content of “{{ name }}”.",
+      "makePrivateMessage": "Only authorized users will be able to access “{{ name }}”.",
+      "nowPublic": "Repository “{{ name }}” public.",
+      "nowPrivate": "Repository “{{ name }}” private.",
+      "deleteMessage": "Delete the repository \"{{ name }}\"?",
+      "deleted": "Repository “{{ name }}” deleted.",
+      "loadFailed": "Failed to load the repository.",
+      "tabs": {
+        "overview": "Overview",
+        "packages": "Packages",
+        "members": "Member repositories",
+        "permissions": "Access rights",
+        "settings": "Settings"
+      },
+      "rename": "Rename",
+      "usage": "Usage",
+      "share": "Sharing",
+      "noMembers": "No member repository",
+      "removeHint": "Click a row to remove the member repository from the group.",
+      "membersCaption": "Member repositories of the group",
+      "memberId": "ID of the repository to add",
+      "noPermissions": "No specific right",
+      "noPermissionsMessage": "Grant a role to a user with the form below.",
+      "editHint": "Click a row to edit or revoke a right.",
+      "permissionsCaption": "Access rights on this repository",
+      "noRight": "No rights",
+      "searchFailed": "Search failed",
+      "searching": "Searching…",
+      "visibility": "Visibility",
+      "quotaHeading": "Storage quota",
+      "quotaSaved": "Quota saved.",
+      "retentionHeading": "Retention",
+      "retentionLabel": "Keep the last N (empty = disabled)",
+      "retentionSaved": "Retention policy saved.",
+      "dangerZone": "Danger zone",
+      "delete": "Delete the repository",
+      "columns": {
+        "member": "Member repository",
+        "user": "User"
+      },
+      "errors": {
+        "quotaSave": "Failed to save the quota.",
+        "retentionSave": "Failed to save the retention policy.",
+        "grantFailed": "Failed to grant the access right.",
+        "renameFailed": "Failed to rename the repository.",
+        "memberAddFailed": "Failed to add the member repository.",
+        "memberRemoveFailed": "Failed to remove the member repository.",
+        "visibilityFailed": "Failed to change the visibility.",
+        "deleteFailed": "Failed to delete the repository."
+      },
+      "renamed": "Repository renamed.",
+      "memberAdded": "Member repository added.",
+      "removeFromGroup": "Remove from the group",
+      "makePublicHeading": "Make the repository public",
+      "makePrivateHeading": "Make the repository private",
+      "removeFromGroupMessage": "Remove \"{{ name }}\" from the group?"
+    }
+  },
+  "package": {
+    "backToRepository": "← Back to the repository",
+    "copyInstallCommand": "Copy the install command for {{ name }}",
+    "copyPullCommand": "Copy the docker pull command",
+    "versions_one": "{{ count }} version",
+    "versions_other": "{{ count }} versions",
+    "versionsTruncated": "Only the {{ count }} most recent versions are shown.",
+    "deprecatedLabel": "Deprecated: {{ reason }}",
+    "noReason": "no reason provided",
+    "deprecated": "deprecated",
+    "pageOf": "Page {{ page }} of {{ total }}",
+    "tags_one": "{{ count }} tag",
+    "tags_other": "{{ count }} tags",
+    "tagsTruncated": "Only the {{ count }} most recent tags are shown.",
+    "allSeverities": "All severities",
+    "noMatchingSeverity": "No vulnerability matches the selected severities.",
+    "loadingLastResult": "Loading the latest result…",
+    "audit": {
+      "checking": "Checking for known vulnerabilities…",
+      "unavailable": "Unable to check vulnerabilities right now (npm advisory database unreachable).",
+      "cleanVersions": "No known vulnerability for the published versions.",
+      "affectedVersions": "Affected versions:",
+      "rescan": "Rescan"
+    },
+    "deps": {
+      "heading": "Dependency analysis (version {{ version }})",
+      "unavailable": "Unable to run the analysis right now (npm advisory database unreachable).",
+      "lastScan_one": "Last analysis on {{ date }} · {{ count }} dependency analyzed",
+      "lastScan_other": "Last analysis on {{ date }} · {{ count }} dependencies analyzed",
+      "partial": "· partial analysis (dependency tree too large to be fully covered)",
+      "clean": "No known vulnerability in the dependency tree.",
+      "deepScan": "Run a deep scan",
+      "noneHeading": "No analysis",
+      "noneMessage": "An analysis checks the dependency tree for known vulnerabilities."
+    },
+    "scan": {
+      "heading": "Security (tag {{ tag }})",
+      "unavailable": "Unable to run the scan right now (Trivy unavailable or analysis error).",
+      "last_one": "Last scan on {{ date }} · {{ count }} vulnerability",
+      "last_other": "Last scan on {{ date }} · {{ count }} vulnerabilities",
+      "clean": "No known vulnerability in this image.",
+      "fixedIn": "· fixed in",
+      "run": "Run a scan",
+      "noneHeading": "No scan",
+      "noneMessage": "A scan checks the image for known vulnerabilities.",
+      "imageHeading": "Image scan (tag {{ tag }})"
+    },
+    "danger": {
+      "deletePackage": "Deletes all the versions of <strong>{{ name }}</strong> and cannot be undone.",
+      "deleteImage": "Deletes all the tags of <strong>{{ name }}</strong> and cannot be undone.",
+      "deleteAllPackage": "Delete the whole package",
+      "deleteAllImage": "Delete the whole image"
+    },
+    "eyebrow": {
+      "tags": "Tags",
+      "install": "Installation"
+    },
+    "table": {
+      "version": "Version",
+      "publishedAt": "Published on",
+      "size": "Size",
+      "tag": "Tag",
+      "digest": "Digest",
+      "updated": "Updated",
+      "createdAt": "Created on"
+    },
+    "security": "Security",
+    "delete": {
+      "versionMessage": "Delete version {{ version }} of {{ name }}?",
+      "versionDeleted": "Version {{ version }} deleted.",
+      "versionFailed": "Failed to delete version {{ version }}.",
+      "packageMessage": "Delete the package {{ name }} entirely? This action is irreversible.",
+      "packageDeleted": "Package {{ name }} deleted.",
+      "tagMessage": "Delete the tag {{ tag }} of {{ name }}? Any other tag pointing to the same image will also be deleted.",
+      "tagDeleted": "Tag {{ tag }} deleted.",
+      "tagFailed": "Failed to delete the tag {{ tag }}.",
+      "imageMessage": "Delete the image {{ name }} entirely? This action is irreversible.",
+      "imageDeleted": "Image {{ name }} deleted.",
+      "versionHeading": "Delete the version",
+      "packageHeading": "Delete the package",
+      "tagHeading": "Delete the tag",
+      "imageHeading": "Delete the image",
+      "packageFailed": "Failed to delete the package.",
+      "imageFailed": "Failed to delete the image."
+    }
+  },
+  "publicRepo": {
+    "loadFailed": "Failed to load the repository.",
+    "notFound": "Repository not found."
+  },
+  "publicPackage": {
+    "loadFailed": "Failed to load the package.",
+    "notFound": "Package not found.",
+    "tabs": {
+      "overview": "Overview",
+      "security": "Security"
+    },
+    "securityAlerts": "Security alerts",
+    "noCachedAudit": "No cached check for this package for now.",
+    "noAnalysis": "No analysis for this version.",
+    "noScan": "No scan for this tag."
+  },
+  "admin": {
+    "auditLog": {
+      "partial": "Computed over the {{ count }} loaded entries; older entries exist.",
+      "exporting": "Export in progress… {{ count }} entries retrieved",
+      "exportHint": "{{ count }} entries loaded; the export also retrieves the following ones, up to {{ max }}.",
+      "exportPartial": "File limited to the {{ max }} most recent entries; older entries are not included.",
+      "summary": "Summary",
+      "entriesByType": "Entries by type",
+      "entries": "Entries",
+      "noEntries": "No entries.",
+      "downloadCsv": "Download as CSV",
+      "emptyHeading": "No entries",
+      "emptyMessage": "The actions recorded in the audit log will appear here.",
+      "caption": "Audit log",
+      "loadFailed": "Unable to load the audit log right now. Try again later.",
+      "exportFailed": "The export failed: no file was produced. Try again.",
+      "loadMoreFailed": "Unable to load the rest of the log. Try again.",
+      "columns": {
+        "id": "Identifier",
+        "event": "Event",
+        "actor": "Actor",
+        "details": "Details"
+      }
+    },
+    "securityLog": {
+      "unlockIn": "{{ label }} — unlocked in {{ remaining }}",
+      "exporting": "Export in progress… {{ count }} events retrieved",
+      "exportHint": "{{ count }} events loaded; the export also retrieves the following ones, up to {{ max }}.",
+      "exportPartial": "File limited to the {{ max }} most recent events; older events are not included.",
+      "errors": {
+        "forbidden": "You are not allowed to unlock {{ username }}.",
+        "notFound": "{{ username }} not found: nothing to unlock.",
+        "unlockFailed": "Failed to unlock {{ username }}."
+      },
+      "unlockMessage": "Unlock {{ username }}? Their failed sign-in attempts will be cleared.",
+      "unlocked": "{{ username }} has been unlocked.",
+      "accessDenied": "Action “{{ action }}” denied on {{ repository }}",
+      "organizationAccount": "{{ username }} (organization)",
+      "lessThanMinute": "less than a minute",
+      "minutes": "{{ count }} minutes",
+      "from": "From {{ ip }}",
+      "eventsByType": "Events by type",
+      "noEvents": "No events.",
+      "blocked": "Currently blocked accounts",
+      "unlock": "Unblock",
+      "emptyHeading": "No events",
+      "emptyMessage": "Security events (sign-ins, blocks…) will appear here.",
+      "caption": "Security log",
+      "loadFailed": "Unable to load the security log right now. Try again later.",
+      "columns": {
+        "user": "User"
+      },
+      "unlockHeading": "Unblock the account",
+      "partial": "Computed over the {{ count }} loaded events; older events exist."
+    },
+    "apiTokens": {
+      "limit": "The list is limited to {{ max }} tokens.",
+      "never": "Never",
+      "revokeMessage": "Revoke the token “{{ label }}” of {{ username }}?",
+      "revoked": "Token “{{ label }}” revoked.",
+      "errors": {
+        "revokeFailed": "Failed to revoke the token “{{ label }}”."
+      },
+      "active": "Active tokens",
+      "noneHeading": "No active tokens",
+      "noneMessage": "Access tokens created by users will appear here.",
+      "revokeHint": "The token will stop working immediately, permanently.",
+      "revoke": "Revoke",
+      "revokedHeading": "Revoked tokens",
+      "loadFailed": "Failed to load the tokens.",
+      "columns": {
+        "user": "User",
+        "label": "Label",
+        "lastUsed": "Last used",
+        "revokedAt": "Revoked on"
+      },
+      "revokeHeading": "Revoke the token"
+    },
+    "dashboard": {
+      "activityTruncated": "Based on the {{ count }} most recent events: older days are underestimated.",
+      "users": "Users",
+      "repositories": "Repositories",
+      "permissions": "Active permissions",
+      "activity": "Activity (last 7 days)",
+      "eventsPerDay": "Events per day",
+      "day": "Day",
+      "noEvents": "No events in the last 7 days.",
+      "reposByFormat": "Repositories by format",
+      "noReposByFormat": "No repositories to break down by format.",
+      "storageEvolution": "Storage evolution",
+      "storageTable": "Total storage per reading",
+      "notEnoughData": "Not enough measurements yet.",
+      "usersAndRepos": "Users and repositories evolution",
+      "usersAndReposTable": "Users and repositories per reading",
+      "recent": "Recent activity",
+      "noRecentHeading": "No recent activity",
+      "noRecentMessage": "Registry events will appear here as soon as there are some.",
+      "partialFailure": "Failed to load part of the dashboard.",
+      "days_one": "{{ count }} day",
+      "days_other": "{{ count }} days",
+      "month": "1 month",
+      "storage": "Storage",
+      "events": "Events"
+    },
+    "audit": {
+      "events": {
+        "LoginFailed": "Sign-in failed",
+        "AccessDenied": "Access denied",
+        "PasswordChangeFailed": "Password change failed",
+        "MfaVerificationFailed": "Two-factor verification failed",
+        "PasskeyVerificationFailed": "Passkey verification failed",
+        "OidcLoginFailed": "SSO (OIDC) sign-in failed",
+        "DockerTokenFailed": "Docker token request failed",
+        "LoginSucceeded": "Sign-in succeeded",
+        "PasswordChanged": "Password changed",
+        "MfaEnabled": "Two-factor authentication enabled",
+        "MfaDisabled": "Two-factor authentication disabled",
+        "PasskeyAdded": "Passkey added",
+        "PasskeyDeleted": "Passkey deleted",
+        "ApiTokenCreated": "API token created",
+        "ApiTokenRevoked": "API token revoked",
+        "SessionsRevoked": "All sessions signed out",
+        "UserInvited": "User invited",
+        "UserActivated": "Account activated",
+        "UserDeleted": "User deleted",
+        "SuperAdminGranted": "Super administrator granted",
+        "SuperAdminRevoked": "Super administrator removed",
+        "OrganizationAdminGranted": "Organization administrator granted",
+        "OrganizationAdminRevoked": "Organization administrator removed",
+        "OrganizationCreated": "Organization created",
+        "IdentityProviderSet": "Identity provider changed",
+        "IdentityProviderCleared": "Identity provider removed",
+        "SmtpSettingsChanged": "SMTP settings changed",
+        "SystemSettingsChanged": "System settings changed",
+        "BrandingChanged": "Branding changed",
+        "ConfigurationExported": "Configuration exported",
+        "ConfigurationImported": "Configuration imported",
+        "BackupCodesRegenerated": "Backup codes regenerated",
+        "InvitationResent": "Invitation resent",
+        "QuotaSet": "Quota changed",
+        "RetentionPolicySet": "Retention changed",
+        "LoginThrottleCleared": "Sign-in lock lifted",
+        "Created": "Repository created",
+        "Renamed": "Repository renamed",
+        "RemoteUrlChanged": "Remote URL changed",
+        "GroupMemberAdded": "Member added to the group",
+        "GroupMemberRemoved": "Member removed from the group",
+        "VisibilityChanged": "Visibility changed",
+        "Deleted": "Repository deleted",
+        "Granted": "Access granted",
+        "Revoked": "Access removed",
+        "PackagePushed": "Package published",
+        "PackageVersionUnpublished": "Version unpublished",
+        "PackageDeleted": "Package deleted",
+        "PackageVersionDeprecated": "Version deprecated",
+        "DistTagChanged": "Dist-tag changed",
+        "ImagePushed": "Image published",
+        "ManifestDeleted": "Manifest deleted"
+      },
+      "loginMethods": {
+        "password": "password",
+        "ldap": "LDAP",
+        "oidc": "SSO (OIDC)"
+      },
+      "mfaMethods": {
+        "totp": "TOTP app",
+        "backup_code": "backup code",
+        "passkey": "passkey"
+      },
+      "settings": {
+        "max_login_attempts": "Max sign-in attempts",
+        "login_attempt_window_seconds": "Attempt window (s)",
+        "session_ttl_hours": "Session duration (h)",
+        "registration_enabled": "Registration open",
+        "seo_indexing_enabled": "Search engine indexing"
+      },
+      "details": {
+        "via": "Via {{ method }}",
+        "viaSecond": "Via {{ method }} + {{ second }}",
+        "method": "Method: {{ method }}",
+        "label": "Label: {{ label }}",
+        "superAdmin": "super administrator",
+        "organizationAdmin": "organization administrator",
+        "user": "User {{ username }}",
+        "none": "none",
+        "secretChanged": ", secret changed",
+        "previous": "Previous: {{ provider }}",
+        "passwordChanged": ", password changed",
+        "logoRemoved": "Logo removed",
+        "logoReplaced": "Logo replaced",
+        "faviconRemoved": "Favicon removed",
+        "faviconReplaced": "Favicon replaced",
+        "counts": "{{ users }} users, {{ repositories }} repositories, {{ permissions }} permissions",
+        "withFailures": "{{ created }}; {{ failures }} failure(s)",
+        "quotaMb": "{{ count }} MB",
+        "unlimited": "Unlimited",
+        "keepLast": "Keep the last {{ count }} versions",
+        "disabled": "Disabled",
+        "oidcProvider": "OIDC {{ issuer }} (client {{ client }})",
+        "yes": "yes",
+        "no": "no"
+      }
+    },
+    "branding": {
+      "removeFile": "Remove {{ name }}",
+      "oversize": "{{ name }} exceeds {{ max }} MB and was not added.",
+      "logo": "Logo",
+      "currentLogoAlt": "Current logo",
+      "logoFile": "Logo file (PNG or JPEG)",
+      "dropLabel": "Drag and drop a file here, or click to browse",
+      "import": "Import",
+      "resetLogoHint": "Goes back to the default ArtiFerris logo.",
+      "reset": "Reset",
+      "favicon": "Favicon",
+      "currentFaviconAlt": "Current favicon",
+      "faviconFile": "Favicon file (PNG, JPEG or ICO)",
+      "resetFaviconHint": "Goes back to the default ArtiFerris favicon.",
+      "logoHelp": "Shown on the sign-in and activation pages and in the application header, as well as in the emails sent by this instance. PNG or JPEG, 2 MB maximum.",
+      "faviconHelp": "Icon shown in the browser tab. PNG, JPEG or ICO, 2 MB maximum.",
+      "logoImported": "Logo imported.",
+      "errors": {
+        "logoImport": "Failed to import the logo.",
+        "logoReset": "Failed to reset the logo.",
+        "faviconImport": "Failed to import the favicon.",
+        "faviconReset": "Failed to reset the favicon."
+      },
+      "logoReset": "Logo reset.",
+      "faviconImported": "Favicon imported.",
+      "faviconReset": "Favicon reset."
+    },
+    "export": {
+      "restored": "{{ users }} user(s), {{ repositories }} repository(ies), {{ permissions }} permission(s) restored.",
+      "invited": "Invited: {{ list }}",
+      "skippedNoEmail": "No email, not invited: {{ list }}",
+      "failed": "Failures: {{ list }}",
+      "configuration": "Configuration",
+      "download": "Download the configuration (JSON)",
+      "restore": "Restore a configuration",
+      "file": "JSON configuration file",
+      "exportHelp": "Exports the repositories, users, permissions and system settings to a downloadable JSON file — useful for an audit or a configuration backup. Contains no password, no API token, and not the packages/images themselves.",
+      "importHelp": "Imports users, repositories, permissions and system settings from a previously exported JSON file. Only works on a freshly provisioned instance, with no repository and no user other than you — packages/images are not restored.",
+      "errors": {
+        "exportFailed": "Failed to export the configuration.",
+        "importFailed": "Failed to import the configuration."
+      },
+      "importHeading": "Import the configuration",
+      "importConfirm": "Import this configuration? This only works on an empty instance (no repository, no user other than yourself)."
+    },
+    "health": {
+      "responseTime": "Response time",
+      "milliseconds": "{{ count }} ms",
+      "days": "{{ count }} d",
+      "hours": "{{ count }} h",
+      "minutes": "{{ count }} min",
+      "loadFailed": "Failed to load the system status.",
+      "database": "Database",
+      "connections": "Connections",
+      "warning": "Warning",
+      "critical": "Critical",
+      "storage": "Storage",
+      "usedSpace": "Space used",
+      "server": "Server",
+      "status": "Status",
+      "postgresVersion": "PostgreSQL version",
+      "freeSpace": "Free space",
+      "uptime": "Up for"
+    },
+    "usage": {
+      "others": "Others ({{ count }})",
+      "usedPerRepo": "Space used per repository",
+      "largest": "Largest repositories",
+      "repository": "Repository",
+      "usedSpace": "Space used",
+      "noRepos": "No repositories.",
+      "quotas": "Storage quotas",
+      "perRepo": "Usage per repository",
+      "noDetails": "No usage details available.",
+      "loadFailed": "Failed to load the usage. Check your connection and try again.",
+      "usedBytes": "Space used (bytes)"
+    },
+    "organizations": {
+      "created": "Organization “{{ name }}” created.",
+      "new": "New organization",
+      "subdomain": "Subdomain",
+      "errors": {
+        "createFailed": "Failed to create the organization.",
+        "loadFailed": "Failed to load the organizations."
+      },
+      "newShort": "New organization",
+      "emptyHeading": "No organizations",
+      "emptyMessage": "Create an organization to group repositories and members.",
+      "caption": "Organizations",
+      "columns": {
+        "subdomain": "Subdomain"
+      }
+    },
+    "metrics": {
+      "loadFailed": "Failed to load the statistics."
+    },
+    "orgPage": {
+      "overview": "Overview",
+      "brand": "Branding",
+      "history": "History",
+      "metrics": "Metrics",
+      "settings": "Settings",
+      "mail": "Mail server"
+    },
+    "orgDetail": {
+      "subdomain": "Subdomain: {{ slug }}",
+      "secretUnreadable": "The secret stored for the identity provider is unreadable with this server's encryption key. Configure the provider again, secret included.",
+      "configured": "{{ provider }} is currently configured for this organization.",
+      "localAccounts": "This organization uses local accounts.",
+      "keepPassword": "Leave empty to keep the current password",
+      "keepSecret": "Leave empty to keep the current secret",
+      "showSecret": "Show the secret",
+      "hideSecret": "Hide the secret",
+      "authentication": "Authentication",
+      "members": "Members",
+      "revertHint": "Removes the identity provider configuration and switches this organization back to local accounts.",
+      "providerType": "Identity provider type",
+      "serverUrl": "Server URL",
+      "bindDn": "Service account DN",
+      "bindPassword": "Service account password",
+      "searchBase": "Search base",
+      "searchFilter": "Search filter",
+      "emailAttribute": "Email attribute",
+      "issuerUrl": "Issuer URL",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "revert": "Switch back to local accounts",
+      "errors": {
+        "issuerHttps": "The issuer URL must start with https://.",
+        "loadFailed": "Failed to load the organization.",
+        "updateFailed": "Failed to update the configuration.",
+        "clearFailed": "Failed to remove the configuration."
+      },
+      "saved": "Configuration saved.",
+      "revertMessage": "Switch back to local accounts for this organization?",
+      "revertConfirm": "Switch back",
+      "reverted": "Switched back to local accounts."
+    },
+    "members": {
+      "promoteHeading": "Promote to administrator",
+      "demoteHeading": "Remove the administrator role",
+      "promoteConfirm": "Do you want to promote {{ username }} to administrator of the organization?",
+      "demoteConfirm": "Do you want to demote {{ username }} from their administrator role of the organization?",
+      "promote": "Promote",
+      "demote": "Demote",
+      "promoted": "{{ username }} is now an administrator of the organization.",
+      "demoted": "{{ username }} is no longer an administrator of the organization.",
+      "invited": "{{ username }} has been invited.",
+      "demoteHint": "Removes the administration rights on this organization.",
+      "promoteHint": "Gives full administration rights on this organization.",
+      "caption": "Organization members",
+      "emptyHeading": "No members",
+      "emptyMessage": "Invite members to give them access to this organization.",
+      "columns": {
+        "email": "Email",
+        "admin": "Administrator",
+        "pending": "Invitation pending"
+      },
+      "adminCheckbox": "Administrator of this organization",
+      "inviteMember": "Invite a member",
+      "errors": {
+        "loadFailed": "Failed to load the members.",
+        "inviteFailed": "Failed to send the invitation.",
+        "updateFailed": "Failed to update the administrator status."
+      }
+    },
+    "smtp": {
+      "security": {
+        "startTls": "STARTTLS (usually port 587)",
+        "tls": "Implicit TLS (usually port 465)",
+        "none": "None (trusted internal network only)"
+      },
+      "errors": {
+        "testFailed": "Failed to send the test email. Check the configuration.",
+        "integer": "Must be an integer.",
+        "portRange": "Must be between 1 and 65535.",
+        "hostRequired": "The host is required.",
+        "usernameRequired": "The username is required.",
+        "emailInvalid": "Must be a valid email address.",
+        "fromNameRequired": "The sender name is required.",
+        "passwordRequired": "The password is required for the first configuration.",
+        "updateFailed": "Failed to update the SMTP settings."
+      },
+      "saved": "SMTP settings saved.",
+      "testSent": "Test email sent.",
+      "heading": "Mail server (SMTP)",
+      "host": "SMTP host",
+      "port": "Port",
+      "username": "Username",
+      "fromName": "Sender name",
+      "fromAddress": "Sender address",
+      "testHeading": "Send a test email",
+      "recipient": "Recipient",
+      "testHint": "Uses the configuration already saved, not the changes in the form above.",
+      "send": "Send",
+      "loadFailed": "Failed to load the SMTP settings.",
+      "secretUnreadable": "The stored SMTP password is unreadable with this server's encryption key. Enter it again, then save."
+    },
+    "system": {
+      "maxLoginAttempts": "Max sign-in attempts",
+      "loginAttemptWindow": "Lockout window (seconds)",
+      "sessionTtl": "Session duration (hours)",
+      "errors": {
+        "range": "Must be between {{ min }} and {{ max }}.",
+        "integer": "Must be an integer.",
+        "updateFailed": "Failed to update the settings."
+      },
+      "heading": "System settings",
+      "loadFailed": "Failed to load the settings.",
+      "allowRegistration": "Allow account creation",
+      "seo": "Search engine optimization",
+      "allowIndexing": "Allow indexing by search engines",
+      "seoHint": "When disabled, the public catalog sends “noindex”, robots.txt disallows everything and the sitemap is empty.",
+      "saved": "Settings saved."
+    }
+  },
+  "notFound": {
+    "heading": "Page not found",
+    "message": "This address does not match any page.",
+    "backHome": "Back to home"
+  }
+}
