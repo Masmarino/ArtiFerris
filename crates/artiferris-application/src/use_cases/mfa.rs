@@ -217,7 +217,8 @@ impl ConfirmTotpUseCase {
         // Best-effort: enrollment already succeeded, a delivery failure must not undo it.
         if let Ok(Some(user)) = self.users.find_by_id(user_id).await {
             if let Some(email) = verified_address(self.security.as_ref(), &user).await {
-                let content = crate::email_templates::mfa_enrolled(username, "une application d'authentification (TOTP)");
+                let language = self.email.language_for(user.id).await;
+                let content = crate::email_templates::mfa_enrolled(language, username, crate::email_templates::EnrolledMethod::AuthenticatorApp);
                 if let Err(e) = self.email.send(user.organization_id, &email, &content.subject, &content.text, &content.html).await {
                     tracing::warn!("failed to send MFA-enrollment confirmation email to {email}: {e}");
                 }

@@ -51,6 +51,11 @@ pub trait SmtpSettingsPort: Send + Sync {
 #[async_trait]
 pub trait EmailPort: Send + Sync {
     async fn send(&self, organization_id: Uuid, to: &str, subject: &str, text_body: &str, html_body: &str) -> Result<(), DomainError>;
+
+    /// The language to write to this user in: the one they chose for the interface, English when they have not chosen (or when it cannot be read: a notification must go out anyway).
+    async fn language_for(&self, _user_id: Uuid) -> crate::user_preferences::Language {
+        crate::user_preferences::Language::FALLBACK
+    }
 }
 
 #[cfg(test)]

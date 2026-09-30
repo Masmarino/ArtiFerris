@@ -319,7 +319,9 @@ impl AppState {
         let system_settings: Arc<dyn artiferris_domain::system_settings::SystemSettingsPort> = Arc::new(PostgresSystemSettingsRepository::new(pool.clone()));
         let smtp_settings: Arc<dyn artiferris_domain::email::SmtpSettingsPort> = Arc::new(PostgresSmtpSettingsRepository::new(pool.clone(), config.secrets_encryption_key.clone()));
         let branding: Arc<dyn artiferris_domain::branding::BrandingPort> = Arc::new(artiferris_infrastructure::postgres::branding_repository::PostgresBrandingRepository::new(pool.clone()));
-        let email_sender: Arc<dyn artiferris_domain::email::EmailPort> = Arc::new(SmtpEmailSender::new(smtp_settings.clone(), branding.clone()));
+        let user_preferences: Arc<dyn artiferris_domain::user_preferences::UserPreferencesPort> =
+            Arc::new(artiferris_infrastructure::postgres::user_preferences_repository::PostgresUserPreferencesRepository::new(pool.clone()));
+        let email_sender: Arc<dyn artiferris_domain::email::EmailPort> = Arc::new(SmtpEmailSender::new(smtp_settings.clone(), branding.clone()).with_preferences(user_preferences.clone()));
         let user_invitations: Arc<dyn artiferris_domain::invitation::UserInvitationPort> = Arc::new(PostgresUserInvitationRepository::new(pool.clone()));
         let totp_credentials: Arc<dyn artiferris_domain::mfa::TotpCredentialPort> = Arc::new(PostgresTotpCredentialRepository::new(pool.clone(), config.secrets_encryption_key.clone()));
         let backup_codes: Arc<dyn artiferris_domain::mfa::BackupCodePort> = Arc::new(PostgresBackupCodeRepository::new(pool.clone()));
@@ -400,7 +402,7 @@ impl AppState {
 
         Self {
             users: users_repo.clone(),
-            user_preferences: Arc::new(artiferris_infrastructure::postgres::user_preferences_repository::PostgresUserPreferencesRepository::new(pool.clone())),
+            user_preferences: user_preferences.clone(),
             permissions: permission_store.clone(),
             repositories: repository_store.clone(),
             repository_quota_lock: repository_quota_lock.clone(),
