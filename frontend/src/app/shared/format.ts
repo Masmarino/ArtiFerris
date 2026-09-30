@@ -13,7 +13,6 @@ export const formatSuggestionsAnnouncement = (count: number): string =>
 export const formatSelectedCount = (count: number): string =>
   t(count !== 1 ? 'format.selected_other' : 'format.selected_one', { count })
 
-/** "1 234 téléchargements cette semaine". French keeps 0 and 1 singular. */
 export const formatWeeklyDownloads = (count: number): string =>
   t(count >= 2 ? 'format.weeklyDownloads_other' : 'format.weeklyDownloads_one', {
     count: new Intl.NumberFormat(t('meta.locale')).format(count),
@@ -38,7 +37,6 @@ const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['minute', 60],
 ]
 
-/** "il y a 3 jours", "hier", "à l'instant". A date slightly in the future (clock skew) counts as now. */
 export function formatRelativeDate(iso: string, now: Date = new Date()): string {
   const seconds = Math.min(0, Math.round((new Date(iso).getTime() - now.getTime()) / 1000))
   const formatter = new Intl.RelativeTimeFormat(t('meta.locale'), { numeric: 'auto' })

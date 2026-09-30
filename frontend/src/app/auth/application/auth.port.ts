@@ -7,7 +7,6 @@ import {
   TotpSetupEnrollment,
 } from '../domain/auth.types'
 
-/** Everything the application layer needs to reach the backend's auth endpoints — implemented by an infrastructure adapter, never called directly by a component. */
 export interface AuthPort {
   login(username: string, password: string): Observable<LoginResponse>
   register(username: string, email: string, password: string): Observable<LoginResponse>

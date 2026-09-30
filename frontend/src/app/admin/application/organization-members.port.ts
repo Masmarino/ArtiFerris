@@ -2,7 +2,6 @@ import { InjectionToken } from '@angular/core'
 import { Observable } from 'rxjs'
 import { OrganizationMember } from '../domain/organization-member.entity'
 
-/** Everything the application layer needs to manage one organization's members — implemented by an infrastructure adapter, never called directly by a component. */
 export interface OrganizationMembersPort {
   list(organizationId: string): Observable<OrganizationMember[]>
   invite(

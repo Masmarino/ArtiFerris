@@ -28,7 +28,6 @@ export function passkeysSupported(): boolean {
   )
 }
 
-/** Server-sent registration options (the `public_key` field of the enroll-start response). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function createPasskeyCredential(serverOptions: any): Promise<unknown> {
   const publicKey: PublicKeyCredentialCreationOptions = {
@@ -54,7 +53,6 @@ export async function createPasskeyCredential(serverOptions: any): Promise<unkno
   }
 }
 
-/** Server-sent authentication options (the `public_key` field of an mfa/passkey start response). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getPasskeyAssertion(serverOptions: any): Promise<unknown> {
   const publicKey: PublicKeyCredentialRequestOptions = {

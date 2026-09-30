@@ -17,7 +17,6 @@ export async function badRequestBlobMessage(error: unknown): Promise<string | nu
   }
 }
 
-/** The stable name of the kind of error the server reported (`username_taken`…), when it sent one. */
 export function errorCode(error: unknown): string | null {
   return error instanceof HttpErrorResponse ? codeOf(error.error) : null
 }
@@ -49,19 +48,16 @@ function bodyMessage(error: HttpErrorResponse): string | null {
   return messageOf(error.error)
 }
 
-/** The server's own explanation of a 400, or null for any other failure. */
 export function badRequestMessage(error: unknown): string | null {
   return error instanceof HttpErrorResponse && error.status === 400 ? bodyMessage(error) : null
 }
 
-/** Translation keys that replace the default wording of an overload status. */
 export interface OverloadMessages {
   tooManyRequests?: string
   busy?: string
   timeout?: string
 }
 
-/** A 429, 503 or 408: the server is limiting or shedding load, which is not the same as failing. */
 export function overloadMessage(error: unknown, messages: OverloadMessages = {}): string | null {
   if (!(error instanceof HttpErrorResponse)) {
     return null
@@ -78,15 +74,12 @@ export function overloadMessage(error: unknown, messages: OverloadMessages = {})
   }
 }
 
-/** What a settings form says when the stored secret can no longer be decrypted. */
 export const secretUnreadableMessage = (): string => t('errors.secretUnreadable')
 
-/** A 409 from a settings route that stores a secret means the stored one cannot be decrypted. */
 export function isSecretUnreadable(error: unknown): boolean {
   return error instanceof HttpErrorResponse && error.status === 409
 }
 
-/** What a settings form holding a secret tells the user about a failed save. */
 export function secretFormFailureMessage(error: unknown, fallback: string): string {
   if (isSecretUnreadable(error)) {
     return secretUnreadableMessage()

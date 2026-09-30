@@ -48,7 +48,6 @@ export class SystemSettingsAdmin {
   private readonly toastService = inject(ToastService)
   private readonly me = inject(MeService)
 
-  /** Set only when embedded in an organization's own admin page — scopes read/write to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
   readonly fields = FIELDS
@@ -101,12 +100,10 @@ export class SystemSettingsAdmin {
 
   readonly showSeoIndexing = computed(() => this.me.isSuperAdmin() && this.isInstanceScope())
 
-  /** Closing the public pages: an organization's own, or the whole instance's for a super-admin. */
   readonly showPublicPage = computed(() => !this.isInstanceScope() || this.me.isSuperAdmin())
 
   readonly publicPageForInstance = this.isInstanceScope
 
-  /** Keeping search engines away from one organization; the instance has its indexing switch instead. */
   readonly showBlockIndexing = computed(() => !this.isInstanceScope())
 
   value(key: FieldSpec['key']): string {
@@ -117,7 +114,6 @@ export class SystemSettingsAdmin {
     this[key].set(value)
   }
 
-  // Errors stay hidden until a save is attempted — same shape as smtp-settings.ts.
   readonly attemptedSave = signal(false)
 
   private rawFieldError(field: FieldSpec): string | null {

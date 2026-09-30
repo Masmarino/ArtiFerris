@@ -13,7 +13,6 @@ import {
   RepositoryType,
 } from '../domain/repository.entity'
 
-/** Everything the application layer needs from wherever repositories actually live — implemented by an infrastructure adapter, never called directly by a component. */
 export interface RepositoryPort {
   list(): Observable<RepositorySummary[]>
 
@@ -36,10 +35,8 @@ export interface RepositoryPort {
 
   rename(id: string, name: string): Observable<void>
 
-  /** `quotaBytes: null` clears the quota back to unlimited. */
   setQuota(id: string, quotaBytes: number | null): Observable<void>
 
-  /** `keepLastN: null` disables automatic cleanup. */
   setRetentionPolicy(id: string, keepLastN: number | null): Observable<void>
 
   setVisibility(id: string, isPublic: boolean): Observable<void>

@@ -114,7 +114,6 @@ export class RepositoryDetail {
   readonly roleOptions = ROLE_OPTIONS
   readonly editingPermission = signal<PermissionEntry | null>(null)
 
-  // Lets the group-members table show names instead of raw ids.
   readonly repositoryNamesById = signal<Map<string, string>>(new Map())
 
   readonly memberColumns: TableColumn<{ id: string }>[] = [

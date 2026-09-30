@@ -18,7 +18,7 @@ export class SessionToken {
     try {
       sessionStorage.setItem(TOKEN_STORAGE_KEY, token)
     } catch {
-      // memory only
+      // Blocked storage: the token stays in memory.
     }
   }
 
@@ -27,7 +27,7 @@ export class SessionToken {
     try {
       sessionStorage.removeItem(TOKEN_STORAGE_KEY)
     } catch {
-      // nothing stored
+      // Blocked storage: nothing to remove.
     }
   }
 }

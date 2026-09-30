@@ -290,7 +290,6 @@ export class SecurityLog {
       : t('admin.securityLog.minutes', { count: minutes })
   }
 
-  /** Fetches the pages not loaded yet (up to the row bound), then saves the CSV. */
   downloadCsv(): void {
     if (this.exporting()) {
       return

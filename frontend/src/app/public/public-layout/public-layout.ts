@@ -20,7 +20,6 @@ export class PublicLayout {
   // them a way back to their own dashboard instead of an inapplicable "Se connecter" link.
   readonly isAuthenticated = this.auth.isAuthenticated
 
-  /** Stays on the current catalog page when there is one, otherwise goes to the explorer. */
   search(text: string): void {
     const target = catalogNameFromUrl(this.router.url) ?? 'explorer'
     void this.router.navigate(['/', target], { queryParams: { q: text.trim() || null } })

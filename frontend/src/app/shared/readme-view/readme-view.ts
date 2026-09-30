@@ -8,7 +8,6 @@ import {
 } from '@angular/core'
 import { Card, EmptyState } from '@masmarino/gabarit'
 
-/** `html` comes sanitized from the backend; Angular's sanitizer still runs on the binding. */
 @Component({
   selector: 'app-readme-view',
   standalone: true,

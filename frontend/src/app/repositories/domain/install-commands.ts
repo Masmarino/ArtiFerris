@@ -16,7 +16,6 @@ export function dockerPullCommand(imageReference: string, tag: string | null): s
   return `docker pull ${positional(`${imageReference}${tag ? ':' + tag : ''}`)}`
 }
 
-/** `latest` when present, otherwise the first tag of the list. */
 export function preferredTag(tags: { tag: string }[]): string | null {
   return tags.find((entry) => entry.tag === 'latest')?.tag ?? tags[0]?.tag ?? null
 }

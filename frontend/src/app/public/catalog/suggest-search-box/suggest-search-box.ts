@@ -50,9 +50,7 @@ export class SuggestSearchBox {
   readonly placeholder = input('')
   readonly compact = input(false, { transform: booleanAttribute })
   readonly maxLength = input<number | null>(null)
-  /** Only suggestions of this format are asked for. */
   readonly format = input<CatalogFormat | null>(null)
-  /** Only suggestions of this owner are asked for. */
   readonly owner = input<OwnerRef | null>(null)
   readonly value = model('')
   // eslint-disable-next-line @angular-eslint/no-output-native

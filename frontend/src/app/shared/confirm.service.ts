@@ -9,7 +9,6 @@ export interface ConfirmOptions {
   confirmLabel?: string
   cancelLabel?: string
   danger?: boolean
-  /** The exact text the user has to retype; switches to Gabarit's type-to-confirm dialog. */
   typeToConfirm?: string
 }
 
@@ -18,7 +17,6 @@ export interface PendingConfirm {
   resolve: (confirmed: boolean) => void
 }
 
-/** App-wide confirmation dialog — `ConfirmHost` renders the pending request, this owns its state. */
 @Injectable({ providedIn: 'root' })
 export class ConfirmService {
   readonly pending = signal<PendingConfirm | null>(null)

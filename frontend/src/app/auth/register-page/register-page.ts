@@ -46,7 +46,6 @@ export class RegisterPage {
   readonly errorMessage = signal<string | null>(null)
   readonly submitting = signal(false)
 
-  // null until registration returns an mfa_token — the template then swaps to enrollment.
   readonly mfaToken = signal<string | null>(null)
 
   submit(): void {

@@ -98,12 +98,8 @@ export class LoginPage implements OnInit {
     this.auth.beginSsoLogin(this.returnUrl)
   }
 
-  // null until a login response requires a second factor — the template swaps to the MFA
-  // form the moment it's set.
   readonly mfaToken = signal<string | null>(null)
   readonly mfaSetupRequired = signal(false)
-  // Which factor(s) the account actually has — the verify form only shows what applies,
-  // instead of always defaulting to a TOTP/backup-code field even for a passkey-only account.
   readonly mfaHasTotp = signal(false)
   readonly mfaHasPasskey = signal(false)
   readonly useBackupCode = signal(false)

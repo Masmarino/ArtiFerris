@@ -38,7 +38,6 @@ export class FakeActivatedRoute {
   }
 }
 
-/** What `router.navigate([], { queryParamsHandling: 'merge' })` does to the URL, null or undefined removing a parameter. */
 export function navigateFake(
   route: FakeActivatedRoute,
   extras?: NavigationExtras,
@@ -55,7 +54,6 @@ export function navigateFake(
   return Promise.resolve(true)
 }
 
-/** For stories: a fresh fake URL per injector, wired into the real router's `navigate`. */
 export function fakeUrlProviders(
   initial: Record<string, string> = {},
   routeData: Data = {},

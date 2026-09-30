@@ -34,7 +34,6 @@ export class BrandingSettingsAdmin {
   private readonly destroyRef = inject(DestroyRef)
   private readonly toastService = inject(ToastService)
 
-  /** Set only when embedded in an organization's own admin page — scopes the preview/upload/reset to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
   // Object URLs from the authenticated preview endpoint, not the public host-resolved one.

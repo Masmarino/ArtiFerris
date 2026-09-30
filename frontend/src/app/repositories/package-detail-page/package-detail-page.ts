@@ -44,7 +44,6 @@ import { dockerPullCommand, npmInstallCommand, preferredTag } from '../domain/in
 
 const PAGE_SIZE = 20
 
-/** Pure pipe: memoized by Angular per digest, unlike calling a method directly in the template. */
 @Pipe({ name: 'shortDigest' })
 class ShortDigestPipe implements PipeTransform {
   transform(digest: string): string {
@@ -106,7 +105,6 @@ export class PackageDetailPage {
   readonly npmDetails = signal<NpmPackageDetails | null>(null)
   readonly dockerDetails = signal<DockerImageDetails | null>(null)
 
-  // A long publish/tag history renders hundreds of rows otherwise.
   readonly versionsPage = signal(1)
   readonly versionsTotalPages = computed(() =>
     Math.max(1, Math.ceil((this.npmDetails()?.versions.length ?? 0) / PAGE_SIZE)),
@@ -142,7 +140,6 @@ export class PackageDetailPage {
   readonly auditLoading = signal(true)
   readonly auditAdvisories = signal<NpmAdvisory[] | null>(null)
   readonly auditFailed = signal(false)
-  /** Set when the failure was the server limiting or shedding load, not npm's database being down. */
   readonly auditNotice = signal<string | null>(null)
 
   // Reads the last persisted result for `latest` — a fresh scan needs a click.
@@ -256,7 +253,6 @@ export class PackageDetailPage {
     this.imageScanPage.set(1)
   }
 
-  // Drops a response for a package the user has since left.
   private stillCurrentGuard(): () => boolean {
     const requested = { repositoryId: this.repositoryId, format: this.format, name: this.name }
     return () => {

@@ -14,7 +14,6 @@ import {
 import { t } from '../../shared/i18n/translator'
 import { ToastService } from '../../shared/toast.service'
 
-/** Lets the user pick the language of the interface; the choice is applied at once and saved on their account. */
 @Component({
   selector: 'app-language-settings',
   standalone: true,

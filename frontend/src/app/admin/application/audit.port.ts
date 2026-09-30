@@ -5,7 +5,6 @@ import { AuditPage, AuditQuery, BlockedAccount } from '../domain/audit.entity'
 export interface AuditPort {
   query(filter?: AuditQuery): Observable<AuditPage>
   blockedAccounts(): Observable<BlockedAccount[]>
-  /** Clears the login throttle of a username (204). */
   unlockUsername(username: string): Observable<void>
 }
 

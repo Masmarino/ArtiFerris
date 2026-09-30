@@ -1,6 +1,5 @@
 const PLACEHOLDER_ORIGIN = 'http://placeholder.invalid'
 
-/** A same-origin path that is safe to send a user to after login, or null. */
 export function safeReturnUrl(candidate: unknown): string | null {
   if (typeof candidate !== 'string' || !candidate.startsWith('/') || candidate.startsWith('//')) {
     return null

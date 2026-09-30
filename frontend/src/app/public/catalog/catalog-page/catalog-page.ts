@@ -11,7 +11,6 @@ const BLURB_KEYS: Record<CatalogFormat, string> = {
   docker: 'catalog.page.blurbDocker',
 }
 
-/** Route data supplies `catalogName` and `format`, see `catalogRoutes` in app.routes.ts. */
 @Component({
   selector: 'app-catalog-page',
   standalone: true,

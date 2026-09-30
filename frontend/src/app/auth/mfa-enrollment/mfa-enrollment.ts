@@ -17,7 +17,6 @@ import { createPasskeyCredential, passkeysSupported } from '../../shared/webauth
 
 type SetupStep = 'choice' | 'totp-enroll' | 'backup-codes' | 'passkey'
 
-/** Mandatory first-time MFA enrollment — every account needs a factor before it can be used. */
 @Component({
   selector: 'app-mfa-enrollment',
   standalone: true,

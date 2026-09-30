@@ -81,7 +81,6 @@ const SETTINGS = new Set([
   'public_page_enabled',
 ])
 
-/** The translated name of an event, or the raw type for the ones without a label. */
 export function auditEventLabel(eventType: string): string {
   return translated(EVENT_TYPES, 'events', eventType) ?? eventType
 }
@@ -91,7 +90,6 @@ function translated(names: Set<string>, group: string, key: string): string | un
   return names.has(key) ? t(`admin.audit.${group}.${key}`) : undefined
 }
 
-/** One line of context for an entry; empty for the events that carry none. */
 export function auditEventDetails(entry: AuditEntry): string {
   const payload = auditPayload(entry)
   switch (entry.event_type) {

@@ -6,22 +6,20 @@ interface Pending {
   returnUrl: string | null
 }
 
-/** Called right before leaving for the identity provider. */
 export function markSsoStarted(returnUrl: string | null, now = Date.now()): void {
   try {
     const pending: Pending = { startedAt: now, returnUrl }
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(pending))
   } catch {
-    // Without storage the return trip is refused, which fails closed.
+    // Without storage the return trip is refused.
   }
 }
 
-/** Forgets a start that was never completed, so it cannot be used later. */
 export function discardSsoStart(): void {
   try {
     sessionStorage.removeItem(STORAGE_KEY)
   } catch {
-    // nothing stored
+    // Blocked storage: nothing to remove.
   }
 }
 

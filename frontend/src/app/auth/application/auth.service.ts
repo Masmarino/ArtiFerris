@@ -77,8 +77,6 @@ export class AuthService {
     )
   }
 
-  // --- Mandatory first-time enrollment (account has no second factor yet) ---
-
   startTotpSetup(mfaToken: string): Observable<TotpSetupEnrollment> {
     return this.port.startTotpSetup(mfaToken)
   }
@@ -110,7 +108,6 @@ export class AuthService {
     return this.port.activate(token, newPassword)
   }
 
-  /** Ends every session server-side; the caller then drops its own token. */
   logoutEverywhere(): Observable<void> {
     return this.port.logoutAll()
   }
@@ -126,7 +123,6 @@ export class AuthService {
     markSsoStarted(returnUrl)
   }
 
-  /** The login page opened with no return trip, so an earlier SSO start was abandoned. */
   abandonSsoLogin(): void {
     discardSsoStart()
   }

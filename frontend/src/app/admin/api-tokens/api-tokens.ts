@@ -29,7 +29,6 @@ export class ApiTokensAdmin {
   private readonly confirmService = inject(ConfirmService)
   private readonly toastService = inject(ToastService)
 
-  /** Set only when embedded in an organization's own admin page — scopes the list to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
   private readonly tokens = signal<AdminApiToken[]>([])

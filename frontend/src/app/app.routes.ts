@@ -7,7 +7,6 @@ import { CATALOGS } from './public/catalog/domain/catalog.registry'
 import { personalOwnerMatcher } from './public/catalog/owner-url-matcher'
 import { knownFormatAt } from './public/known-format'
 
-// One route per catalog: single-segment literals, so they're safe ahead of AppShell.
 const catalogRoutes: Routes = CATALOGS.map((catalog) => ({
   path: catalog.name,
   loadComponent: () =>
@@ -50,7 +49,6 @@ export const routes: Routes = [
   {
     path: '',
     loadComponent: () => import('./shell/app-shell').then((m) => m.AppShell),
-    // The shell re-creates its own routed view on a language change (see App).
     data: { recreatesViewsOnLanguageChange: true },
     canActivate: [authGuard],
     children: [
@@ -171,7 +169,6 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./public/public-package-page/public-package-page').then((m) => m.PublicPackagePage),
   },
-  // Keep last.
   {
     path: '**',
     loadComponent: () => import('./not-found/not-found-page').then((m) => m.NotFoundPage),

@@ -53,7 +53,6 @@ export class ApiTokensList implements OnInit {
   })
   readonly newPassword = new FormControl('', { nonNullable: true })
   readonly createError = signal<string | null>(null)
-  /** How long the token just created stays valid. */
   readonly createdTokenDays = signal<number>(API_TOKEN_LIFETIME_DAYS.session)
 
   private readonly typedPassword = toSignal(this.newPassword.valueChanges, { initialValue: '' })

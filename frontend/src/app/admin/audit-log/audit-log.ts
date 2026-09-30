@@ -59,7 +59,6 @@ export class AuditLog {
   private readonly auditService = inject(AuditService)
   private exportRun: Subscription | null = null
 
-  /** Set only when embedded in an organization's own admin page — scopes the query to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
   readonly entries = signal<AuditEntry[]>([])
@@ -188,7 +187,6 @@ export class AuditLog {
       })
   }
 
-  /** Fetches the pages not loaded yet (up to the row bound), then saves the CSV. */
   downloadCsv(): void {
     if (this.exporting()) {
       return

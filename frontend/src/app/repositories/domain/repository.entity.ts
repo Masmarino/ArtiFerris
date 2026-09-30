@@ -8,7 +8,6 @@ export interface RepositorySummary {
   format: RepositoryFormat
   repo_type: RepositoryType
   remote_url: string | null
-  /** Whether a remote username/password is configured — never the credentials themselves. */
   remote_credentials_set: boolean
   group_members: string[]
   /** `null` means unlimited. Absent from the public view (anonymous or implicit public read). */
@@ -16,9 +15,7 @@ export interface RepositorySummary {
   /** `null` means automatic cleanup is disabled. Absent from the public view. */
   retention_keep_last_n?: number | null
   is_public: boolean
-  /** The current user's own role on this repository. `null` only for an anonymous caller on a public repository. */
   my_role: RepositoryRole | null
-  /** Absent from the public view. */
   organization_id?: string
   owner_name: string
   owner_is_personal: boolean
@@ -29,7 +26,6 @@ export interface RepositorySummary {
 export interface CreateRepositoryOptions {
   remoteUsername?: string | null
   remotePassword?: string | null
-  /** For a `group` repository: member repository ids, in resolution order. */
   groupMembers?: string[]
   quotaBytes?: number | null
   retentionKeepLastN?: number | null
@@ -65,7 +61,6 @@ export interface DockerImageTreeEntry {
   vulnerability_summary: VulnerabilitySummary
 }
 
-/** `next_after` is the cursor for the next page, `null` or absent on the last one. */
 export type RepositoryPackages =
   | { format: 'npm'; packages: NpmPackageTreeEntry[]; next_after?: string | null }
   | { format: 'docker'; images: DockerImageTreeEntry[]; next_after?: string | null }
@@ -86,15 +81,11 @@ export interface NpmDistTagDetail {
 
 export interface NpmPackageDetails {
   name: string
-  /** Newest first, capped at 200: see `truncated`. */
   versions: NpmVersionDetail[]
   truncated: boolean
   dist_tags: NpmDistTagDetail[]
-  /** Sanitized by the backend, `null` when the package has no README. */
   readme_html: string | null
-  /** The owner's registry URL, with a trailing slash. */
   registry_url: string
-  /** Downloads over the last 7 days, indicative only. */
   downloads_7d: number
 }
 
@@ -103,13 +94,11 @@ export interface DockerTagDetail {
   digest: string
   media_type: string
   created_at: string
-  /** `null` for a multi-arch index or when unknown. */
   size_bytes: number | null
 }
 
 export interface DockerImageDetails {
   image_name: string
-  /** Without tag or scheme. */
   image_reference: string
   /** The 100 most recently updated tags: see `truncated`. */
   tags: DockerTagDetail[]

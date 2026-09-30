@@ -5,7 +5,6 @@ import { activeLocale } from './translator'
 
 type DateInput = string | number | Date | null | undefined
 
-/** `formatDate` in the language the interface is displayed in. Empty for a missing date. */
 export function formatLocalizedDate(value: DateInput, format = 'mediumDate'): string {
   return value === null || value === undefined || value === ''
     ? ''

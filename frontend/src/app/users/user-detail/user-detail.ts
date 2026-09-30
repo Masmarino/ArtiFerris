@@ -83,7 +83,6 @@ export class UserDetail {
   readonly repositoryOptions = computed(() =>
     this.repositories().map((repo) => ({ value: repo.id, label: repo.name })),
   )
-  // Multi-select: grants the same role to several repositories in one action.
   readonly grantRepositoryIds = signal<string[]>([])
   readonly grantRole = signal<Role>('read')
   readonly roleOptions = ROLE_OPTIONS

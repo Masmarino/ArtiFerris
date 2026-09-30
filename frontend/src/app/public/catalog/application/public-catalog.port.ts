@@ -10,7 +10,6 @@ import {
   SuggestOptions,
 } from '../domain/catalog.entity'
 
-/** Public, unauthenticated read access to the instance's catalogs. */
 export interface PublicCatalogPort {
   catalogs(): Observable<CatalogInfo[]>
 

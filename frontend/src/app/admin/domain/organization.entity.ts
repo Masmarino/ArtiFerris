@@ -26,7 +26,6 @@ export interface OidcIdentityProvider {
 
 export interface NoIdentityProvider {
   type: null
-  /** The stored secret can no longer be decrypted by this server: the provider must be configured again. */
   secret_unreadable?: boolean
   error?: string
 }

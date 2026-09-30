@@ -29,7 +29,6 @@ const CHART_TOP_N = 15
 export class UsageMetrics {
   private readonly metricsService = inject(AdminMetricsService)
 
-  /** Set only when embedded in an organization's own admin page — scopes the usage to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
   readonly locale = activeLocale()

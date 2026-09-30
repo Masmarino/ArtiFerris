@@ -48,7 +48,6 @@ export class SmtpSettingsAdmin {
   private readonly settingsService = inject(SmtpSettingsService)
   private readonly toastService = inject(ToastService)
 
-  /** Set only when embedded in an organization's own admin page — scopes read/write to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
   readonly securityOptions = securityOptions()
@@ -61,7 +60,6 @@ export class SmtpSettingsAdmin {
   readonly fromAddress = signal('')
   readonly security = signal<SmtpSecurity>('start_tls')
   readonly passwordSet = signal(false)
-  /** The stored password cannot be decrypted by this server: it has to be typed again. */
   readonly secretUnreadable = signal(false)
 
   readonly loading = signal(true)

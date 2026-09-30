@@ -144,7 +144,6 @@ export class UsersList implements OnInit {
   }
 
   openDetail(user: UserSummary): void {
-    // Reachable by whoever reached this list — already scoped by the backend.
     this.router.navigate(['/users', user.id])
   }
 }

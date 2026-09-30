@@ -68,7 +68,6 @@ export class RepositoriesList implements OnInit {
   // comment), so those controls would be meaningless for anyone else.
   readonly isSuperAdmin = computed(() => this.me.isSuperAdmin())
 
-  // Also requires 'organization' mode — see the comment on `mode` above.
   readonly showOrganizationControls = computed(
     () => this.mode() === 'organization' && this.isSuperAdmin(),
   )

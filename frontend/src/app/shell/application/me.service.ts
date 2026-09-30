@@ -17,7 +17,6 @@ export class MeService {
   readonly createdAt = signal<string | null>(null)
   readonly organizationId = signal<string | null>(null)
   readonly isOrganizationAdmin = signal(false)
-  /** The language the user chose; `null` until they have. */
   readonly language = signal<string | null>(null)
 
   private cached$: Observable<MeResponse> | null = null
@@ -103,7 +102,6 @@ export class MeService {
     return this.port.changePassword(currentPassword, newPassword)
   }
 
-  /** Saves the choice on the account, so it follows the user to their other devices. */
   setLanguage(language: string): Observable<void> {
     return this.port.setLanguage(language).pipe(tap(() => this.language.set(language)))
   }

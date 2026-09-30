@@ -64,7 +64,6 @@ export class CatalogSearch {
   private readonly destroyRef = inject(DestroyRef)
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-  /** When set, the format filter is hidden and every search is restricted to this format. */
   readonly format = input<CatalogFormat | null>(null)
   /** When set, every search is restricted to this owner's public entries. It comes from the route, never the query string. */
   readonly owner = input<OwnerRef | null>(null)

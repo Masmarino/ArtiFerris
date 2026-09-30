@@ -8,7 +8,6 @@ import {
   TotpEnrollment,
 } from '../domain/mfa.types'
 
-/** Everything the application layer needs to reach the backend's MFA endpoints — implemented by an infrastructure adapter, never called directly by a component. */
 export interface MfaPort {
   getStatus(): Observable<MfaStatus>
   enrollTotp(): Observable<TotpEnrollment>

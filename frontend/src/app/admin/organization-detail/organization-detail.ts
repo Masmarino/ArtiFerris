@@ -67,7 +67,6 @@ export class OrganizationDetail {
   readonly selectedProviderType = signal<'ldap' | 'oidc'>('ldap')
 
   readonly identityProviderConfigured = signal(false)
-  /** The stored secret cannot be decrypted by this server: the provider must be configured again. */
   readonly secretUnreadable = signal(false)
   readonly serverUrl = signal('')
   readonly bindDn = signal('')

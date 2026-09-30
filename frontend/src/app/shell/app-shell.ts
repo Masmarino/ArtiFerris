@@ -86,9 +86,7 @@ function packageLabel(entry: ReadableCatalogEntry): string {
     : label
 }
 
-// The instance-wide flat Administration menu is super-admin only.
 const SUPER_ADMIN_ONLY_ACTIONS = new Set(['admin'])
-// Reachable by a super-admin or an organization admin, never a plain member.
 const STAFF_ONLY_ACTIONS = new Set(['users'])
 
 @Component({
@@ -123,14 +121,12 @@ export class AppShell implements OnInit {
   readonly pageTitle = inject(PageTitleService)
   readonly toastService = inject(ToastService)
   private readonly languageService = inject(LanguageService)
-  /** Bumped on a language change to re-create the routed view. */
   readonly viewGeneration = signal(0)
 
   readonly isLoading = signal(true)
   readonly loadFailed = signal(false)
   readonly userMenuOpen = signal(false)
   readonly navCollapsed = signal(false)
-  // Per nav-group override — absent here just follows the route (see isMenuOpen).
   private readonly menuManualOverrides = signal<Record<string, boolean>>({})
 
   private readonly repositories = signal<RepositorySummary[]>([])
@@ -138,7 +134,6 @@ export class AppShell implements OnInit {
   private readonly packages = signal<ReadableCatalogEntry[]>([])
   private readonly packageQueries = new Subject<string>()
   readonly searchQuery = signal('')
-  /** A search load failed; typing again retries it. */
   readonly searchFailed = signal(false)
 
   // Whoever can reach /users (STAFF_ONLY_ACTIONS) can also search it.
@@ -384,7 +379,6 @@ export class AppShell implements OnInit {
     this.userMenuOpen.update((open) => !open)
   }
 
-  // Opens automatically while on one of its own pages, until manually toggled.
   isMenuOpen(item: NavItem): boolean {
     return this.menuManualOverrides()[item.action] ?? this.currentUrl().startsWith(item.link)
   }

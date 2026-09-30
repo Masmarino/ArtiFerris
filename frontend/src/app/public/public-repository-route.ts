@@ -15,13 +15,11 @@ export function resolvePublicRepository(
     return repositories.getByOrg(slug, repoName)
   }
   const username = params.get('username')!.replace(/^@/, '')
-  // "/@/repo" names nobody: not found, without asking the server.
   return username
     ? repositories.getByOwner(username, repoName)
     : throwError(() => new HttpErrorResponse({ status: 404 }))
 }
 
-/** Absolute routerLink prefix of the public repository page, keeping the personal `@` segment as typed. */
 export function publicRepositoryBasePath(params: ParamMap): string[] {
   const repoName = params.get('repoName')!
   const slug = params.get('slug')
