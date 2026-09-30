@@ -11,10 +11,19 @@ export type Language = keyof typeof LANGUAGE_LOCALES
 
 export const SUPPORTED_LANGUAGES = Object.keys(LANGUAGE_LOCALES) as Language[]
 
+/** Each language named in itself, so a reader can find theirs whatever the current language is. */
+export const LANGUAGE_NAMES: Record<Language, string> = {
+  en: 'English',
+  fr: 'Français',
+  es: 'Español',
+  it: 'Italiano',
+  de: 'Deutsch',
+}
+
 /** Used when none of the browser's languages is translated. */
 export const FALLBACK_LANGUAGE: Language = 'en'
 
-function isSupported(code: string): code is Language {
+export function isSupported(code: string): code is Language {
   return Object.hasOwn(LANGUAGE_LOCALES, code)
 }
 

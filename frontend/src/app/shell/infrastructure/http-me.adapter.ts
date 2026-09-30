@@ -18,4 +18,8 @@ export class HttpMeAdapter implements MePort {
       new_password: newPassword,
     })
   }
+
+  setLanguage(language: string): Observable<void> {
+    return this.http.put<void>('/api/me/language', { language })
+  }
 }

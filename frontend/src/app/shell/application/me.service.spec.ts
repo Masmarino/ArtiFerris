@@ -5,6 +5,8 @@ import { of, throwError } from 'rxjs'
 import { MeService } from './me.service'
 import { ME_PORT, MePort } from './me.port'
 import { AuthService } from '../../auth/application/auth.service'
+import { LanguageService } from '../../shared/i18n/language.service'
+import { setActiveLanguage } from '../../shared/i18n/translator'
 import { authProviders } from '../../auth/infrastructure/auth.providers'
 
 describe('MeService', () => {
@@ -149,5 +151,84 @@ describe('MeService', () => {
 
     expect(load).toHaveBeenCalledTimes(2)
     expect(service.username()).toBe('bob')
+  })
+
+  describe('language', () => {
+    const account = {
+      id: 'user-1',
+      username: 'florian',
+      is_super_admin: false,
+      is_organization_admin: false,
+      organization_id: 'org-1',
+      created_at: '2026-01-01T00:00:00Z',
+    }
+
+    afterEach(() => setActiveLanguage('fr'))
+
+    it('applies the language saved on the account over the one the browser suggested', async () => {
+      setActiveLanguage('en')
+      const service = setup({ load: () => of({ ...account, language: 'de' }) })
+      const use = vi.spyOn(TestBed.inject(LanguageService), 'use').mockResolvedValue()
+
+      service.load().subscribe()
+
+      expect(service.language()).toBe('de')
+      expect(use).toHaveBeenCalledWith('de')
+    })
+
+    it('leaves the language alone when the account has not chosen one', () => {
+      const service = setup({ load: () => of({ ...account, language: null }) })
+      const use = vi.spyOn(TestBed.inject(LanguageService), 'use').mockResolvedValue()
+
+      service.load().subscribe()
+
+      expect(service.language()).toBeNull()
+      expect(use).not.toHaveBeenCalled()
+    })
+
+    it('ignores a saved language the interface does not offer', () => {
+      const service = setup({ load: () => of({ ...account, language: 'xx' }) })
+      const use = vi.spyOn(TestBed.inject(LanguageService), 'use').mockResolvedValue()
+
+      service.load().subscribe()
+
+      expect(use).not.toHaveBeenCalled()
+    })
+
+    it('copes with a server that predates the setting', () => {
+      const service = setup({ load: () => of(account) })
+
+      service.load().subscribe()
+
+      expect(service.language()).toBeNull()
+    })
+
+    it('does not switch again when the account language is already displayed', () => {
+      setActiveLanguage('it')
+      const service = setup({ load: () => of({ ...account, language: 'it' }) })
+      const use = vi.spyOn(TestBed.inject(LanguageService), 'use').mockResolvedValue()
+
+      service.load().subscribe()
+
+      expect(use).not.toHaveBeenCalled()
+    })
+
+    it('remembers a saved choice, and forgets it when the session changes', () => {
+      const setLanguage = vi.fn().mockReturnValue(of(undefined))
+      const service = setup({ setLanguage })
+
+      service.setLanguage('es').subscribe()
+
+      expect(setLanguage).toHaveBeenCalledWith('es')
+      expect(service.language()).toBe('es')
+    })
+
+    it('does not remember a choice the server refused', () => {
+      const service = setup({ setLanguage: () => throwError(() => new Error('400')) })
+
+      service.setLanguage('es').subscribe({ error: () => undefined })
+
+      expect(service.language()).toBeNull()
+    })
   })
 })

@@ -65,6 +65,13 @@ pub struct MeResponse {
     pub is_organization_admin: bool,
     pub organization_id: Uuid,
     pub created_at: DateTime<Utc>,
+    /// The language the user chose for the interface; `null` until they have (or the app has recorded one).
+    pub language: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetLanguageRequest {
+    pub language: String,
 }
 
 #[derive(Debug, Deserialize)]

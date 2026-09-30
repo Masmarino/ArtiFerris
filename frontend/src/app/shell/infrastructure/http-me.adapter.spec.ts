@@ -41,4 +41,15 @@ describe('HttpMeAdapter', () => {
     })
     req.flush(null)
   })
+
+  it('sends a PUT to /api/me/language with the chosen language', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.setLanguage('de').subscribe()
+
+    const req = httpMock.expectOne('/api/me/language')
+    expect(req.request.method).toBe('PUT')
+    expect(req.request.body).toEqual({ language: 'de' })
+    req.flush(null)
+  })
 })

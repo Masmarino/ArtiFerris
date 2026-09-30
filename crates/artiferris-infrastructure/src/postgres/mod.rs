@@ -23,6 +23,7 @@ pub mod smtp_settings_repository;
 pub mod system_settings_repository;
 pub mod totp_credential_repository;
 pub mod user_invitation_repository;
+pub mod user_preferences_repository;
 pub mod user_repository;
 pub mod webauthn_credential_repository;
 
