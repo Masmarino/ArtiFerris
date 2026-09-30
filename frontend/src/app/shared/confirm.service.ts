@@ -12,7 +12,7 @@ export interface ConfirmOptions {
   typeToConfirm?: string
 }
 
-export interface PendingConfirm {
+interface PendingConfirm {
   options: ConfirmOptions
   resolve: (confirmed: boolean) => void
 }

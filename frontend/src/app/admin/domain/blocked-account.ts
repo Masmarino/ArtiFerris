@@ -1,7 +1,7 @@
 import { t } from '../../shared/i18n/translator'
 import { BlockedAccount } from './audit.entity'
 
-export interface BlockedAccountView {
+interface BlockedAccountView {
   label: string
   unlockAs: string | null
 }

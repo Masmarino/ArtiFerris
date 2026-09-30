@@ -34,7 +34,7 @@ export interface CreateRepositoryOptions {
   retentionKeepLastN?: number | null
 }
 
-export interface NpmPackageVersionEntry {
+interface NpmPackageVersionEntry {
   version: string
   published_at: string
   size_bytes: number

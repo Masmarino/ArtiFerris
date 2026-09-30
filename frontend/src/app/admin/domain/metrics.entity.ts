@@ -6,7 +6,7 @@ export interface RepositoryUsage {
   quota_bytes: number | null
 }
 
-export interface ComponentHealth {
+interface ComponentHealth {
   status: 'up' | 'down'
   detail: string | null
 }
