@@ -77,6 +77,8 @@ const SETTINGS = new Set([
   'session_ttl_hours',
   'registration_enabled',
   'seo_indexing_enabled',
+  'seo_indexing_blocked',
+  'public_page_enabled',
 ])
 
 /** The translated name of an event, or the raw type for the ones without a label. */

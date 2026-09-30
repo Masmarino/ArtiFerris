@@ -1030,7 +1030,9 @@
         "login_attempt_window_seconds": "Finestra dei tentativi (s)",
         "session_ttl_hours": "Durata della sessione (h)",
         "registration_enabled": "Registrazione aperta",
-        "seo_indexing_enabled": "Indicizzazione da parte dei motori di ricerca"
+        "seo_indexing_enabled": "Indicizzazione da parte dei motori di ricerca",
+        "seo_indexing_blocked": "Motori di ricerca bloccati",
+        "public_page_enabled": "Pagina pubblica"
       },
       "details": {
         "via": "Tramite {{ method }}",
@@ -1272,6 +1274,13 @@
       "seo": "Indicizzazione",
       "allowIndexing": "Consenti l'indicizzazione da parte dei motori di ricerca",
       "seoHint": "Se disattivata, il catalogo pubblico invia «noindex», il robots.txt vieta tutto e la sitemap è vuota.",
+      "publicPage": "Pagina pubblica",
+      "publicPageEnabled": "Mostra la pagina pubblica dell'organizzazione",
+      "publicPageEnabledInstance": "Mostra le pagine pubbliche dell'istanza",
+      "publicPageHint": "Disattivata, le pagine del catalogo pubblico dell'organizzazione rispondono come se non fosse pubblicato nulla: non trovate per i visitatori, assenti dalla ricerca e dalla sitemap.",
+      "publicPageHintInstance": "Disattivata, il catalogo pubblico dell'intera istanza è chiuso: nessuna pagina viene servita e l'indicizzazione è disattivata.",
+      "blockIndexing": "Blocca i motori di ricerca per questa organizzazione",
+      "blockIndexingHint": "Le pagine restano visibili, ma inviano «noindex» e non compaiono nella sitemap.",
       "saved": "Impostazioni salvate."
     }
   },

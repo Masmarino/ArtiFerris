@@ -25,6 +25,8 @@ describe('SystemSettingsService', () => {
       session_ttl_hours: 1,
       registration_enabled: true,
       seo_indexing_enabled: false,
+      seo_indexing_blocked: false,
+      public_page_enabled: true,
     }
     const update = vi.fn().mockReturnValue(of(undefined))
     setup({ update }).update(settings)

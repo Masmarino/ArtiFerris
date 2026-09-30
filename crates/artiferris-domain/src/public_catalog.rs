@@ -121,6 +121,8 @@ pub struct OwnerSummary {
     pub repository_count: i64,
     pub package_count: i64,
     pub image_count: i64,
+    /// The owner keeps its pages away from search engines: they carry `noindex` and are not in the sitemap.
+    pub indexing_blocked: bool,
 }
 
 /// What the search box offers while typing: a name and where it lives, nothing else.

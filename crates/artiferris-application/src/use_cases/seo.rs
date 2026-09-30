@@ -114,7 +114,7 @@ pub struct PageMeta {
     pub title: String,
     pub description: Option<String>,
     pub canonical_path: Option<String>,
-    /// False for anything that isn't a resolvable public page. Says nothing about the instance's indexing switch.
+    /// False for anything that isn't a resolvable public page, and for a page its owner keeps away from search engines. Says nothing about the instance's indexing switch.
     pub indexable: bool,
     /// Schema.org data, without any markup escaping.
     pub structured_data: Option<Value>,
@@ -182,7 +182,7 @@ impl SeoPageUseCase {
             title: title(&text.owner_title(&summary.display_name)),
             description: Some(truncate(&text.owner_description(&summary.display_name, summary.package_count, summary.image_count))),
             canonical_path: Some(owner_path(owner)),
-            indexable: true,
+            indexable: !summary.indexing_blocked,
             structured_data: None,
             language: Some(text.0),
         })
@@ -196,7 +196,7 @@ impl SeoPageUseCase {
             title: title(&text.repository_title(&summary.display_name, &found.name, found.format)),
             description: Some(truncate(&text.repository_description(&summary.display_name, &found.name, found.format))),
             canonical_path: Some(repository_path(owner, repository)),
-            indexable: true,
+            indexable: !summary.indexing_blocked,
             structured_data: None,
             language: Some(text.0),
         })
@@ -206,6 +206,7 @@ impl SeoPageUseCase {
         let Some(entry) = self.catalog.find_entry(owner, repository, format, name).await? else {
             return Ok(PageMeta::generic());
         };
+        let Some(summary) = self.catalog.owner_summary(owner).await? else { return Ok(PageMeta::generic()) };
         let canonical_path = package_path(owner, repository, format, name);
         let description = package_description(&entry, text);
         let structured_data = Some(self.structured_data(&entry, &canonical_path, &description, text.0));
@@ -213,7 +214,7 @@ impl SeoPageUseCase {
             title: title(&text.package_title(name, &entry.owner.display_name, format)),
             description: Some(description),
             canonical_path: Some(canonical_path),
-            indexable: true,
+            indexable: !summary.indexing_blocked,
             structured_data,
             language: Some(text.0),
         })
@@ -423,7 +424,7 @@ mod tests {
     }
 
     fn summary(display_name: &str, packages: i64, images: i64) -> OwnerSummary {
-        OwnerSummary { kind: OwnerKind::Personal, slug: display_name.to_string(), display_name: display_name.to_string(), repository_count: 1, package_count: packages, image_count: images }
+        OwnerSummary { kind: OwnerKind::Personal, slug: display_name.to_string(), display_name: display_name.to_string(), repository_count: 1, package_count: packages, image_count: images, indexing_blocked: false }
     }
 
     #[tokio::test]
@@ -485,7 +486,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_package_page_carries_its_description_and_structured_data() {
-        let catalog = FakeCatalog { entries: vec![entry("left-pad", Some("Pads strings on the left"))], ..Default::default() };
+        let catalog = FakeCatalog { entries: vec![entry("left-pad", Some("Pads strings on the left"))], owner: Some(summary("alice", 1, 0)), ..Default::default() };
         let seo = use_case(catalog);
 
         let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "left-pad".into() }, Language::Fr).await.unwrap();
@@ -500,7 +501,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_package_without_a_description_gets_a_sentence_built_from_what_is_known() {
-        let seo = use_case(FakeCatalog { entries: vec![entry("widget", Some("   "))], ..Default::default() });
+        let seo = use_case(FakeCatalog { entries: vec![entry("widget", Some("   "))], owner: Some(summary("alice", 1, 0)), ..Default::default() });
 
         let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "widget".into() }, Language::Fr).await.unwrap();
 
@@ -527,6 +528,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_page_of_an_owner_who_blocks_search_engines_is_not_indexable() {
+        let blocked = OwnerSummary { indexing_blocked: true, ..summary("alice", 1, 0) };
+        let seo = use_case(FakeCatalog { owner: Some(blocked), entries: vec![entry("widget", None)], repository: Some(CatalogRepository { name: "lib".into(), format: RepositoryFormat::Npm }), ..Default::default() });
+        let package = SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "widget".into() };
+
+        for route in [SeoRoute::Owner(personal("alice")), SeoRoute::Repository { owner: personal("alice"), repository: "lib".into() }, package] {
+            let meta = seo.execute(&route, Language::En).await.unwrap();
+            assert!(!meta.indexable, "{route:?}");
+            assert!(meta.canonical_path.is_some(), "the page is still there for visitors: {route:?}");
+        }
+        let open = use_case(FakeCatalog { owner: Some(summary("alice", 1, 0)), ..Default::default() });
+        assert!(open.execute(&SeoRoute::Owner(personal("alice")), Language::En).await.unwrap().indexable);
+    }
+
+    #[tokio::test]
     async fn a_generic_head_is_in_no_language() {
         let seo = use_case(FakeCatalog::default());
 
@@ -549,7 +565,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_package_is_looked_up_by_its_exact_owner_repository_format_and_name() {
-        let catalog = Arc::new(FakeCatalog { entries: vec![entry("x", None)], ..Default::default() });
+        let catalog = Arc::new(FakeCatalog { entries: vec![entry("x", None)], owner: Some(summary("alice", 1, 0)), ..Default::default() });
         let seo = SeoPageUseCase::new(catalog.clone(), "https://r.example".to_string());
 
         seo.execute(&SeoRoute::Package { owner: org("acme"), repository: "lib".into(), format: RepositoryFormat::Docker, name: "x".into() }, Language::Fr).await.unwrap();
@@ -582,7 +598,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_longest_names_that_can_exist_are_still_looked_up() {
-        let catalog = Arc::new(FakeCatalog { entries: vec![entry(&"a".repeat(214), None)], ..Default::default() });
+        let catalog = Arc::new(FakeCatalog { entries: vec![entry(&"a".repeat(214), None)], owner: Some(summary("alice", 1, 0)), ..Default::default() });
         let seo = SeoPageUseCase::new(catalog.clone(), "https://r.example".to_string());
 
         let meta = seo.execute(&SeoRoute::Package { owner: personal("alice"), repository: "lib".into(), format: RepositoryFormat::Npm, name: "a".repeat(214) }, Language::Fr).await.unwrap();

@@ -71,9 +71,11 @@ macro_rules! public_repositories {
            CASE WHEN o.is_personal THEN 'personal' ELSE 'organization' END AS owner_kind,
            CASE WHEN o.is_personal THEN u.username ELSE o.slug END AS owner_slug,
            CASE WHEN o.is_personal THEN u.username ELSE o.display_name END AS owner_display_name,
-           o.is_public AS owner_is_public_organization
+           o.is_public AS owner_is_public_organization,
+           COALESCE(ss.seo_indexing_blocked, false) AS indexing_blocked
     FROM package_repository_projections p
     JOIN organizations o ON o.id = p.organization_id
+    LEFT JOIN system_settings ss ON ss.organization_id = o.id
     LEFT JOIN users u ON o.is_personal AND o.slug = 'u' || left(replace(u.id::text, '-', ''), 24)
     WHERE "#,
             $filter,
@@ -86,7 +88,9 @@ macro_rules! public_repositories {
 
 macro_rules! public_filter {
     () => {
-        "p.repo_type = 'hosted' AND p.is_public AND p.deleted_at IS NULL"
+        // The owner's page may be closed, and so may the whole instance's (the public organization's row).
+        "p.repo_type = 'hosted' AND p.is_public AND p.deleted_at IS NULL AND COALESCE(ss.public_page_enabled, true) \
+         AND COALESCE((SELECT i.public_page_enabled FROM system_settings i JOIN organizations io ON io.id = i.organization_id WHERE io.is_public), true)"
     };
 }
 
@@ -294,23 +298,24 @@ SELECT (SELECT owner_display_name FROM owned LIMIT 1) AS display_name,
        (SELECT count(*) FROM (
             SELECT 1 FROM owned r JOIN docker_tags t ON t.package_repository_id = r.id
             WHERE r.format = 'docker' GROUP BY t.package_repository_id, t.image_name
-        ) images) AS image_count
+        ) images) AS image_count,
+       (SELECT COALESCE(bool_or(indexing_blocked), false) FROM owned) AS indexing_blocked
 "#;
 
-/// $1 the most rows to return.
+/// $1 the most rows to return. What an owner keeps away from search engines is left out.
 const SITEMAP: &str = r#"
 SELECT owner_kind, owner_slug, NULL::text AS repository_name, NULL::text AS kind, NULL::text AS name, max(repository_updated_at) AS updated_at
-FROM public_repositories GROUP BY owner_kind, owner_slug
+FROM public_repositories WHERE NOT indexing_blocked GROUP BY owner_kind, owner_slug
 UNION ALL
-SELECT owner_kind, owner_slug, repository_name, NULL, NULL, repository_updated_at FROM public_repositories
+SELECT owner_kind, owner_slug, repository_name, NULL, NULL, repository_updated_at FROM public_repositories WHERE NOT indexing_blocked
 UNION ALL
 SELECT r.owner_kind, r.owner_slug, r.repository_name, 'npm', k.name, max(v.published_at)
 FROM public_repositories r JOIN npm_packages k ON k.package_repository_id = r.id JOIN npm_package_versions v ON v.npm_package_id = k.id
-WHERE r.format = 'npm' GROUP BY r.owner_kind, r.owner_slug, r.repository_name, k.name
+WHERE r.format = 'npm' AND NOT r.indexing_blocked GROUP BY r.owner_kind, r.owner_slug, r.repository_name, k.name
 UNION ALL
 SELECT r.owner_kind, r.owner_slug, r.repository_name, 'docker', t.image_name, max(t.updated_at)
 FROM public_repositories r JOIN docker_tags t ON t.package_repository_id = r.id
-WHERE r.format = 'docker' GROUP BY r.owner_kind, r.owner_slug, r.repository_name, t.image_name
+WHERE r.format = 'docker' AND NOT r.indexing_blocked GROUP BY r.owner_kind, r.owner_slug, r.repository_name, t.image_name
 ORDER BY 1, 2, 3 NULLS FIRST, 4 NULLS FIRST, 5 NULLS FIRST
 LIMIT $1
 "#;
@@ -482,7 +487,7 @@ impl PublicCatalogPort for PostgresPublicCatalog {
 
     async fn owner_summary(&self, owner: &OwnerRef) -> Result<Option<OwnerSummary>, DomainError> {
         let (mut tx, _slot) = self.begin().await?;
-        let (display_name, repository_count, package_count, image_count): (Option<String>, i64, i64, i64) =
+        let (display_name, repository_count, package_count, image_count, indexing_blocked): (Option<String>, i64, i64, i64, bool) =
             sqlx::query_as(AssertSqlSafe(format!("{PUBLIC_REPOSITORIES}{OWNER_SUMMARY}")))
                 .bind(owner_kind_key(owner.kind))
                 .bind(&owner.slug)
@@ -496,6 +501,7 @@ impl PublicCatalogPort for PostgresPublicCatalog {
             repository_count,
             package_count,
             image_count,
+            indexing_blocked,
         }))
     }
 
@@ -1123,6 +1129,71 @@ mod tests {
         assert_eq!(entries.len(), 3);
     }
 
+    async fn set_page_controls(pool: &PgPool, organization: impl std::fmt::Display, public_page_enabled: bool, seo_indexing_blocked: bool) {
+        sqlx::query("INSERT INTO system_settings (organization_id, max_login_attempts, login_attempt_window_seconds, session_ttl_hours, public_page_enabled, seo_indexing_blocked) VALUES ($1::uuid, 10, 300, 12, $2, $3) ON CONFLICT (organization_id) DO UPDATE SET public_page_enabled = $2, seo_indexing_blocked = $3")
+            .bind(organization.to_string()).bind(public_page_enabled).bind(seo_indexing_blocked)
+            .execute(pool).await.unwrap();
+    }
+
+    #[sqlx::test]
+    async fn an_organization_that_closes_its_public_page_vanishes_from_every_public_view_and_the_others_stay(pool: PgPool) {
+        let acme = insert_organization(&pool, "acme", "Acme Corp", false).await;
+        let other = insert_organization(&pool, "other", "Other", false).await;
+        let acme_lib = public_hosted(&pool, acme, "lib", "npm").await;
+        let other_lib = public_hosted(&pool, other, "lib", "npm").await;
+        add_npm(&pool, acme_lib, "acme-pkg", vec![version("1.0.0", ago(1))], None).await;
+        add_npm(&pool, other_lib, "other-pkg", vec![version("1.0.0", ago(1))], None).await;
+        set_page_controls(&pool, acme, false, false).await;
+        let catalog = PostgresPublicCatalog::new(pool.clone());
+        let acme_owner = OwnerRef { kind: OwnerKind::Organization, slug: "acme".into() };
+
+        assert_eq!(names(&pool, &query(None)).await, vec!["other-pkg"]);
+        assert_eq!(names(&pool, &query(Some("acme"))).await, Vec::<String>::new());
+        assert!(catalog.owner_summary(&acme_owner).await.unwrap().is_none());
+        assert!(catalog.repository(&acme_owner, "lib").await.unwrap().is_none());
+        assert!(catalog.find_entry(&acme_owner, "lib", RepositoryFormat::Npm, "acme-pkg").await.unwrap().is_none());
+        assert_eq!(catalog.entry_counts().await.unwrap().iter().map(|c| c.entry_count).sum::<i64>(), 1);
+        assert!(catalog.sitemap_entries(100).await.unwrap().iter().all(|e| e.owner.slug != "acme"));
+
+        set_page_controls(&pool, acme, true, false).await;
+        assert!(catalog.owner_summary(&acme_owner).await.unwrap().is_some(), "open again");
+    }
+
+    #[sqlx::test]
+    async fn closing_the_public_organizations_page_closes_the_whole_catalog(pool: PgPool) {
+        let acme = insert_organization(&pool, "acme", "Acme Corp", false).await;
+        let lib = public_hosted(&pool, acme, "lib", "npm").await;
+        add_npm(&pool, lib, "pkg", vec![version("1.0.0", ago(1))], None).await;
+        assert_eq!(names(&pool, &query(None)).await, vec!["pkg"]);
+
+        set_page_controls(&pool, PUBLIC_ORG, false, false).await;
+        let catalog = PostgresPublicCatalog::new(pool.clone());
+
+        assert!(names(&pool, &query(None)).await.is_empty());
+        assert!(catalog.entry_counts().await.unwrap().is_empty());
+        assert!(catalog.sitemap_entries(100).await.unwrap().is_empty());
+        assert!(catalog.owner_summary(&OwnerRef { kind: OwnerKind::Organization, slug: "acme".into() }).await.unwrap().is_none());
+    }
+
+    #[sqlx::test]
+    async fn an_organization_that_blocks_search_engines_stays_visible_but_out_of_the_sitemap(pool: PgPool) {
+        let acme = insert_organization(&pool, "acme", "Acme Corp", false).await;
+        let other = insert_organization(&pool, "other", "Other", false).await;
+        let acme_lib = public_hosted(&pool, acme, "lib", "npm").await;
+        let other_lib = public_hosted(&pool, other, "lib", "npm").await;
+        add_npm(&pool, acme_lib, "acme-pkg", vec![version("1.0.0", ago(1))], None).await;
+        add_npm(&pool, other_lib, "other-pkg", vec![version("1.0.0", ago(1))], None).await;
+        set_page_controls(&pool, acme, true, true).await;
+        let catalog = PostgresPublicCatalog::new(pool.clone());
+
+        let summary = |slug: &str| OwnerRef { kind: OwnerKind::Organization, slug: slug.into() };
+        assert!(catalog.owner_summary(&summary("acme")).await.unwrap().unwrap().indexing_blocked);
+        assert!(!catalog.owner_summary(&summary("other")).await.unwrap().unwrap().indexing_blocked);
+        assert_eq!(names(&pool, &query(None)).await.len(), 2, "still listed for visitors");
+        let sitemap = catalog.sitemap_entries(100).await.unwrap();
+        assert!(sitemap.iter().all(|e| e.owner.slug != "acme") && sitemap.iter().any(|e| e.owner.slug == "other"), "{sitemap:?}");
+    }
+
     #[sqlx::test]
     async fn an_entry_is_found_by_its_exact_owner_repository_format_and_name(pool: PgPool) {
         let acme = insert_organization(&pool, "acme", "Acme Corp", false).await;
@@ -1380,7 +1451,7 @@ mod tests {
 
         assert_eq!(
             summary,
-            OwnerSummary { kind: OwnerKind::Organization, slug: "acme".to_string(), display_name: "Acme Corp".to_string(), repository_count: 2, package_count: 2, image_count: 1 }
+            OwnerSummary { kind: OwnerKind::Organization, slug: "acme".to_string(), display_name: "Acme Corp".to_string(), repository_count: 2, package_count: 2, image_count: 1, indexing_blocked: false }
         );
     }
 

@@ -253,8 +253,10 @@ impl SeoState {
         let read = tokio::time::timeout(INDEXING_SETTING_TIMEOUT, self.app.get_system_settings.execute(PUBLIC_ORGANIZATION_ID)).await;
         match read {
             Ok(Ok(settings)) => {
-                *self.indexing.lock().unwrap_or_else(|p| p.into_inner()) = Some((Instant::now(), settings.seo_indexing_enabled));
-                Some(settings.seo_indexing_enabled)
+                // An instance that closed its public pages has nothing for a search engine to index either.
+                let indexing_enabled = settings.seo_indexing_enabled && settings.public_page_enabled;
+                *self.indexing.lock().unwrap_or_else(|p| p.into_inner()) = Some((Instant::now(), indexing_enabled));
+                Some(indexing_enabled)
             }
             failed => {
                 let reason = match failed {

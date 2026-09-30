@@ -426,6 +426,10 @@ async fn update_system_settings(
     // Opening the whole catalog to search engines is an instance-wide decision: an organization admin's save keeps the stored value.
     if !user.is_super_admin {
         settings.seo_indexing_enabled = before.seo_indexing_enabled;
+        // On the public organization's row, closing the public pages closes them for the whole instance.
+        if organization_id == artiferris_domain::organization::PUBLIC_ORGANIZATION_ID {
+            settings.public_page_enabled = before.public_page_enabled;
+        }
     }
     let changes = artiferris_domain::audit::system_settings_changes(&before, &settings);
     let audit = (!changes.is_empty()).then(|| AdminAuditRecord { event: AdminAuditEvent::SystemSettingsChanged { organization_id, changes }, actor_id: Some(user.id) });
@@ -2569,5 +2573,27 @@ mod tests {
         let saved = state.get_system_settings.execute(public).await.unwrap();
         assert_eq!(saved.max_login_attempts, 4, "the rest of the save still applies");
         assert!(saved.seo_indexing_enabled, "the switch keeps its stored value");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn only_a_super_admin_closes_the_public_pages_of_the_whole_instance(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public = artiferris_domain::organization::PUBLIC_ORGANIZATION_ID;
+        let org_admin = state.create_user.execute(public, "org-admin", "sup3r-s3cret!", false).await.unwrap();
+        state.set_organization_admin.execute(org_admin, true, None).await.unwrap();
+        state.create_user.execute(public, "admin", "sup3r-s3cret!", true).await.unwrap();
+        let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
+        let super_admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let body = |page: bool, blocked: bool| serde_json::json!({ "max_login_attempts": 10, "login_attempt_window_seconds": 300, "session_ttl_hours": 12, "public_page_enabled": page, "seo_indexing_blocked": blocked });
+        assert!(state.get_system_settings.execute(public).await.unwrap().public_page_enabled, "open by default");
+
+        assert_eq!(put_settings(build_router(state.clone()), &org_admin_token, body(false, true)).await, axum::http::StatusCode::NO_CONTENT);
+        let saved = state.get_system_settings.execute(public).await.unwrap();
+        assert!(saved.public_page_enabled, "an organization admin cannot close the instance's public pages");
+        assert!(saved.seo_indexing_blocked, "but keeps its own search-engine setting");
+
+        assert_eq!(put_settings(build_router(state.clone()), &super_admin_token, body(false, false)).await, axum::http::StatusCode::NO_CONTENT);
+        let saved = state.get_system_settings.execute(public).await.unwrap();
+        assert!(!saved.public_page_enabled && !saved.seo_indexing_blocked);
     }
 }

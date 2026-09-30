@@ -15,6 +15,8 @@ const SETTINGS: SystemSettings = {
   session_ttl_hours: 24,
   registration_enabled: true,
   seo_indexing_enabled: false,
+  seo_indexing_blocked: false,
+  public_page_enabled: true,
 }
 
 function fakeSettings(
@@ -199,6 +201,8 @@ export const SavedSuccessfully: Story = {
           session_ttl_hours: 8,
           registration_enabled: false,
           seo_indexing_enabled: false,
+          seo_indexing_blocked: false,
+          public_page_enabled: true,
         },
         undefined,
       ),

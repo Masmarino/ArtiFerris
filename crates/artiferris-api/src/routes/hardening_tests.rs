@@ -88,7 +88,7 @@ async fn organization_with_policy(state: &AppState, slug: &str, max_login_attemp
     let organization_id = state.create_organization.execute(slug, slug).await.unwrap();
     state
         .update_system_settings
-        .execute(organization_id, SystemSettings { max_login_attempts, login_attempt_window_seconds, session_ttl_hours: 12, registration_enabled: true, seo_indexing_enabled: false }, None)
+        .execute(organization_id, SystemSettings { max_login_attempts, login_attempt_window_seconds, session_ttl_hours: 12, registration_enabled: true, seo_indexing_enabled: false, seo_indexing_blocked: false, public_page_enabled: true }, None)
         .await
         .unwrap();
     organization_id

@@ -20,6 +20,18 @@ pub struct SystemSettings {
     /// organization's row counts. Off by default, and off for a bundle saved before the field existed.
     #[serde(default)]
     pub seo_indexing_enabled: bool,
+    /// Keeps search engines away from this organization's pages of the public catalog (`noindex`, left out of the sitemap), even when the
+    /// instance lets the catalog be indexed. Off by default and for a bundle saved before the field existed.
+    #[serde(default)]
+    pub seo_indexing_blocked: bool,
+    /// Whether this organization's pages of the public catalog are served to visitors at all. Closed, they answer as if nothing was published.
+    /// On the public organization's row it is the same switch for the whole instance. On by default and for a bundle saved before the field existed.
+    #[serde(default = "default_public_page_enabled")]
+    pub public_page_enabled: bool,
+}
+
+fn default_public_page_enabled() -> bool {
+    true
 }
 
 fn default_registration_enabled() -> bool {
@@ -28,7 +40,7 @@ fn default_registration_enabled() -> bool {
 
 impl SystemSettings {
     pub const fn defaults() -> Self {
-        Self { max_login_attempts: 10, login_attempt_window_seconds: 300, session_ttl_hours: 12, registration_enabled: true, seo_indexing_enabled: false }
+        Self { max_login_attempts: 10, login_attempt_window_seconds: 300, session_ttl_hours: 12, registration_enabled: true, seo_indexing_enabled: false, seo_indexing_blocked: false, public_page_enabled: true }
     }
 }
 
@@ -51,6 +63,14 @@ mod tests {
         assert_eq!(defaults.session_ttl_hours, 12);
         assert!(defaults.registration_enabled);
         assert!(!defaults.seo_indexing_enabled);
+    }
+
+    #[test]
+    fn a_bundle_saved_before_the_public_page_controls_keeps_the_page_open_and_indexing_unblocked() {
+        let json = r#"{"max_login_attempts":10,"login_attempt_window_seconds":300,"session_ttl_hours":12,"registration_enabled":true}"#;
+        let settings = serde_json::from_str::<SystemSettings>(json).unwrap();
+        assert!(settings.public_page_enabled);
+        assert!(!settings.seo_indexing_blocked);
     }
 
     #[test]

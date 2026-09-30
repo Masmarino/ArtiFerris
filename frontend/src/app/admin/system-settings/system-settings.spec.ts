@@ -1,5 +1,5 @@
 import { signal } from '@angular/core'
-import { TestBed } from '@angular/core/testing'
+import { ComponentFixture, TestBed } from '@angular/core/testing'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
 import { SystemSettingsAdmin } from './system-settings'
@@ -15,6 +15,8 @@ interface RenderOptions {
   ownOrganizationId?: string | null
   organizationId?: string
   seoIndexingEnabled?: boolean
+  publicPageEnabled?: boolean
+  seoIndexingBlocked?: boolean
 }
 
 function render(options: RenderOptions = {}) {
@@ -44,6 +46,8 @@ function render(options: RenderOptions = {}) {
       session_ttl_hours: 12,
       registration_enabled: true,
       seo_indexing_enabled: options.seoIndexingEnabled ?? false,
+      seo_indexing_blocked: options.seoIndexingBlocked ?? false,
+      public_page_enabled: options.publicPageEnabled ?? true,
     })
   fixture.detectChanges()
   return { fixture, httpMock }
@@ -72,6 +76,8 @@ describe('SystemSettingsAdmin', () => {
       session_ttl_hours: 12,
       registration_enabled: true,
       seo_indexing_enabled: false,
+      seo_indexing_blocked: false,
+      public_page_enabled: true,
     })
     const toastService = TestBed.inject(ToastService)
     req.flush(null)
@@ -96,8 +102,73 @@ describe('SystemSettingsAdmin', () => {
       session_ttl_hours: 12,
       registration_enabled: false,
       seo_indexing_enabled: false,
+      seo_indexing_blocked: false,
+      public_page_enabled: true,
     })
     req.flush(null)
+  })
+
+  describe('public page controls', () => {
+    const checkbox = (fixture: ComponentFixture<SystemSettingsAdmin>, label: string) =>
+      Array.from(fixture.nativeElement.querySelectorAll('gbt-checkbox')).find((box) =>
+        (box as HTMLElement).textContent?.includes(label),
+      ) as HTMLElement | undefined
+
+    it("offers an organization admin to close the organization's page and keep search engines away", () => {
+      const { fixture } = render({ ownOrganizationId: 'org-acme' })
+
+      expect(fixture.nativeElement.textContent).toContain('Page publique')
+      expect(checkbox(fixture, "Afficher la page publique de l'organisation")).toBeDefined()
+      expect(checkbox(fixture, 'Bloquer les moteurs de recherche pour cette organisation')).toBeDefined()
+    })
+
+    it("offers the instance's pages, and nothing about one organization's crawlers, to a super-admin on the public organization", () => {
+      const { fixture } = render({ isSuperAdmin: true, ownOrganizationId: PUBLIC_ORGANIZATION_ID })
+
+      expect(checkbox(fixture, "Afficher les pages publiques de l'instance")).toBeDefined()
+      expect(checkbox(fixture, 'Bloquer les moteurs de recherche')).toBeUndefined()
+    })
+
+    it("does not offer closing the instance's pages to an admin who is not a super-admin", () => {
+      const { fixture } = render({ isSuperAdmin: false, ownOrganizationId: PUBLIC_ORGANIZATION_ID })
+
+      expect(fixture.nativeElement.textContent).not.toContain('Page publique')
+    })
+
+    it('loads the stored values and sends the changed ones on save', () => {
+      const { fixture, httpMock } = render({
+        ownOrganizationId: 'org-acme',
+        publicPageEnabled: false,
+        seoIndexingBlocked: true,
+      })
+      expect(fixture.componentInstance.publicPageEnabled()).toBe(false)
+      expect(fixture.componentInstance.seoIndexingBlocked()).toBe(true)
+
+      fixture.componentInstance.publicPageEnabled.set(true)
+      fixture.componentInstance.seoIndexingBlocked.set(false)
+      fixture.componentInstance.save()
+
+      const req = httpMock.expectOne((r) => r.url === '/api/admin/settings')
+      expect(req.request.body.public_page_enabled).toBe(true)
+      expect(req.request.body.seo_indexing_blocked).toBe(false)
+      req.flush(null)
+    })
+
+    it('keeps the loaded values when the section is hidden', () => {
+      const { fixture, httpMock } = render({
+        isSuperAdmin: false,
+        ownOrganizationId: PUBLIC_ORGANIZATION_ID,
+        publicPageEnabled: false,
+        seoIndexingBlocked: true,
+      })
+
+      fixture.componentInstance.save()
+
+      const req = httpMock.expectOne((r) => r.url === '/api/admin/settings')
+      expect(req.request.body.public_page_enabled).toBe(false)
+      expect(req.request.body.seo_indexing_blocked).toBe(true)
+      req.flush(null)
+    })
   })
 
   describe('search-engine indexing', () => {
@@ -254,6 +325,8 @@ describe('SystemSettingsAdmin', () => {
       session_ttl_hours: 12,
       registration_enabled: true,
       seo_indexing_enabled: false,
+      seo_indexing_blocked: false,
+      public_page_enabled: true,
     })
 
     function switchTwice() {

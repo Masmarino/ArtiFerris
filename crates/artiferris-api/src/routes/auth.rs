@@ -3312,7 +3312,7 @@ mod tests {
             .update_system_settings
             .execute(
                 organization_id,
-                artiferris_domain::system_settings::SystemSettings { max_login_attempts, login_attempt_window_seconds: 300, session_ttl_hours: 12, registration_enabled: true, seo_indexing_enabled: false },
+                artiferris_domain::system_settings::SystemSettings { max_login_attempts, login_attempt_window_seconds: 300, session_ttl_hours: 12, registration_enabled: true, seo_indexing_enabled: false, seo_indexing_blocked: false, public_page_enabled: true },
             None,
         )
             .await
@@ -3373,7 +3373,7 @@ mod tests {
             .update_system_settings
             .execute(
                 lenient_id,
-                artiferris_domain::system_settings::SystemSettings { max_login_attempts: 1000, login_attempt_window_seconds: 1, session_ttl_hours: 12, registration_enabled: true, seo_indexing_enabled: false },
+                artiferris_domain::system_settings::SystemSettings { max_login_attempts: 1000, login_attempt_window_seconds: 1, session_ttl_hours: 12, registration_enabled: true, seo_indexing_enabled: false, seo_indexing_blocked: false, public_page_enabled: true },
             None,
         )
             .await
@@ -3442,7 +3442,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         state.create_user.execute(acme_id, "acme-user", "sup3r-s3cret!", false).await.unwrap();
-        state.update_system_settings.execute(acme_id, artiferris_domain::system_settings::SystemSettings { max_login_attempts: 10, login_attempt_window_seconds: 300, session_ttl_hours: 1, registration_enabled: true, seo_indexing_enabled: false }, None).await.unwrap();
+        state.update_system_settings.execute(acme_id, artiferris_domain::system_settings::SystemSettings { max_login_attempts: 10, login_attempt_window_seconds: 300, session_ttl_hours: 1, registration_enabled: true, seo_indexing_enabled: false, seo_indexing_blocked: false, public_page_enabled: true }, None).await.unwrap();
         let app = build_router(state.clone());
 
         let json = login_response(app.clone(), "acme-user", "sup3r-s3cret!").await;
