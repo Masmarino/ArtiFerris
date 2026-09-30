@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -22,7 +24,7 @@ const MAX_ASSET_MB = 2
 @Component({
   selector: 'app-branding-settings',
   standalone: true,
-  imports: [Button, Card, FileUpload, FormsModule, Tooltip],
+  imports: [TranslocoPipe, Button, Card, FileUpload, FormsModule, Tooltip],
   templateUrl: './branding-settings.html',
   styleUrl: './branding-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -48,9 +50,9 @@ export class BrandingSettingsAdmin {
   readonly faviconError = signal<string | null>(null)
 
   readonly maxSizeMb = MAX_ASSET_MB
-  readonly removeFileLabel = (name: string): string => `Retirer ${name}`
+  readonly removeFileLabel = (name: string): string => t('admin.branding.removeFile', { name })
   readonly oversizeMessage = (name: string, maxSizeMb: number): string =>
-    `${name} dépasse ${maxSizeMb} Mo et n'a pas été ajouté.`
+    t('admin.branding.oversize', { name, max: maxSizeMb })
 
   // effect(), not ngOnInit — this component is reused across organizations on the same route.
   constructor() {
@@ -127,11 +129,11 @@ export class BrandingSettingsAdmin {
         this.uploadingLogo.set(false)
         this.selectedLogoFile.set([])
         this.reloadLogo()
-        this.toastService.success('Logo importé.')
+        this.toastService.success(t('admin.branding.logoImported'))
       },
       error: (err) => {
         this.uploadingLogo.set(false)
-        this.toastService.error(rejectionMessage(err) ?? "Échec de l'import du logo.")
+        this.toastService.error(rejectionMessage(err) ?? t('admin.branding.errors.logoImport'))
       },
     })
   }
@@ -144,11 +146,11 @@ export class BrandingSettingsAdmin {
       next: () => {
         this.uploadingLogo.set(false)
         this.reloadLogo()
-        this.toastService.success('Logo réinitialisé.')
+        this.toastService.success(t('admin.branding.logoReset'))
       },
       error: () => {
         this.uploadingLogo.set(false)
-        this.toastService.error('Échec de la réinitialisation du logo.')
+        this.toastService.error(t('admin.branding.errors.logoReset'))
       },
     })
   }
@@ -163,11 +165,11 @@ export class BrandingSettingsAdmin {
         this.uploadingFavicon.set(false)
         this.selectedFaviconFile.set([])
         this.reloadFavicon()
-        this.toastService.success('Favicon importé.')
+        this.toastService.success(t('admin.branding.faviconImported'))
       },
       error: (err) => {
         this.uploadingFavicon.set(false)
-        this.toastService.error(rejectionMessage(err) ?? "Échec de l'import du favicon.")
+        this.toastService.error(rejectionMessage(err) ?? t('admin.branding.errors.faviconImport'))
       },
     })
   }
@@ -180,11 +182,11 @@ export class BrandingSettingsAdmin {
       next: () => {
         this.uploadingFavicon.set(false)
         this.reloadFavicon()
-        this.toastService.success('Favicon réinitialisé.')
+        this.toastService.success(t('admin.branding.faviconReset'))
       },
       error: () => {
         this.uploadingFavicon.set(false)
-        this.toastService.error('Échec de la réinitialisation du favicon.')
+        this.toastService.error(t('admin.branding.errors.faviconReset'))
       },
     })
   }

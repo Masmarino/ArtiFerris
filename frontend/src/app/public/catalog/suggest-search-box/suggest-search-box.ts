@@ -1,3 +1,4 @@
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -29,6 +30,7 @@ let nextId = 0
 
 /** A search input that suggests package names as you type, as an ARIA combobox. Enter without a highlighted suggestion emits `search`. */
 @Component({
+  imports: [TranslocoPipe],
   selector: 'app-suggest-search-box',
   standalone: true,
   templateUrl: './suggest-search-box.html',

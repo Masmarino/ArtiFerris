@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -16,7 +18,7 @@ import { ROLE_OPTIONS, Role } from '../domain/permission.entity'
 @Component({
   selector: 'app-permission-role-editor',
   standalone: true,
-  imports: [Modal, Button, Select, FormsModule],
+  imports: [TranslocoPipe, Modal, Button, Select, FormsModule],
   templateUrl: './permission-role-editor.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -38,8 +40,8 @@ export class PermissionRoleEditor {
 
   readonly modalTitle = computed(() =>
     this.subjectKind() === 'repository'
-      ? `Modifier l'accès du dépôt ${this.label()}`
-      : `Modifier l'accès de ${this.label()}`,
+      ? t('repositories.permissions.titleRepository', { label: this.label() })
+      : t('repositories.permissions.titleUser', { label: this.label() }),
   )
 
   constructor() {
@@ -60,12 +62,15 @@ export class PermissionRoleEditor {
   }
 
   async revoke(): Promise<void> {
-    const subject =
-      this.subjectKind() === 'repository' ? `du dépôt "${this.label()}"` : `de "${this.label()}"`
+    const label = this.label()
+    const message =
+      this.subjectKind() === 'repository'
+        ? t('repositories.permissions.revokeRepository', { label })
+        : t('repositories.permissions.revokeUser', { label })
     const confirmed = await this.confirmService.ask({
-      heading: "Révoquer l'accès",
-      message: `Révoquer l'accès ${subject} ?`,
-      confirmLabel: 'Révoquer',
+      heading: t('repositories.permissions.revokeHeading'),
+      message,
+      confirmLabel: t('repositories.permissions.revoke'),
       danger: true,
     })
     if (!confirmed) {

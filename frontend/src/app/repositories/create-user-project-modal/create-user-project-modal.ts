@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -31,7 +33,7 @@ const REPO_TYPE_OPTIONS: SelectOption<RepositoryType>[] = [
 @Component({
   selector: 'app-create-user-project-modal',
   standalone: true,
-  imports: [ReactiveFormsModule, Modal, GbtInput, Select, Checkbox, Button],
+  imports: [TranslocoPipe, ReactiveFormsModule, Modal, GbtInput, Select, Checkbox, Button],
   templateUrl: './create-user-project-modal.html',
   styleUrl: './create-user-project-modal.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -86,7 +88,7 @@ export class CreateUserProjectModal {
         if (!isPublic) {
           this.creating.set(false)
           this.created.emit()
-          this.toastService.success(`Projet « ${name} » créé.`)
+          this.toastService.success(t('repositories.createProject.created', { name }))
           return
         }
         // The creation endpoint has no visibility field — making it public is a second,
@@ -95,21 +97,23 @@ export class CreateUserProjectModal {
           next: () => {
             this.creating.set(false)
             this.created.emit()
-            this.toastService.success(`Projet « ${name} » créé.`)
+            this.toastService.success(t('repositories.createProject.created', { name }))
           },
           error: (err) => {
             this.creating.set(false)
             // The project itself was created — only the visibility follow-up failed.
             this.created.emit()
             this.toastService.error(
-              rejectionMessage(err) ?? 'Projet créé, mais échec du passage en public.',
+              rejectionMessage(err) ?? t('repositories.createProject.errors.publicFailed'),
             )
           },
         })
       },
       error: (err) => {
         this.creating.set(false)
-        this.toastService.error(rejectionMessage(err) ?? 'Échec de la création du projet.')
+        this.toastService.error(
+          rejectionMessage(err) ?? t('repositories.createProject.errors.createFailed'),
+        )
       },
     })
   }

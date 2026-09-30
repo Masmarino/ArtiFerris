@@ -1,30 +1,33 @@
-// French pluralization for Gabarit's function-typed label inputs — their English defaults can't be overridden with a plain attribute.
+import { t } from './i18n/translator'
+
+// Each language ships its own plural rules; French treats 0 and 1 alike, and the labels Gabarit
+// takes as functions can't be overridden with a plain attribute.
 export const formatResultsAnnouncement = (count: number): string =>
-  `${count} résultat${count !== 1 ? 's' : ''}`
+  t(count !== 1 ? 'format.results_other' : 'format.results_one', { count })
 
 export const formatSuggestionsAnnouncement = (count: number): string =>
   count === 0
-    ? 'Aucune suggestion'
-    : `${count} suggestion${count !== 1 ? 's' : ''} disponible${count !== 1 ? 's' : ''}`
+    ? t('format.suggestions_none')
+    : t(count !== 1 ? 'format.suggestions_other' : 'format.suggestions_one', { count })
 
 export const formatSelectedCount = (count: number): string =>
-  `${count} sélectionné${count !== 1 ? 's' : ''}`
-
-const COUNT_FORMAT = new Intl.NumberFormat('fr-FR')
+  t(count !== 1 ? 'format.selected_other' : 'format.selected_one', { count })
 
 /** "1 234 téléchargements cette semaine". French keeps 0 and 1 singular. */
 export const formatWeeklyDownloads = (count: number): string =>
-  `${COUNT_FORMAT.format(count)} téléchargement${count >= 2 ? 's' : ''} cette semaine`
+  t(count >= 2 ? 'format.weeklyDownloads_other' : 'format.weeklyDownloads_one', {
+    count: new Intl.NumberFormat(t('meta.locale')).format(count),
+  })
 
-const BYTE_UNITS = ['o', 'Ko', 'Mo', 'Go', 'To']
+const BYTE_UNIT_KEYS = ['b', 'kb', 'mb', 'gb', 'tb']
 
 export function formatBytes(bytes: number): string {
   if (bytes <= 0) {
-    return '0 o'
+    return `0 ${t('format.bytes.b')}`
   }
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1)
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNIT_KEYS.length - 1)
   const value = bytes / 1024 ** exponent
-  return `${value.toFixed(exponent === 0 ? 0 : 1)} ${BYTE_UNITS[exponent]}`
+  return `${value.toFixed(exponent === 0 ? 0 : 1)} ${t(`format.bytes.${BYTE_UNIT_KEYS[exponent]}`)}`
 }
 
 const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -38,11 +41,11 @@ const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 /** "il y a 3 jours", "hier", "à l'instant". A date slightly in the future (clock skew) counts as now. */
 export function formatRelativeDate(iso: string, now: Date = new Date()): string {
   const seconds = Math.min(0, Math.round((new Date(iso).getTime() - now.getTime()) / 1000))
-  const formatter = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' })
+  const formatter = new Intl.RelativeTimeFormat(t('meta.locale'), { numeric: 'auto' })
   for (const [unit, size] of RELATIVE_UNITS) {
     if (-seconds >= size) {
       return formatter.format(Math.trunc(seconds / size), unit)
     }
   }
-  return "à l'instant"
+  return t('format.justNow')
 }

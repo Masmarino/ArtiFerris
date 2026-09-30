@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import {
   AbstractControl,
@@ -27,6 +29,7 @@ function passwordsMatch(group: AbstractControl): ValidationErrors | null {
   selector: 'app-account-page',
   standalone: true,
   imports: [
+    TranslocoPipe,
     ReactiveFormsModule,
     Button,
     GbtInput,
@@ -70,14 +73,14 @@ export class AccountPage {
   get confirmPasswordError(): string | null {
     const control = this.form.controls.confirmPassword
     return this.form.hasError('passwordsMismatch') && control.touched
-      ? 'Les mots de passe ne correspondent pas.'
+      ? t('account.password.errors.mismatch')
       : null
   }
 
   get newPasswordError(): string | null {
     const control = this.form.controls.newPassword
     return control.hasError('minlength') && control.touched
-      ? 'Le mot de passe doit contenir au moins 8 caractères.'
+      ? t('account.password.errors.tooShort')
       : null
   }
 
@@ -93,7 +96,7 @@ export class AccountPage {
       },
       error: () => {
         this.submitting.set(false)
-        this.toastService.error('Mot de passe actuel incorrect ou nouveau mot de passe invalide.')
+        this.toastService.error(t('account.password.errors.change'))
         this.form.patchValue({ currentPassword: '' })
       },
     })

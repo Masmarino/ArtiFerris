@@ -4,12 +4,15 @@ import { applicationConfig, type Preview } from '@storybook/angular-vite'
 // Storybook's preview iframe never loads the real app's index.html/styles.scss on its own.
 import '../src/styles.scss'
 import { provideArtiferrisIcons } from '../src/app/shared/register-icons'
+import { provideStorybookTransloco } from './transloco'
 
 const preview: Preview = {
   // Registers ArtiFerris's own icon set (package, users, server, …) — gbt-icon only ships a
   // handful of built-in names itself, same as the real app.config.ts, or every gbt-icon using
   // one of ours silently renders nothing (aria-hidden, so no story assertion catches it).
-  decorators: [applicationConfig({ providers: [provideArtiferrisIcons()] })],
+  decorators: [
+    applicationConfig({ providers: [provideArtiferrisIcons(), ...provideStorybookTransloco()] }),
+  ],
   parameters: {
     controls: {
       matchers: {

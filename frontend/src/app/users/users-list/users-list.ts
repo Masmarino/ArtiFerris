@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core'
 import { Router } from '@angular/router'
 import { FormsModule } from '@angular/forms'
@@ -24,7 +26,16 @@ const ALL_ORGANIZATIONS = 'ALL'
 @Component({
   selector: 'app-users-list',
   standalone: true,
-  imports: [Table, Button, Select, FormsModule, CreateUserModal, EmptyState, Spinner],
+  imports: [
+    TranslocoPipe,
+    Table,
+    Button,
+    Select,
+    FormsModule,
+    CreateUserModal,
+    EmptyState,
+    Spinner,
+  ],
   templateUrl: './users-list.html',
   styleUrl: './users-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -51,7 +62,7 @@ export class UsersList implements OnInit {
   )
 
   readonly organizationOptions = computed<SelectOption<string>[]>(() => [
-    { value: ALL_ORGANIZATIONS, label: 'Toutes les organisations' },
+    { value: ALL_ORGANIZATIONS, label: t('users.list.allOrganizations') },
     ...this.organizations().map((o) => ({ value: o.id, label: o.display_name })),
   ])
 
@@ -64,19 +75,19 @@ export class UsersList implements OnInit {
 
   readonly columns = computed<TableColumn<UserSummary>[]>(() => {
     const columns: TableColumn<UserSummary>[] = [
-      { key: 'username', label: "Nom d'utilisateur" },
-      { key: 'email', label: 'E-mail' },
+      { key: 'username', label: t('users.list.columns.username') },
+      { key: 'email', label: t('users.list.columns.email') },
     ]
     if (this.isSuperAdmin()) {
       columns.push({
         key: 'organization_id',
-        label: 'Organisation',
+        label: t('users.list.organization'),
         format: (u) => this.organizationNamesById().get(u.organization_id) ?? u.organization_id,
       })
     }
     columns.push(
-      { key: 'is_super_admin', label: 'Super-admin' },
-      { key: 'invitation_pending', label: 'Invitation en attente' },
+      { key: 'is_super_admin', label: t('users.list.columns.superAdmin') },
+      { key: 'invitation_pending', label: t('users.list.columns.invitationPending') },
     )
     return columns
   })
@@ -100,7 +111,7 @@ export class UsersList implements OnInit {
         },
         error: () => {
           this.loading.set(false)
-          this.error.set('Échec du chargement des utilisateurs.')
+          this.error.set(t('users.list.errors.loadFailed'))
         },
       })
       return
@@ -122,7 +133,7 @@ export class UsersList implements OnInit {
       },
       error: () => {
         this.loading.set(false)
-        this.error.set('Échec du chargement des utilisateurs.')
+        this.error.set(t('users.list.errors.loadFailed'))
       },
     })
   }

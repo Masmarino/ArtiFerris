@@ -1,90 +1,87 @@
 <div class="form-container">
-  <gbt-card heading="Serveur mail (SMTP)" icon="mail">
+  <gbt-card [heading]="'admin.smtp.heading' | transloco" icon="mail">
     @if (loading()) {
-      <gbt-spinner label="Chargement…" />
+      <gbt-spinner [label]="'common.loading' | transloco" />
     } @else if (loadFailed()) {
-      <p class="gbt-form-error" role="alert">Échec du chargement des paramètres SMTP.</p>
+      <p class="gbt-form-error" role="alert">{{ 'admin.smtp.loadFailed' | transloco }}</p>
     } @else {
       @if (secretUnreadable()) {
         <gbt-alert variant="warning">
-          Le mot de passe SMTP enregistré est illisible avec la clé de chiffrement de ce serveur.
-          Saisissez-le à nouveau, puis enregistrez.
+          {{ 'admin.smtp.secretUnreadable' | transloco }}
         </gbt-alert>
       }
       <gbt-input
-        label="Hôte SMTP"
+        [label]="'admin.smtp.host' | transloco"
         [ngModel]="host()"
         (ngModelChange)="host.set($event)"
         [errorMessage]="hostError()"
       />
       <gbt-input
-        label="Port"
+        [label]="'admin.smtp.port' | transloco"
         [ngModel]="port()"
         (ngModelChange)="port.set($event)"
         [errorMessage]="portError()"
       />
       <gbt-input
-        label="Identifiant"
+        [label]="'admin.smtp.username' | transloco"
         [ngModel]="username()"
         (ngModelChange)="username.set($event)"
         [errorMessage]="usernameError()"
       />
       <gbt-input
-        label="Mot de passe"
+        [label]="'auth.login.password' | transloco"
         type="password"
-        showPasswordLabel="Afficher le mot de passe"
-        hidePasswordLabel="Masquer le mot de passe"
+        [showPasswordLabel]="'common.showPassword' | transloco"
+        [hidePasswordLabel]="'common.hidePassword' | transloco"
         [ngModel]="password()"
         (ngModelChange)="password.set($event)"
         [errorMessage]="passwordError()"
-        [placeholder]="passwordSet() ? 'Laisser vide pour conserver le mot de passe actuel' : ''"
+        [placeholder]="passwordSet() ? ('admin.orgDetail.keepPassword' | transloco) : ''"
       />
       <gbt-input
-        label="Nom d'expéditeur"
+        [label]="'admin.smtp.fromName' | transloco"
         [ngModel]="fromName()"
         (ngModelChange)="fromName.set($event)"
         [errorMessage]="fromNameError()"
         placeholder="ArtiFerris"
       />
       <gbt-input
-        label="Adresse d'expédition"
+        [label]="'admin.smtp.fromAddress' | transloco"
         [ngModel]="fromAddress()"
         (ngModelChange)="fromAddress.set($event)"
         [errorMessage]="fromAddressError()"
       />
       <gbt-select
-        label="Sécurité"
-        placeholder="Sélectionner…"
+        [label]="'package.security' | transloco"
+        [placeholder]="'common.select' | transloco"
         [options]="securityOptions"
         [ngModel]="security()"
         (ngModelChange)="security.set($event)"
       />
 
       <gbt-button
-        text="Enregistrer"
+        [text]="'common.save' | transloco"
         [loading]="saving()"
         [disabled]="hasErrors()"
         (clicked)="save()"
-        loadingLabel="Chargement en cours"
+        [loadingLabel]="'common.loadingLabel' | transloco"
       />
     }
   </gbt-card>
 
   @if (!loading()) {
-    <gbt-card heading="Envoyer un e-mail de test" icon="send">
+    <gbt-card [heading]="'admin.smtp.testHeading' | transloco" icon="send">
       <gbt-input
-        label="Destinataire"
+        [label]="'admin.smtp.recipient' | transloco"
         [ngModel]="testRecipient()"
         (ngModelChange)="testRecipient.set($event)"
       />
-      <gbt-tooltip
-        text="Utilise la configuration déjà enregistrée, pas les modifications du formulaire ci-dessus."
-      >
+      <gbt-tooltip [text]="'admin.smtp.testHint' | transloco">
         <gbt-button
-          text="Envoyer"
+          [text]="'admin.smtp.send' | transloco"
           variant="secondary"
           [loading]="sendingTest()"
-          loadingLabel="Chargement en cours"
+          [loadingLabel]="'common.loadingLabel' | transloco"
           [disabled]="testRecipient().trim() === ''"
           (clicked)="sendTest()"
         />

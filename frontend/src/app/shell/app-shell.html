@@ -1,22 +1,22 @@
 @if (isLoading()) {
   <div class="app-shell__loading">
-    <gbt-spinner label="Chargement…" />
+    <gbt-spinner [label]="'common.loading' | transloco" />
   </div>
 } @else if (loadFailed()) {
   <div class="app-shell__loading app-shell__load-error">
     <p class="gbt-form-error" role="alert">
-      Impossible de charger votre session. Vérifiez votre connexion puis réessayez.
+      {{ 'shell.loadFailed' | transloco }}
     </p>
-    <gbt-button text="Réessayer" (clicked)="retryLoad()" />
+    <gbt-button [text]="'common.retry' | transloco" (clicked)="retryLoad()" />
   </div>
 } @else {
   <gbt-app-shell
-    navLabel="Navigation principale"
-    skipLabel="Aller au contenu principal"
-    openMenuLabel="Ouvrir le menu de navigation"
-    closeMenuLabel="Fermer le menu de navigation"
-    collapseLabel="Réduire le menu"
-    expandLabel="Déployer le menu"
+    [navLabel]="'shell.navLabel' | transloco"
+    [skipLabel]="'shell.skipLabel' | transloco"
+    [openMenuLabel]="'shell.openMenu' | transloco"
+    [closeMenuLabel]="'shell.closeMenu' | transloco"
+    [collapseLabel]="'shell.collapseMenu' | transloco"
+    [expandLabel]="'shell.expandMenu' | transloco"
     [versionLabel]="version.version()"
     [collapsed]="navCollapsed()"
     (collapsedChange)="navCollapsed.set($event)"
@@ -24,12 +24,17 @@
     @if (navCollapsed()) {
       <img
         src="/Logo.png"
-        alt="ArtiFerris"
+        [alt]="'shell.logoAlt' | transloco"
         class="app-shell__logo app-shell__logo--collapsed"
         shell-brand
       />
     } @else {
-      <img src="/api/branding/logo" alt="ArtiFerris logo" class="app-shell__logo" shell-brand />
+      <img
+        src="/api/branding/logo"
+        [alt]="'auth.login.logoAlt' | transloco"
+        class="app-shell__logo"
+        shell-brand
+      />
     }
     <ng-container shell-nav>
       <ul class="app-shell__nav-list" [class.app-shell__nav-list--collapsed]="navCollapsed()">
@@ -58,7 +63,8 @@
                     [class.app-shell__nav-group-toggle--open]="isMenuOpen(item)"
                     [attr.aria-expanded]="isMenuOpen(item)"
                     [attr.aria-label]="
-                      isMenuOpen(item) ? 'Réduire ' + item.text : 'Déployer ' + item.text
+                      (isMenuOpen(item) ? 'shell.collapseItem' : 'shell.expandItem')
+                        | transloco: { name: item.text }
                     "
                     (click)="toggleMenu(item)"
                   >
@@ -109,15 +115,17 @@
       <h1 class="app-shell__page-title">{{ pageTitle.title() }}</h1>
       <gbt-search-bar
         class="app-shell__search"
-        placeholder="Rechercher un dépôt ou un utilisateur..."
-        [noResultsMessage]="searchFailed() ? 'La recherche a échoué' : 'Aucun résultat'"
-        [noResultsHint]="
-          searchFailed() ? 'Modifiez votre saisie pour réessayer.' : 'Essayez une autre recherche.'
+        [placeholder]="'shell.search.placeholder' | transloco"
+        [noResultsMessage]="
+          (searchFailed() ? 'shell.search.failed' : 'shell.search.noResults') | transloco
         "
-        clearLabel="Effacer la recherche"
-        navigateHint="Naviguer"
-        selectHint="Sélectionner"
-        closeHint="Fermer"
+        [noResultsHint]="
+          (searchFailed() ? 'shell.search.failedHint' : 'shell.search.noResultsHint') | transloco
+        "
+        [clearLabel]="'shell.search.clear' | transloco"
+        [navigateHint]="'shell.search.navigate' | transloco"
+        [selectHint]="'shell.search.select' | transloco"
+        [closeHint]="'common.close' | transloco"
         [groupedResults]="searchResults()"
         [displayFn]="searchResultLabel"
         [resultsAnnouncement]="resultsAnnouncement"
@@ -145,7 +153,7 @@
               (click)="userMenuOpen.set(false)"
             >
               <gbt-icon name="user" aria-hidden="true" />
-              <span>Mon compte</span>
+              <span>{{ 'nav.account' | transloco }}</span>
             </a>
             <button
               type="button"
@@ -154,7 +162,7 @@
               (click)="logout()"
             >
               <gbt-icon name="log-out" aria-hidden="true" />
-              <span>Déconnexion</span>
+              <span>{{ 'shell.logout' | transloco }}</span>
             </button>
           </div>
         }
@@ -166,7 +174,7 @@
 
 <gbt-toaster
   [toasts]="toastService.toasts()"
-  closeLabel="Fermer"
+  [closeLabel]="'common.close' | transloco"
   (dismissed)="toastService.dismiss($event)"
 />
 

@@ -4,6 +4,7 @@ import { HttpErrorResponse, provideHttpClient } from '@angular/common/http'
 import { provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideRouter } from '@angular/router'
 import { By } from '@angular/platform-browser'
+import { Button } from '@masmarino/gabarit'
 import { of, throwError } from 'rxjs'
 import { MyRepositoryPage } from './my-repository-page'
 import { PersonalRepositoryService } from '../application/personal-repository.service'
@@ -49,8 +50,8 @@ describe('MyRepositoryPage', () => {
     it('shows the create button and hides RepositoriesList/ConfirmModal', () => {
       const { fixture } = render({ hasReservedNamespace: () => of(false) })
 
-      const button: HTMLElement = fixture.nativeElement.querySelector('gbt-button')
-      expect(button.getAttribute('text')).toBe('Créer son dépôt utilisateur')
+      const button = fixture.debugElement.query(By.directive(Button)).componentInstance as Button
+      expect(button.text()).toBe('Créer son dépôt utilisateur')
       expect(fixture.debugElement.query(By.directive(RepositoriesList))).toBeFalsy()
       expect(fixture.debugElement.query(By.directive(ConfirmModal))).toBeFalsy()
     })

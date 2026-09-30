@@ -1,3 +1,4 @@
+import { TranslocoPipe } from '@jsverse/transloco'
 import { DOCUMENT } from '@angular/common'
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core'
 import { RouterLink } from '@angular/router'
@@ -12,7 +13,7 @@ interface PublicLink {
 @Component({
   selector: 'app-share-repository-link',
   standalone: true,
-  imports: [RouterLink, CopyableCommand],
+  imports: [TranslocoPipe, RouterLink, CopyableCommand],
   templateUrl: './share-repository-link.html',
   styleUrl: './share-repository-link.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

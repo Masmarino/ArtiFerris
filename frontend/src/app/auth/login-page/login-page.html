@@ -1,78 +1,87 @@
 <main class="auth-layout">
   <div class="auth-layout__card">
-    <h1 class="sr-only">Connexion à ArtiFerris</h1>
-    <img src="/api/branding/logo" alt="ArtiFerris logo" class="auth-layout__logo" />
+    <h1 class="sr-only">{{ 'auth.login.heading' | transloco }}</h1>
+    <img
+      src="/api/branding/logo"
+      [alt]="'auth.login.logoAlt' | transloco"
+      class="auth-layout__logo"
+    />
     @if (sessionsEndedMessage) {
       <gbt-alert variant="info">{{ sessionsEndedMessage }}</gbt-alert>
     }
     @if (ssoLinkInvalid()) {
-      <gbt-alert variant="error">Lien de connexion invalide ou expiré.</gbt-alert>
+      <gbt-alert variant="error">{{ 'auth.login.ssoLinkInvalid' | transloco }}</gbt-alert>
     }
     @if (!mfaToken()) {
       @if (ssoType() === 'oidc') {
-        <gbt-alert variant="info"
-          >Cette organisation utilise l'authentification unique (OIDC).</gbt-alert
-        >
-        <a href="/api/auth/sso/oidc/login" class="auth-layout__link" (click)="startSso()"
-          >Se connecter avec le fournisseur d'identité</a
-        >
+        <gbt-alert variant="info">{{ 'auth.login.oidcNotice' | transloco }}</gbt-alert>
+        <a href="/api/auth/sso/oidc/login" class="auth-layout__link" (click)="startSso()">{{
+          'auth.login.oidcLink' | transloco
+        }}</a>
       } @else {
         <form [formGroup]="form" (ngSubmit)="submit()">
           <p class="gbt-form-required-note">
-            Les champs marqués d'un astérisque (*) sont obligatoires.
+            {{ 'common.requiredNote' | transloco }}
           </p>
           <gbt-input
-            label="Nom d'utilisateur"
+            [label]="'auth.login.username' | transloco"
             formControlName="username"
             [required]="true"
             autocomplete="username"
           />
           <gbt-input
-            label="Mot de passe"
+            [label]="'auth.login.password' | transloco"
             type="password"
             formControlName="password"
             [required]="true"
             autocomplete="current-password"
-            showPasswordLabel="Afficher le mot de passe"
-            hidePasswordLabel="Masquer le mot de passe"
+            [showPasswordLabel]="'common.showPassword' | transloco"
+            [hidePasswordLabel]="'common.hidePassword' | transloco"
           />
           @if (errorMessage(); as message) {
             <p class="gbt-form-error" role="alert">{{ message }}</p>
           }
           <gbt-button
-            text="Se connecter"
+            [text]="'auth.login.submit' | transloco"
             type="submit"
             [loading]="submitting()"
-            loadingLabel="Chargement en cours"
+            [loadingLabel]="'common.loadingLabel' | transloco"
             [disabled]="form.invalid || submitting()"
           />
         </form>
         @if (registrationEnabled()) {
           <gbt-divider />
-          <a routerLink="/register" class="auth-layout__link">Créer un compte</a>
+          <a routerLink="/register" class="auth-layout__link">{{
+            'auth.login.createAccount' | transloco
+          }}</a>
         }
       }
-      <a routerLink="/explorer" class="auth-layout__link">Explorer les paquets publics</a>
+      <a routerLink="/explorer" class="auth-layout__link">{{
+        'auth.login.explorePublic' | transloco
+      }}</a>
     } @else if (mfaSetupRequired()) {
       <app-mfa-enrollment [mfaToken]="mfaToken()!" (completed)="onEnrollmentCompleted()" />
     } @else {
       @if (mfaHasTotp()) {
         <form [formGroup]="mfaForm" (ngSubmit)="submitMfa()">
           <p class="gbt-form-required-note">
-            Les champs marqués d'un astérisque (*) sont obligatoires.
+            {{ 'common.requiredNote' | transloco }}
           </p>
           <div class="d-flex align-items-end gap-2">
             <gbt-input
-              [label]="useBackupCode() ? 'Code de secours' : 'Code de vérification'"
+              [label]="
+                (useBackupCode() ? 'auth.login.backupCode' : 'auth.login.verificationCode')
+                  | transloco
+              "
               formControlName="code"
               [required]="true"
               [autocomplete]="useBackupCode() ? 'off' : 'one-time-code'"
             />
             <gbt-button
-              text="Vérifier"
+              [text]="'auth.login.verify' | transloco"
               type="submit"
               [loading]="submitting()"
-              loadingLabel="Chargement en cours"
+              [loadingLabel]="'common.loadingLabel' | transloco"
               [disabled]="mfaForm.invalid || submitting()"
             />
           </div>
@@ -81,9 +90,8 @@
           }
           <button type="button" class="auth-layout__link" (click)="toggleBackupCode()">
             {{
-              useBackupCode()
-                ? "Utiliser l'application d'authentification"
-                : 'Utiliser un code de secours'
+              (useBackupCode() ? 'auth.login.useAuthenticatorApp' : 'auth.login.useBackupCode')
+                | transloco
             }}
           </button>
         </form>
@@ -91,12 +99,12 @@
         <p class="gbt-form-error" role="alert">{{ message }}</p>
       }
       @if (passkeysSupported && mfaHasPasskey()) {
-        <gbt-divider label="OU" />
+        <gbt-divider [label]="'common.or' | transloco" />
         <gbt-button
-          text="Utiliser une clé d'accès"
+          [text]="'auth.login.usePasskey' | transloco"
           variant="secondary"
           [loading]="submitting()"
-          loadingLabel="Chargement en cours"
+          [loadingLabel]="'common.loadingLabel' | transloco"
           [disabled]="submitting()"
           (clicked)="submitPasskey()"
         />

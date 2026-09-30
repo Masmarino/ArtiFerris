@@ -1,3 +1,4 @@
+import { t } from '../../../shared/i18n/translator'
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
 import { ActivatedRoute } from '@angular/router'
 import { PageTitleService } from '../../../shell/page-title.service'
@@ -5,10 +6,9 @@ import { PublicLayout } from '../../public-layout/public-layout'
 import { CatalogSearch } from '../catalog-search/catalog-search'
 import { CatalogFormat } from '../domain/catalog.entity'
 
-const BLURBS: Record<CatalogFormat, string> = {
-  npm: "Tous les paquets npm publics hébergés sur cette instance. On installe toujours depuis l'URL du propriétaire.",
-  docker:
-    "Toutes les images Docker publiques hébergées sur cette instance. On tire toujours depuis l'URL du propriétaire.",
+const BLURB_KEYS: Record<CatalogFormat, string> = {
+  npm: 'catalog.page.blurbNpm',
+  docker: 'catalog.page.blurbDocker',
 }
 
 /** Route data supplies `catalogName` and `format`, see `catalogRoutes` in app.routes.ts. */
@@ -25,7 +25,7 @@ export class CatalogPage {
 
   readonly name = this.data['catalogName'] as string
   readonly format = this.data['format'] as CatalogFormat
-  readonly blurb = BLURBS[this.format]
+  readonly blurb = t(BLURB_KEYS[this.format])
 
   constructor() {
     inject(PageTitleService).title.set(this.name)

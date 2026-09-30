@@ -1,15 +1,19 @@
 <app-public-layout>
-  <a [routerLink]="backLink()" class="public-package-page__back">← Retour au dépôt</a>
+  <a [routerLink]="backLink()" class="public-package-page__back">{{
+    'package.backToRepository' | transloco
+  }}</a>
 
   @if (loading()) {
-    <div class="loading-state"><gbt-spinner size="lg" label="Chargement…" /></div>
+    <div class="loading-state">
+      <gbt-spinner size="lg" [label]="'common.loading' | transloco" />
+    </div>
   } @else if (loadError()) {
     <gbt-card>
-      <p class="gbt-form-error" role="alert">Échec du chargement du package.</p>
+      <p class="gbt-form-error" role="alert">{{ 'publicPackage.loadFailed' | transloco }}</p>
     </gbt-card>
   } @else if (notFound()) {
     <gbt-card>
-      <p class="gbt-form-error" role="alert">Package introuvable.</p>
+      <p class="gbt-form-error" role="alert">{{ 'publicPackage.notFound' | transloco }}</p>
     </gbt-card>
   } @else if (format() === 'npm' && npmDetails(); as details) {
     <h1>{{ packageName() }}</h1>
@@ -17,7 +21,7 @@
       <p class="public-package-page__downloads">{{ downloads }}</p>
     }
     <gbt-tabs>
-      <gbt-tab label="Aperçu">
+      <gbt-tab [label]="'publicPackage.tabs.overview' | transloco">
         @if (details.dist_tags.length > 0) {
           <gbt-card>
             <div class="public-package-page__dist-tags">
@@ -28,25 +32,25 @@
           </gbt-card>
         }
         <gbt-card>
-          <h2 class="public-package-page__eyebrow">Installation</h2>
+          <h2 class="public-package-page__eyebrow">{{ 'package.eyebrow.install' | transloco }}</h2>
           <app-copyable-command
             [command]="npmCommand()"
-            [label]="'Copier la commande d\'installation de ' + packageName()"
+            [label]="'package.copyInstallCommand' | transloco: { name: packageName() }"
           />
         </gbt-card>
         <app-readme-view [html]="details.readme_html" />
         <gbt-card>
           @if (details.truncated) {
             <p class="public-package-page__truncated" data-testid="truncated-notice">
-              Seules les 200 versions les plus récentes sont affichées.
+              {{ 'package.versionsTruncated' | transloco: { count: 200 } }}
             </p>
           }
           <table class="public-package-page__table">
             <thead>
               <tr>
-                <th>Version</th>
-                <th>Publiée le</th>
-                <th>Taille</th>
+                <th>{{ 'package.table.version' | transloco }}</th>
+                <th>{{ 'package.table.publishedAt' | transloco }}</th>
+                <th>{{ 'package.table.size' | transloco }}</th>
               </tr>
             </thead>
             <tbody>
@@ -62,26 +66,23 @@
         </gbt-card>
       </gbt-tab>
 
-      <gbt-tab label="Sécurité" class="gap-4">
+      <gbt-tab [label]="'publicPackage.tabs.security' | transloco" class="gap-4">
         <gbt-card>
-          <p class="package-detail__eyebrow">Alertes de sécurité</p>
+          <p class="package-detail__eyebrow">{{ 'publicPackage.securityAlerts' | transloco }}</p>
           @if (auditLoading()) {
-            <gbt-spinner size="sm" label="Vérification des vulnérabilités connues…" />
+            <gbt-spinner size="sm" [label]="'package.audit.checking' | transloco" />
           } @else if (auditNoCache()) {
             <p class="package-detail__audit-status">
-              Aucune vérification en cache pour ce paquet pour le moment.
+              {{ 'publicPackage.noCachedAudit' | transloco }}
             </p>
           } @else if (auditFailed()) {
             <p class="package-detail__audit-status">
-              {{
-                auditNotice() ??
-                  "Impossible de vérifier les vulnérabilités pour le moment (base d'alertes npm injoignable)."
-              }}
+              {{ auditNotice() ?? ('package.audit.unavailable' | transloco) }}
             </p>
           } @else if (auditAdvisories(); as advisories) {
             @if (advisories.length === 0) {
               <p class="package-detail__audit-status package-detail__audit-status--clean">
-                Aucune vulnérabilité connue pour les versions publiées.
+                {{ 'package.audit.cleanVersions' | transloco }}
               </p>
             } @else {
               <ul class="package-detail__advisories">
@@ -95,10 +96,12 @@
                     </span>
                     <div class="package-detail__advisory-body">
                       <a [href]="advisory.url" target="_blank" rel="noopener noreferrer"
-                        >{{ advisory.title }} <span class="sr-only">(nouvelle fenêtre)</span></a
+                        >{{ advisory.title }}
+                        <span class="sr-only">{{ 'common.newWindow' | transloco }}</span></a
                       >
                       <p class="package-detail__advisory-meta">
-                        Versions concernées : <code>{{ advisory.vulnerable_versions }}</code>
+                        {{ 'package.audit.affectedVersions' | transloco }}
+                        <code>{{ advisory.vulnerable_versions }}</code>
                         @if (advisory.cvss_score !== null) {
                           · CVSS {{ advisory.cvss_score }}
                         }
@@ -113,36 +116,37 @@
 
         @if (latestVersion(); as scannedVersion) {
           <gbt-card>
-            <p class="package-detail__eyebrow">Analyse des dépendances (version {{ scannedVersion }})</p>
+            <p class="package-detail__eyebrow">
+              {{ 'package.deps.heading' | transloco: { version: scannedVersion } }}
+            </p>
             @if (depAuditLoading()) {
-              <gbt-spinner size="sm" label="Chargement du dernier résultat…" />
+              <gbt-spinner size="sm" [label]="'package.loadingLastResult' | transloco" />
             } @else if (depAuditFailed()) {
               <p class="package-detail__audit-status">
-                {{
-                  depAuditNotice() ??
-                    "Impossible d'effectuer l'analyse pour le moment (base d'alertes npm injoignable)."
-                }}
+                {{ depAuditNotice() ?? ('package.deps.unavailable' | transloco) }}
               </p>
             } @else if (depAuditResult(); as result) {
               <p class="package-detail__audit-meta">
-                Dernière analyse le {{ result.scanned_at | date: 'short' }} ·
-                {{ result.packages_scanned }} dépendance{{
-                  result.packages_scanned !== 1 ? 's' : ''
+                {{
+                  (result.packages_scanned !== 1
+                    ? 'package.deps.lastScan_other'
+                    : 'package.deps.lastScan_one'
+                  )
+                    | transloco
+                      : { date: result.scanned_at | date: 'short', count: result.packages_scanned }
                 }}
-                analysée{{ result.packages_scanned !== 1 ? 's' : '' }}
                 @if (result.truncated) {
-                  · analyse partielle (arbre de dépendances trop volumineux pour être couvert
-                  entièrement)
+                  {{ 'package.deps.partial' | transloco }}
                 }
               </p>
               @if (result.findings.length === 0) {
                 <p class="package-detail__audit-status package-detail__audit-status--clean">
-                  Aucune vulnérabilité connue dans l'arbre de dépendances.
+                  {{ 'package.deps.clean' | transloco }}
                 </p>
               } @else {
                 <gbt-select
                   class="package-detail__severity-filter"
-                  placeholder="Toutes les criticités"
+                  [placeholder]="'package.allSeverities' | transloco"
                   [options]="npmSeverityOptions"
                   [multiple]="true"
                   [selectedCountLabel]="selectedCountLabel"
@@ -151,7 +155,7 @@
                 />
                 @if (filteredFindings().length === 0) {
                   <p class="package-detail__audit-status">
-                    Aucune vulnérabilité ne correspond aux criticités sélectionnées.
+                    {{ 'package.noMatchingSeverity' | transloco }}
                   </p>
                 } @else {
                   <ul class="package-detail__advisories">
@@ -169,7 +173,7 @@
                         <div class="package-detail__advisory-body">
                           <a [href]="finding.advisory.url" target="_blank" rel="noopener noreferrer"
                             >{{ finding.advisory.title }}
-                            <span class="sr-only">(nouvelle fenêtre)</span></a
+                            <span class="sr-only">{{ 'common.newWindow' | transloco }}</span></a
                           >
                           <p class="package-detail__advisory-meta">
                             <code
@@ -188,17 +192,20 @@
                   @if (depAuditTotalPages() > 1) {
                     <div class="package-detail__pagination">
                       <gbt-button
-                        text="Précédent"
+                        [text]="'common.previous' | transloco"
                         variant="secondary"
                         size="small"
                         [disabled]="depAuditPage() <= 1"
                         (clicked)="goToDepAuditPage(depAuditPage() - 1)"
                       />
                       <span class="package-detail__pagination-status">
-                        Page {{ depAuditPage() }} sur {{ depAuditTotalPages() }}
+                        {{
+                          'package.pageOf'
+                            | transloco: { page: depAuditPage(), total: depAuditTotalPages() }
+                        }}
                       </span>
                       <gbt-button
-                        text="Suivant"
+                        [text]="'common.next' | transloco"
                         variant="secondary"
                         size="small"
                         [disabled]="depAuditPage() >= depAuditTotalPages()"
@@ -209,7 +216,9 @@
                 }
               }
             } @else {
-              <p class="package-detail__audit-status">Aucune analyse pour cette version.</p>
+              <p class="package-detail__audit-status">
+                {{ 'publicPackage.noAnalysis' | transloco }}
+              </p>
             }
           </gbt-card>
         }
@@ -221,23 +230,26 @@
       <p class="public-package-page__downloads">{{ downloads }}</p>
     }
     <gbt-tabs>
-      <gbt-tab label="Aperçu" class="gap-4">
+      <gbt-tab [label]="'publicPackage.tabs.overview' | transloco" class="gap-4">
         <gbt-card>
-          <h2 class="public-package-page__eyebrow">Installation</h2>
-          <app-copyable-command [command]="dockerCommand()" label="Copier la commande docker pull" />
+          <h2 class="public-package-page__eyebrow">{{ 'package.eyebrow.install' | transloco }}</h2>
+          <app-copyable-command
+            [command]="dockerCommand()"
+            [label]="'package.copyPullCommand' | transloco"
+          />
         </gbt-card>
         <gbt-card>
           @if (details.truncated) {
             <p class="public-package-page__truncated" data-testid="truncated-notice">
-              Seuls les 100 tags les plus récents sont affichés.
+              {{ 'package.tagsTruncated' | transloco: { count: 100 } }}
             </p>
           }
           <table class="public-package-page__table">
             <thead>
               <tr>
-                <th>Tag</th>
-                <th>Créé le</th>
-                <th>Taille</th>
+                <th>{{ 'package.table.tag' | transloco }}</th>
+                <th>{{ 'package.table.createdAt' | transloco }}</th>
+                <th>{{ 'package.table.size' | transloco }}</th>
               </tr>
             </thead>
             <tbody>
@@ -253,32 +265,40 @@
         </gbt-card>
       </gbt-tab>
 
-      <gbt-tab label="Sécurité" class="gap-4">
+      <gbt-tab [label]="'publicPackage.tabs.security' | transloco" class="gap-4">
         @if (scannedTag(); as scannedTagValue) {
           <gbt-card>
-            <p class="package-detail__eyebrow">Scan de l'image (tag {{ scannedTagValue }})</p>
+            <p class="package-detail__eyebrow">
+              {{ 'package.scan.imageHeading' | transloco: { tag: scannedTagValue } }}
+            </p>
             @if (imageScanLoading()) {
-              <gbt-spinner size="sm" label="Chargement du dernier résultat…" />
+              <gbt-spinner size="sm" [label]="'package.loadingLastResult' | transloco" />
             } @else if (imageScanFailed()) {
               <p class="package-detail__audit-status">
-                Impossible d'effectuer le scan pour le moment (Trivy indisponible ou erreur
-                d'analyse).
+                {{ 'package.scan.unavailable' | transloco }}
               </p>
             } @else if (imageScanResult(); as result) {
               <p class="package-detail__audit-meta">
-                Dernier scan le {{ result.scanned_at | date: 'short' }} ·
-                {{ result.vulnerabilities.length }} vulnérabilité{{
-                  result.vulnerabilities.length !== 1 ? 's' : ''
+                {{
+                  (result.vulnerabilities.length !== 1
+                    ? 'package.scan.last_other'
+                    : 'package.scan.last_one'
+                  )
+                    | transloco
+                      : {
+                          date: result.scanned_at | date: 'short',
+                          count: result.vulnerabilities.length,
+                        }
                 }}
               </p>
               @if (result.vulnerabilities.length === 0) {
                 <p class="package-detail__audit-status package-detail__audit-status--clean">
-                  Aucune vulnérabilité connue dans cette image.
+                  {{ 'package.scan.clean' | transloco }}
                 </p>
               } @else {
                 <gbt-select
                   class="package-detail__severity-filter"
-                  placeholder="Toutes les criticités"
+                  [placeholder]="'package.allSeverities' | transloco"
                   [options]="dockerSeverityOptions"
                   [multiple]="true"
                   [selectedCountLabel]="selectedCountLabel"
@@ -287,7 +307,7 @@
                 />
                 @if (filteredVulnerabilities().length === 0) {
                   <p class="package-detail__audit-status">
-                    Aucune vulnérabilité ne correspond aux criticités sélectionnées.
+                    {{ 'package.noMatchingSeverity' | transloco }}
                   </p>
                 } @else {
                   <ul class="package-detail__advisories">
@@ -303,7 +323,7 @@
                           @if (vuln.primary_url) {
                             <a [href]="vuln.primary_url" target="_blank" rel="noopener noreferrer"
                               >{{ vuln.title ?? vuln.id }}
-                              <span class="sr-only">(nouvelle fenêtre)</span></a
+                              <span class="sr-only">{{ 'common.newWindow' | transloco }}</span></a
                             >
                           } @else {
                             <span>{{ vuln.title ?? vuln.id }}</span>
@@ -311,7 +331,8 @@
                           <p class="package-detail__advisory-meta">
                             <code>{{ vuln.package_name }}&#64;{{ vuln.installed_version }}</code>
                             @if (vuln.fixed_version) {
-                              · corrigé en <code>{{ vuln.fixed_version }}</code>
+                              {{ 'package.scan.fixedIn' | transloco }}
+                              <code>{{ vuln.fixed_version }}</code>
                             }
                           </p>
                         </div>
@@ -321,17 +342,20 @@
                   @if (imageScanTotalPages() > 1) {
                     <div class="package-detail__pagination">
                       <gbt-button
-                        text="Précédent"
+                        [text]="'common.previous' | transloco"
                         variant="secondary"
                         size="small"
                         [disabled]="imageScanPage() <= 1"
                         (clicked)="goToImageScanPage(imageScanPage() - 1)"
                       />
                       <span class="package-detail__pagination-status">
-                        Page {{ imageScanPage() }} sur {{ imageScanTotalPages() }}
+                        {{
+                          'package.pageOf'
+                            | transloco: { page: imageScanPage(), total: imageScanTotalPages() }
+                        }}
                       </span>
                       <gbt-button
-                        text="Suivant"
+                        [text]="'common.next' | transloco"
                         variant="secondary"
                         size="small"
                         [disabled]="imageScanPage() >= imageScanTotalPages()"
@@ -342,7 +366,7 @@
                 }
               }
             } @else {
-              <p class="package-detail__audit-status">Aucun scan pour ce tag.</p>
+              <p class="package-detail__audit-status">{{ 'publicPackage.noScan' | transloco }}</p>
             }
           </gbt-card>
         }

@@ -1,3 +1,4 @@
+import { t } from '../../shared/i18n/translator'
 import { BlockedAccount } from './audit.entity'
 
 export interface BlockedAccountView {
@@ -20,7 +21,7 @@ export function describeBlockedAccount(account: BlockedAccount): BlockedAccountV
   }
   const username = ORGANIZATION_LOGIN_KEY.exec(key)?.[1]
   if (username) {
-    return { label: `${username} (organisation)`, unlockAs: username }
+    return { label: t('admin.securityLog.organizationAccount', { username }), unlockAs: username }
   }
   return { label: key, unlockAs: null }
 }

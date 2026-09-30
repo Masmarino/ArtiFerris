@@ -1,3 +1,4 @@
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core'
 import { rxResource, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, RouterLink } from '@angular/router'
@@ -24,8 +25,8 @@ import { ReadmeView } from '../../shared/readme-view/readme-view'
 import { overloadMessage } from '../../shared/api-error'
 import {
   bySeverityDesc,
-  DOCKER_SEVERITY_OPTIONS,
-  NPM_SEVERITY_OPTIONS,
+  buildDockerSeverityOptions,
+  buildNpmSeverityOptions,
   SeverityClassPipe,
 } from '../../shared/severity'
 import {
@@ -40,6 +41,7 @@ const PAGE_SIZE = 20
   selector: 'app-public-package-page',
   standalone: true,
   imports: [
+    TranslocoPipe,
     Button,
     Card,
     CopyableCommand,
@@ -245,8 +247,8 @@ export class PublicPackagePage {
   })
 
   readonly selectedCountLabel = formatSelectedCount
-  readonly npmSeverityOptions = NPM_SEVERITY_OPTIONS
-  readonly dockerSeverityOptions = DOCKER_SEVERITY_OPTIONS
+  readonly npmSeverityOptions = buildNpmSeverityOptions()
+  readonly dockerSeverityOptions = buildDockerSeverityOptions()
 
   constructor() {
     effect(() => this.pageTitle.title.set(this.packageName()))

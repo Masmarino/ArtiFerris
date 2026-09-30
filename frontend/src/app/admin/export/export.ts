@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Button, Card, FileUpload } from '@masmarino/gabarit'
@@ -11,7 +13,7 @@ import { badRequestMessage } from '../../shared/api-error'
 @Component({
   selector: 'app-export',
   standalone: true,
-  imports: [Button, Card, FileUpload, FormsModule],
+  imports: [TranslocoPipe, Button, Card, FileUpload, FormsModule],
   templateUrl: './export.html',
   styleUrl: './export.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -27,7 +29,7 @@ export class ExportAdmin {
   readonly importing = signal(false)
   readonly importError = signal<string | null>(null)
   readonly importReport = signal<ImportReport | null>(null)
-  readonly removeFileLabel = (name: string): string => `Retirer ${name}`
+  readonly removeFileLabel = (name: string): string => t('admin.branding.removeFile', { name })
 
   downloadConfiguration(): void {
     this.error.set(null)
@@ -40,7 +42,7 @@ export class ExportAdmin {
       error: async (err) => {
         const message = await badRequestBlobMessage(err)
         this.downloading.set(false)
-        this.error.set(message ?? "Échec de l'export de la configuration.")
+        this.error.set(message ?? t('admin.export.errors.exportFailed'))
       },
     })
   }
@@ -55,10 +57,9 @@ export class ExportAdmin {
     const file = this.selectedFile()[0]
     if (!file || this.importing()) return
     const confirmed = await this.confirmService.ask({
-      heading: 'Importer la configuration',
-      message:
-        'Importer cette configuration ? Cette opération ne fonctionne que sur une instance vide (sans dépôt, sans autre utilisateur que le vôtre).',
-      confirmLabel: 'Importer',
+      heading: t('admin.export.importHeading'),
+      message: t('admin.export.importConfirm'),
+      confirmLabel: t('admin.branding.import'),
       danger: true,
     })
     if (!confirmed) return
@@ -72,7 +73,7 @@ export class ExportAdmin {
       },
       error: (err) => {
         this.importing.set(false)
-        this.importError.set(badRequestMessage(err) ?? "Échec de l'import de la configuration.")
+        this.importError.set(badRequestMessage(err) ?? t('admin.export.errors.importFailed'))
       },
     })
   }

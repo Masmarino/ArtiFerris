@@ -10,7 +10,9 @@ import {
 import { FormsModule } from '@angular/forms'
 import { firstValueFrom } from 'rxjs'
 import { Alert, Button, Divider, GbtInput, Tooltip } from '@masmarino/gabarit'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { AuthService } from '../application/auth.service'
+import { t } from '../../shared/i18n/translator'
 import { createPasskeyCredential, passkeysSupported } from '../../shared/webauthn-browser'
 
 type SetupStep = 'choice' | 'totp-enroll' | 'backup-codes' | 'passkey'
@@ -19,7 +21,7 @@ type SetupStep = 'choice' | 'totp-enroll' | 'backup-codes' | 'passkey'
 @Component({
   selector: 'app-mfa-enrollment',
   standalone: true,
-  imports: [FormsModule, GbtInput, Button, Tooltip, Alert, Divider],
+  imports: [FormsModule, GbtInput, Button, Tooltip, Alert, Divider, TranslocoPipe],
   templateUrl: './mfa-enrollment.html',
   styleUrl: './mfa-enrollment.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -61,7 +63,7 @@ export class MfaEnrollmentPage {
       },
       error: () => {
         this.submitting.set(false)
-        this.errorMessage.set("Échec de la préparation de l'application d'authentification.")
+        this.errorMessage.set(t('auth.mfaEnrollment.errors.totpSetupFailed'))
       },
     })
   }
@@ -92,7 +94,7 @@ export class MfaEnrollmentPage {
       },
       error: () => {
         this.submitting.set(false)
-        this.errorMessage.set('Code invalide.')
+        this.errorMessage.set(t('auth.mfaEnrollment.errors.invalidCode'))
       },
     })
   }
@@ -121,7 +123,7 @@ export class MfaEnrollmentPage {
       this.completed.emit()
     } catch {
       this.submitting.set(false)
-      this.errorMessage.set("Échec de l'enregistrement de la clé d'accès. Réessayez.")
+      this.errorMessage.set(t('auth.mfaEnrollment.errors.passkeyFailed'))
     }
   }
 }

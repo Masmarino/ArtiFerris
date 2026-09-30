@@ -1,3 +1,4 @@
+import { t } from '../../shared/i18n/translator'
 import { AuditEntry } from './audit.entity'
 
 type Payload = Record<string, unknown>
@@ -11,89 +12,81 @@ export function auditPayload(entry: AuditEntry): Payload {
   return isRecord(entry.payload) ? entry.payload : {}
 }
 
-const LABELS: Record<string, string> = {
-  LoginFailed: 'Échec de connexion',
-  AccessDenied: 'Accès refusé',
-  PasswordChangeFailed: 'Échec de changement de mot de passe',
-  MfaVerificationFailed: 'Échec de vérification de la double authentification',
-  PasskeyVerificationFailed: "Échec de vérification d'une clé d'accès",
-  OidcLoginFailed: 'Échec de connexion SSO (OIDC)',
-  DockerTokenFailed: "Échec d'obtention d'un jeton Docker",
-  LoginSucceeded: 'Connexion réussie',
-  PasswordChanged: 'Mot de passe modifié',
-  MfaEnabled: 'Double authentification activée',
-  MfaDisabled: 'Double authentification désactivée',
-  PasskeyAdded: "Clé d'accès ajoutée",
-  PasskeyDeleted: "Clé d'accès supprimée",
-  ApiTokenCreated: "Jeton d'API créé",
-  ApiTokenRevoked: "Jeton d'API révoqué",
-  SessionsRevoked: 'Déconnexion de toutes les sessions',
-  UserInvited: 'Utilisateur invité',
-  UserActivated: 'Compte activé',
-  UserDeleted: 'Utilisateur supprimé',
-  SuperAdminGranted: 'Super-administrateur accordé',
-  SuperAdminRevoked: 'Super-administrateur retiré',
-  OrganizationAdminGranted: "Administrateur d'organisation accordé",
-  OrganizationAdminRevoked: "Administrateur d'organisation retiré",
-  OrganizationCreated: 'Organisation créée',
-  IdentityProviderSet: "Fournisseur d'identité modifié",
-  IdentityProviderCleared: "Fournisseur d'identité supprimé",
-  SmtpSettingsChanged: 'Paramètres SMTP modifiés',
-  SystemSettingsChanged: 'Paramètres système modifiés',
-  BrandingChanged: 'Image de marque modifiée',
-  ConfigurationExported: 'Configuration exportée',
-  ConfigurationImported: 'Configuration importée',
-  BackupCodesRegenerated: 'Codes de secours régénérés',
-  InvitationResent: 'Invitation renvoyée',
-  QuotaSet: 'Quota modifié',
-  RetentionPolicySet: 'Rétention modifiée',
-  LoginThrottleCleared: 'Verrouillage de connexion levé',
-  Created: 'Dépôt créé',
-  Renamed: 'Dépôt renommé',
-  RemoteUrlChanged: 'URL distante modifiée',
-  GroupMemberAdded: 'Membre ajouté au groupe',
-  GroupMemberRemoved: 'Membre retiré du groupe',
-  VisibilityChanged: 'Visibilité modifiée',
-  Deleted: 'Dépôt supprimé',
-  Granted: 'Accès accordé',
-  Revoked: 'Accès retiré',
-  PackagePushed: 'Paquet publié',
-  PackageVersionUnpublished: 'Version dépubliée',
-  PackageDeleted: 'Paquet supprimé',
-  PackageVersionDeprecated: 'Version dépréciée',
-  DistTagChanged: 'Dist-tag modifié',
-  ImagePushed: 'Image publiée',
-  ManifestDeleted: 'Manifeste supprimé',
-}
+const EVENT_TYPES = new Set([
+  'LoginFailed',
+  'AccessDenied',
+  'PasswordChangeFailed',
+  'MfaVerificationFailed',
+  'PasskeyVerificationFailed',
+  'OidcLoginFailed',
+  'DockerTokenFailed',
+  'LoginSucceeded',
+  'PasswordChanged',
+  'MfaEnabled',
+  'MfaDisabled',
+  'PasskeyAdded',
+  'PasskeyDeleted',
+  'ApiTokenCreated',
+  'ApiTokenRevoked',
+  'SessionsRevoked',
+  'UserInvited',
+  'UserActivated',
+  'UserDeleted',
+  'SuperAdminGranted',
+  'SuperAdminRevoked',
+  'OrganizationAdminGranted',
+  'OrganizationAdminRevoked',
+  'OrganizationCreated',
+  'IdentityProviderSet',
+  'IdentityProviderCleared',
+  'SmtpSettingsChanged',
+  'SystemSettingsChanged',
+  'BrandingChanged',
+  'ConfigurationExported',
+  'ConfigurationImported',
+  'BackupCodesRegenerated',
+  'InvitationResent',
+  'QuotaSet',
+  'RetentionPolicySet',
+  'LoginThrottleCleared',
+  'Created',
+  'Renamed',
+  'RemoteUrlChanged',
+  'GroupMemberAdded',
+  'GroupMemberRemoved',
+  'VisibilityChanged',
+  'Deleted',
+  'Granted',
+  'Revoked',
+  'PackagePushed',
+  'PackageVersionUnpublished',
+  'PackageDeleted',
+  'PackageVersionDeprecated',
+  'DistTagChanged',
+  'ImagePushed',
+  'ManifestDeleted',
+])
 
-const LOGIN_METHODS: Record<string, string> = {
-  password: 'mot de passe',
-  ldap: 'LDAP',
-  oidc: 'SSO (OIDC)',
-}
+const LOGIN_METHODS = new Set(['password', 'ldap', 'oidc'])
 
-const MFA_METHODS: Record<string, string> = {
-  totp: 'application TOTP',
-  backup_code: 'code de secours',
-  passkey: "clé d'accès",
-}
+const MFA_METHODS = new Set(['totp', 'backup_code', 'passkey'])
 
-const SETTINGS: Record<string, string> = {
-  max_login_attempts: 'Tentatives de connexion max.',
-  login_attempt_window_seconds: 'Fenêtre de tentatives (s)',
-  session_ttl_hours: 'Durée de session (h)',
-  registration_enabled: 'Inscription ouverte',
-  seo_indexing_enabled: 'Indexation par les moteurs de recherche',
-}
+const SETTINGS = new Set([
+  'max_login_attempts',
+  'login_attempt_window_seconds',
+  'session_ttl_hours',
+  'registration_enabled',
+  'seo_indexing_enabled',
+])
 
-/** The French name of an event, or the raw type for the ones without a label. */
+/** The translated name of an event, or the raw type for the ones without a label. */
 export function auditEventLabel(eventType: string): string {
-  return lookup(LABELS, eventType) ?? eventType
+  return translated(EVENT_TYPES, 'events', eventType) ?? eventType
 }
 
-// Own keys only, so "constructor" is not a label.
-function lookup(names: Record<string, string>, key: string): string | undefined {
-  return Object.hasOwn(names, key) ? names[key] : undefined
+// Known names only (a Set, not an object lookup), so "constructor" is not a label.
+function translated(names: Set<string>, group: string, key: string): string | undefined {
+  return names.has(key) ? t(`admin.audit.${group}.${key}`) : undefined
 }
 
 /** One line of context for an entry; empty for the events that carry none. */
@@ -101,22 +94,28 @@ export function auditEventDetails(entry: AuditEntry): string {
   const payload = auditPayload(entry)
   switch (entry.event_type) {
     case 'LoginSucceeded': {
-      const method = mapped(LOGIN_METHODS, payload['method'])
-      const second = mapped(MFA_METHODS, payload['second_factor'])
-      return second ? `Via ${method} + ${second}` : `Via ${method}`
+      const method = mapped(LOGIN_METHODS, 'loginMethods', payload['method'])
+      const second = mapped(MFA_METHODS, 'mfaMethods', payload['second_factor'])
+      return second
+        ? t('admin.audit.details.viaSecond', { method, second })
+        : t('admin.audit.details.via', { method })
     }
     case 'MfaEnabled':
     case 'MfaDisabled':
-      return `Méthode : ${mapped(MFA_METHODS, payload['method'])}`
+      return t('admin.audit.details.method', {
+        method: mapped(MFA_METHODS, 'mfaMethods', payload['method']),
+      })
     case 'ApiTokenCreated':
-      return `Libellé : ${text(payload['label'])}`
+      return t('admin.audit.details.label', { label: text(payload['label']) })
     case 'UserInvited': {
       if (typeof payload['username'] !== 'string') {
         return ''
       }
       const roles = [
-        payload['is_super_admin'] === true ? 'super-administrateur' : null,
-        payload['is_organization_admin'] === true ? "administrateur d'organisation" : null,
+        payload['is_super_admin'] === true ? t('admin.audit.details.superAdmin') : null,
+        payload['is_organization_admin'] === true
+          ? t('admin.audit.details.organizationAdmin')
+          : null,
       ].filter((role) => role !== null)
       return roles.length > 0
         ? `${text(payload['username'])} (${roles.join(', ')})`
@@ -125,20 +124,26 @@ export function auditEventDetails(entry: AuditEntry): string {
     case 'UserDeleted':
       return text(payload['username'], '')
     case 'LoginThrottleCleared':
-      return typeof payload['username'] === 'string' ? `Utilisateur ${payload['username']}` : ''
+      return typeof payload['username'] === 'string'
+        ? t('admin.audit.details.user', { username: payload['username'] })
+        : ''
     case 'OrganizationCreated':
       return `${text(payload['display_name'])} (${text(payload['slug'])})`
     case 'IdentityProviderSet': {
       const after = provider(payload['after'])
-      const before = payload['before'] ? provider(payload['before']) : 'aucun'
-      const secret = payload['secret_changed'] === true ? ', secret modifié' : ''
+      const before = payload['before'] ? provider(payload['before']) : t('admin.audit.details.none')
+      const secret =
+        payload['secret_changed'] === true ? t('admin.audit.details.secretChanged') : ''
       return `${before} → ${after}${secret}`
     }
     case 'IdentityProviderCleared':
-      return payload['before'] ? `Ancien : ${provider(payload['before'])}` : ''
+      return payload['before']
+        ? t('admin.audit.details.previous', { provider: provider(payload['before']) })
+        : ''
     case 'SmtpSettingsChanged': {
       const after = asRecord(payload['after'])
-      const secret = payload['password_changed'] === true ? ', mot de passe modifié' : ''
+      const secret =
+        payload['password_changed'] === true ? t('admin.audit.details.passwordChanged') : ''
       return `${text(after['host'])}:${text(after['port'])}${secret}`
     }
     case 'SystemSettingsChanged': {
@@ -146,29 +151,43 @@ export function auditEventDetails(entry: AuditEntry): string {
       return changes
         .map(
           (c) =>
-            `${lookup(SETTINGS, String(c['setting'])) ?? text(c['setting'])} : ${value(c['before'])} → ${value(c['after'])}`,
+            `${translated(SETTINGS, 'settings', String(c['setting'])) ?? text(c['setting'])} : ${value(c['before'])} → ${value(c['after'])}`,
         )
         .join(' ; ')
     }
     case 'BrandingChanged': {
-      const asset = payload['asset'] === 'favicon' ? 'Favicon' : 'Logo'
-      return `${asset} ${payload['cleared'] === true ? 'supprimé' : 'remplacé'}`
+      const asset = payload['asset'] === 'favicon' ? 'favicon' : 'logo'
+      return t(
+        payload['cleared'] === true
+          ? `admin.audit.details.${asset}Removed`
+          : `admin.audit.details.${asset}Replaced`,
+      )
     }
     case 'ConfigurationExported':
-      return `${text(payload['users'], '0')} utilisateurs, ${text(payload['repositories'], '0')} dépôts, ${text(payload['permissions'], '0')} permissions`
+      return t('admin.audit.details.counts', {
+        users: text(payload['users'], '0'),
+        repositories: text(payload['repositories'], '0'),
+        permissions: text(payload['permissions'], '0'),
+      })
     case 'ConfigurationImported': {
-      const created = `${text(payload['users_created'], '0')} utilisateurs, ${text(payload['repositories_created'], '0')} dépôts, ${text(payload['permissions_granted'], '0')} permissions`
+      const created = t('admin.audit.details.counts', {
+        users: text(payload['users_created'], '0'),
+        repositories: text(payload['repositories_created'], '0'),
+        permissions: text(payload['permissions_granted'], '0'),
+      })
       const failures = Number(payload['failures'] ?? 0)
-      return failures > 0 ? `${created} ; ${failures} échec(s)` : created
+      return failures > 0 ? t('admin.audit.details.withFailures', { created, failures }) : created
     }
     case 'QuotaSet':
       return typeof payload['quota_bytes'] === 'number'
-        ? `${Math.round(payload['quota_bytes'] / (1024 * 1024))} Mo`
-        : 'Illimité'
+        ? t('admin.audit.details.quotaMb', {
+            count: Math.round(payload['quota_bytes'] / (1024 * 1024)),
+          })
+        : t('admin.audit.details.unlimited')
     case 'RetentionPolicySet':
       return typeof payload['keep_last_n_versions'] === 'number'
-        ? `Garder les ${payload['keep_last_n_versions']} dernières versions`
-        : 'Désactivée'
+        ? t('admin.audit.details.keepLast', { count: payload['keep_last_n_versions'] })
+        : t('admin.audit.details.disabled')
     default:
       return ''
   }
@@ -182,13 +201,13 @@ function text(raw: unknown, fallback = '?'): string {
   return typeof raw === 'string' || typeof raw === 'number' ? String(raw) : fallback
 }
 
-function mapped(names: Record<string, string>, raw: unknown): string {
-  return typeof raw === 'string' ? (lookup(names, raw) ?? raw) : ''
+function mapped(names: Set<string>, group: string, raw: unknown): string {
+  return typeof raw === 'string' ? (translated(names, group, raw) ?? raw) : ''
 }
 
 function value(raw: unknown): string {
   if (typeof raw === 'boolean') {
-    return raw ? 'oui' : 'non'
+    return raw ? t('admin.audit.details.yes') : t('admin.audit.details.no')
   }
   return text(raw)
 }
@@ -197,5 +216,8 @@ function provider(raw: unknown): string {
   const summary = asRecord(raw)
   return summary['provider'] === 'ldap'
     ? `LDAP ${text(summary['server_url'])}`
-    : `OIDC ${text(summary['issuer_url'])} (client ${text(summary['client_id'])})`
+    : t('admin.audit.details.oidcProvider', {
+        issuer: text(summary['issuer_url']),
+        client: text(summary['client_id']),
+      })
 }

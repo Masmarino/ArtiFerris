@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Button, Checkbox, EmptyState, GbtInput, Spinner, Tooltip } from '@masmarino/gabarit'
@@ -9,7 +11,7 @@ import { ToastService } from '../../shared/toast.service'
 @Component({
   selector: 'app-organization-members',
   standalone: true,
-  imports: [Button, EmptyState, GbtInput, Checkbox, FormsModule, Spinner, Tooltip],
+  imports: [TranslocoPipe, Button, EmptyState, GbtInput, Checkbox, FormsModule, Spinner, Tooltip],
   templateUrl: './organization-members.html',
   styleUrl: './organization-members.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -60,7 +62,7 @@ export class OrganizationMembers {
       error: () => {
         if (stillCurrent()) {
           this.loading.set(false)
-          this.errorMessage.set('Échec du chargement des membres.')
+          this.errorMessage.set(t('admin.members.errors.loadFailed'))
         }
       },
     })
@@ -94,24 +96,25 @@ export class OrganizationMembers {
             this.addingMember.set(false)
             this.reload()
           }
-          this.toastService.success(`${username} a été invité·e.`)
+          this.toastService.success(t('admin.members.invited', { username }))
         },
         error: () => {
           if (stillCurrent()) {
             this.inviting.set(false)
           }
-          this.toastService.error("Échec de l'invitation.")
+          this.toastService.error(t('admin.members.errors.inviteFailed'))
         },
       })
   }
 
   async toggleOrganizationAdmin(member: OrganizationMember): Promise<void> {
     const promoting = !member.is_organization_admin
-    const verb = promoting ? 'promouvoir' : 'rétrograder'
     const confirmed = await this.confirmService.ask({
-      heading: promoting ? 'Promouvoir en administrateur' : "Retirer le rôle d'administrateur",
-      message: `Voulez-vous ${verb} ${member.username} ${promoting ? 'en administrateur' : "de son rôle d'administrateur"} de l'organisation ?`,
-      confirmLabel: promoting ? 'Promouvoir' : 'Rétrograder',
+      heading: promoting ? t('admin.members.promoteHeading') : t('admin.members.demoteHeading'),
+      message: t(promoting ? 'admin.members.promoteConfirm' : 'admin.members.demoteConfirm', {
+        username: member.username,
+      }),
+      confirmLabel: promoting ? t('admin.members.promote') : t('admin.members.demote'),
       danger: !promoting,
     })
     if (!confirmed) return
@@ -122,11 +125,11 @@ export class OrganizationMembers {
           this.reload()
           this.toastService.success(
             promoting
-              ? `${member.username} est désormais administrateur·rice de l'organisation.`
-              : `${member.username} n'est plus administrateur·rice de l'organisation.`,
+              ? t('admin.members.promoted', { username: member.username })
+              : t('admin.members.demoted', { username: member.username }),
           )
         },
-        error: () => this.toastService.error("Échec de la mise à jour du statut d'administrateur."),
+        error: () => this.toastService.error(t('admin.members.errors.updateFailed')),
       })
   }
 }

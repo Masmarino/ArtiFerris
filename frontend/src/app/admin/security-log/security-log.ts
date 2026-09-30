@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -50,18 +52,18 @@ interface EventTypeCount {
 function unlockFailureMessage(error: unknown, username: string): string {
   switch (error instanceof HttpErrorResponse ? error.status : null) {
     case 403:
-      return `Vous n'avez pas le droit de débloquer ${username}.`
+      return t('admin.securityLog.errors.forbidden', { username })
     case 404:
-      return `${username} est introuvable : rien à débloquer.`
+      return t('admin.securityLog.errors.notFound', { username })
     default:
-      return `Échec du déblocage de ${username}.`
+      return t('admin.securityLog.errors.unlockFailed', { username })
   }
 }
 
 @Component({
   selector: 'app-security-log',
   standalone: true,
-  imports: [Table, DimensionCard, Button, Card, EmptyState, Spinner],
+  imports: [TranslocoPipe, Table, DimensionCard, Button, Card, EmptyState, Spinner],
   providers: [DatePipe],
   templateUrl: './security-log.html',
   styleUrl: './security-log.scss',
@@ -128,12 +130,12 @@ export class SecurityLog {
   readonly columns: TableColumn<SecurityLogRow>[] = [
     {
       key: 'occurred_at',
-      label: 'Date',
+      label: t('common.date'),
       format: (r) => this.datePipe.transform(r.occurred_at, 'short') ?? '',
     },
-    { key: 'event_type', label: 'Événement' },
-    { key: 'actor', label: 'Utilisateur' },
-    { key: 'details', label: 'Détails' },
+    { key: 'event_type', label: t('admin.auditLog.columns.event') },
+    { key: 'actor', label: t('admin.securityLog.columns.user') },
+    { key: 'details', label: t('admin.auditLog.columns.details') },
   ]
   readonly rowId = (r: SecurityLogRow): string =>
     `${r.occurred_at}|${r.event_type}|${r.actor}|${r.details}`
@@ -233,9 +235,9 @@ export class SecurityLog {
       return
     }
     const confirmed = await this.confirmService.ask({
-      heading: 'Débloquer le compte',
-      message: `Débloquer ${username} ? Ses tentatives de connexion échouées seront effacées.`,
-      confirmLabel: 'Débloquer',
+      heading: t('admin.securityLog.unlockHeading'),
+      message: t('admin.securityLog.unlockMessage', { username }),
+      confirmLabel: t('admin.securityLog.unlock'),
     })
     if (!confirmed) {
       return
@@ -245,7 +247,7 @@ export class SecurityLog {
     this.auditService.unlockUsername(username).subscribe({
       next: () => {
         this.unlocking.set(false)
-        this.toastService.success(`${username} a été débloqué·e.`)
+        this.toastService.success(t('admin.securityLog.unlocked', { username }))
         this.loadBlockedAccounts(organizationId)
       },
       error: (err: unknown) => {
@@ -286,7 +288,9 @@ export class SecurityLog {
 
   formatRemainingTime(seconds: number): string {
     const minutes = Math.ceil(seconds / 60)
-    return minutes <= 1 ? "moins d'une minute" : `${minutes} minutes`
+    return minutes <= 1
+      ? t('admin.securityLog.lessThanMinute')
+      : t('admin.securityLog.minutes', { count: minutes })
   }
 
   /** Fetches the pages not loaded yet (up to the row bound), then saves the CSV. */
@@ -364,7 +368,9 @@ export class SecurityLog {
     switch (entry.event_type) {
       case 'LoginFailed':
       case 'PasswordChangeFailed':
-        return typeof payload['ip'] === 'string' ? `Depuis ${payload['ip']}` : ''
+        return typeof payload['ip'] === 'string'
+          ? t('admin.securityLog.from', { ip: payload['ip'] })
+          : ''
       case 'AccessDenied': {
         const repositoryId = payload['repository_id']
         const repositoryName =
@@ -372,7 +378,7 @@ export class SecurityLog {
             ? (this.repositoryNamesById().get(repositoryId) ?? repositoryId)
             : '?'
         const action = typeof payload['action'] === 'string' ? payload['action'] : '?'
-        return `Action « ${action} » refusée sur ${repositoryName}`
+        return t('admin.securityLog.accessDenied', { action, repository: repositoryName })
       }
       default:
         return auditEventDetails(entry)

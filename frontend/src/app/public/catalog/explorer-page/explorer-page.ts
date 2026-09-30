@@ -1,3 +1,5 @@
+import { t } from '../../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core'
 import { rxResource, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, RouterLink } from '@angular/router'
@@ -17,7 +19,16 @@ const POPULAR_QUERY: CatalogQuery = { sort: 'popular', perPage: 5 }
 @Component({
   selector: 'app-explorer-page',
   standalone: true,
-  imports: [Button, Card, CatalogResultCard, CatalogSearch, PublicLayout, RouterLink, Spinner],
+  imports: [
+    TranslocoPipe,
+    Button,
+    Card,
+    CatalogResultCard,
+    CatalogSearch,
+    PublicLayout,
+    RouterLink,
+    Spinner,
+  ],
   templateUrl: './explorer-page.html',
   styleUrl: './explorer-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -48,7 +59,7 @@ export class ExplorerPage {
   readonly failedMessage = computed(
     () =>
       overloadMessage(this.catalogResource.error(), CATALOG_OVERLOAD) ??
-      'Échec du chargement des catalogues.',
+      t('catalog.explorer.errors.catalogs'),
   )
   readonly catalogs = computed(() =>
     !this.loading() && this.catalogResource.hasValue() ? this.catalogResource.value() : [],
@@ -61,7 +72,7 @@ export class ExplorerPage {
   readonly popularFailedMessage = computed(
     () =>
       overloadMessage(this.popularResource.error(), CATALOG_OVERLOAD) ??
-      'Échec du chargement des paquets populaires.',
+      t('catalog.explorer.errors.popular'),
   )
   readonly popularEntries = computed(() =>
     !this.popularLoading() && this.popularResource.hasValue()
@@ -77,7 +88,7 @@ export class ExplorerPage {
   )
 
   constructor() {
-    inject(PageTitleService).title.set('Explorer')
+    inject(PageTitleService).title.set(t('nav.explorer'))
   }
 
   retry(): void {
@@ -89,7 +100,9 @@ export class ExplorerPage {
   }
 
   countLabel(catalog: CatalogInfo): string {
-    const noun = catalog.format === 'docker' ? 'image' : 'paquet'
-    return `${catalog.entry_count} ${noun}${catalog.entry_count > 1 ? 's' : ''}`
+    const noun = catalog.format === 'docker' ? 'catalog.counts.image' : 'catalog.counts.package'
+    return t(catalog.entry_count > 1 ? `${noun}_other` : `${noun}_one`, {
+      count: catalog.entry_count,
+    })
   }
 }

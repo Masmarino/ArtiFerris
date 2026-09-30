@@ -1,3 +1,5 @@
+import { TranslocoPipe } from '@jsverse/transloco'
+import { t } from '../../../shared/i18n/translator'
 import { DatePipe } from '@angular/common'
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core'
 import { RouterLink } from '@angular/router'
@@ -11,7 +13,7 @@ import { installCommand } from '../domain/install-command'
 @Component({
   selector: 'app-catalog-result-card',
   standalone: true,
-  imports: [Badge, Card, CopyableCommand, DatePipe, Icon, RouterLink],
+  imports: [TranslocoPipe, Badge, Card, CopyableCommand, DatePipe, Icon, RouterLink],
   templateUrl: './catalog-result-card.html',
   styleUrl: './catalog-result-card.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -30,5 +32,5 @@ export class CatalogResultCard {
     this.entry().downloads_7d > 0 ? formatWeeklyDownloads(this.entry().downloads_7d) : null,
   )
 
-  readonly copyLabel = computed(() => `Copier la commande d'installation de ${this.entry().name}`)
+  readonly copyLabel = computed(() => t('package.copyInstallCommand', { name: this.entry().name }))
 }

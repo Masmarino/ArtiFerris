@@ -1,16 +1,14 @@
-<gbt-card heading="Sessions" icon="lock">
+<gbt-card [heading]="'account.sessions.heading' | transloco" icon="lock">
   <div class="stack">
     <p>
-      Révoque toutes vos sessions ouvertes, vos jetons API et vos jetons Docker. Utile si un
-      appareil est perdu ou compromis, ou si votre compte passe par un SSO et n'a pas de mot de
-      passe à changer.
+      {{ 'account.sessions.description' | transloco }}
     </p>
     <gbt-button
       class="w-content"
-      text="Se déconnecter partout"
+      [text]="'account.sessions.signOutEverywhere' | transloco"
       variant="danger"
       [loading]="signingOut()"
-      loadingLabel="Chargement en cours"
+      [loadingLabel]="'common.loadingLabel' | transloco"
       (clicked)="logoutEverywhere()"
     />
   </div>

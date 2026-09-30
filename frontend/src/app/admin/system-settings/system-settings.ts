@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -18,20 +20,25 @@ interface FieldSpec {
   key: 'maxLoginAttempts' | 'loginAttemptWindowSeconds' | 'sessionTtlHours'
   min: number
   max: number
-  label: string
+  labelKey: string
 }
 
 // Mirrors the backend's validation in UpdateSystemSettingsUseCase, kept in sync by hand, so the form can reject an out-of-range value before a round trip.
 const FIELDS: FieldSpec[] = [
-  { key: 'maxLoginAttempts', min: 1, max: 1000, label: 'Tentatives de connexion max' },
-  { key: 'loginAttemptWindowSeconds', min: 1, max: 86_400, label: 'Fenêtre de blocage (secondes)' },
-  { key: 'sessionTtlHours', min: 1, max: 720, label: 'Durée de session (heures)' },
+  { key: 'maxLoginAttempts', min: 1, max: 1000, labelKey: 'admin.system.maxLoginAttempts' },
+  {
+    key: 'loginAttemptWindowSeconds',
+    min: 1,
+    max: 86_400,
+    labelKey: 'admin.system.loginAttemptWindow',
+  },
+  { key: 'sessionTtlHours', min: 1, max: 720, labelKey: 'admin.system.sessionTtl' },
 ]
 
 @Component({
   selector: 'app-system-settings',
   standalone: true,
-  imports: [Button, Card, GbtInput, Checkbox, FormsModule, Spinner],
+  imports: [TranslocoPipe, Button, Card, GbtInput, Checkbox, FormsModule, Spinner],
   templateUrl: './system-settings.html',
   styleUrl: './system-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -104,10 +111,10 @@ export class SystemSettingsAdmin {
   private rawFieldError(field: FieldSpec): string | null {
     const parsed = Number(this.value(field.key))
     if (this.value(field.key).trim() === '' || !Number.isInteger(parsed)) {
-      return 'Doit être un nombre entier.'
+      return t('admin.system.errors.integer')
     }
     if (parsed < field.min || parsed > field.max) {
-      return `Doit être entre ${field.min} et ${field.max}.`
+      return t('admin.system.errors.range', { min: field.min, max: field.max })
     }
     return null
   }
@@ -140,11 +147,11 @@ export class SystemSettingsAdmin {
       .subscribe({
         next: () => {
           this.saving.set(false)
-          this.toastService.success('Paramètres enregistrés.')
+          this.toastService.success(t('admin.system.saved'))
         },
         error: () => {
           this.saving.set(false)
-          this.toastService.error('Échec de la mise à jour des paramètres.')
+          this.toastService.error(t('admin.system.errors.updateFailed'))
         },
       })
   }

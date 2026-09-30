@@ -1,23 +1,25 @@
 <div class="stack">
   @if (loading()) {
-    <gbt-spinner label="Chargement…" />
+    <gbt-spinner [label]="'common.loading' | transloco" />
   } @else if (members().length === 0) {
     <gbt-empty-state
       illustration="folder"
-      heading="Aucun membre"
-      message="Invitez des membres pour leur donner accès à cette organisation."
+      [heading]="'admin.members.emptyHeading' | transloco"
+      [message]="'admin.members.emptyMessage' | transloco"
     />
   } @else {
     <table class="organization-members__table">
       <caption>
-        Membres de l'organisation
+        {{
+          'admin.members.caption' | transloco
+        }}
       </caption>
       <thead>
         <tr>
-          <th scope="col">Nom d'utilisateur</th>
-          <th scope="col">E-mail</th>
-          <th scope="col">Administrateur</th>
-          <th scope="col">Invitation en attente</th>
+          <th scope="col">{{ 'users.create.username' | transloco }}</th>
+          <th scope="col">{{ 'admin.members.columns.email' | transloco }}</th>
+          <th scope="col">{{ 'admin.members.columns.admin' | transloco }}</th>
+          <th scope="col">{{ 'admin.members.columns.pending' | transloco }}</th>
           <th scope="col"></th>
         </tr>
       </thead>
@@ -26,18 +28,24 @@
           <tr>
             <td>{{ member.username }}</td>
             <td>{{ member.email }}</td>
-            <td>{{ member.is_organization_admin ? 'Oui' : 'Non' }}</td>
-            <td>{{ member.invitation_pending ? 'Oui' : 'Non' }}</td>
+            <td>{{ (member.is_organization_admin ? 'common.yes' : 'common.no') | transloco }}</td>
+            <td>{{ (member.invitation_pending ? 'common.yes' : 'common.no') | transloco }}</td>
             <td class="organization-members__actions">
               <gbt-tooltip
                 [text]="
-                  member.is_organization_admin
-                    ? 'Retire les droits d\'administration de cette organisation.'
-                    : 'Donne les droits d\'administration complets sur cette organisation.'
+                  (member.is_organization_admin
+                    ? 'admin.members.demoteHint'
+                    : 'admin.members.promoteHint'
+                  ) | transloco
                 "
               >
                 <gbt-button
-                  [text]="member.is_organization_admin ? 'Rétrograder' : 'Promouvoir'"
+                  [text]="
+                    (member.is_organization_admin
+                      ? 'admin.members.demote'
+                      : 'admin.members.promote'
+                    ) | transloco
+                  "
                   variant="secondary"
                   size="small"
                   (clicked)="toggleOrganizationAdmin(member)"
@@ -57,32 +65,36 @@
   @if (addingMember()) {
     <div class="stack">
       <gbt-input
-        label="Nom d'utilisateur"
+        [label]="'users.create.username' | transloco"
         [ngModel]="newUsername()"
         (ngModelChange)="newUsername.set($event)"
       />
       <gbt-input
-        label="Adresse e-mail"
+        [label]="'users.create.email' | transloco"
         [ngModel]="newEmail()"
         (ngModelChange)="newEmail.set($event)"
       />
       <gbt-checkbox
-        label="Administrateur de cette organisation"
+        [label]="'admin.members.adminCheckbox' | transloco"
         [ngModel]="newIsOrganizationAdmin()"
         (ngModelChange)="newIsOrganizationAdmin.set($event)"
       />
       <div class="d-flex gap-2">
         <gbt-button
-          text="Inviter"
+          [text]="'users.create.invite' | transloco"
           [loading]="inviting()"
-          loadingLabel="Chargement en cours"
+          [loadingLabel]="'common.loadingLabel' | transloco"
           [disabled]="newUsername().trim() === '' || newEmail().trim() === ''"
           (clicked)="invite()"
         />
-        <gbt-button text="Annuler" variant="secondary" (clicked)="cancelAdding()" />
+        <gbt-button
+          [text]="'common.cancel' | transloco"
+          variant="secondary"
+          (clicked)="cancelAdding()"
+        />
       </div>
     </div>
   } @else {
-    <gbt-button text="Inviter un membre" (clicked)="startAdding()" />
+    <gbt-button [text]="'admin.members.inviteMember' | transloco" (clicked)="startAdding()" />
   }
 </div>

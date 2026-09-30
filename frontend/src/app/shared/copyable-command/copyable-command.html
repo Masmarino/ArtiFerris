@@ -3,7 +3,7 @@
   <gbt-button
     variant="secondary"
     size="small"
-    text="Copier"
+    [text]="'common.copy' | transloco"
     [iconName]="copyState() === 'copied' ? 'check' : 'copy'"
     [ariaLabel]="label()"
     (clicked)="copy()"

@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms'
@@ -10,27 +12,28 @@ import { ConfirmService } from '../../shared/confirm.service'
 import { badRequestMessage } from '../../shared/api-error'
 
 const MAX_LABEL_LENGTH = 100
-const WRONG_PASSWORD = 'Mot de passe incorrect.'
 
 function createErrorMessage(error: unknown): string {
   const status = error instanceof HttpErrorResponse ? error.status : 0
   if (status === 429) {
-    return 'Trop de tentatives, réessayez plus tard.'
+    return t('tokens.errors.tooMany')
   }
   if (status === 401 || status === 403) {
-    return WRONG_PASSWORD
+    return t('tokens.errors.wrongPassword')
   }
   const message = badRequestMessage(error)
   if (message) {
-    return message.toLowerCase().includes('invalid credentials') ? WRONG_PASSWORD : message
+    return message.toLowerCase().includes('invalid credentials')
+      ? t('tokens.errors.wrongPassword')
+      : message
   }
-  return 'Échec de la création du token.'
+  return t('tokens.errors.createFailed')
 }
 
 @Component({
   selector: 'app-api-tokens-list',
   standalone: true,
-  imports: [ReactiveFormsModule, Table, Button, GbtInput, Modal, EmptyState],
+  imports: [TranslocoPipe, ReactiveFormsModule, Table, Button, GbtInput, Modal, EmptyState],
   providers: [DatePipe],
   templateUrl: './api-tokens-list.html',
   styleUrl: './api-tokens-list.scss',
@@ -62,10 +65,10 @@ export class ApiTokensList implements OnInit {
   )
 
   readonly columns: TableColumn<ApiToken>[] = [
-    { key: 'label', label: 'Nom' },
+    { key: 'label', label: t('tokens.table.name') },
     {
       key: 'created_at',
-      label: 'Créé le',
+      label: t('tokens.table.createdAt'),
       format: (t) => this.datePipe.transform(t.created_at, 'short') ?? '',
     },
   ]
@@ -110,16 +113,16 @@ export class ApiTokensList implements OnInit {
 
   async revokeToken(token: ApiToken): Promise<void> {
     const confirmed = await this.confirmService.ask({
-      heading: 'Révoquer le token',
-      message: `Révoquer le token "${token.label}" ? Toute intégration npm qui l'utilise cessera de fonctionner.`,
-      confirmLabel: 'Révoquer',
+      heading: t('tokens.revoke.heading'),
+      message: t('tokens.revoke.message', { label: token.label }),
+      confirmLabel: t('tokens.revoke.confirm'),
       danger: true,
     })
     if (!confirmed) return
     this.revokeError.set(null)
     this.tokenService.revoke(token.id).subscribe({
       next: () => this.reload(),
-      error: () => this.revokeError.set(`Échec de la révocation du token "${token.label}".`),
+      error: () => this.revokeError.set(t('tokens.errors.revokeFailed', { label: token.label })),
     })
   }
 

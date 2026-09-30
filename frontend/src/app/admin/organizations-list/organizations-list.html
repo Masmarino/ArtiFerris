@@ -1,20 +1,26 @@
-<gbt-button text="Nouvelle organisation" (clicked)="showCreateModal.set(true)" />
+<gbt-button
+  [text]="'admin.organizations.newShort' | transloco"
+  (clicked)="showCreateModal.set(true)"
+/>
 @if (loading()) {
-  <div class="loading-state"><gbt-spinner label="Chargement…" /></div>
+  <div class="loading-state"><gbt-spinner [label]="'common.loading' | transloco" /></div>
 } @else if (error(); as message) {
   <p class="gbt-form-error" role="alert">{{ message }}</p>
 } @else {
   @if (organizations().length === 0) {
     <gbt-empty-state
       illustration="checklist"
-      heading="Aucune organisation"
-      message="Créez une organisation pour y regrouper des dépôts et des membres."
+      [heading]="'admin.organizations.emptyHeading' | transloco"
+      [message]="'admin.organizations.emptyMessage' | transloco"
     >
-      <gbt-button text="Nouvelle organisation" (clicked)="showCreateModal.set(true)" />
+      <gbt-button
+        [text]="'admin.organizations.newShort' | transloco"
+        (clicked)="showCreateModal.set(true)"
+      />
     </gbt-empty-state>
   } @else {
     <gbt-table
-      caption="Organisations"
+      [caption]="'admin.organizations.caption' | transloco"
       [clickableRows]="true"
       [data]="organizations()"
       [columns]="columns"

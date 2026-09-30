@@ -1,21 +1,24 @@
 @if (loading()) {
-  <div class="loading-state"><gbt-spinner size="lg" label="Chargement…" /></div>
+  <div class="loading-state"><gbt-spinner size="lg" [label]="'common.loading' | transloco" /></div>
 } @else if (reserved()) {
   <app-repositories-list mode="personal" />
 } @else {
   <gbt-empty-state
     illustration="folder"
-    heading="Aucun dépôt personnel"
-    message="Créez votre dépôt personnel pour y publier vos propres projets npm et docker."
+    [heading]="'repositories.mine.emptyHeading' | transloco"
+    [message]="'repositories.mine.emptyMessage' | transloco"
   >
-    <gbt-button text="Créer son dépôt utilisateur" (clicked)="openReserveModal()" />
+    <gbt-button
+      [text]="'repositories.mine.createButton' | transloco"
+      (clicked)="openReserveModal()"
+    />
   </gbt-empty-state>
 }
 @if (showConfirmModal()) {
   <app-confirm-modal
-    heading="Créer son dépôt utilisateur"
-    message="Cette action réserve votre espace personnel afin que vous puissiez y créer vos propres projets npm et docker."
-    confirmLabel="Créer"
+    [heading]="'repositories.mine.createButton' | transloco"
+    [message]="'repositories.mine.confirmMessage' | transloco"
+    [confirmLabel]="'common.create' | transloco"
     [confirming]="reserving()"
     (confirmed)="confirmReserve()"
     (cancelled)="cancelReserve()"

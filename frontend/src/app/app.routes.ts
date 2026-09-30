@@ -55,7 +55,7 @@ export const routes: Routes = [
         path: 'users',
         loadComponent: () => import('./users/users-list/users-list').then((m) => m.UsersList),
         canActivate: [usersGuard],
-        data: { title: 'Utilisateurs' },
+        data: { titleKey: 'nav.users' },
       },
       {
         path: 'users/:id',
@@ -66,7 +66,7 @@ export const routes: Routes = [
         path: 'account',
         loadComponent: () =>
           import('./account/account-page/account-page').then((m) => m.AccountPage),
-        data: { title: 'Mon compte' },
+        data: { titleKey: 'nav.account' },
       },
       {
         path: 'repositories',
@@ -74,7 +74,7 @@ export const routes: Routes = [
           import('./repositories/repositories-list/repositories-list').then(
             (m) => m.RepositoriesList,
           ),
-        data: { title: 'Dépôts' },
+        data: { titleKey: 'nav.repositories' },
       },
       {
         path: 'my-repository',
@@ -82,7 +82,7 @@ export const routes: Routes = [
           import('./repositories/my-repository-page/my-repository-page').then(
             (m) => m.MyRepositoryPage,
           ),
-        data: { title: 'Mon dépôt' },
+        data: { titleKey: 'nav.myRepository' },
       },
       {
         path: 'repositories/:id',
@@ -103,27 +103,27 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./admin/admin-dashboard/admin-dashboard').then((m) => m.AdminDashboard),
         canActivate: [adminGuard],
-        data: { title: 'Administration' },
+        data: { titleKey: 'nav.administration' },
       },
       {
         path: 'admin/export',
         loadComponent: () => import('./admin/export/export').then((m) => m.ExportAdmin),
         canActivate: [adminGuard],
-        data: { title: 'Export' },
+        data: { titleKey: 'nav.export' },
       },
       {
         path: 'admin/health',
         loadComponent: () =>
           import('./admin/health-status/health-status').then((m) => m.HealthStatusPage),
         canActivate: [adminGuard],
-        data: { title: 'Santé système' },
+        data: { titleKey: 'nav.systemHealth' },
       },
       {
         path: 'admin/organizations',
         loadComponent: () =>
           import('./admin/organizations-page/organizations-page').then((m) => m.OrganizationsPage),
         canActivate: [adminGuard],
-        data: { title: 'Organisations' },
+        data: { titleKey: 'nav.organizations' },
       },
       {
         path: 'admin/organizations/:id',

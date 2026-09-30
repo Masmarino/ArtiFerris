@@ -1,3 +1,4 @@
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -11,7 +12,7 @@ import { Card, EmptyState } from '@masmarino/gabarit'
 @Component({
   selector: 'app-readme-view',
   standalone: true,
-  imports: [Card, EmptyState],
+  imports: [TranslocoPipe, Card, EmptyState],
   templateUrl: './readme-view.html',
   styleUrl: './readme-view.scss',
   // The rendered markup is created at runtime, so emulated encapsulation would never match it.

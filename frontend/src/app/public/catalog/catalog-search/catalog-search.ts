@@ -1,3 +1,5 @@
+import { t } from '../../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -42,7 +44,15 @@ const MAX_QUERY_LENGTH = 100
 @Component({
   selector: 'app-catalog-search',
   standalone: true,
-  imports: [Button, CatalogResultCard, EmptyState, SegmentedControl, Spinner, SuggestSearchBox],
+  imports: [
+    TranslocoPipe,
+    Button,
+    CatalogResultCard,
+    EmptyState,
+    SegmentedControl,
+    Spinner,
+    SuggestSearchBox,
+  ],
   templateUrl: './catalog-search.html',
   styleUrl: './catalog-search.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -80,16 +90,20 @@ export class CatalogSearch {
   readonly text = signal(this.urlQuery())
 
   readonly formatOptions = computed<SegmentedControlOption[]>(() => [
-    { value: '', label: 'Tous' },
+    { value: '', label: t('catalog.search.sort.all') },
     ...(this.catalogs().length > 0 ? this.catalogs() : CATALOGS).map((catalog) => ({
       value: catalog.format,
       label: catalog.label,
     })),
   ])
   readonly sortOptions = computed<SegmentedControlOption[]>(() => [
-    { value: 'relevance', label: 'Pertinence', disabled: !this.searchedText() },
-    { value: 'updated', label: 'Récents' },
-    { value: 'popular', label: 'Populaires' },
+    {
+      value: 'relevance',
+      label: t('catalog.search.sort.relevance'),
+      disabled: !this.searchedText(),
+    },
+    { value: 'updated', label: t('catalog.search.sort.updated') },
+    { value: 'popular', label: t('catalog.search.sort.popular') },
   ])
 
   private readonly request = computed<CatalogQuery>(() => ({
@@ -129,12 +143,13 @@ export class CatalogSearch {
     if (!result) {
       return ''
     }
-    return result.total === 0 ? 'Aucun résultat' : formatResultsAnnouncement(result.total)
+    return result.total === 0
+      ? t('shell.search.noResults')
+      : formatResultsAnnouncement(result.total)
   })
   readonly errorMessage = computed(() => {
     return (
-      overloadMessage(this.search.error(), CATALOG_OVERLOAD) ??
-      'La recherche a échoué. Vérifiez votre connexion puis réessayez.'
+      overloadMessage(this.search.error(), CATALOG_OVERLOAD) ?? t('catalog.search.errors.failed')
     )
   })
 

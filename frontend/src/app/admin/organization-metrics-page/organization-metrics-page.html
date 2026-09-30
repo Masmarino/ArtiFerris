@@ -1,15 +1,15 @@
 @if (loadFailed()) {
-  <p class="gbt-form-error container" role="alert">Échec du chargement des statistiques.</p>
+  <p class="gbt-form-error container" role="alert">{{ 'admin.metrics.loadFailed' | transloco }}</p>
 }
 @if (stats(); as s) {
   <section class="stats-grid container">
-    <gbt-card heading="Utilisateurs" icon="users">
+    <gbt-card [heading]="'admin.dashboard.users' | transloco" icon="users">
       <p>{{ s.total_users }}</p>
     </gbt-card>
-    <gbt-card heading="Dépôts" icon="package">
+    <gbt-card [heading]="'admin.dashboard.repositories' | transloco" icon="package">
       <p>{{ s.total_repositories }}</p>
     </gbt-card>
-    <gbt-card heading="Permissions actives" icon="shield">
+    <gbt-card [heading]="'admin.dashboard.permissions' | transloco" icon="shield">
       <p>{{ s.total_active_permissions }}</p>
     </gbt-card>
   </section>

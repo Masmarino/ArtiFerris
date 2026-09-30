@@ -18,7 +18,7 @@
     }
 
     @if (entry().keywords.length > 0) {
-      <ul class="result-card__keywords" aria-label="Mots-clés">
+      <ul class="result-card__keywords" [attr.aria-label]="'catalog.card.keywords' | transloco">
         @for (keyword of entry().keywords; track keyword) {
           <li>{{ keyword }}</li>
         }
@@ -26,12 +26,13 @@
     }
 
     <p class="result-card__meta">
-      par <a [routerLink]="ownerPath()">{{ entry().owner.display_name }}</a> /
+      {{ 'catalog.card.by' | transloco }}
+      <a [routerLink]="ownerPath()">{{ entry().owner.display_name }}</a> /
       <a [routerLink]="repositoryPath()">{{ entry().repository.name }}</a>
       ·
-      <time [attr.datetime]="entry().updated_at" [title]="entry().updated_at | date: 'medium'"
-        >mis à jour {{ updatedAgo() }}</time
-      >
+      <time [attr.datetime]="entry().updated_at" [title]="entry().updated_at | date: 'medium'">{{
+        'catalog.card.updated' | transloco: { ago: updatedAgo() }
+      }}</time>
       @if (weeklyDownloads(); as downloads) {
         · <span class="result-card__downloads">{{ downloads }}</span>
       }

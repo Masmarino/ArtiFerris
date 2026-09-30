@@ -1,5 +1,1190 @@
 {
-  "artiferris": {
-    "title": "ArtiFerris"
+  "meta": {
+    "locale": "fr-FR"
+  },
+  "errors": {
+    "overload": {
+      "tooManyRequests": "Trop de demandes, réessayez dans un instant",
+      "busy": "Service momentanément occupé",
+      "timeout": "La requête a pris trop de temps, réessayez"
+    },
+    "secretUnreadable": "Le secret enregistré est illisible : saisissez-le à nouveau"
+  },
+  "catalog": {
+    "overload": {
+      "tooManyRequests": "Trop de requêtes, patientez un instant puis réessayez.",
+      "busy": "Le catalogue est momentanément occupé"
+    },
+    "counts": {
+      "repository_one": "{{ count }} dépôt",
+      "repository_other": "{{ count }} dépôts",
+      "package_one": "{{ count }} paquet",
+      "package_other": "{{ count }} paquets",
+      "image_one": "{{ count }} image",
+      "image_other": "{{ count }} images"
+    },
+    "search": {
+      "resultsFor": "Résultats pour « {{ text }} »",
+      "ariaLabel": "Recherche dans le catalogue",
+      "label": "Rechercher un paquet",
+      "placeholder": "Nom, description ou mot-clé",
+      "submit": "Rechercher",
+      "sortBy": "Trier par",
+      "searching": "Recherche en cours…",
+      "ownerEmptyHeading": "Rien à afficher",
+      "ownerEmptyMessage": "Ce propriétaire n'a rien de public à afficher ici.",
+      "allFormats": "Tous les formats",
+      "emptyHeading": "Rien à explorer pour l'instant",
+      "emptyMessage": "Aucun contenu public n'est encore publié ici. Rendez un dépôt public pour qu'il apparaisse dans le catalogue.",
+      "noMatchMessage": "Aucun paquet ne correspond à cette recherche. Essayez un autre nom, un mot-clé, ou une recherche plus courte.",
+      "pagination": "Pagination",
+      "popular": "Populaires cette semaine",
+      "recent": "Récemment mis à jour",
+      "noExact": "Aucun résultat exact — voici des résultats approchants.",
+      "approximate": "Résultats approchants",
+      "sort": {
+        "all": "Tous",
+        "relevance": "Pertinence",
+        "updated": "Récents",
+        "popular": "Populaires"
+      },
+      "errors": {
+        "failed": "La recherche a échoué. Vérifiez votre connexion puis réessayez."
+      }
+    },
+    "card": {
+      "by": "par",
+      "updated": "mis à jour {{ ago }}",
+      "keywords": "Mots-clés"
+    },
+    "suggest": {
+      "by": "par {{ owner }} / {{ repository }}",
+      "label": "Suggestions",
+      "none": "Aucune suggestion"
+    },
+    "page": {
+      "blurbNpm": "Tous les paquets npm publics hébergés sur cette instance. On installe toujours depuis l'URL du propriétaire.",
+      "blurbDocker": "Toutes les images Docker publiques hébergées sur cette instance. On tire toujours depuis l'URL du propriétaire."
+    },
+    "explorer": {
+      "loadingCatalogs": "Chargement des catalogues…",
+      "loadingPopular": "Chargement des paquets populaires…",
+      "heading": "Explorer les paquets publics",
+      "intro": "Les paquets npm et les images Docker publics hébergés sur cette instance.",
+      "catalogs": "Catalogues",
+      "popular": "Populaires cette semaine",
+      "errors": {
+        "catalogs": "Échec du chargement des catalogues.",
+        "popular": "Échec du chargement des paquets populaires."
+      }
+    },
+    "owner": {
+      "notFoundHeading": "Propriétaire introuvable",
+      "notFoundMessage": "Il n'y a rien de public à cette adresse.",
+      "browse": "Parcourir le catalogue public",
+      "errors": {
+        "loadFailed": "Échec du chargement du profil. Vérifiez votre connexion puis réessayez."
+      },
+      "title": "Propriétaire"
+    },
+    "layout": {
+      "quickSearch": "Recherche rapide",
+      "searchPlaceholder": "Rechercher un paquet…",
+      "myRepositories": "Mes dépôts",
+      "login": "Se connecter"
+    }
+  },
+  "severity": {
+    "critical": "Critique",
+    "high": "Élevée",
+    "medium": "Moyenne",
+    "low": "Faible",
+    "unknown": "Inconnue"
+  },
+  "format": {
+    "results_one": "{{ count }} résultat",
+    "results_other": "{{ count }} résultats",
+    "suggestions_none": "Aucune suggestion",
+    "suggestions_one": "{{ count }} suggestion disponible",
+    "suggestions_other": "{{ count }} suggestions disponibles",
+    "selected_one": "{{ count }} sélectionné",
+    "selected_other": "{{ count }} sélectionnés",
+    "weeklyDownloads_one": "{{ count }} téléchargement cette semaine",
+    "weeklyDownloads_other": "{{ count }} téléchargements cette semaine",
+    "bytes": {
+      "b": "o",
+      "kb": "Ko",
+      "mb": "Mo",
+      "gb": "Go",
+      "tb": "To"
+    },
+    "justNow": "à l'instant"
+  },
+  "auth": {
+    "sessionsEnded": "Vos sessions ont été fermées : reconnectez-vous.",
+    "login": {
+      "heading": "Connexion à ArtiFerris",
+      "logoAlt": "ArtiFerris logo",
+      "ssoLinkInvalid": "Lien de connexion invalide ou expiré.",
+      "oidcNotice": "Cette organisation utilise l'authentification unique (OIDC).",
+      "oidcLink": "Se connecter avec le fournisseur d'identité",
+      "username": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "submit": "Se connecter",
+      "createAccount": "Créer un compte",
+      "explorePublic": "Explorer les paquets publics",
+      "backupCode": "Code de secours",
+      "verificationCode": "Code de vérification",
+      "verify": "Vérifier",
+      "useAuthenticatorApp": "Utiliser l'application d'authentification",
+      "useBackupCode": "Utiliser un code de secours",
+      "usePasskey": "Utiliser une clé d'accès",
+      "errors": {
+        "busy": "Service momentanément occupé, réessayez",
+        "tooManyRequests": "Trop de tentatives, réessayez plus tard.",
+        "invalidCredentials": "Identifiants invalides",
+        "invalidBackupCode": "Code de secours invalide.",
+        "invalidCode": "Code invalide.",
+        "passkeyFailed": "Échec de l'authentification par clé d'accès."
+      }
+    },
+    "mfaEnrollment": {
+      "required": "La double authentification est obligatoire sur ce compte.",
+      "chooseMethod": "Choisissez une méthode pour continuer :",
+      "totpTooltip": "Nécessite une application comme Google Authenticator, Authy ou 1Password.",
+      "totpButton": "Application d'authentification (TOTP)",
+      "passkeyTooltip": "Utilise Touch ID, Windows Hello ou une clé de sécurité physique.",
+      "passkeyButton": "Clé d'accès (passkey)",
+      "scanQr": "Scannez ce QR code avec votre application d'authentification, ou saisissez le code manuellement :",
+      "qrAlt": "QR code d'activation",
+      "verificationCode": "Code de vérification",
+      "confirm": "Confirmer",
+      "back": "Retour",
+      "enabled": "Double authentification activée. Conservez ces codes de secours dans un endroit sûr — chacun ne peut être utilisé qu'une seule fois.",
+      "savedCodes": "J'ai sauvegardé ces codes",
+      "passkeyName": "Nom de la clé (ex. « MacBook Touch ID »)",
+      "registerPasskey": "Enregistrer la clé d'accès",
+      "errors": {
+        "invalidCode": "Code invalide.",
+        "totpSetupFailed": "Échec de la préparation de l'application d'authentification.",
+        "passkeyFailed": "Échec de l'enregistrement de la clé d'accès. Réessayez."
+      }
+    },
+    "register": {
+      "heading": "Créer un compte ArtiFerris",
+      "email": "Adresse e-mail",
+      "submit": "Créer mon compte",
+      "haveAccount": "J'ai déjà un compte",
+      "errors": {
+        "usernameTaken": "Ce nom d’utilisateur est déjà pris.",
+        "invalidEmail": "Adresse e-mail invalide.",
+        "passwordTooShort": "Le mot de passe doit comporter au moins 8 caractères.",
+        "notAvailable": "L'inscription publique n'est pas disponible sur cette organisation.",
+        "disabled": "La création de compte est actuellement désactivée par l'administrateur.",
+        "invalidUsername": "Nom d'utilisateur invalide : 3 à 32 caractères, doit commencer par une lettre.",
+        "generic": "Impossible de créer le compte. Réessayez."
+      }
+    },
+    "activate": {
+      "impossibleHeading": "Activation impossible",
+      "tokenMissing": "Lien d'activation invalide : aucun jeton fourni.",
+      "heading": "Activer votre compte",
+      "newPassword": "Nouveau mot de passe",
+      "confirmPassword": "Confirmer le mot de passe",
+      "mismatch": "Les mots de passe ne correspondent pas.",
+      "submit": "Activer mon compte",
+      "errors": {
+        "invalidLink": "Ce lien d'activation est invalide ou a expiré. Demandez à un administrateur de vous renvoyer une invitation."
+      }
+    }
+  },
+  "common": {
+    "loadingLabel": "Chargement en cours",
+    "loading": "Chargement…",
+    "select": "Sélectionner…",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
+    "close": "Fermer",
+    "retry": "Réessayer",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "requiredNote": "Les champs marqués d'un astérisque (*) sont obligatoires.",
+    "or": "OU",
+    "confirm": "Confirmer",
+    "cancel": "Annuler",
+    "copy": "Copier",
+    "delete": "Supprimer",
+    "name": "Nom",
+    "format": "Format",
+    "type": "Type",
+    "add": "Ajouter",
+    "create": "Créer",
+    "save": "Enregistrer",
+    "newWindow": "(nouvelle fenêtre)",
+    "loadMore": "Charger plus",
+    "yes": "Oui",
+    "no": "Non",
+    "date": "Date",
+    "saving": "Enregistrement…",
+    "deleting": "Suppression…"
+  },
+  "confirm": {
+    "typeToConfirm": "Saisissez « {{ text }} » pour confirmer"
+  },
+  "shared": {
+    "copyableCommand": {
+      "copied": "Commande copiée",
+      "failed": "Copie impossible, sélectionnez la commande manuellement"
+    },
+    "readme": {
+      "title": "README",
+      "emptyHeading": "Aucun README",
+      "emptyMessage": "Ce package n'a pas de README."
+    }
+  },
+  "shell": {
+    "loadFailed": "Impossible de charger votre session. Vérifiez votre connexion puis réessayez.",
+    "navLabel": "Navigation principale",
+    "skipLabel": "Aller au contenu principal",
+    "openMenu": "Ouvrir le menu de navigation",
+    "closeMenu": "Fermer le menu de navigation",
+    "collapseMenu": "Réduire le menu",
+    "expandMenu": "Déployer le menu",
+    "logoAlt": "ArtiFerris",
+    "search": {
+      "placeholder": "Rechercher un dépôt ou un utilisateur...",
+      "clear": "Effacer la recherche",
+      "navigate": "Naviguer",
+      "select": "Sélectionner",
+      "failed": "La recherche a échoué",
+      "noResults": "Aucun résultat",
+      "failedHint": "Modifiez votre saisie pour réessayer.",
+      "noResultsHint": "Essayez une autre recherche.",
+      "packagesAndImages": "Paquets et images",
+      "proxyCache": "cache du proxy"
+    },
+    "logout": "Déconnexion",
+    "collapseItem": "Réduire {{ name }}",
+    "expandItem": "Déployer {{ name }}"
+  },
+  "nav": {
+    "account": "Mon compte",
+    "repositories": "Dépôts",
+    "myRepository": "Mon dépôt",
+    "users": "Utilisateurs",
+    "administration": "Administration",
+    "organizations": "Organisations",
+    "export": "Export",
+    "explorer": "Explorer",
+    "health": "Santé",
+    "systemHealth": "Santé système"
+  },
+  "account": {
+    "profile": {
+      "username": "Nom d'utilisateur : {{ username }}",
+      "memberSince": "Membre depuis : {{ date }}",
+      "infoHeading": "Informations",
+      "superAdminStatus": "Statut : Super-administrateur"
+    },
+    "mfa": {
+      "backupCodesRemaining": "Codes de secours restants : {{ count }}",
+      "heading": "Double authentification (TOTP)",
+      "loadFailed": "Échec du chargement de la double authentification.",
+      "notEnabled": "La double authentification n'est pas activée sur ce compte.",
+      "enable": "Activer",
+      "scanQr": "Scannez ce QR code avec votre application d'authentification (Google Authenticator, Authy, 1Password…), ou saisissez le code manuellement :",
+      "enabledWithCodes": "Double authentification activée. Conservez ces codes de secours dans un endroit sûr — chacun ne peut être utilisé qu'une seule fois, si vous perdez l'accès à votre application d'authentification.",
+      "savedCodesReconnect": "J'ai sauvegardé ces codes, me reconnecter",
+      "enabled": "Double authentification activée.",
+      "regenerate": {
+        "label": "REGÉNÉRATION",
+        "warning": "Les anciens codes de secours cesseront de fonctionner immédiatement et vos sessions seront fermées.",
+        "button": "Régénérer les codes de secours"
+      },
+      "currentPassword": "Mot de passe actuel",
+      "disable": {
+        "label": "DÉSACTIVATION",
+        "warning": "Le compte ne demandera plus de code à la connexion. Vos sessions seront fermées.",
+        "button": "Désactiver la double authentification"
+      },
+      "newBackupCodes": "Nouveaux codes de secours — les anciens ne fonctionnent plus :",
+      "sessionsWillClose": "Vos sessions vont être fermées : vous devrez vous reconnecter une fois ces codes sauvegardés.",
+      "errors": {
+        "startFailed": "Échec du démarrage de l'activation. Réessayez.",
+        "wrongPassword": "Mot de passe incorrect.",
+        "disableFailed": "Échec de la désactivation.",
+        "regenerateFailed": "Échec de la régénération."
+      }
+    },
+    "tabs": {
+      "profile": "Profil",
+      "security": "Sécurité",
+      "tokens": "Jetons API"
+    },
+    "password": {
+      "heading": "Changer le mot de passe",
+      "current": "Mot de passe actuel",
+      "new": "Nouveau mot de passe",
+      "confirm": "Confirmer le nouveau mot de passe",
+      "errors": {
+        "mismatch": "Les mots de passe ne correspondent pas.",
+        "tooShort": "Le mot de passe doit contenir au moins 8 caractères.",
+        "change": "Mot de passe actuel incorrect ou nouveau mot de passe invalide."
+      }
+    },
+    "tokens": {
+      "heading": "Tokens API"
+    },
+    "passkeys": {
+      "heading": "Clés d'accès (passkeys)",
+      "emptyHeading": "Aucune clé d'accès",
+      "emptyMessage": "Ajoutez une clé d'accès pour vous connecter sans mot de passe.",
+      "registerNew": "Enregistrer une nouvelle clé",
+      "add": "Ajouter une clé d'accès",
+      "unsupported": "Votre navigateur ne prend pas en charge les clés d'accès.",
+      "errors": {
+        "loadFailed": "Échec du chargement des clés d'accès."
+      },
+      "registered": "Clé d’accès enregistrée."
+    },
+    "sessions": {
+      "heading": "Sessions",
+      "description": "Révoque toutes vos sessions ouvertes, vos jetons API et vos jetons Docker. Utile si un appareil est perdu ou compromis, ou si votre compte passe par un SSO et n'a pas de mot de passe à changer.",
+      "signOutEverywhere": "Se déconnecter partout",
+      "confirmMessage": "Toutes vos sessions, jetons API et jetons Docker seront révoqués, y compris celui-ci. Vous devrez vous reconnecter.",
+      "errors": {
+        "signOutFailed": "Échec de la déconnexion des sessions. Réessayez."
+      }
+    }
+  },
+  "tokens": {
+    "intro": "Utilisez un token pour authentifier <code>npm publish</code>/<code>npm install</code> dans votre <code>.npmrc</code>.",
+    "create": {
+      "labelTooLong": "Le nom ne peut pas dépasser {{ max }} caractères.",
+      "expiresFull": "Ce token expirera dans {{ days }} jours.",
+      "expiresShort": "Ce token expirera dans {{ days }} jours : renseignez votre mot de passe pour 365 jours.",
+      "heading": "Nouveau token API",
+      "name": "Nom (ex. « mon laptop »)",
+      "password": "Mot de passe (pour un jeton de longue durée)",
+      "submit": "Créer"
+    },
+    "created": {
+      "expires": "Il expirera dans {{ days }} jours.",
+      "heading": "Token créé",
+      "copyNow": "Copiez ce token maintenant — il ne sera plus jamais affiché.",
+      "done": "J'ai copié le token"
+    },
+    "empty": {
+      "heading": "Aucun token",
+      "message": "Créez un token pour authentifier vos publications et installations npm."
+    },
+    "new": "Nouveau token",
+    "table": {
+      "caption": "Jetons API",
+      "name": "Nom",
+      "createdAt": "Créé le"
+    },
+    "errors": {
+      "tooMany": "Trop de tentatives, réessayez plus tard.",
+      "createFailed": "Échec de la création du token.",
+      "wrongPassword": "Mot de passe incorrect.",
+      "revokeFailed": "Échec de la révocation du token \"{{ label }}\"."
+    },
+    "revoke": {
+      "heading": "Révoquer le token",
+      "confirm": "Révoquer",
+      "message": "Révoquer le token \"{{ label }}\" ? Toute intégration npm qui l'utilise cessera de fonctionner."
+    }
+  },
+  "users": {
+    "detail": {
+      "email": "E-mail : {{ email }}",
+      "info": "Informations",
+      "grant": "Accorder",
+      "grantMany": "Accorder ({{ count }})",
+      "demoteHint": "Retire tous les droits de super-administration.",
+      "promoteHint": "Donne un accès complet à toutes les organisations et à leur administration.",
+      "demote": "Rétrograder",
+      "promote": "Promouvoir super-administrateur",
+      "promoteConfirm": "Promouvoir \"{{ username }}\" au rang de super-administrateur ?",
+      "demoteConfirm": "Retirer le rang de super-administrateur à \"{{ username }}\" ?",
+      "promoteHeading": "Promouvoir en super-administrateur",
+      "demoteHeading": "Retirer le rang de super-administrateur",
+      "promoteAction": "Promouvoir",
+      "demoteAction": "Retirer",
+      "promoted": "{{ username }} est désormais super-administrateur·rice.",
+      "demoted": "{{ username }} n'est plus super-administrateur·rice.",
+      "deleteConfirm": "Supprimer l'utilisateur \"{{ username }}\" ?",
+      "deleted": "Utilisateur « {{ username }} » supprimé.",
+      "errors": {
+        "lastSuperAdmin": "Impossible de rétrograder le dernier super-administrateur.",
+        "superAdminStatus": "Impossible de modifier le statut super-administrateur.",
+        "resendFailed": "Échec de l'envoi de l'invitation. Vérifiez la configuration du serveur mail.",
+        "updateFailed": "Échec de la mise à jour du droit d'accès.",
+        "revokeFailed": "Échec de la révocation du droit d'accès.",
+        "grantFailed": "Échec de l'attribution sur au moins un dépôt.",
+        "deleteFailed": "Échec de la suppression de l'utilisateur."
+      },
+      "loadFailed": "Échec du chargement de l'utilisateur.",
+      "pending": "Statut : invitation en attente d'activation",
+      "resend": "Renvoyer l'invitation",
+      "permissions": "Droits d'accès",
+      "permissionsCaption": "Droits d'accès de cet utilisateur",
+      "noPermissions": "Aucun droit d'accès accordé",
+      "repositories": "Dépôts",
+      "repositoriesPlaceholder": "Choisir un ou plusieurs dépôts",
+      "role": "Rôle",
+      "deleteHint": "Suppression définitive du compte.",
+      "delete": "Supprimer l'utilisateur",
+      "columns": {
+        "repository": "Dépôt"
+      },
+      "updated": "Droit d'accès mis à jour.",
+      "revoked": "Droit d'accès révoqué.",
+      "granted": "Droit d'accès accordé.",
+      "resent": "Invitation renvoyée."
+    },
+    "create": {
+      "created": "Utilisateur « {{ username }} » créé.",
+      "heading": "Nouvel utilisateur",
+      "username": "Nom d'utilisateur",
+      "email": "Adresse e-mail",
+      "superAdmin": "Super-administrateur",
+      "inviteNote": "Un e-mail sera envoyé à cette adresse pour que l'utilisateur active son compte et choisisse son mot de passe, sous 24 heures.",
+      "invite": "Inviter",
+      "errors": {
+        "createFailed": "Échec de la création de l'utilisateur."
+      }
+    },
+    "list": {
+      "new": "Nouvel utilisateur",
+      "organization": "Organisation",
+      "emptyHeading": "Aucun utilisateur",
+      "emptyMessage": "Les utilisateurs créés ou invités apparaîtront ici.",
+      "noResultsHeading": "Aucun résultat",
+      "noResultsMessage": "Aucun utilisateur dans cette organisation. Changez le filtre pour en voir d'autres.",
+      "caption": "Utilisateurs",
+      "allOrganizations": "Toutes les organisations",
+      "columns": {
+        "username": "Nom d'utilisateur",
+        "email": "E-mail",
+        "superAdmin": "Super-admin",
+        "invitationPending": "Invitation en attente"
+      },
+      "errors": {
+        "loadFailed": "Échec du chargement des utilisateurs."
+      }
+    }
+  },
+  "repositories": {
+    "create": {
+      "noMemberAvailable": "Aucun dépôt {{ format }} disponible à ajouter pour l'instant.",
+      "created": "Dépôt « {{ name }} » créé.",
+      "heading": "Nouveau dépôt",
+      "remoteUrl": "URL distante",
+      "remoteUsername": "Nom d'utilisateur distant (optionnel)",
+      "remotePassword": "Mot de passe / token distant (optionnel)",
+      "remotePasswordPlaceholder": "Laisser le nom d'utilisateur vide pour une authentification par token",
+      "addMember": "Ajouter un dépôt membre",
+      "resolutionOrder": "Ordre de résolution (le premier dépôt qui contient le paquet demandé répond) :",
+      "moveUp": "Monter",
+      "moveDown": "Descendre",
+      "remove": "Retirer",
+      "quota": "Quota (Mo, vide = illimité)",
+      "retention": "Conserver les N dernières versions/étiquettes (vide = désactivé)",
+      "makePublic": "Rendre public",
+      "errors": {
+        "quota": "Doit être un nombre positif (ou vide pour illimité).",
+        "retention": "Doit être un entier positif (ou vide pour désactiver).",
+        "publicFailed": "Dépôt créé, mais échec du passage en public.",
+        "createFailed": "Échec de la création du dépôt."
+      }
+    },
+    "createProject": {
+      "created": "Projet « {{ name }} » créé.",
+      "heading": "Nouveau projet",
+      "errors": {
+        "publicFailed": "Projet créé, mais échec du passage en public.",
+        "createFailed": "Échec de la création du projet."
+      }
+    },
+    "mine": {
+      "emptyHeading": "Aucun dépôt personnel",
+      "emptyMessage": "Créez votre dépôt personnel pour y publier vos propres projets npm et docker.",
+      "createButton": "Créer son dépôt utilisateur",
+      "confirmMessage": "Cette action réserve votre espace personnel afin que vous puissiez y créer vos propres projets npm et docker.",
+      "errors": {
+        "checkFailed": "Échec de la vérification de votre dépôt personnel.",
+        "createFailed": "Échec de la création de votre dépôt utilisateur."
+      }
+    },
+    "tree": {
+      "truncated": "Seules les {{ count }} plus récentes sont listées",
+      "noPackagesHeading": "Aucun package",
+      "noPackagesMessage": "Les packages npm publiés dans ce dépôt apparaîtront ici.",
+      "noImagesHeading": "Aucune image",
+      "noImagesMessage": "Les images docker poussées dans ce dépôt apparaîtront ici.",
+      "loadMore": "Charger plus",
+      "loadMoreFailed": "Échec du chargement de la suite.",
+      "errors": {
+        "loadFailed": "Échec du chargement des packages."
+      }
+    },
+    "permissions": {
+      "titleRepository": "Modifier l'accès du dépôt {{ label }}",
+      "titleUser": "Modifier l'accès de {{ label }}",
+      "revokeRepository": "Révoquer l'accès du dépôt \"{{ label }}\" ?",
+      "revokeUser": "Révoquer l'accès de \"{{ label }}\" ?",
+      "role": "Rôle",
+      "revoke": "Révoquer",
+      "revokeHeading": "Révoquer l'accès"
+    },
+    "share": {
+      "viewPublicPage": "Voir la page publique",
+      "perPackageHint": "· chaque paquet ou image a aussi sa propre page, depuis l'onglet Packages.",
+      "private": "Ce dépôt est privé : lui et ses paquets ne sont visibles que par les utilisateurs autorisés.",
+      "makePublicHint": "Rendez-le public dans l'onglet Paramètres pour obtenir un lien à partager.",
+      "anyoneCanView": "N'importe qui peut consulter et télécharger ce dépôt, sans compte, à cette adresse :",
+      "copyLabel": "Copier le lien public du dépôt"
+    },
+    "usage": {
+      "login": "Connexion :",
+      "dockerLogin": "echo <votre-token> | docker login {{ host }} -u <votre-nom-utilisateur> --password-stdin",
+      "tagAndPush": "Marquage et publication de l'image :",
+      "dockerTagPush": "docker tag mon-image:latest {{ host }}/{{ path }}/mon-image:latest\ndocker push {{ host }}/{{ path }}/mon-image:latest",
+      "pull": "Récupération d'une image :",
+      "dockerPull": "docker pull {{ host }}/{{ path }}/<image>:<tag>",
+      "npmrc": "Ajoutez ces lignes à votre <code>.npmrc</code> :",
+      "npmrcContent": "registry={{ origin }}/npm/{{ path }}/\n//{{ host }}/npm/{{ path }}/:_authToken=<votre-token>",
+      "createApiToken": "Créer un token API"
+    },
+    "vulnerability": {
+      "label_one": "{{ count }} vulnérabilité de sévérité {{ severity }}",
+      "label_other": "{{ count }} vulnérabilités de sévérité {{ severity }}",
+      "severity": {
+        "critical": "critique",
+        "high": "élevée",
+        "medium": "moyenne",
+        "low": "faible"
+      }
+    },
+    "list": {
+      "newProject": "Nouveau projet",
+      "newRepository": "Nouveau dépôt",
+      "noProject": "Aucun projet",
+      "noRepository": "Aucun dépôt",
+      "noProjectMessage": "Créez votre premier projet pour y publier des paquets npm ou des images docker.",
+      "noRepositoryMessage": "Créez un dépôt pour commencer à publier des paquets npm ou des images docker.",
+      "noResultsHeading": "Aucun résultat",
+      "noResultsMessage": "Aucun dépôt ne correspond à l'organisation sélectionnée. Changez le filtre pour en voir d'autres.",
+      "caption": "Dépôts",
+      "columns": {
+        "owner": "Propriétaire"
+      },
+      "errors": {
+        "loadFailed": "Échec du chargement des dépôts."
+      }
+    },
+    "detail": {
+      "remote": "Dépôt distant :",
+      "membersEmptyAdmin": "Ajoutez des dépôts membres pour les regrouper derrière ce dépôt.",
+      "membersEmpty": "Ce groupe ne contient aucun dépôt pour le moment.",
+      "currently": "Actuellement :",
+      "public": "public",
+      "private": "privé",
+      "publicHint": "Tout le monde peut consulter et télécharger le contenu de ce dépôt, sans authentification. Publier reste réservé aux utilisateurs autorisés.",
+      "privateHint": "Seuls les utilisateurs autorisés peuvent accéder à ce dépôt.",
+      "makePrivate": "Rendre privé",
+      "makePublic": "Rendre public",
+      "current": "Actuel :",
+      "unlimited": "illimité",
+      "retentionDisabled": "désactivée",
+      "retentionKeep": "conserver les {{ count }} dernières versions/étiquettes",
+      "retentionHint": "Purge automatique périodique des versions npm ou étiquettes Docker les plus anciennes au-delà de ce nombre, par paquet/image. Les versions taguées (ex. « latest ») ne sont jamais supprimées.",
+      "dangerMessage": "La suppression d'un dépôt est définitive et efface tous les packages qu'il contient.",
+      "memberRemoved": "« {{ name }} » retiré du groupe.",
+      "makePublicMessage": "Toute personne, sans authentification, pourra consulter et télécharger le contenu de « {{ name }} ».",
+      "makePrivateMessage": "Seuls les utilisateurs autorisés pourront accéder à « {{ name }} ».",
+      "nowPublic": "Dépôt « {{ name }} » public.",
+      "nowPrivate": "Dépôt « {{ name }} » privé.",
+      "deleteMessage": "Supprimer le dépôt \"{{ name }}\" ?",
+      "deleted": "Dépôt « {{ name }} » supprimé.",
+      "loadFailed": "Échec du chargement du dépôt.",
+      "tabs": {
+        "overview": "Aperçu",
+        "packages": "Packages",
+        "members": "Dépôts membres",
+        "permissions": "Droits d'accès",
+        "settings": "Paramètres"
+      },
+      "rename": "Renommer",
+      "usage": "Utilisation",
+      "share": "Partage",
+      "noMembers": "Aucun dépôt membre",
+      "removeHint": "Cliquer sur une ligne pour retirer le dépôt membre du groupe.",
+      "membersCaption": "Dépôts membres du groupe",
+      "memberId": "ID du dépôt à ajouter",
+      "noPermissions": "Aucun droit spécifique",
+      "noPermissionsMessage": "Accordez un rôle à un utilisateur avec le formulaire ci-dessous.",
+      "editHint": "Cliquer sur une ligne pour modifier ou révoquer un droit.",
+      "permissionsCaption": "Droits d'accès sur ce dépôt",
+      "noRight": "Aucun droit",
+      "searchFailed": "Échec de la recherche",
+      "searching": "Recherche en cours…",
+      "visibility": "Visibilité",
+      "quotaHeading": "Quota de stockage",
+      "quotaSaved": "Quota enregistré.",
+      "retentionHeading": "Rétention",
+      "retentionLabel": "Conserver les N dernières (vide = désactivé)",
+      "retentionSaved": "Politique de rétention enregistrée.",
+      "dangerZone": "Zone de danger",
+      "delete": "Supprimer le dépôt",
+      "columns": {
+        "member": "Dépôt membre",
+        "user": "Utilisateur"
+      },
+      "errors": {
+        "quotaSave": "Échec de l'enregistrement du quota.",
+        "retentionSave": "Échec de l'enregistrement de la politique de rétention.",
+        "grantFailed": "Échec de l'attribution du droit d'accès.",
+        "renameFailed": "Échec du renommage du dépôt.",
+        "memberAddFailed": "Échec de l'ajout du dépôt membre.",
+        "memberRemoveFailed": "Échec du retrait du dépôt membre.",
+        "visibilityFailed": "Échec du changement de visibilité.",
+        "deleteFailed": "Échec de la suppression du dépôt."
+      },
+      "renamed": "Dépôt renommé.",
+      "memberAdded": "Dépôt membre ajouté.",
+      "removeFromGroup": "Retirer du groupe",
+      "makePublicHeading": "Rendre le dépôt public",
+      "makePrivateHeading": "Rendre le dépôt privé",
+      "removeFromGroupMessage": "Retirer \"{{ name }}\" du groupe ?"
+    }
+  },
+  "package": {
+    "backToRepository": "← Retour au dépôt",
+    "copyInstallCommand": "Copier la commande d'installation de {{ name }}",
+    "copyPullCommand": "Copier la commande docker pull",
+    "versions_one": "{{ count }} version",
+    "versions_other": "{{ count }} versions",
+    "versionsTruncated": "Seules les {{ count }} versions les plus récentes sont affichées.",
+    "deprecatedLabel": "Déprécié : {{ reason }}",
+    "noReason": "aucune raison fournie",
+    "deprecated": "déprécié",
+    "pageOf": "Page {{ page }} sur {{ total }}",
+    "tags_one": "{{ count }} tag",
+    "tags_other": "{{ count }} tags",
+    "tagsTruncated": "Seuls les {{ count }} tags les plus récents sont affichés.",
+    "allSeverities": "Toutes les criticités",
+    "noMatchingSeverity": "Aucune vulnérabilité ne correspond aux criticités sélectionnées.",
+    "loadingLastResult": "Chargement du dernier résultat…",
+    "audit": {
+      "checking": "Vérification des vulnérabilités connues…",
+      "unavailable": "Impossible de vérifier les vulnérabilités pour le moment (base d'alertes npm injoignable).",
+      "cleanVersions": "Aucune vulnérabilité connue pour les versions publiées.",
+      "affectedVersions": "Versions concernées :",
+      "rescan": "Relancer le scan"
+    },
+    "deps": {
+      "heading": "Analyse des dépendances (version {{ version }})",
+      "unavailable": "Impossible d'effectuer l'analyse pour le moment (base d'alertes npm injoignable).",
+      "lastScan_one": "Dernière analyse le {{ date }} · {{ count }} dépendance analysée",
+      "lastScan_other": "Dernière analyse le {{ date }} · {{ count }} dépendances analysées",
+      "partial": "· analyse partielle (arbre de dépendances trop volumineux pour être couvert entièrement)",
+      "clean": "Aucune vulnérabilité connue dans l'arbre de dépendances.",
+      "deepScan": "Lancer un scan approfondi",
+      "noneHeading": "Aucune analyse",
+      "noneMessage": "Une analyse vérifie les vulnérabilités connues de l'arbre de dépendances."
+    },
+    "scan": {
+      "heading": "Sécurité (tag {{ tag }})",
+      "unavailable": "Impossible d'effectuer le scan pour le moment (Trivy indisponible ou erreur d'analyse).",
+      "last_one": "Dernier scan le {{ date }} · {{ count }} vulnérabilité",
+      "last_other": "Dernier scan le {{ date }} · {{ count }} vulnérabilités",
+      "clean": "Aucune vulnérabilité connue dans cette image.",
+      "fixedIn": "· corrigé en",
+      "run": "Lancer un scan",
+      "noneHeading": "Aucun scan",
+      "noneMessage": "Un scan vérifie les vulnérabilités connues de l'image.",
+      "imageHeading": "Scan de l'image (tag {{ tag }})"
+    },
+    "danger": {
+      "deletePackage": "Supprime toutes les versions de <strong>{{ name }}</strong> et ne peut pas être annulé.",
+      "deleteImage": "Supprime toutes les étiquettes de <strong>{{ name }}</strong> et ne peut pas être annulé.",
+      "deleteAllPackage": "Supprimer tout le package",
+      "deleteAllImage": "Supprimer toute l'image"
+    },
+    "eyebrow": {
+      "tags": "Tags",
+      "install": "Installation"
+    },
+    "table": {
+      "version": "Version",
+      "publishedAt": "Publiée le",
+      "size": "Taille",
+      "tag": "Tag",
+      "digest": "Digest",
+      "updated": "Mise à jour",
+      "createdAt": "Créé le"
+    },
+    "security": "Sécurité",
+    "delete": {
+      "versionMessage": "Supprimer la version {{ version }} de {{ name }} ?",
+      "versionDeleted": "Version {{ version }} supprimée.",
+      "versionFailed": "Échec de la suppression de la version {{ version }}.",
+      "packageMessage": "Supprimer entièrement le package {{ name }} ? Cette action est irréversible.",
+      "packageDeleted": "Package {{ name }} supprimé.",
+      "tagMessage": "Supprimer le tag {{ tag }} de {{ name }} ? Toute autre étiquette pointant vers la même image sera aussi supprimée.",
+      "tagDeleted": "Tag {{ tag }} supprimé.",
+      "tagFailed": "Échec de la suppression du tag {{ tag }}.",
+      "imageMessage": "Supprimer entièrement l'image {{ name }} ? Cette action est irréversible.",
+      "imageDeleted": "Image {{ name }} supprimée.",
+      "versionHeading": "Supprimer la version",
+      "packageHeading": "Supprimer le package",
+      "tagHeading": "Supprimer le tag",
+      "imageHeading": "Supprimer l'image",
+      "packageFailed": "Échec de la suppression du package.",
+      "imageFailed": "Échec de la suppression de l'image."
+    }
+  },
+  "publicRepo": {
+    "loadFailed": "Échec du chargement du dépôt.",
+    "notFound": "Dépôt introuvable."
+  },
+  "publicPackage": {
+    "loadFailed": "Échec du chargement du package.",
+    "notFound": "Package introuvable.",
+    "tabs": {
+      "overview": "Aperçu",
+      "security": "Sécurité"
+    },
+    "securityAlerts": "Alertes de sécurité",
+    "noCachedAudit": "Aucune vérification en cache pour ce paquet pour le moment.",
+    "noAnalysis": "Aucune analyse pour cette version.",
+    "noScan": "Aucun scan pour ce tag."
+  },
+  "admin": {
+    "auditLog": {
+      "partial": "Calculé sur les {{ count }} entrées chargées ; des entrées plus anciennes existent.",
+      "exporting": "Export en cours… {{ count }} entrées récupérées",
+      "exportHint": "{{ count }} entrées chargées ; l'export récupère aussi les suivantes, dans la limite de {{ max }}.",
+      "exportPartial": "Fichier limité aux {{ max }} entrées les plus récentes ; des entrées plus anciennes n'y figurent pas.",
+      "summary": "Résumé",
+      "entriesByType": "Entrées par type",
+      "entries": "Entrées",
+      "noEntries": "Aucune entrée.",
+      "downloadCsv": "Télécharger en CSV",
+      "emptyHeading": "Aucune entrée",
+      "emptyMessage": "Les actions enregistrées dans le journal d'audit apparaîtront ici.",
+      "caption": "Journal d'audit",
+      "loadFailed": "Impossible de charger le journal d'audit pour le moment. Réessayez plus tard.",
+      "exportFailed": "L'export a échoué : aucun fichier n'a été produit. Réessayez.",
+      "loadMoreFailed": "Impossible de charger la suite du journal. Réessayez.",
+      "columns": {
+        "id": "Identifiant",
+        "event": "Événement",
+        "actor": "Acteur",
+        "details": "Détails"
+      }
+    },
+    "securityLog": {
+      "unlockIn": "{{ label }} — débloqué dans {{ remaining }}",
+      "exporting": "Export en cours… {{ count }} événements récupérés",
+      "exportHint": "{{ count }} événements chargés ; l'export récupère aussi les suivants, dans la limite de {{ max }}.",
+      "exportPartial": "Fichier limité aux {{ max }} événements les plus récents ; des événements plus anciens n'y figurent pas.",
+      "errors": {
+        "forbidden": "Vous n'avez pas le droit de débloquer {{ username }}.",
+        "notFound": "{{ username }} est introuvable : rien à débloquer.",
+        "unlockFailed": "Échec du déblocage de {{ username }}."
+      },
+      "unlockMessage": "Débloquer {{ username }} ? Ses tentatives de connexion échouées seront effacées.",
+      "unlocked": "{{ username }} a été débloqué·e.",
+      "accessDenied": "Action « {{ action }} » refusée sur {{ repository }}",
+      "organizationAccount": "{{ username }} (organisation)",
+      "lessThanMinute": "moins d'une minute",
+      "minutes": "{{ count }} minutes",
+      "from": "Depuis {{ ip }}",
+      "eventsByType": "Événements par type",
+      "noEvents": "Aucun événement.",
+      "blocked": "Comptes actuellement bloqués",
+      "unlock": "Débloquer",
+      "emptyHeading": "Aucun événement",
+      "emptyMessage": "Les événements de sécurité (connexions, blocages…) apparaîtront ici.",
+      "caption": "Journal de sécurité",
+      "loadFailed": "Impossible de charger le journal de sécurité pour le moment. Réessayez plus tard.",
+      "columns": {
+        "user": "Utilisateur"
+      },
+      "unlockHeading": "Débloquer le compte",
+      "partial": "Calculé sur les {{ count }} événements chargés ; des événements plus anciens existent."
+    },
+    "apiTokens": {
+      "limit": "La liste est limitée à {{ max }} jetons.",
+      "never": "Jamais",
+      "revokeMessage": "Révoquer le jeton « {{ label }} » de {{ username }} ?",
+      "revoked": "Jeton « {{ label }} » révoqué.",
+      "errors": {
+        "revokeFailed": "Échec de la révocation du jeton « {{ label }} »."
+      },
+      "active": "Jetons actifs",
+      "noneHeading": "Aucun jeton actif",
+      "noneMessage": "Les jetons d'accès créés par les utilisateurs apparaîtront ici.",
+      "revokeHint": "Le jeton cessera immédiatement de fonctionner, définitivement.",
+      "revoke": "Révoquer",
+      "revokedHeading": "Jetons révoqués",
+      "loadFailed": "Échec du chargement des jetons.",
+      "columns": {
+        "user": "Utilisateur",
+        "label": "Libellé",
+        "lastUsed": "Dernière utilisation",
+        "revokedAt": "Révoqué le"
+      },
+      "revokeHeading": "Révoquer le jeton"
+    },
+    "dashboard": {
+      "activityTruncated": "Basé sur les {{ count }} événements les plus récents : les jours plus anciens sont sous-estimés.",
+      "users": "Utilisateurs",
+      "repositories": "Dépôts",
+      "permissions": "Permissions actives",
+      "activity": "Activité (7 derniers jours)",
+      "eventsPerDay": "Événements par jour",
+      "day": "Jour",
+      "noEvents": "Aucun événement ces 7 derniers jours.",
+      "reposByFormat": "Dépôts par format",
+      "noReposByFormat": "Aucun dépôt à répartir par format.",
+      "storageEvolution": "Évolution du stockage",
+      "storageTable": "Stockage total par relevé",
+      "notEnoughData": "Pas encore assez de mesures.",
+      "usersAndRepos": "Évolution des utilisateurs et dépôts",
+      "usersAndReposTable": "Utilisateurs et dépôts par relevé",
+      "recent": "Activité récente",
+      "noRecentHeading": "Aucune activité récente",
+      "noRecentMessage": "Les événements du registre apparaîtront ici dès qu'il y en aura.",
+      "partialFailure": "Échec du chargement d'une partie du tableau de bord.",
+      "days_one": "{{ count }} jour",
+      "days_other": "{{ count }} jours",
+      "month": "1 mois",
+      "storage": "Stockage",
+      "events": "Événements"
+    },
+    "audit": {
+      "events": {
+        "LoginFailed": "Échec de connexion",
+        "AccessDenied": "Accès refusé",
+        "PasswordChangeFailed": "Échec de changement de mot de passe",
+        "MfaVerificationFailed": "Échec de vérification de la double authentification",
+        "PasskeyVerificationFailed": "Échec de vérification d'une clé d'accès",
+        "OidcLoginFailed": "Échec de connexion SSO (OIDC)",
+        "DockerTokenFailed": "Échec d'obtention d'un jeton Docker",
+        "LoginSucceeded": "Connexion réussie",
+        "PasswordChanged": "Mot de passe modifié",
+        "MfaEnabled": "Double authentification activée",
+        "MfaDisabled": "Double authentification désactivée",
+        "PasskeyAdded": "Clé d'accès ajoutée",
+        "PasskeyDeleted": "Clé d'accès supprimée",
+        "ApiTokenCreated": "Jeton d'API créé",
+        "ApiTokenRevoked": "Jeton d'API révoqué",
+        "SessionsRevoked": "Déconnexion de toutes les sessions",
+        "UserInvited": "Utilisateur invité",
+        "UserActivated": "Compte activé",
+        "UserDeleted": "Utilisateur supprimé",
+        "SuperAdminGranted": "Super-administrateur accordé",
+        "SuperAdminRevoked": "Super-administrateur retiré",
+        "OrganizationAdminGranted": "Administrateur d'organisation accordé",
+        "OrganizationAdminRevoked": "Administrateur d'organisation retiré",
+        "OrganizationCreated": "Organisation créée",
+        "IdentityProviderSet": "Fournisseur d'identité modifié",
+        "IdentityProviderCleared": "Fournisseur d'identité supprimé",
+        "SmtpSettingsChanged": "Paramètres SMTP modifiés",
+        "SystemSettingsChanged": "Paramètres système modifiés",
+        "BrandingChanged": "Image de marque modifiée",
+        "ConfigurationExported": "Configuration exportée",
+        "ConfigurationImported": "Configuration importée",
+        "BackupCodesRegenerated": "Codes de secours régénérés",
+        "InvitationResent": "Invitation renvoyée",
+        "QuotaSet": "Quota modifié",
+        "RetentionPolicySet": "Rétention modifiée",
+        "LoginThrottleCleared": "Verrouillage de connexion levé",
+        "Created": "Dépôt créé",
+        "Renamed": "Dépôt renommé",
+        "RemoteUrlChanged": "URL distante modifiée",
+        "GroupMemberAdded": "Membre ajouté au groupe",
+        "GroupMemberRemoved": "Membre retiré du groupe",
+        "VisibilityChanged": "Visibilité modifiée",
+        "Deleted": "Dépôt supprimé",
+        "Granted": "Accès accordé",
+        "Revoked": "Accès retiré",
+        "PackagePushed": "Paquet publié",
+        "PackageVersionUnpublished": "Version dépubliée",
+        "PackageDeleted": "Paquet supprimé",
+        "PackageVersionDeprecated": "Version dépréciée",
+        "DistTagChanged": "Dist-tag modifié",
+        "ImagePushed": "Image publiée",
+        "ManifestDeleted": "Manifeste supprimé"
+      },
+      "loginMethods": {
+        "password": "mot de passe",
+        "ldap": "LDAP",
+        "oidc": "SSO (OIDC)"
+      },
+      "mfaMethods": {
+        "totp": "application TOTP",
+        "backup_code": "code de secours",
+        "passkey": "clé d'accès"
+      },
+      "settings": {
+        "max_login_attempts": "Tentatives de connexion max.",
+        "login_attempt_window_seconds": "Fenêtre de tentatives (s)",
+        "session_ttl_hours": "Durée de session (h)",
+        "registration_enabled": "Inscription ouverte",
+        "seo_indexing_enabled": "Indexation par les moteurs de recherche"
+      },
+      "details": {
+        "via": "Via {{ method }}",
+        "viaSecond": "Via {{ method }} + {{ second }}",
+        "method": "Méthode : {{ method }}",
+        "label": "Libellé : {{ label }}",
+        "superAdmin": "super-administrateur",
+        "organizationAdmin": "administrateur d'organisation",
+        "user": "Utilisateur {{ username }}",
+        "none": "aucun",
+        "secretChanged": ", secret modifié",
+        "previous": "Ancien : {{ provider }}",
+        "passwordChanged": ", mot de passe modifié",
+        "logoRemoved": "Logo supprimé",
+        "logoReplaced": "Logo remplacé",
+        "faviconRemoved": "Favicon supprimé",
+        "faviconReplaced": "Favicon remplacé",
+        "counts": "{{ users }} utilisateurs, {{ repositories }} dépôts, {{ permissions }} permissions",
+        "withFailures": "{{ created }} ; {{ failures }} échec(s)",
+        "quotaMb": "{{ count }} Mo",
+        "unlimited": "Illimité",
+        "keepLast": "Garder les {{ count }} dernières versions",
+        "disabled": "Désactivée",
+        "oidcProvider": "OIDC {{ issuer }} (client {{ client }})",
+        "yes": "oui",
+        "no": "non"
+      }
+    },
+    "branding": {
+      "removeFile": "Retirer {{ name }}",
+      "oversize": "{{ name }} dépasse {{ max }} Mo et n'a pas été ajouté.",
+      "logo": "Logo",
+      "currentLogoAlt": "Logo actuel",
+      "logoFile": "Fichier logo (PNG ou JPEG)",
+      "dropLabel": "Glisser-déposer un fichier ici, ou cliquer pour parcourir",
+      "import": "Importer",
+      "resetLogoHint": "Revient au logo par défaut de ArtiFerris.",
+      "reset": "Réinitialiser",
+      "favicon": "Favicon",
+      "currentFaviconAlt": "Favicon actuel",
+      "faviconFile": "Fichier favicon (PNG, JPEG ou ICO)",
+      "resetFaviconHint": "Revient au favicon par défaut de ArtiFerris.",
+      "logoHelp": "Affiché sur les pages de connexion, d'activation et dans l'en-tête de l'application, ainsi que dans les e-mails envoyés par cette instance. PNG ou JPEG, 2 Mo maximum.",
+      "faviconHelp": "Icône affichée dans l'onglet du navigateur. PNG, JPEG ou ICO, 2 Mo maximum.",
+      "logoImported": "Logo importé.",
+      "errors": {
+        "logoImport": "Échec de l'import du logo.",
+        "logoReset": "Échec de la réinitialisation du logo.",
+        "faviconImport": "Échec de l'import du favicon.",
+        "faviconReset": "Échec de la réinitialisation du favicon."
+      },
+      "logoReset": "Logo réinitialisé.",
+      "faviconImported": "Favicon importé.",
+      "faviconReset": "Favicon réinitialisé."
+    },
+    "export": {
+      "restored": "{{ users }} utilisateur(s), {{ repositories }} dépôt(s), {{ permissions }} permission(s) restaurés.",
+      "invited": "Invités : {{ list }}",
+      "skippedNoEmail": "Sans email, non invités : {{ list }}",
+      "failed": "Échecs : {{ list }}",
+      "configuration": "Configuration",
+      "download": "Télécharger la configuration (JSON)",
+      "restore": "Restaurer une configuration",
+      "file": "Fichier de configuration JSON",
+      "exportHelp": "Exporte les dépôts, utilisateurs, permissions et paramètres système dans un fichier JSON téléchargeable — utile pour un audit ou une sauvegarde de la configuration. Ne contient ni mot de passe, ni jeton API, ni les paquets/images eux-mêmes.",
+      "importHelp": "Importe utilisateurs, dépôts, permissions et paramètres système depuis un fichier JSON exporté précédemment. Ne fonctionne que sur une instance fraîchement provisionnée, sans dépôt ni autre utilisateur que vous — les paquets/images ne sont pas restaurés.",
+      "errors": {
+        "exportFailed": "Échec de l'export de la configuration.",
+        "importFailed": "Échec de l'import de la configuration."
+      },
+      "importHeading": "Importer la configuration",
+      "importConfirm": "Importer cette configuration ? Cette opération ne fonctionne que sur une instance vide (sans dépôt, sans autre utilisateur que le vôtre)."
+    },
+    "health": {
+      "responseTime": "Temps de réponse",
+      "milliseconds": "{{ count }} ms",
+      "days": "{{ count }} j",
+      "hours": "{{ count }} h",
+      "minutes": "{{ count }} min",
+      "loadFailed": "Échec du chargement de l'état du système.",
+      "database": "Base de données",
+      "connections": "Connexions",
+      "warning": "Avertissement",
+      "critical": "Critique",
+      "storage": "Stockage",
+      "usedSpace": "Espace utilisé",
+      "server": "Serveur",
+      "status": "Statut",
+      "postgresVersion": "Version PostgreSQL",
+      "freeSpace": "Espace libre",
+      "uptime": "Démarré depuis"
+    },
+    "usage": {
+      "others": "Autres ({{ count }})",
+      "usedPerRepo": "Espace utilisé par dépôt",
+      "largest": "Dépôts les plus volumineux",
+      "repository": "Dépôt",
+      "usedSpace": "Espace utilisé",
+      "noRepos": "Aucun dépôt.",
+      "quotas": "Quotas de stockage",
+      "perRepo": "Utilisation par dépôt",
+      "noDetails": "Aucun détail d'utilisation disponible.",
+      "loadFailed": "Échec du chargement de l'utilisation. Vérifiez votre connexion puis réessayez.",
+      "usedBytes": "Espace utilisé (octets)"
+    },
+    "organizations": {
+      "created": "Organisation « {{ name }} » créée.",
+      "new": "Nouvelle organisation",
+      "subdomain": "Sous-domaine",
+      "errors": {
+        "createFailed": "Échec de la création de l'organisation.",
+        "loadFailed": "Échec du chargement des organisations."
+      },
+      "newShort": "Nouvelle organisation",
+      "emptyHeading": "Aucune organisation",
+      "emptyMessage": "Créez une organisation pour y regrouper des dépôts et des membres.",
+      "caption": "Organisations",
+      "columns": {
+        "subdomain": "Sous-domaine"
+      }
+    },
+    "metrics": {
+      "loadFailed": "Échec du chargement des statistiques."
+    },
+    "orgPage": {
+      "overview": "Aperçu",
+      "brand": "Marque",
+      "history": "Historique",
+      "metrics": "Métriques",
+      "settings": "Paramètres",
+      "mail": "Serveur mail"
+    },
+    "orgDetail": {
+      "subdomain": "Sous-domaine : {{ slug }}",
+      "secretUnreadable": "Le secret enregistré pour le fournisseur d'identité est illisible avec la clé de chiffrement de ce serveur. Configurez à nouveau le fournisseur, secret compris.",
+      "configured": "{{ provider }} est actuellement configuré pour cette organisation.",
+      "localAccounts": "Cette organisation utilise des comptes locaux.",
+      "keepPassword": "Laisser vide pour conserver le mot de passe actuel",
+      "keepSecret": "Laisser vide pour conserver le secret actuel",
+      "showSecret": "Afficher le secret",
+      "hideSecret": "Masquer le secret",
+      "authentication": "Authentification",
+      "members": "Membres",
+      "revertHint": "Supprime la configuration du fournisseur d'identité et repasse cette organisation en comptes locaux.",
+      "providerType": "Type de fournisseur d'identité",
+      "serverUrl": "URL du serveur",
+      "bindDn": "DN du compte de service",
+      "bindPassword": "Mot de passe du compte de service",
+      "searchBase": "Base de recherche",
+      "searchFilter": "Filtre de recherche",
+      "emailAttribute": "Attribut e-mail",
+      "issuerUrl": "URL de l'émetteur (issuer)",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "revert": "Revenir aux comptes locaux",
+      "errors": {
+        "issuerHttps": "L'URL de l'émetteur doit commencer par https://.",
+        "loadFailed": "Échec du chargement de l'organisation.",
+        "updateFailed": "Échec de la mise à jour de la configuration.",
+        "clearFailed": "Échec de la suppression de la configuration."
+      },
+      "saved": "Configuration enregistrée.",
+      "revertMessage": "Revenir aux comptes locaux pour cette organisation ?",
+      "revertConfirm": "Revenir",
+      "reverted": "Retour aux comptes locaux effectué."
+    },
+    "members": {
+      "promoteHeading": "Promouvoir en administrateur",
+      "demoteHeading": "Retirer le rôle d'administrateur",
+      "promoteConfirm": "Voulez-vous promouvoir {{ username }} en administrateur de l'organisation ?",
+      "demoteConfirm": "Voulez-vous rétrograder {{ username }} de son rôle d'administrateur de l'organisation ?",
+      "promote": "Promouvoir",
+      "demote": "Rétrograder",
+      "promoted": "{{ username }} est désormais administrateur·rice de l'organisation.",
+      "demoted": "{{ username }} n'est plus administrateur·rice de l'organisation.",
+      "invited": "{{ username }} a été invité·e.",
+      "demoteHint": "Retire les droits d'administration de cette organisation.",
+      "promoteHint": "Donne les droits d'administration complets sur cette organisation.",
+      "caption": "Membres de l'organisation",
+      "emptyHeading": "Aucun membre",
+      "emptyMessage": "Invitez des membres pour leur donner accès à cette organisation.",
+      "columns": {
+        "email": "E-mail",
+        "admin": "Administrateur",
+        "pending": "Invitation en attente"
+      },
+      "adminCheckbox": "Administrateur de cette organisation",
+      "inviteMember": "Inviter un membre",
+      "errors": {
+        "loadFailed": "Échec du chargement des membres.",
+        "inviteFailed": "Échec de l'invitation.",
+        "updateFailed": "Échec de la mise à jour du statut d'administrateur."
+      }
+    },
+    "smtp": {
+      "security": {
+        "startTls": "STARTTLS (port 587 usuellement)",
+        "tls": "TLS implicite (port 465 usuellement)",
+        "none": "Aucun (réseau interne de confiance uniquement)"
+      },
+      "errors": {
+        "testFailed": "Échec de l'envoi de l'e-mail de test. Vérifiez la configuration.",
+        "integer": "Doit être un nombre entier.",
+        "portRange": "Doit être entre 1 et 65535.",
+        "hostRequired": "L'hôte est requis.",
+        "usernameRequired": "L'identifiant est requis.",
+        "emailInvalid": "Doit être une adresse e-mail valide.",
+        "fromNameRequired": "Le nom d'expéditeur est requis.",
+        "passwordRequired": "Le mot de passe est requis lors de la première configuration.",
+        "updateFailed": "Échec de la mise à jour des paramètres SMTP."
+      },
+      "saved": "Paramètres SMTP enregistrés.",
+      "testSent": "E-mail de test envoyé.",
+      "heading": "Serveur mail (SMTP)",
+      "host": "Hôte SMTP",
+      "port": "Port",
+      "username": "Identifiant",
+      "fromName": "Nom d'expéditeur",
+      "fromAddress": "Adresse d'expédition",
+      "testHeading": "Envoyer un e-mail de test",
+      "recipient": "Destinataire",
+      "testHint": "Utilise la configuration déjà enregistrée, pas les modifications du formulaire ci-dessus.",
+      "send": "Envoyer",
+      "loadFailed": "Échec du chargement des paramètres SMTP.",
+      "secretUnreadable": "Le mot de passe SMTP enregistré est illisible avec la clé de chiffrement de ce serveur. Saisissez-le à nouveau, puis enregistrez."
+    },
+    "system": {
+      "maxLoginAttempts": "Tentatives de connexion max",
+      "loginAttemptWindow": "Fenêtre de blocage (secondes)",
+      "sessionTtl": "Durée de session (heures)",
+      "errors": {
+        "range": "Doit être entre {{ min }} et {{ max }}.",
+        "integer": "Doit être un nombre entier.",
+        "updateFailed": "Échec de la mise à jour des paramètres."
+      },
+      "heading": "Paramètres système",
+      "loadFailed": "Échec du chargement des paramètres.",
+      "allowRegistration": "Autoriser la création de compte",
+      "seo": "Référencement",
+      "allowIndexing": "Autoriser l'indexation par les moteurs de recherche",
+      "seoHint": "Désactivée, le catalogue public envoie « noindex », le robots.txt interdit tout et le plan du site est vide.",
+      "saved": "Paramètres enregistrés."
+    }
+  },
+  "notFound": {
+    "heading": "Page introuvable",
+    "message": "Cette adresse ne correspond à aucune page.",
+    "backHome": "Retour à l'accueil"
   }
 }

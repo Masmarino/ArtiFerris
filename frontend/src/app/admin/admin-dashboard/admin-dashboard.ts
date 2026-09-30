@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -34,17 +36,27 @@ const ACTIVITY_FETCH_LIMIT = 200
 // Bucket span for the activity chart — long enough to show a trend, short enough that a quiet self-hosted instance doesn't render a wall of empty bars.
 const ACTIVITY_CHART_DAYS = 7
 
-const EVOLUTION_DAYS_OPTIONS: SelectOption<number>[] = [
-  { value: 1, label: '1 jour' },
-  { value: 3, label: '3 jours' },
-  { value: 7, label: '7 jours' },
-  { value: 30, label: '1 mois' },
+const evolutionDaysOptions = (): SelectOption<number>[] => [
+  { value: 1, label: t('admin.dashboard.days_one', { count: 1 }) },
+  { value: 3, label: t('admin.dashboard.days_other', { count: 3 }) },
+  { value: 7, label: t('admin.dashboard.days_other', { count: 7 }) },
+  { value: 30, label: t('admin.dashboard.month') },
 ]
 
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [Button, Card, DimensionCard, EmptyState, LineChart, DatePipe, Select, FormsModule],
+  imports: [
+    TranslocoPipe,
+    Button,
+    Card,
+    DimensionCard,
+    EmptyState,
+    LineChart,
+    DatePipe,
+    Select,
+    FormsModule,
+  ],
   templateUrl: './admin-dashboard.html',
   styleUrl: './admin-dashboard.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -64,7 +76,7 @@ export class AdminDashboard implements OnInit {
   readonly eventLabel = auditEventLabel
   readonly loadFailed = signal(false)
 
-  readonly evolutionDaysOptions = EVOLUTION_DAYS_OPTIONS
+  readonly evolutionDaysOptions = evolutionDaysOptions()
 
   // Each evolution chart has its own duration control, so each fetches its
   // own history independently rather than the two sharing one window.
@@ -75,7 +87,7 @@ export class AdminDashboard implements OnInit {
 
   readonly storageEvolutionSeries = computed<ChartSeries<Date>[]>(() => [
     {
-      label: 'Stockage',
+      label: t('admin.dashboard.storage'),
       points: this.storageHistory().map((h) => ({
         x: new Date(h.recorded_at),
         y: h.total_storage_bytes,
@@ -86,11 +98,11 @@ export class AdminDashboard implements OnInit {
 
   readonly countsEvolutionSeries = computed<ChartSeries<Date>[]>(() => [
     {
-      label: 'Utilisateurs',
+      label: t('admin.dashboard.users'),
       points: this.countsHistory().map((h) => ({ x: new Date(h.recorded_at), y: h.total_users })),
     },
     {
-      label: 'Dépôts',
+      label: t('admin.dashboard.repositories'),
       points: this.countsHistory().map((h) => ({
         x: new Date(h.recorded_at),
         y: h.total_repositories,

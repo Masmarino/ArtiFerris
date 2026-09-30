@@ -1,3 +1,5 @@
+import { t } from '../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -77,7 +79,9 @@ const PACKAGE_SEARCH_LIMIT = 5
 function packageLabel(entry: ReadableCatalogEntry): string {
   const format = CATALOGS.find((catalog) => catalog.format === entry.kind)?.label ?? entry.kind
   const label = `${entry.name} (${format})`
-  return entry.repository.repo_type === 'proxy' ? `${label} — cache du proxy` : label
+  return entry.repository.repo_type === 'proxy'
+    ? `${label} — ${t('shell.search.proxyCache')}`
+    : label
 }
 
 // The instance-wide flat Administration menu is super-admin only.
@@ -89,6 +93,7 @@ const STAFF_ONLY_ACTIONS = new Set(['users'])
   selector: 'app-shell',
   standalone: true,
   imports: [
+    TranslocoPipe,
     RouterOutlet,
     RouterLink,
     RouterLinkActive,
@@ -149,10 +154,10 @@ export class AppShell implements OnInit {
       .map((user) => ({ kind: 'user', id: user.id, label: user.username }))
 
     const categories: SearchResultCategory<SearchResult>[] = [
-      { label: 'Dépôts', icon: 'package', items: matchingRepositories },
+      { label: t('nav.repositories'), icon: 'package', items: matchingRepositories },
     ]
     if (this.canSeeUsers()) {
-      categories.push({ label: 'Utilisateurs', icon: 'user', items: matchingUsers })
+      categories.push({ label: t('nav.users'), icon: 'user', items: matchingUsers })
     }
     const matchingPackages = this.packages().map((entry): SearchResult => ({
       kind: 'package',
@@ -162,7 +167,11 @@ export class AppShell implements OnInit {
       label: packageLabel(entry),
     }))
     if (matchingPackages.length > 0) {
-      categories.push({ label: 'Paquets et images', icon: 'package', items: matchingPackages })
+      categories.push({
+        label: t('shell.search.packagesAndImages'),
+        icon: 'package',
+        items: matchingPackages,
+      })
     }
     return categories
   })
@@ -191,24 +200,34 @@ export class AppShell implements OnInit {
 
   readonly navItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [
-      { action: 'explorer', icon: 'compass', text: 'Explorer', link: '/', exact: true },
-      { action: 'repositories', icon: 'package', text: 'Dépôts', link: '/repositories' },
-      { action: 'my-repository', icon: 'user', text: 'Mon dépôt', link: '/my-repository' },
-      { action: 'users', icon: 'users', text: 'Utilisateurs', link: '/users' },
+      { action: 'explorer', icon: 'compass', text: t('nav.explorer'), link: '/', exact: true },
+      {
+        action: 'repositories',
+        icon: 'package',
+        text: t('nav.repositories'),
+        link: '/repositories',
+      },
+      {
+        action: 'my-repository',
+        icon: 'user',
+        text: t('nav.myRepository'),
+        link: '/my-repository',
+      },
+      { action: 'users', icon: 'users', text: t('nav.users'), link: '/users' },
       {
         action: 'admin',
         icon: 'layout-dashboard',
-        text: 'Administration',
+        text: t('nav.administration'),
         link: '/admin',
         children: [
           {
             action: 'organizations',
             icon: 'server',
-            text: 'Organisations',
+            text: t('nav.organizations'),
             link: '/admin/organizations',
           },
-          { action: 'export', icon: 'download', text: 'Export', link: '/admin/export' },
-          { action: 'health', icon: 'activity', text: 'Santé', link: '/admin/health' },
+          { action: 'export', icon: 'download', text: t('nav.export'), link: '/admin/export' },
+          { action: 'health', icon: 'activity', text: t('nav.health'), link: '/admin/health' },
         ],
       },
     ]
@@ -224,7 +243,7 @@ export class AppShell implements OnInit {
       filtered.push({
         action: 'organization',
         icon: 'layout-dashboard',
-        text: 'Administration',
+        text: t('nav.administration'),
         link: `/admin/organizations/${organizationId}`,
       })
     }
@@ -331,7 +350,8 @@ export class AppShell implements OnInit {
     while (route.firstChild) {
       route = route.firstChild
     }
-    return (route.snapshot.data['title'] as string | undefined) ?? ''
+    const titleKey = route.snapshot.data['titleKey'] as string | undefined
+    return titleKey ? t(titleKey) : ''
   }
 
   logout(): void {

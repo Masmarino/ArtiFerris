@@ -1,3 +1,5 @@
+import { t } from '../i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -14,7 +16,7 @@ const COPIED_FEEDBACK_MS = 2000
 @Component({
   selector: 'app-copyable-command',
   standalone: true,
-  imports: [Button],
+  imports: [TranslocoPipe, Button],
   templateUrl: './copyable-command.html',
   styleUrl: './copyable-command.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -31,9 +33,9 @@ export class CopyableCommand {
   readonly copyAnnouncement = computed(() => {
     switch (this.copyState()) {
       case 'copied':
-        return 'Commande copiée'
+        return t('shared.copyableCommand.copied')
       case 'failed':
-        return 'Copie impossible, sélectionnez la commande manuellement'
+        return t('shared.copyableCommand.failed')
       default:
         return ''
     }

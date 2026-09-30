@@ -1,16 +1,20 @@
 <app-public-layout>
   <header class="explorer-page__header">
-    <h1>Explorer les paquets publics</h1>
-    <p>Les paquets npm et les images Docker publics hébergés sur cette instance.</p>
+    <h1>{{ 'catalog.explorer.heading' | transloco }}</h1>
+    <p>{{ 'catalog.explorer.intro' | transloco }}</p>
   </header>
 
   <section aria-labelledby="explorer-catalogs-heading">
-    <h2 id="explorer-catalogs-heading" class="sr-only">Catalogues</h2>
+    <h2 id="explorer-catalogs-heading" class="sr-only">
+      {{ 'catalog.explorer.catalogs' | transloco }}
+    </h2>
     @if (loading()) {
-      <div class="loading-state"><gbt-spinner label="Chargement des catalogues…" /></div>
+      <div class="loading-state">
+        <gbt-spinner [label]="'catalog.explorer.loadingCatalogs' | transloco" />
+      </div>
     } @else if (failed()) {
       <p class="gbt-form-error" role="alert">{{ failedMessage() }}</p>
-      <gbt-button text="Réessayer" (clicked)="retry()" />
+      <gbt-button [text]="'common.retry' | transloco" (clicked)="retry()" />
     } @else {
       <ul class="explorer-page__catalogs">
         @for (catalog of catalogs(); track catalog.name) {
@@ -31,13 +35,15 @@
   @if (showPopular()) {
     <section class="explorer-page__popular" aria-labelledby="explorer-popular-heading">
       <h2 id="explorer-popular-heading" class="explorer-page__popular-heading">
-        Populaires cette semaine
+        {{ 'catalog.explorer.popular' | transloco }}
       </h2>
       @if (popularLoading()) {
-        <div class="loading-state"><gbt-spinner label="Chargement des paquets populaires…" /></div>
+        <div class="loading-state">
+          <gbt-spinner [label]="'catalog.explorer.loadingPopular' | transloco" />
+        </div>
       } @else if (popularFailed()) {
         <p class="gbt-form-error" role="alert">{{ popularFailedMessage() }}</p>
-        <gbt-button text="Réessayer" (clicked)="retryPopular()" />
+        <gbt-button [text]="'common.retry' | transloco" (clicked)="retryPopular()" />
       } @else {
         <ol class="explorer-page__popular-list">
           @for (entry of popularEntries(); track entry.repository.name + entry.kind + entry.name) {

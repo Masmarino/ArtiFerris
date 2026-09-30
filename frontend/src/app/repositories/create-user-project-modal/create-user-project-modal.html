@@ -1,13 +1,37 @@
-<gbt-modal [isOpen]="true" heading="Nouveau projet" closeLabel="Fermer" (closed)="cancelled.emit()">
+<gbt-modal
+  [isOpen]="true"
+  [heading]="'repositories.createProject.heading' | transloco"
+  [closeLabel]="'common.close' | transloco"
+  (closed)="cancelled.emit()"
+>
   <form [formGroup]="form" (ngSubmit)="submit()">
-    <p class="gbt-form-required-note">Les champs marqués d'un astérisque (*) sont obligatoires.</p>
-    <gbt-input label="Nom" formControlName="name" [required]="true" />
-    <gbt-select label="Format" placeholder="Sélectionner…" [options]="formatOptions" formControlName="format" />
-    <gbt-select label="Type" placeholder="Sélectionner…" [options]="repoTypeOptions" formControlName="repoType" />
+    <p class="gbt-form-required-note">{{ 'common.requiredNote' | transloco }}</p>
+    <gbt-input [label]="'common.name' | transloco" formControlName="name" [required]="true" />
+    <gbt-select
+      [label]="'common.format' | transloco"
+      [placeholder]="'common.select' | transloco"
+      [options]="formatOptions"
+      formControlName="format"
+    />
+    <gbt-select
+      [label]="'common.type' | transloco"
+      [placeholder]="'common.select' | transloco"
+      [options]="repoTypeOptions"
+      formControlName="repoType"
+    />
     @if (canBePublic()) {
-      <gbt-checkbox label="Rendre public" formControlName="isPublic" />
+      <gbt-checkbox
+        [label]="'repositories.create.makePublic' | transloco"
+        formControlName="isPublic"
+      />
     }
 
-    <gbt-button text="Créer" type="submit" [disabled]="form.invalid" [loading]="creating()" loadingLabel="Chargement en cours" />
+    <gbt-button
+      [text]="'common.create' | transloco"
+      type="submit"
+      [disabled]="form.invalid"
+      [loading]="creating()"
+      [loadingLabel]="'common.loadingLabel' | transloco"
+    />
   </form>
 </gbt-modal>

@@ -1,22 +1,22 @@
 <div class="container">
   @if (loadError()) {
     <gbt-card>
-      <p class="gbt-form-error" role="alert">Échec du chargement de l'utilisateur.</p>
+      <p class="gbt-form-error" role="alert">{{ 'users.detail.loadFailed' | transloco }}</p>
     </gbt-card>
   } @else {
     @if (user(); as u) {
       <gbt-card>
         <div class="stack">
-          <h2>Informations</h2>
-          <p>E-mail : {{ u.email ?? '—' }}</p>
+          <h2>{{ 'users.detail.info' | transloco }}</h2>
+          <p>{{ 'users.detail.email' | transloco: { email: u.email ?? '—' } }}</p>
           @if (u.invitation_pending) {
-            <p>Statut : invitation en attente d'activation</p>
+            <p>{{ 'users.detail.pending' | transloco }}</p>
             @if (canManageTarget()) {
               <gbt-button
-                text="Renvoyer l'invitation"
+                [text]="'users.detail.resend' | transloco"
                 [loading]="resendingInvitation()"
                 (clicked)="resendInvitation()"
-                loadingLabel="Chargement en cours"
+                [loadingLabel]="'common.loadingLabel' | transloco"
               />
             }
           }
@@ -26,10 +26,10 @@
 
     <gbt-card>
       <div class="stack">
-        <h2>Droits d'accès</h2>
+        <h2>{{ 'users.detail.permissions' | transloco }}</h2>
         <gbt-table
-          caption="Droits d'accès de cet utilisateur"
-          emptyMessage="Aucun droit d'accès accordé"
+          [caption]="'users.detail.permissionsCaption' | transloco"
+          [emptyMessage]="'users.detail.noPermissions' | transloco"
           [clickableRows]="true"
           [data]="permissions()"
           [columns]="permissionColumns"
@@ -38,8 +38,8 @@
         />
         <div class="stack">
           <gbt-select
-            label="Dépôts"
-            placeholder="Choisir un ou plusieurs dépôts"
+            [label]="'users.detail.repositories' | transloco"
+            [placeholder]="'users.detail.repositoriesPlaceholder' | transloco"
             [multiple]="true"
             [selectedCountLabel]="selectedCountLabel"
             [options]="repositoryOptions()"
@@ -47,8 +47,8 @@
             (ngModelChange)="grantRepositoryIds.set($event)"
           />
           <gbt-select
-            label="Rôle"
-            placeholder="Sélectionner…"
+            [label]="'users.detail.role' | transloco"
+            [placeholder]="'common.select' | transloco"
             [options]="roleOptions"
             [ngModel]="grantRole()"
             (ngModelChange)="grantRole.set($event)"
@@ -56,8 +56,8 @@
           <gbt-button
             [text]="
               grantRepositoryIds().length > 1
-                ? 'Accorder (' + grantRepositoryIds().length + ')'
-                : 'Accorder'
+                ? ('users.detail.grantMany' | transloco: { count: grantRepositoryIds().length })
+                : ('users.detail.grant' | transloco)
             "
             (clicked)="grantPermission()"
           />
@@ -82,22 +82,27 @@
       @if (isSuperAdminViewer()) {
         <gbt-tooltip
           [text]="
-            user()?.is_super_admin
-              ? 'Retire tous les droits de super-administration.'
-              : 'Donne un accès complet à toutes les organisations et à leur administration.'
+            (user()?.is_super_admin ? 'users.detail.demoteHint' : 'users.detail.promoteHint')
+              | transloco
           "
         >
           <gbt-button
-            [text]="user()?.is_super_admin ? 'Rétrograder' : 'Promouvoir super-administrateur'"
+            [text]="
+              (user()?.is_super_admin ? 'users.detail.demote' : 'users.detail.promote') | transloco
+            "
             [loading]="settingSuperAdmin()"
-            loadingLabel="Chargement en cours"
+            [loadingLabel]="'common.loadingLabel' | transloco"
             (clicked)="setSuperAdmin()"
           />
         </gbt-tooltip>
       }
       @if (canManageTarget()) {
-        <gbt-tooltip text="Suppression définitive du compte.">
-          <gbt-button text="Supprimer l'utilisateur" variant="danger" (clicked)="deleteUser()" />
+        <gbt-tooltip [text]="'users.detail.deleteHint' | transloco">
+          <gbt-button
+            [text]="'users.detail.delete' | transloco"
+            variant="danger"
+            (clicked)="deleteUser()"
+          />
         </gbt-tooltip>
       }
     </div>

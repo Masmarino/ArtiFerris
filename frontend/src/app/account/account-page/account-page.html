@@ -1,56 +1,60 @@
 <div class="container">
   <gbt-tabs>
-    <gbt-tab label="Profil">
+    <gbt-tab [label]="'account.tabs.profile' | transloco">
       <div class="stack">
-        <gbt-card heading="Informations" icon="user">
+        <gbt-card [heading]="'account.profile.infoHeading' | transloco" icon="user">
           <div class="stack">
-            <p>Nom d'utilisateur : {{ me.username() }}</p>
+            <p>{{ 'account.profile.username' | transloco: { username: me.username() } }}</p>
             @if (me.isSuperAdmin()) {
-              <p>Statut : Super-administrateur</p>
+              <p>{{ 'account.profile.superAdminStatus' | transloco }}</p>
             }
-            <p>Membre depuis : {{ me.createdAt() | date: 'medium' }}</p>
+            <p>
+              {{
+                'account.profile.memberSince' | transloco: { date: me.createdAt() | date: 'medium' }
+              }}
+            </p>
           </div>
         </gbt-card>
 
-        <gbt-card heading="Changer le mot de passe" icon="lock">
+        <gbt-card [heading]="'account.password.heading' | transloco" icon="lock">
           <form class="stack" [formGroup]="form" (ngSubmit)="submit()">
             <p class="gbt-form-required-note">
-              Les champs marqués d'un astérisque (*) sont obligatoires.
+              {{ 'common.requiredNote' | transloco }}
             </p>
             <gbt-input
-              label="Mot de passe actuel"
+              [label]="'account.password.current' | transloco"
               type="password"
-              showPasswordLabel="Afficher le mot de passe"
-              hidePasswordLabel="Masquer le mot de passe"
+              [showPasswordLabel]="'common.showPassword' | transloco"
+              [hidePasswordLabel]="'common.hidePassword' | transloco"
               formControlName="currentPassword"
               [required]="true"
               autocomplete="current-password"
             />
             <gbt-input
-              label="Nouveau mot de passe"
+              [label]="'account.password.new' | transloco"
               type="password"
-              showPasswordLabel="Afficher le mot de passe"
-              hidePasswordLabel="Masquer le mot de passe"
+              [showPasswordLabel]="'common.showPassword' | transloco"
+              [hidePasswordLabel]="'common.hidePassword' | transloco"
               formControlName="newPassword"
               [required]="true"
               autocomplete="new-password"
               [errorMessage]="newPasswordError"
             />
             <gbt-input
-              label="Confirmer le nouveau mot de passe"
+              [label]="'account.password.confirm' | transloco"
               type="password"
-              showPasswordLabel="Afficher le mot de passe"
-              hidePasswordLabel="Masquer le mot de passe"
+              [showPasswordLabel]="'common.showPassword' | transloco"
+              [hidePasswordLabel]="'common.hidePassword' | transloco"
               formControlName="confirmPassword"
               [required]="true"
               autocomplete="new-password"
               [errorMessage]="confirmPasswordError"
             />
             <gbt-button
-              text="Changer le mot de passe"
+              [text]="'account.password.heading' | transloco"
               type="submit"
               [loading]="submitting()"
-              loadingLabel="Chargement en cours"
+              [loadingLabel]="'common.loadingLabel' | transloco"
               [disabled]="form.invalid || submitting()"
             />
           </form>
@@ -58,7 +62,7 @@
       </div>
     </gbt-tab>
 
-    <gbt-tab label="Sécurité">
+    <gbt-tab [label]="'account.tabs.security' | transloco">
       <div class="stack">
         <app-mfa-settings />
         <app-passkey-settings />
@@ -66,8 +70,8 @@
       </div>
     </gbt-tab>
 
-    <gbt-tab label="Jetons API">
-      <gbt-card heading="Tokens API" icon="key">
+    <gbt-tab [label]="'account.tabs.tokens' | transloco">
+      <gbt-card [heading]="'account.tokens.heading' | transloco" icon="key">
         <app-api-tokens-list />
       </gbt-card>
     </gbt-tab>

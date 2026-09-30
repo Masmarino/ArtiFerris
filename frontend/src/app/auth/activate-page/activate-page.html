@@ -1,42 +1,46 @@
 <main class="auth-layout">
   <div class="auth-layout__card">
-    <img src="/api/branding/logo" alt="ArtiFerris logo" class="auth-layout__logo" />
+    <img
+      src="/api/branding/logo"
+      [alt]="'auth.login.logoAlt' | transloco"
+      class="auth-layout__logo"
+    />
     @if (tokenMissing) {
-      <h1>Activation impossible</h1>
-      <gbt-alert variant="error">Lien d'activation invalide : aucun jeton fourni.</gbt-alert>
+      <h1>{{ 'auth.activate.impossibleHeading' | transloco }}</h1>
+      <gbt-alert variant="error">{{ 'auth.activate.tokenMissing' | transloco }}</gbt-alert>
     } @else {
-      <h1>Activer votre compte</h1>
+      <h1>{{ 'auth.activate.heading' | transloco }}</h1>
       <form [formGroup]="form" (ngSubmit)="submit()">
         <p class="gbt-form-required-note">
-          Les champs marqués d'un astérisque (*) sont obligatoires.
+          {{ 'common.requiredNote' | transloco }}
         </p>
         <gbt-input
-          label="Nouveau mot de passe"
+          [label]="'auth.activate.newPassword' | transloco"
           type="password"
-          showPasswordLabel="Afficher le mot de passe"
-          hidePasswordLabel="Masquer le mot de passe"
+          [showPasswordLabel]="'common.showPassword' | transloco"
+          [hidePasswordLabel]="'common.hidePassword' | transloco"
           formControlName="newPassword"
           [required]="true"
           autocomplete="new-password"
         />
         <gbt-input
-          label="Confirmer le mot de passe"
+          [label]="'auth.activate.confirmPassword' | transloco"
           type="password"
-          showPasswordLabel="Afficher le mot de passe"
-          hidePasswordLabel="Masquer le mot de passe"
+          [showPasswordLabel]="'common.showPassword' | transloco"
+          [hidePasswordLabel]="'common.hidePassword' | transloco"
           formControlName="confirmPassword"
           [required]="true"
           autocomplete="new-password"
-          [errorMessage]="passwordMismatch ? 'Les mots de passe ne correspondent pas.' : null"
+          [errorMessage]="passwordMismatch ? ('auth.activate.mismatch' | transloco) : null"
         />
         @if (errorMessage(); as message) {
           <p class="gbt-form-error" role="alert">{{ message }}</p>
         }
         <gbt-button
-          text="Activer mon compte"
+          [text]="'auth.activate.submit' | transloco"
           type="submit"
           [loading]="submitting()"
-          loadingLabel="Chargement en cours"
+          [loadingLabel]="'common.loadingLabel' | transloco"
           [disabled]="form.invalid || passwordMismatch || submitting()"
         />
       </form>

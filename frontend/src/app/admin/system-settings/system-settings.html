@@ -1,13 +1,13 @@
 <div class="form-container">
-  <gbt-card heading="Paramètres système" icon="settings">
+  <gbt-card [heading]="'admin.system.heading' | transloco" icon="settings">
     @if (loading()) {
-      <gbt-spinner label="Chargement…" />
+      <gbt-spinner [label]="'common.loading' | transloco" />
     } @else if (loadFailed()) {
-      <p class="gbt-form-error" role="alert">Échec du chargement des paramètres.</p>
+      <p class="gbt-form-error" role="alert">{{ 'admin.system.loadFailed' | transloco }}</p>
     } @else {
       @for (field of fields; track field.key) {
         <gbt-input
-          [label]="field.label"
+          [label]="field.labelKey | transloco"
           [ngModel]="value(field.key)"
           (ngModelChange)="setValue(field.key, $event)"
           [errorMessage]="fieldError(field)"
@@ -15,30 +15,29 @@
       }
 
       <gbt-checkbox
-        label="Autoriser la création de compte"
+        [label]="'admin.system.allowRegistration' | transloco"
         [ngModel]="registrationEnabled()"
         (ngModelChange)="registrationEnabled.set($event)"
       />
 
       @if (showSeoIndexing()) {
         <section class="seo">
-          <h3>Référencement</h3>
+          <h3>{{ 'admin.system.seo' | transloco }}</h3>
           <gbt-checkbox
-            label="Autoriser l'indexation par les moteurs de recherche"
+            [label]="'admin.system.allowIndexing' | transloco"
             [ngModel]="seoIndexingEnabled()"
             (ngModelChange)="seoIndexingEnabled.set($event)"
           />
           <p class="seo__hint">
-            Désactivée, le catalogue public envoie « noindex », le robots.txt interdit tout et le
-            plan du site est vide.
+            {{ 'admin.system.seoHint' | transloco }}
           </p>
         </section>
       }
 
       <gbt-button
-        text="Enregistrer"
+        [text]="'common.save' | transloco"
         [loading]="saving()"
-        loadingLabel="Chargement en cours"
+        [loadingLabel]="'common.loadingLabel' | transloco"
         [disabled]="hasErrors()"
         (clicked)="save()"
       />

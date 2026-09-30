@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -35,6 +37,7 @@ const ALL_ORGANIZATIONS = 'ALL'
   selector: 'app-repositories-list',
   standalone: true,
   imports: [
+    TranslocoPipe,
     Table,
     Button,
     EmptyState,
@@ -86,7 +89,7 @@ export class RepositoriesList implements OnInit {
   }
 
   readonly organizationOptions = computed<SelectOption<string>[]>(() => [
-    { value: ALL_ORGANIZATIONS, label: 'Toutes les organisations' },
+    { value: ALL_ORGANIZATIONS, label: t('users.list.allOrganizations') },
     ...this.organizations().map((o) => ({ value: o.id, label: o.display_name })),
   ])
 
@@ -99,21 +102,24 @@ export class RepositoriesList implements OnInit {
 
   readonly columns = computed<TableColumn<RepositorySummary>[]>(() => {
     const columns: TableColumn<RepositorySummary>[] = [
-      { key: 'name', label: 'Nom' },
+      { key: 'name', label: t('common.name') },
       {
         key: 'owner_name',
-        label: 'Propriétaire',
+        label: t('repositories.list.columns.owner'),
         format: (r) => (r.owner_is_personal ? `@${r.owner_name}` : r.owner_name),
       },
     ]
     if (this.showOrganizationControls()) {
       columns.push({
         key: 'organization_id',
-        label: 'Organisation',
+        label: t('users.list.organization'),
         format: (r) => this.organizationName(r.organization_id),
       })
     }
-    columns.push({ key: 'format', label: 'Format' }, { key: 'repo_type', label: 'Type' })
+    columns.push(
+      { key: 'format', label: t('common.format') },
+      { key: 'repo_type', label: t('common.type') },
+    )
     return columns
   })
   readonly rowId = (r: RepositorySummary): string => r.id
@@ -136,7 +142,7 @@ export class RepositoriesList implements OnInit {
         },
         error: () => {
           this.loading.set(false)
-          this.error.set('Échec du chargement des dépôts.')
+          this.error.set(t('repositories.list.errors.loadFailed'))
         },
       })
       return
@@ -150,7 +156,7 @@ export class RepositoriesList implements OnInit {
         },
         error: () => {
           this.loading.set(false)
-          this.error.set('Échec du chargement des dépôts.')
+          this.error.set(t('repositories.list.errors.loadFailed'))
         },
       })
       return
@@ -172,7 +178,7 @@ export class RepositoriesList implements OnInit {
       },
       error: () => {
         this.loading.set(false)
-        this.error.set('Échec du chargement des dépôts.')
+        this.error.set(t('repositories.list.errors.loadFailed'))
       },
     })
   }

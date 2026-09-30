@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import {
   ChangeDetectionStrategy,
   Component,
@@ -39,7 +41,16 @@ const BYTES_PER_MB = 1024 * 1024
 @Component({
   selector: 'app-create-repository-modal',
   standalone: true,
-  imports: [ReactiveFormsModule, FormsModule, Modal, GbtInput, Select, Checkbox, Button],
+  imports: [
+    TranslocoPipe,
+    ReactiveFormsModule,
+    FormsModule,
+    Modal,
+    GbtInput,
+    Select,
+    Checkbox,
+    Button,
+  ],
   templateUrl: './create-repository-modal.html',
   styleUrl: './create-repository-modal.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -159,9 +170,7 @@ export class CreateRepositoryModal implements OnInit {
       return null
     }
     const mb = Number(raw)
-    return Number.isFinite(mb) && mb >= 0
-      ? null
-      : 'Doit être un nombre positif (ou vide pour illimité).'
+    return Number.isFinite(mb) && mb >= 0 ? null : t('repositories.create.errors.quota')
   }
 
   get retentionError(): string | null {
@@ -170,9 +179,7 @@ export class CreateRepositoryModal implements OnInit {
       return null
     }
     const n = Number(raw)
-    return Number.isInteger(n) && n >= 1
-      ? null
-      : 'Doit être un entier positif (ou vide pour désactiver).'
+    return Number.isInteger(n) && n >= 1 ? null : t('repositories.create.errors.retention')
   }
 
   get hasErrors(): boolean {
@@ -216,7 +223,7 @@ export class CreateRepositoryModal implements OnInit {
           if (!isPublic) {
             this.creating.set(false)
             this.created.emit()
-            this.toastService.success(`Dépôt « ${name} » créé.`)
+            this.toastService.success(t('repositories.create.created', { name }))
             return
           }
           // The creation endpoint has no visibility field — making it public is a second,
@@ -225,21 +232,23 @@ export class CreateRepositoryModal implements OnInit {
             next: () => {
               this.creating.set(false)
               this.created.emit()
-              this.toastService.success(`Dépôt « ${name} » créé.`)
+              this.toastService.success(t('repositories.create.created', { name }))
             },
             error: (err) => {
               this.creating.set(false)
               // The repository itself was created — only the visibility follow-up failed.
               this.created.emit()
               this.toastService.error(
-                rejectionMessage(err) ?? 'Dépôt créé, mais échec du passage en public.',
+                rejectionMessage(err) ?? t('repositories.create.errors.publicFailed'),
               )
             },
           })
         },
         error: (err) => {
           this.creating.set(false)
-          this.toastService.error(rejectionMessage(err) ?? 'Échec de la création du dépôt.')
+          this.toastService.error(
+            rejectionMessage(err) ?? t('repositories.create.errors.createFailed'),
+          )
         },
       })
   }

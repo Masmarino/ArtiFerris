@@ -1,3 +1,5 @@
+import { t } from '../../shared/i18n/translator'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import { Button, Card } from '@masmarino/gabarit'
 import { AuthService } from '../../auth/application/auth.service'
@@ -8,7 +10,7 @@ import { ToastService } from '../../shared/toast.service'
 @Component({
   selector: 'app-session-settings',
   standalone: true,
-  imports: [Button, Card],
+  imports: [TranslocoPipe, Button, Card],
   templateUrl: './session-settings.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -25,10 +27,9 @@ export class SessionSettings {
       return
     }
     const confirmed = await this.confirmService.ask({
-      heading: 'Se déconnecter partout',
-      message:
-        'Toutes vos sessions, jetons API et jetons Docker seront révoqués, y compris celui-ci. Vous devrez vous reconnecter.',
-      confirmLabel: 'Se déconnecter partout',
+      heading: t('account.sessions.signOutEverywhere'),
+      message: t('account.sessions.confirmMessage'),
+      confirmLabel: t('account.sessions.signOutEverywhere'),
       danger: true,
     })
     if (!confirmed) {
@@ -42,7 +43,7 @@ export class SessionSettings {
       },
       error: () => {
         this.signingOut.set(false)
-        this.toastService.error('Échec de la déconnexion des sessions. Réessayez.')
+        this.toastService.error(t('account.sessions.errors.signOutFailed'))
       },
     })
   }

@@ -5,10 +5,10 @@
       [heading]="pending.options.heading"
       [message]="pending.options.message"
       [confirmText]="text"
-      [confirmInputLabel]="'Saisissez « ' + text + ' » pour confirmer'"
-      [confirmLabel]="pending.options.confirmLabel ?? 'Confirmer'"
-      [cancelLabel]="pending.options.cancelLabel ?? 'Annuler'"
-      closeLabel="Fermer"
+      [confirmInputLabel]="'confirm.typeToConfirm' | transloco: { text }"
+      [confirmLabel]="pending.options.confirmLabel ?? ('common.confirm' | transloco)"
+      [cancelLabel]="pending.options.cancelLabel ?? ('common.cancel' | transloco)"
+      [closeLabel]="'common.close' | transloco"
       (confirmed)="confirm.answer(true)"
       (closed)="confirm.answer(false)"
     />
@@ -16,19 +16,19 @@
     <gbt-modal
       [isOpen]="true"
       [heading]="pending.options.heading"
-      closeLabel="Fermer"
+      [closeLabel]="'common.close' | transloco"
       (closed)="confirm.answer(false)"
     >
       <p>{{ pending.options.message }}</p>
       <div class="confirm-host__actions">
         <gbt-button
           variant="secondary"
-          [text]="pending.options.cancelLabel ?? 'Annuler'"
+          [text]="pending.options.cancelLabel ?? ('common.cancel' | transloco)"
           (clicked)="confirm.answer(false)"
         />
         <gbt-button
           [variant]="pending.options.danger ? 'danger' : 'primary'"
-          [text]="pending.options.confirmLabel ?? 'Confirmer'"
+          [text]="pending.options.confirmLabel ?? ('common.confirm' | transloco)"
           (clicked)="confirm.answer(true)"
         />
       </div>

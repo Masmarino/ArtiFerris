@@ -1,34 +1,35 @@
 <div class="container">
   @if (loading()) {
-    <gbt-spinner label="Chargement…" />
+    <gbt-spinner [label]="'common.loading' | transloco" />
   } @else if (organization(); as org) {
     <gbt-card>
       <div class="stack">
         <h2>{{ org.display_name }}</h2>
-        <p>Sous-domaine : {{ org.slug }}</p>
+        <p>{{ 'admin.orgDetail.subdomain' | transloco: { slug: org.slug } }}</p>
       </div>
     </gbt-card>
 
     <gbt-card>
       <div class="stack">
-        <h3>Authentification</h3>
+        <h3>{{ 'admin.orgDetail.authentication' | transloco }}</h3>
         @if (secretUnreadable()) {
           <gbt-alert variant="warning">
-            Le secret enregistré pour le fournisseur d'identité est illisible avec la clé de
-            chiffrement de ce serveur. Configurez à nouveau le fournisseur, secret compris.
+            {{ 'admin.orgDetail.secretUnreadable' | transloco }}
           </gbt-alert>
         } @else if (identityProviderConfigured()) {
           <p>
-            {{ selectedProviderType() === 'oidc' ? 'OIDC' : 'LDAP' }} est actuellement configuré
-            pour cette organisation.
+            {{
+              'admin.orgDetail.configured'
+                | transloco: { provider: selectedProviderType() === 'oidc' ? 'OIDC' : 'LDAP' }
+            }}
           </p>
         } @else {
-          <p>Cette organisation utilise des comptes locaux.</p>
+          <p>{{ 'admin.orgDetail.localAccounts' | transloco }}</p>
         }
 
         <gbt-select
-          label="Type de fournisseur d'identité"
-          placeholder="Sélectionner…"
+          [label]="'admin.orgDetail.providerType' | transloco"
+          [placeholder]="'common.select' | transloco"
           [options]="providerTypeOptions"
           [ngModel]="selectedProviderType()"
           (ngModelChange)="selectedProviderType.set($event)"
@@ -36,87 +37,83 @@
 
         @if (selectedProviderType() === 'ldap') {
           <gbt-input
-            label="URL du serveur"
+            [label]="'admin.orgDetail.serverUrl' | transloco"
             [ngModel]="serverUrl()"
             (ngModelChange)="serverUrl.set($event)"
             placeholder="ldaps://dc.corp.example:636"
           />
           <gbt-input
-            label="DN du compte de service"
+            [label]="'admin.orgDetail.bindDn' | transloco"
             [ngModel]="bindDn()"
             (ngModelChange)="bindDn.set($event)"
             placeholder="cn=service,dc=corp,dc=example"
           />
           <gbt-input
-            label="Mot de passe du compte de service"
+            [label]="'admin.orgDetail.bindPassword' | transloco"
             type="password"
             [ngModel]="bindPassword()"
             (ngModelChange)="bindPassword.set($event)"
-            [placeholder]="
-              bindPasswordSet() ? 'Laisser vide pour conserver le mot de passe actuel' : ''
-            "
-            showPasswordLabel="Afficher le mot de passe"
-            hidePasswordLabel="Masquer le mot de passe"
+            [placeholder]="bindPasswordSet() ? ('admin.orgDetail.keepPassword' | transloco) : ''"
+            [showPasswordLabel]="'common.showPassword' | transloco"
+            [hidePasswordLabel]="'common.hidePassword' | transloco"
           />
           <gbt-input
-            label="Base de recherche"
+            [label]="'admin.orgDetail.searchBase' | transloco"
             [ngModel]="userSearchBase()"
             (ngModelChange)="userSearchBase.set($event)"
             placeholder="ou=people,dc=corp,dc=example"
           />
           <gbt-input
-            label="Filtre de recherche"
+            [label]="'admin.orgDetail.searchFilter' | transloco"
             [ngModel]="userSearchFilter()"
             (ngModelChange)="userSearchFilter.set($event)"
             placeholder="(uid={{ '{' }}username{{ '}' }})"
           />
           <gbt-input
-            label="Attribut e-mail"
+            [label]="'admin.orgDetail.emailAttribute' | transloco"
             [ngModel]="emailAttribute()"
             (ngModelChange)="emailAttribute.set($event)"
             placeholder="mail"
           />
         } @else {
           <gbt-input
-            label="URL de l'émetteur (issuer)"
+            [label]="'admin.orgDetail.issuerUrl' | transloco"
             [ngModel]="issuerUrl()"
             (ngModelChange)="issuerUrl.set($event)"
             [errorMessage]="issuerError()"
             placeholder="https://accounts.example.com"
           />
           <gbt-input
-            label="Client ID"
+            [label]="'admin.orgDetail.clientId' | transloco"
             [ngModel]="clientId()"
             (ngModelChange)="clientId.set($event)"
             placeholder="artiferris"
           />
           <gbt-input
-            label="Client secret"
+            [label]="'admin.orgDetail.clientSecret' | transloco"
             type="password"
             [ngModel]="clientSecret()"
             (ngModelChange)="clientSecret.set($event)"
-            [placeholder]="clientSecretSet() ? 'Laisser vide pour conserver le secret actuel' : ''"
-            showPasswordLabel="Afficher le secret"
-            hidePasswordLabel="Masquer le secret"
+            [placeholder]="clientSecretSet() ? ('admin.orgDetail.keepSecret' | transloco) : ''"
+            [showPasswordLabel]="'admin.orgDetail.showSecret' | transloco"
+            [hidePasswordLabel]="'admin.orgDetail.hideSecret' | transloco"
           />
         }
 
         <gbt-button
-          text="Enregistrer"
+          [text]="'common.save' | transloco"
           [loading]="saving()"
-          loadingLabel="Enregistrement…"
+          [loadingLabel]="'common.saving' | transloco"
           [disabled]="hasErrors() || saving()"
           (clicked)="save()"
         />
         @if (identityProviderConfigured() || secretUnreadable()) {
-          <gbt-tooltip
-            text="Supprime la configuration du fournisseur d'identité et repasse cette organisation en comptes locaux."
-          >
+          <gbt-tooltip [text]="'admin.orgDetail.revertHint' | transloco">
             <gbt-button
-              text="Revenir aux comptes locaux"
+              [text]="'admin.orgDetail.revert' | transloco"
               variant="secondary"
               [loading]="clearing()"
-              loadingLabel="Suppression…"
+              [loadingLabel]="'common.deleting' | transloco"
               (clicked)="clear()"
             />
           </gbt-tooltip>
@@ -126,12 +123,12 @@
 
     <gbt-card>
       <div class="stack">
-        <h3>Membres</h3>
+        <h3>{{ 'admin.orgDetail.members' | transloco }}</h3>
         <app-organization-members [organizationId]="organizationId()" />
       </div>
     </gbt-card>
   } @else if (errorMessage(); as message) {
     <p class="gbt-form-error" role="alert">{{ message }}</p>
-    <gbt-button text="Réessayer" (clicked)="reload()" />
+    <gbt-button [text]="'common.retry' | transloco" (clicked)="reload()" />
   }
 </div>

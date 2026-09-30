@@ -1,30 +1,42 @@
-<gbt-modal [isOpen]="true" heading="Nouveau dépôt" closeLabel="Fermer" (closed)="cancelled.emit()">
+<gbt-modal
+  [isOpen]="true"
+  [heading]="'repositories.create.heading' | transloco"
+  [closeLabel]="'common.close' | transloco"
+  (closed)="cancelled.emit()"
+>
   <form [formGroup]="form" (ngSubmit)="submit()">
-    <p class="gbt-form-required-note">Les champs marqués d'un astérisque (*) sont obligatoires.</p>
-    <gbt-input label="Nom" formControlName="name" [required]="true" />
+    <p class="gbt-form-required-note">{{ 'common.requiredNote' | transloco }}</p>
+    <gbt-input [label]="'common.name' | transloco" formControlName="name" [required]="true" />
     <gbt-select
-      label="Format"
-      placeholder="Sélectionner…"
+      [label]="'common.format' | transloco"
+      [placeholder]="'common.select' | transloco"
       [options]="formatOptions"
       formControlName="format"
     />
     <gbt-select
-      label="Type"
-      placeholder="Sélectionner…"
+      [label]="'common.type' | transloco"
+      [placeholder]="'common.select' | transloco"
       [options]="repoTypeOptions"
       formControlName="repoType"
     />
 
     @if (isProxy()) {
-      <gbt-input label="URL distante" formControlName="remoteUrl" [required]="true" />
-      <gbt-input label="Nom d'utilisateur distant (optionnel)" formControlName="remoteUsername" />
       <gbt-input
-        label="Mot de passe / token distant (optionnel)"
+        [label]="'repositories.create.remoteUrl' | transloco"
+        formControlName="remoteUrl"
+        [required]="true"
+      />
+      <gbt-input
+        [label]="'repositories.create.remoteUsername' | transloco"
+        formControlName="remoteUsername"
+      />
+      <gbt-input
+        [label]="'repositories.create.remotePassword' | transloco"
         type="password"
-        showPasswordLabel="Afficher le mot de passe"
-        hidePasswordLabel="Masquer le mot de passe"
+        [showPasswordLabel]="'common.showPassword' | transloco"
+        [hidePasswordLabel]="'common.hidePassword' | transloco"
         formControlName="remotePassword"
-        placeholder="Laisser le nom d'utilisateur vide pour une authentification par token"
+        [placeholder]="'repositories.create.remotePasswordPlaceholder' | transloco"
       />
     }
 
@@ -32,13 +44,16 @@
       <div class="create-repository-modal__members">
         @if (availableMemberOptions().length === 0) {
           <p class="create-repository-modal__hint">
-            Aucun dépôt {{ form.controls.format.value }} disponible à ajouter pour l'instant.
+            {{
+              'repositories.create.noMemberAvailable'
+                | transloco: { format: form.controls.format.value }
+            }}
           </p>
         } @else {
           <div class="d-flex align-items-end gap-4">
             <gbt-select
-              label="Ajouter un dépôt membre"
-              placeholder="Sélectionner…"
+              [label]="'repositories.create.addMember' | transloco"
+              [placeholder]="'common.select' | transloco"
               [options]="availableMemberOptions()"
               [ngModel]="selectedMemberId()"
               (ngModelChange)="selectedMemberId.set($event)"
@@ -47,7 +62,7 @@
             <gbt-button
               class="mb-3"
               type="button"
-              text="Ajouter"
+              [text]="'common.add' | transloco"
               [disabled]="!selectedMemberId()"
               (clicked)="addMember()"
             />
@@ -55,7 +70,7 @@
         }
         @if (groupMembers().length > 0) {
           <p class="create-repository-modal__hint">
-            Ordre de résolution (le premier dépôt qui contient le paquet demandé répond) :
+            {{ 'repositories.create.resolutionOrder' | transloco }}
           </p>
           <ol class="create-repository-modal__member-list">
             @for (member of groupMembers(); track member.id; let i = $index) {
@@ -64,7 +79,7 @@
                 <div class="create-repository-modal__member-actions">
                   <button
                     type="button"
-                    aria-label="Monter"
+                    [attr.aria-label]="'repositories.create.moveUp' | transloco"
                     [disabled]="i === 0"
                     (click)="moveMemberUp(i)"
                   >
@@ -72,13 +87,17 @@
                   </button>
                   <button
                     type="button"
-                    aria-label="Descendre"
+                    [attr.aria-label]="'repositories.create.moveDown' | transloco"
                     [disabled]="i === groupMembers().length - 1"
                     (click)="moveMemberDown(i)"
                   >
                     ↓
                   </button>
-                  <button type="button" aria-label="Retirer" (click)="removeMember(member.id)">
+                  <button
+                    type="button"
+                    [attr.aria-label]="'repositories.create.remove' | transloco"
+                    (click)="removeMember(member.id)"
+                  >
                     ×
                   </button>
                 </div>
@@ -90,26 +109,29 @@
     }
 
     <gbt-input
-      label="Quota (Mo, vide = illimité)"
+      [label]="'repositories.create.quota' | transloco"
       formControlName="quotaMb"
       [errorMessage]="quotaError"
     />
     <gbt-input
-      label="Conserver les N dernières versions/étiquettes (vide = désactivé)"
+      [label]="'repositories.create.retention' | transloco"
       formControlName="retentionKeepLastN"
       [errorMessage]="retentionError"
     />
 
     @if (isSuperAdmin() && canBePublic()) {
-      <gbt-checkbox label="Rendre public" formControlName="isPublic" />
+      <gbt-checkbox
+        [label]="'repositories.create.makePublic' | transloco"
+        formControlName="isPublic"
+      />
     }
 
     <gbt-button
-      text="Créer"
+      [text]="'common.create' | transloco"
       type="submit"
       [disabled]="hasErrors"
       [loading]="creating()"
-      loadingLabel="Chargement en cours"
+      [loadingLabel]="'common.loadingLabel' | transloco"
     />
   </form>
 </gbt-modal>

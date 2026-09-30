@@ -1,3 +1,4 @@
+import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core'
 import { Card } from '@masmarino/gabarit'
 import { AdminMetricsService } from '../application/metrics.service'
@@ -7,7 +8,7 @@ import { UsageMetrics } from '../usage-metrics/usage-metrics'
 @Component({
   selector: 'app-organization-metrics-page',
   standalone: true,
-  imports: [Card, UsageMetrics],
+  imports: [TranslocoPipe, Card, UsageMetrics],
   templateUrl: './organization-metrics-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

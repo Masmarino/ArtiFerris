@@ -1,37 +1,39 @@
 <div class="container">
   @if (loading()) {
-    <gbt-spinner label="Chargement…" />
+    <gbt-spinner [label]="'common.loading' | transloco" />
   } @else if (loadFailed()) {
-    <p>Impossible de charger le journal de sécurité pour le moment. Réessayez plus tard.</p>
+    <p>{{ 'admin.securityLog.loadFailed' | transloco }}</p>
   } @else {
     @if (summary().length > 0) {
-      <gbt-card heading="Résumé" icon="shield">
+      <gbt-card [heading]="'admin.auditLog.summary' | transloco" icon="shield">
         @if (nextCursor()) {
           <p class="partial-note">
-            Calculé sur les {{ rows().length }} événements chargés ; des événements plus anciens
-            existent.
+            {{ 'admin.securityLog.partial' | transloco: { count: rows().length } }}
           </p>
         }
         <gbt-dimension-card
           [rows]="summaryChartData()"
-          caption="Événements par type"
-          labelColumn="Type"
-          valueColumn="Événements"
-          emptyMessage="Aucun événement."
+          [caption]="'admin.securityLog.eventsByType' | transloco"
+          [labelColumn]="'common.type' | transloco"
+          [valueColumn]="'admin.dashboard.events' | transloco"
+          [emptyMessage]="'admin.securityLog.noEvents' | transloco"
           [locale]="locale"
         />
       </gbt-card>
     }
 
     @if (blockedAccounts().length > 0) {
-      <gbt-card heading="Comptes actuellement bloqués" icon="lock">
+      <gbt-card [heading]="'admin.securityLog.blocked' | transloco" icon="lock">
         <ul>
           @for (account of blockedAccountRows(); track account.key) {
             <li>
-              {{ account.label }} — débloqué dans {{ account.remaining }}
+              {{
+                'admin.securityLog.unlockIn'
+                  | transloco: { label: account.label, remaining: account.remaining }
+              }}
               @if (account.unlockAs; as username) {
                 <gbt-button
-                  text="Débloquer"
+                  [text]="'admin.securityLog.unlock' | transloco"
                   variant="secondary"
                   size="small"
                   [disabled]="unlocking()"
@@ -46,52 +48,59 @@
 
     <div class="d-flex justify-content-end align-items-center gap-3 mb-3">
       @if (exporting()) {
-        <span role="status">Export en cours… {{ exportedCount() }} événements récupérés</span>
-        <gbt-button text="Annuler" variant="secondary" (clicked)="cancelExport()" />
+        <span role="status">{{
+          'admin.securityLog.exporting' | transloco: { count: exportedCount() }
+        }}</span>
+        <gbt-button
+          [text]="'common.cancel' | transloco"
+          variant="secondary"
+          (clicked)="cancelExport()"
+        />
       } @else {
         @if (nextCursor()) {
           <span class="partial-note">
-            {{ rows().length }} événements chargés ; l'export récupère aussi les suivants, dans la
-            limite de {{ exportMaxRows }}.
+            {{
+              'admin.securityLog.exportHint'
+                | transloco: { count: rows().length, max: exportMaxRows }
+            }}
           </span>
         }
         <gbt-button
-          text="Télécharger en CSV"
+          [text]="'admin.auditLog.downloadCsv' | transloco"
           [disabled]="rows().length === 0"
           (clicked)="downloadCsv()"
         />
       }
     </div>
     @if (exportFailed()) {
-      <p role="alert">L'export a échoué : aucun fichier n'a été produit. Réessayez.</p>
+      <p role="alert">{{ 'admin.auditLog.exportFailed' | transloco }}</p>
     }
     @if (exportPartial()) {
       <p role="status">
-        Fichier limité aux {{ exportMaxRows }} événements les plus récents ; des événements plus
-        anciens n'y figurent pas.
+        {{ 'admin.securityLog.exportPartial' | transloco: { max: exportMaxRows } }}
       </p>
     }
 
     @if (rows().length === 0) {
       <gbt-empty-state
         illustration="checklist"
-        heading="Aucun événement"
-        message="Les événements de sécurité (connexions, blocages…) apparaîtront ici."
+        [heading]="'admin.securityLog.emptyHeading' | transloco"
+        [message]="'admin.securityLog.emptyMessage' | transloco"
       />
     } @else {
       <gbt-table
-        caption="Journal de sécurité"
+        [caption]="'admin.securityLog.caption' | transloco"
         [data]="rows()"
         [columns]="columns"
         [trackBy]="rowId"
       />
       @if (loadMoreFailed()) {
-        <p role="alert">Impossible de charger la suite du journal. Réessayez.</p>
+        <p role="alert">{{ 'admin.auditLog.loadMoreFailed' | transloco }}</p>
       }
       @if (nextCursor()) {
         <div class="d-flex justify-content-center mt-3">
           <gbt-button
-            [text]="loadingMore() ? 'Chargement…' : 'Charger plus'"
+            [text]="(loadingMore() ? 'common.loading' : 'common.loadMore') | transloco"
             [disabled]="loadingMore()"
             (clicked)="loadMore()"
           />
