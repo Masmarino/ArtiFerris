@@ -36,11 +36,11 @@ export interface CatalogSuggestion {
 export interface CatalogEntry extends CatalogSuggestion {
   description: string | null
   keywords: string[]
-  /** Latest version (npm) or most recently updated tag (docker). */
+  /** Latest version (npm) or latest tag (docker). */
   latest: string | null
   updated_at: string
   downloads_7d: number
-  /** `null` when the search had no text. `fuzzy` is a typo-tolerant name match, always ranked last. */
+  /** `null` without search text. `fuzzy` is a typo match, always last. */
   match_kind: CatalogMatchKind | null
   registry_url: string | null
   image_reference: string | null

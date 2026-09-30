@@ -20,7 +20,8 @@ async function matchedComponentName(url: string): Promise<string> {
     router.events.pipe(filter((e): e is RoutesRecognized => e instanceof RoutesRecognized)),
   )
   router.navigateByUrl(url).catch(() => {
-    // A guard rejecting the navigation still fires RoutesRecognized first — that's all this test needs.
+    // A guard rejecting the navigation still fires RoutesRecognized first — that's all this test
+    // needs.
   })
   const event = await recognized
   let route = event.state.root

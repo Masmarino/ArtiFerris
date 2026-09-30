@@ -98,7 +98,10 @@ export const CancellingTheCreateForm: Story = {
 let listAfterCreate: ApiToken[] = [LAPTOP]
 const createTokens = fakeTokens({ list: fn(() => of(listAfterCreate)) })
 
-/** The secret is only shown once, in a dedicated modal; the list is reloaded behind it. Without a password the token lasts 7 days. */
+/**
+ * The secret is only shown once, in a dedicated modal; the list is reloaded behind it. Without a
+ * password the token lasts 7 days.
+ */
 export const CreatingAToken: Story = {
   decorators: [withTokens(createTokens)],
   beforeEach: () => {
@@ -125,7 +128,9 @@ export const CreatingAToken: Story = {
 
 const passwordTokens = fakeTokens()
 
-/** Typing a password switches the hint from 7 to 365 days and sends the password with the request. */
+/**
+ * Typing a password switches the hint from 7 to 365 days and sends the password with the request.
+ */
 export const CreatingALongLivedToken: Story = {
   decorators: [withTokens(passwordTokens)],
   play: async ({ canvasElement }) => {

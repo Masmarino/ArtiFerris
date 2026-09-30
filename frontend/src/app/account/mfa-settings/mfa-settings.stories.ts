@@ -180,7 +180,10 @@ export const Enabled: Story = {
 const regenMfa = fakeMfa({ getStatus: fn(() => of(ENABLED)) })
 const regenSignOut = fn()
 
-/** The backend ends the session on a regeneration: the codes stay visible until acknowledged, then the user is signed out. */
+/**
+ * The backend ends the session on a regeneration: the codes stay visible until acknowledged, then
+ * the user is signed out.
+ */
 export const RegeneratingBackupCodes: Story = {
   decorators: [withServices(regenMfa, new ToastService(), regenSignOut)],
   beforeEach: () => regenSignOut.mockClear(),

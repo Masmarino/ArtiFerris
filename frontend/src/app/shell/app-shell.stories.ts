@@ -254,7 +254,10 @@ export const SearchingForARepository: Story = {
   },
 }
 
-/** From two characters on, packages and images from the readable repositories show up in their own category; selecting one navigates to it. */
+/**
+ * From two characters on, packages and images from the readable repositories show up in their own
+ * category; selecting one navigates to it.
+ */
 export const SearchingForAPackage: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -352,7 +355,9 @@ export const PackageSearchFailing: Story = {
   },
 }
 
-/** When the lists behind the search cannot be loaded, the bar says so instead of "Aucun résultat". */
+/**
+ * When the lists behind the search cannot be loaded, the bar says so instead of "Aucun résultat".
+ */
 export const SearchLoadFailed: Story = {
   decorators: [
     moduleMetadata({

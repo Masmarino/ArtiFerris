@@ -169,7 +169,9 @@ export const Populated: Story = {
   },
 }
 
-/** Actor comes from the payload username first, then the users lookup, then the raw id, then a dash. */
+/**
+ * Actor comes from the payload username first, then the users lookup, then the raw id, then a dash.
+ */
 export const ActorResolution: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -181,7 +183,10 @@ export const ActorResolution: Story = {
   },
 }
 
-/** Details column: source IP for failed logins/password changes, action and repository for denied access. */
+/**
+ * Details column: source IP for failed logins/password changes, action and repository for denied
+ * access.
+ */
 export const EventDetails: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -334,7 +339,9 @@ const pagedQuery = fn<AuditService['query']>((filter) =>
   of(filter?.cursor === 'page-2' ? page([EVENTS[4]], null) : page(EVENTS.slice(0, 4), 'page-2')),
 )
 
-/** The instance-level log (super-admin, no organization) pages the same way, failed logins included. */
+/**
+ * The instance-level log (super-admin, no organization) pages the same way, failed logins included.
+ */
 export const LoadMore: Story = {
   decorators: [
     moduleMetadata({
@@ -510,7 +517,9 @@ const unlockUsername = fn(() => {
   aliceUnlocked = true
   return of(undefined)
 })
-/** Confirming unlocks by the bare username and re-fetches the list, which no longer has the account. */
+/**
+ * Confirming unlocks by the bare username and re-fetches the list, which no longer has the account.
+ */
 export const UnlockingAnAccount: Story = {
   beforeEach: () => {
     aliceUnlocked = false
@@ -554,7 +563,9 @@ export const UnlockCancelled: Story = {
   },
 }
 
-/** The backend refuses (403) or does not know the account (404): a French toast, and the row stays. */
+/**
+ * The backend refuses (403) or does not know the account (404): a French toast, and the row stays.
+ */
 export const UnlockForbidden: Story = {
   beforeEach: () => unlockToast.error.mockClear(),
   decorators: [
@@ -652,7 +663,10 @@ const scopedBlocked = fn<AuditService['blockedAccounts']>(() => of(BLOCKED))
 const scopedUsers = fn<UsersService['list']>(() => of(USERS))
 const scopedMembers = fn<OrganizationMembersService['list']>(() => of(MEMBERS))
 
-/** Embedded in an organization's admin page: scoped query, member names, and no blocked-accounts panel. */
+/**
+ * Embedded in an organization's admin page: scoped query, member names, and no blocked-accounts
+ * panel.
+ */
 export const ScopedToOrganization: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [
@@ -682,7 +696,10 @@ export const ScopedToOrganization: Story = {
   },
 }
 
-/** Members lookup is the only source of names in an organization: the actor id maps to a member username. */
+/**
+ * Members lookup is the only source of names in an organization: the actor id maps to a member
+ * username.
+ */
 export const ScopedActorFromMembers: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [
@@ -754,7 +771,10 @@ const ORG_B_EVENTS: AuditEntry[] = [
   },
 ]
 
-/** Switching organization while the first request is still in flight: its late response must not overwrite the new organization's rows. */
+/**
+ * Switching organization while the first request is still in flight: its late response must not
+ * overwrite the new organization's rows.
+ */
 export const SwitchOrganizationWhileLoading: Story = {
   decorators: [
     moduleMetadata({

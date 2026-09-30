@@ -27,9 +27,8 @@ export function registerTranslator(translate: TranslateFn): void {
 }
 
 /**
- * Looks a key up in the active language. Meant for code that builds user-facing text outside a
- * template and outside an injection context — validators, formatters, error mappers. A
- * `computed` that calls it is re-evaluated when the language changes (it reads `activeLanguage`).
+ * Looks a key up in the active language, for code outside templates and injection contexts. A
+ * `computed` calling it follows language changes.
  */
 export const t: TranslateFn = (key, params) => {
   language()

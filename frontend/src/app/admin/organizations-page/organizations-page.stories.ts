@@ -194,7 +194,9 @@ async function openTab(canvas: ReturnType<typeof within>, name: string) {
 }
 
 const superAdminDetail = fakeDetailServices()
-/** A super-admin on /admin/organizations/:id sees the list next to the selected organization's tabs. */
+/**
+ * A super-admin on /admin/organizations/:id sees the list next to the selected organization's tabs.
+ */
 export const SuperAdminWithOrganizationSelected: Story = {
   decorators: [superAdminDetail.decorator],
   play: async ({ canvasElement }) => {
@@ -223,7 +225,9 @@ export const SuperAdminWithOrganizationSelected: Story = {
 }
 
 const orgAdminDetail = fakeDetailServices()
-/** A plain organization admin never sees the organizations list, only their own organization's tabs. */
+/**
+ * A plain organization admin never sees the organizations list, only their own organization's tabs.
+ */
 export const OrganizationAdminSeesOnlyTheirOrganization: Story = {
   decorators: [orgAdminDetail.decorator, asOrganizationAdmin()],
   play: async ({ canvasElement }) => {
@@ -271,7 +275,9 @@ export const AuditLogTab: Story = {
 }
 
 const securityDetail = fakeDetailServices()
-/** Scoped to an organization, the security log leaves out the instance-wide blocked-accounts panel. */
+/**
+ * Scoped to an organization, the security log leaves out the instance-wide blocked-accounts panel.
+ */
 export const SecurityLogTab: Story = {
   decorators: [securityDetail.decorator],
   play: async ({ canvasElement }) => {

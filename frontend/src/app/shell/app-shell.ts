@@ -66,7 +66,7 @@ interface NavItem {
   text: string
   link: string
   children?: NavItem[]
-  /** '/' would otherwise "contain" every other route under non-exact matching, always lighting up. */
+  /** '/' would contain every route under non-exact matching, so it always lit up. */
   exact?: boolean
 }
 
@@ -136,7 +136,7 @@ export class AppShell implements OnInit {
   readonly searchQuery = signal('')
   readonly searchFailed = signal(false)
 
-  // Whoever can reach /users (STAFF_ONLY_ACTIONS) can also search it.
+  // Whoever can reach /users can also search it.
   private readonly canSeeUsers = computed(
     () => this.me.isSuperAdmin() || this.me.isOrganizationAdmin(),
   )
@@ -189,7 +189,7 @@ export class AppShell implements OnInit {
     { initialValue: this.router.url },
   )
 
-  // Starts as '' — calling deepestRouteTitle() here would throw, too early in the route tree.
+  // Starts empty: calling deepestRouteTitle() here is too early.
   private readonly routeTitle = toSignal(
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
@@ -269,12 +269,12 @@ export class AppShell implements OnInit {
     })
     this.packageQueries
       .pipe(
-        // a too-short query clears at once, a longer one waits for a pause in typing
+        // A too-short query clears at once; a longer one waits for a pause.
         debounce((query) =>
           query.length < PACKAGE_SEARCH_MIN_LENGTH ? of(0) : timer(PACKAGE_SEARCH_DEBOUNCE_MS),
         ),
         distinctUntilChanged(),
-        // switchMap drops the in-flight request, so a slow answer can never overwrite a newer one
+        // switchMap drops the in-flight request, so a slow answer never overwrites a newer one.
         switchMap((query) =>
           query.length < PACKAGE_SEARCH_MIN_LENGTH
             ? of([])
@@ -310,7 +310,7 @@ export class AppShell implements OnInit {
       },
       error: (error: unknown) => {
         this.isLoading.set(false)
-        // Only a refused session ends it; a 5xx or network error keeps the token and offers a retry.
+        // Only a refused session ends it; a 5xx or network error keeps the token.
         if (error instanceof HttpErrorResponse && (error.status === 401 || error.status === 403)) {
           this.auth.logout()
           this.router.navigateByUrl('/login')
@@ -321,7 +321,7 @@ export class AppShell implements OnInit {
     })
   }
 
-  // Refresh only when a search starts, not on every keystroke — catches changes made elsewhere.
+  // Refresh when a search starts, to catch changes made elsewhere.
   onSearchInput(query: string): void {
     if ((!this.searchQuery() && query) || this.searchFailed()) {
       this.refreshSearchData()

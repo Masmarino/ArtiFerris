@@ -1,6 +1,6 @@
 import { shellQuote, singleQuote } from '../../shared/shell-quote'
 
-/** A name starting with `-` would read as an option, so it goes after `--`, quoted. */
+/** A name starting with `-` would read as an option: it goes after `--`, quoted. */
 function positional(value: string): string {
   return value.startsWith('-') ? `-- ${singleQuote(value)}` : shellQuote(value)
 }

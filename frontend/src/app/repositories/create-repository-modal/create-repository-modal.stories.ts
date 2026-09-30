@@ -222,7 +222,9 @@ export const GroupWithoutCandidateMembers: Story = {
 }
 
 const group = scenario()
-/** Members are picked from same-format repositories and can be reordered or removed before creating. */
+/**
+ * Members are picked from same-format repositories and can be reordered or removed before creating.
+ */
 export const CreatingAGroupRepository: Story = {
   decorators: [group.decorator],
   play: async ({ canvasElement, args }) => {
@@ -318,7 +320,9 @@ export const PublicTickIsDroppedForProxy: Story = {
 }
 
 const publicRepo = scenario({ isSuperAdmin: true })
-/** Creation has no visibility field, so going public is a second call after the repository exists. */
+/**
+ * Creation has no visibility field, so going public is a second call after the repository exists.
+ */
 export const CreatingAPublicRepository: Story = {
   decorators: [publicRepo.decorator],
   play: async ({ canvasElement, args }) => {

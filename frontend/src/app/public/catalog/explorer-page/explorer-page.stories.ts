@@ -101,7 +101,9 @@ export const PopularLoading: Story = {
 
 let popularAttempts = 0
 
-/** A failing popular section reports it on its own, keeps the search working, and can be retried. */
+/**
+ * A failing popular section reports it on its own, keeps the search working, and can be retried.
+ */
 export const PopularFailed: Story = {
   decorators: scenario(
     () => of(CATALOG_INFOS),

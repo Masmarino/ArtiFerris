@@ -45,7 +45,7 @@ export class PermissionRoleEditor {
   )
 
   constructor() {
-    // This modal is reused across every row, so re-seed the selected role each time it opens.
+    // The modal is reused across rows: re-seed the role on open.
     effect(() => {
       if (this.isOpen()) {
         this.selectedRole.set(this.currentRole())

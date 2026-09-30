@@ -68,7 +68,7 @@ export class PublicPackagePage {
 
   private readonly params = toSignal(this.route.paramMap, { requireSync: true })
 
-  // Absolute routerLink array (leading '/'), so the link doesn't resolve relative to this page.
+  // Absolute routerLink (leading '/'), so it does not resolve relative to this page.
   readonly backLink = computed(() => publicRepositoryBasePath(this.params()))
   readonly format = computed(() => this.params().get('format') as RepositoryFormat)
   readonly packageName = computed(() => this.params().get('name')!)
@@ -130,7 +130,7 @@ export class PublicPackagePage {
     return details ? dockerPullCommand(details.image_reference, this.scannedTag()) : ''
   })
 
-  // The same version the package listing's own vulnerability counts are computed from.
+  // Same version the listing's vulnerability counts use.
   readonly latestVersion = computed(() => {
     const details = this.npmDetails()
     if (!details) {
@@ -150,8 +150,8 @@ export class PublicPackagePage {
     return newest?.version ?? null
   })
 
-  // Read-only sections: only a signed-in caller with write access can start a new scan, but the
-  // backend serves anyone the last completed result for a public repository.
+  // Read-only: only a writer can start a scan, but anyone gets the last result of a public
+  // repository.
   private readonly auditResource = rxResource({
     params: () => {
       const id = this.repositoryId()
@@ -163,9 +163,9 @@ export class PublicPackagePage {
   readonly auditAdvisories = computed<NpmAdvisory[] | null>(() =>
     this.auditResource.hasValue() ? this.auditResource.value() : null,
   )
-  // An anonymous visitor may only read a cached advisory list, never trigger a fresh one (that
-  // calls npm's own advisory service, so it's rate-limited to signed-in accounts) — no cache yet
-  // is a 401 from the backend, but it's not a failure, just nothing to show yet.
+  // Anonymous visitors only read a cached advisory list (a fresh one is rate-limited to signed-in
+  // accounts):
+  // no cache yet is a 401 and just means nothing to show.
   readonly auditNoCache = computed(() => {
     const error = this.auditResource.error()
     return error instanceof HttpErrorResponse && error.status === 401
@@ -252,7 +252,7 @@ export class PublicPackagePage {
 
   constructor() {
     effect(() => this.pageTitle.title.set(this.packageName()))
-    // The resources above reset themselves on a param change; this filter/page UI state doesn't.
+    // Filter and page state do not reset on a param change.
     effect(() => {
       this.params()
       this.depAuditSeverityFilter.set([])

@@ -190,7 +190,9 @@ export const IdentityProviderLookupFailed: Story = {
   },
 }
 
-/** With a stored bind password, leaving the field blank keeps it, so the form is already saveable. */
+/**
+ * With a stored bind password, leaving the field blank keeps it, so the form is already saveable.
+ */
 export const LdapConfigured: Story = {
   decorators: [withOrgs(fakeOrgs(LDAP))],
   play: async ({ canvasElement }) => {
@@ -377,7 +379,9 @@ const keptSecretRefused = fakeOrgs(LDAP, {
   ),
 })
 
-/** Changing the server without retyping the secret is refused: the server's own message is shown. */
+/**
+ * Changing the server without retyping the secret is refused: the server's own message is shown.
+ */
 export const KeptSecretRefusedAfterChangingTheServer: Story = {
   decorators: [withOrgs(keptSecretRefused)],
   play: async ({ canvasElement }) => {
@@ -398,7 +402,9 @@ export const KeptSecretRefusedAfterChangingTheServer: Story = {
   },
 }
 
-/** A 409 on save means the stored secret is unreadable: the toast says so and the warning appears. */
+/**
+ * A 409 on save means the stored secret is unreadable: the toast says so and the warning appears.
+ */
 export const SaveAnswersSecretUnreadable: Story = {
   decorators: [
     withOrgs(
@@ -425,7 +431,10 @@ export const SaveAnswersSecretUnreadable: Story = {
   },
 }
 
-/** The stored secret cannot be decrypted by this server: a warning replaces the "local accounts" line and the secret must be typed again. */
+/**
+ * The stored secret cannot be decrypted by this server: a warning replaces the "local accounts"
+ * line and the secret must be typed again.
+ */
 export const StoredSecretUnreadable: Story = {
   decorators: [
     withOrgs(

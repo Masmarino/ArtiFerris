@@ -16,8 +16,7 @@ export interface AuthPort {
   /** Revokes every session, Docker token and API token of the caller, this one included. */
   logoutAll(): Observable<void>
   verifyMfa(mfaToken: string, code?: string, backupCode?: string): Observable<LoginResponse>
-  // The server's JSON-safe WebAuthn options, passed straight through to the browser's
-  // credentials API — never inspected here.
+  // WebAuthn options from the server, passed to the browser as is.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   startMfaPasskey(mfaToken: string): Observable<{ challenge_id: string; public_key: any }>
   finishMfaPasskey(

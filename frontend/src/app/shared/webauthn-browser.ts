@@ -1,4 +1,5 @@
-// Bridges the server's base64url-encoded WebAuthn options to the browser's navigator.credentials API, which wants raw ArrayBuffers, and back.
+// Converts the server's base64url WebAuthn options to the ArrayBuffers navigator.credentials wants,
+// and back.
 
 function base64UrlToBuffer(base64url: string): ArrayBuffer {
   const padding = '='.repeat((4 - (base64url.length % 4)) % 4)

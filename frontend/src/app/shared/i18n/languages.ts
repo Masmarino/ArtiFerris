@@ -25,8 +25,8 @@ export function isSupported(code: string): code is Language {
 }
 
 /**
- * The first of `preferred` (a browser's `navigator.languages`, most wanted first) that is
- * translated, comparing only the language part: `fr-CA` picks `fr`. English otherwise.
+ * The first translated language of `preferred` (most wanted first), by language part only: `fr-CA`
+ * gives `fr`. English otherwise.
  */
 export function pickLanguage(preferred: readonly string[]): Language {
   for (const tag of preferred) {

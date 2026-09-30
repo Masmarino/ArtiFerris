@@ -20,7 +20,7 @@ import { OrganizationsService } from '../../admin/application/organizations.serv
 import { OrganizationSummary } from '../../admin/domain/organization.entity'
 import { MeService } from '../../shell/application/me.service'
 
-/** Not a real organization id — selects the unfiltered view across every organization. */
+/** Not a real organization id: selects the unfiltered view across organizations. */
 const ALL_ORGANIZATIONS = 'ALL'
 
 @Component({
@@ -46,8 +46,8 @@ export class UsersList implements OnInit {
   private readonly me = inject(MeService)
   private readonly router = inject(Router)
 
-  // Gates the organization filter/column and "Nouvel utilisateur" — an org admin's /api/users
-  // is already scoped to their own organization, so those controls would be meaningless for them.
+  // The organization filter, column and "Nouvel utilisateur" are for super-admins: an org admin's
+  // /api/users is already scoped.
   readonly isSuperAdmin = computed(() => this.me.isSuperAdmin())
 
   readonly users = signal<UserSummary[]>([])
@@ -93,7 +93,7 @@ export class UsersList implements OnInit {
   })
   readonly rowId = (u: UserSummary): string => u.id
 
-  // Set once — a later reload() must not snap the filter back and discard the viewer's pick.
+  // Set once: a later reload() must not reset the viewer's pick.
   private hasAppliedDefaultOrganizationFilter = false
 
   ngOnInit(): void {
@@ -103,7 +103,7 @@ export class UsersList implements OnInit {
   reload(): void {
     this.error.set(null)
     if (!this.isSuperAdmin()) {
-      // Can't call /api/organizations (super-admin only) — no forkJoin needed here.
+      // /api/organizations is super-admin only: no forkJoin here.
       this.usersService.list().subscribe({
         next: (users) => {
           this.users.set(users)
@@ -124,7 +124,7 @@ export class UsersList implements OnInit {
         this.users.set(users)
         this.organizations.set(organizations)
         if (!this.hasAppliedDefaultOrganizationFilter) {
-          // Defaults to the public organization, not every organization at once.
+          // Defaults to the public organization, not all of them.
           const publicOrganization = organizations.find((o) => o.is_public)
           this.selectedOrganizationId.set(publicOrganization?.id ?? ALL_ORGANIZATIONS)
           this.hasAppliedDefaultOrganizationFilter = true

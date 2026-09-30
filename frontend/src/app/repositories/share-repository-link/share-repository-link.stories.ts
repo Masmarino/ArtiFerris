@@ -32,7 +32,9 @@ export default meta
 
 type Story = StoryObj<ShareRepositoryLink>
 
-/** A public personal repository: the full link, ready to copy, and a way to open the page itself. */
+/**
+ * A public personal repository: the full link, ready to copy, and a way to open the page itself.
+ */
 export const PersonalPublic: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -60,7 +62,10 @@ export const OrganizationPublic: Story = {
   },
 }
 
-/** A private repository has no link to share yet; a read-only viewer isn't told about a Paramètres tab they don't have. */
+/**
+ * A private repository has no link to share yet; a read-only viewer isn't told about a Paramètres
+ * tab they don't have.
+ */
 export const Private: Story = {
   args: { repository: { ...REPO, is_public: false, public_path: null } },
   play: async ({ canvasElement }) => {

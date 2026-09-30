@@ -9,7 +9,7 @@ import { Observable, firstValueFrom, of } from 'rxjs'
 import { provideTranslator } from '../src/app/shared/i18n/translator'
 import fr from '../public/i18n/fr.json'
 
-/** Storybook has no server to fetch /i18n/fr.json from, so the dictionary is bundled instead. */
+/** Storybook has no server for the dictionary, so it is bundled. */
 @Injectable()
 class BundledTranslocoLoader implements TranslocoLoader {
   getTranslation(): Observable<Translation> {

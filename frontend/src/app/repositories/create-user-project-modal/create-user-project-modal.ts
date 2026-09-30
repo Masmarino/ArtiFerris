@@ -23,8 +23,7 @@ const FORMAT_OPTIONS: SelectOption<RepositoryFormat>[] = [
   { value: 'docker', label: 'docker' },
 ]
 
-// No route can ever set remote_url on a personal project after creation, so proxy
-// is excluded here — unlike the org-level modal, which does support it.
+// No route sets remote_url on a personal project, so there is no proxy option here.
 const REPO_TYPE_OPTIONS: SelectOption<RepositoryType>[] = [
   { value: 'hosted', label: 'hosted' },
   { value: 'group', label: 'group' },
@@ -56,19 +55,17 @@ export class CreateUserProjectModal {
     isPublic: new FormControl(false, { nonNullable: true }),
   })
 
-  // Zoneless only re-renders on signal changes, so this can't just read the FormControl directly.
+  // Zoneless: only signals trigger a re-render, so the FormControl can't be read directly.
   private readonly repoType = toSignal(this.form.controls.repoType.valueChanges, {
     initialValue: this.form.controls.repoType.value,
   })
-  // No proxy option here (see REPO_TYPE_OPTIONS above), so group is the only type the backend
-  // rejects a public toggle for.
+  // No proxy here, so group is the only type the backend refuses a public toggle for.
   readonly canBePublic = computed(() => this.repoType() !== 'group')
 
   readonly creating = signal(false)
 
   constructor() {
-    // Drop a stale checked state so it can't survive a repo-type change while the checkbox row
-    // is hidden and still get submitted.
+    // Drop a stale checked state so it is not submitted while the checkbox is hidden.
     effect(() => {
       if (!this.canBePublic()) {
         this.form.controls.isPublic.setValue(false)
@@ -91,8 +88,8 @@ export class CreateUserProjectModal {
           this.toastService.success(t('repositories.createProject.created', { name }))
           return
         }
-        // The creation endpoint has no visibility field — making it public is a second,
-        // separate call, only ever fired when the checkbox was ticked.
+        // Creation has no visibility field: making it public is a second call, made only when
+        // ticked.
         this.repositoriesService.setVisibility(created.id, true).subscribe({
           next: () => {
             this.creating.set(false)
@@ -101,7 +98,7 @@ export class CreateUserProjectModal {
           },
           error: (err) => {
             this.creating.set(false)
-            // The project itself was created — only the visibility follow-up failed.
+            // The project exists; only the visibility call failed.
             this.created.emit()
             this.toastService.error(
               rejectionMessage(err) ?? t('repositories.createProject.errors.publicFailed'),

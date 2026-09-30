@@ -215,7 +215,10 @@ export const RegisteringAPasskey: Story = {
 const cancelledCeremonyMfa = fakeMfa()
 const cancelledCeremonyToasts = new ToastService()
 
-/** The user dismisses the browser's passkey prompt: nothing is sent to the server, the form stays open. */
+/**
+ * The user dismisses the browser's passkey prompt: nothing is sent to the server, the form stays
+ * open.
+ */
 export const BrowserCeremonyFails: Story = {
   decorators: [withServices(cancelledCeremonyMfa, cancelledCeremonyToasts)],
   beforeEach: () => {

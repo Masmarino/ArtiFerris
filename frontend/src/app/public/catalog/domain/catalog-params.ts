@@ -9,7 +9,7 @@ export function parseSort(value: string | null): CatalogSort | null {
   return value === 'relevance' || value === 'updated' || value === 'popular' ? value : null
 }
 
-// The API takes the page as a u32; anything else it rejects with a 400.
+// The API takes the page as a u32 and rejects anything else.
 const MAX_PAGE = 4_294_967_295
 
 export function parsePage(value: string | null): number {

@@ -16,8 +16,7 @@ import { SuggestSearchBox } from '../catalog/suggest-search-box/suggest-search-b
 export class PublicLayout {
   private readonly router = inject(Router)
   private readonly auth = inject(AuthService)
-  // The explorer is now the site's home page, so a signed-in visitor can land here too — give
-  // them a way back to their own dashboard instead of an inapplicable "Se connecter" link.
+  // Signed-in visitors can land here too: give them a way back to their dashboard.
   readonly isAuthenticated = this.auth.isAuthenticated
 
   search(text: string): void {

@@ -18,7 +18,7 @@ import { BrandingService } from '../application/branding.service'
 import { ToastService } from '../../shared/toast.service'
 import { rejectionMessage } from '../../shared/api-error'
 
-// Kept in sync with MAX_ASSET_BYTES in branding.rs — the maxSizeMb below rejects an oversized file client-side to save the full upload round-trip just to be told no.
+// Same limit as MAX_ASSET_BYTES in branding.rs: checking here saves a rejected upload.
 const MAX_ASSET_MB = 2
 
 @Component({
@@ -36,7 +36,7 @@ export class BrandingSettingsAdmin {
 
   readonly organizationId = input<string | undefined>(undefined)
 
-  // Object URLs from the authenticated preview endpoint, not the public host-resolved one.
+  // From the authenticated preview endpoint, not the public one.
   readonly logoPreviewUrl = signal<string | null>(null)
   readonly faviconPreviewUrl = signal<string | null>(null)
 
@@ -53,7 +53,7 @@ export class BrandingSettingsAdmin {
   readonly oversizeMessage = (name: string, maxSizeMb: number): string =>
     t('admin.branding.oversize', { name, max: maxSizeMb })
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     effect(() => {
       this.organizationId()
@@ -93,7 +93,7 @@ export class BrandingSettingsAdmin {
           this.setPreview(target, blob)
         }
       },
-      // Without a preview the upload and reset buttons still work.
+      // Upload and reset work without a preview.
       error: () => undefined,
     })
   }
@@ -104,9 +104,7 @@ export class BrandingSettingsAdmin {
   }
 
   private setPreview(target: WritableSignal<string | null>, blob: Blob): void {
-    // untracked: reading target() here is bookkeeping to revoke the old object URL, not a
-    // dependency this should establish — reading it un-tracked avoids the effect above
-    // re-triggering itself every time this same signal it just wrote to changes.
+    // untracked: reading target() to revoke the old URL must not re-trigger this effect.
     const previous = untracked(target)
     target.set(URL.createObjectURL(blob))
     this.revokePreview(previous)

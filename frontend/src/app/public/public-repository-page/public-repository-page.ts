@@ -43,7 +43,7 @@ export class PublicRepositoryPage {
   readonly loadError = computed(
     () => !this.loading() && this.resource.error() !== undefined && !this.notFound(),
   )
-  // Absolute routerLink array (leading '/'), like PackageTree's own default, so links don't resolve relative to this page.
+  // Absolute routerLink, so links do not resolve relative to this page.
   readonly basePath = computed(() => publicRepositoryBasePath(this.params()))
 
   constructor() {

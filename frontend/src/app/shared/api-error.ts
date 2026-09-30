@@ -1,7 +1,10 @@
 import { t } from './i18n/translator'
 import { HttpErrorResponse } from '@angular/common/http'
 
-/** Same as `badRequestMessage` for a request made with `responseType: 'blob'`, where the error body arrives as a Blob. */
+/**
+ * Same as `badRequestMessage` for a request made with `responseType: 'blob'`, whose error body
+ * arrives as a Blob.
+ */
 export async function badRequestBlobMessage(error: unknown): Promise<string | null> {
   if (
     !(error instanceof HttpErrorResponse) ||
@@ -27,9 +30,8 @@ function codeOf(body: unknown): string | null {
 }
 
 /**
- * What to tell the user about an error body: the translation of its `code` when there is one, so
- * the wording is ours and in the user's language; otherwise the server's own text (an error that
- * has no code yet).
+ * The translation of the error's `code` when there is one (our wording, the user's language), else
+ * the server's text.
  */
 function messageOf(body: unknown): string | null {
   const code = codeOf(body)
@@ -87,7 +89,7 @@ export function secretFormFailureMessage(error: unknown, fallback: string): stri
   return badRequestMessage(error) ?? overloadMessage(error) ?? fallback
 }
 
-/** Like `badRequestMessage`, plus a 409 (a name already taken is worth telling the user) and the overload statuses. */
+/** Like `badRequestMessage`, plus a 409 (a name already taken) and the overload statuses. */
 export function rejectionMessage(error: unknown): string | null {
   return error instanceof HttpErrorResponse && (error.status === 400 || error.status === 409)
     ? bodyMessage(error)

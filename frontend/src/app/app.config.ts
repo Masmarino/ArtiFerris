@@ -53,9 +53,8 @@ export const appConfig: ApplicationConfig = {
       loader: TranslocoHttpLoader,
     }),
     provideTranslator(),
-    // Templates read translations through the pipe, but TypeScript code (error messages, labels
-    // computed in components) calls translate() synchronously, so the active language must be
-    // loaded before the first component is created.
+    // TypeScript code calls translate() synchronously, so the language must be loaded before the
+    // first component.
     provideAppInitializer(() => inject(LanguageService).use(detectBrowserLanguage())),
     ...apiTokenProviders,
     ...authProviders,

@@ -8,10 +8,8 @@ const dirname =
   typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url))
 
 /**
- * The app's logo/favicon are served by a live backend route (GET /api/branding/logo|favicon),
- * not a static file — there's no backend in Storybook to answer it. Serves the same files the
- * app falls back to by default (crates/artiferris-infrastructure/assets/) so <img> tags using
- * these paths render instead of a broken-image icon.
+ * The logo and favicon come from a backend route Storybook does not have: serve the default files
+ * instead.
  */
 function mockBrandingApi(): Plugin {
   const assetsDir = path.resolve(dirname, '../../crates/artiferris-infrastructure/assets')
@@ -44,8 +42,7 @@ const config: StorybookConfig = {
     '@storybook/addon-docs',
   ],
   framework: '@storybook/angular-vite',
-  // Serves the app's public/ folder (fonts, favicons, other static assets) at the same
-  // root-relative paths the app itself uses (e.g. /fonts/inter/Inter-Regular.woff2).
+  // The app's public/ folder, at the paths the app uses.
   staticDirs: ['../public'],
   async viteFinal(viteConfig) {
     viteConfig.plugins ??= []

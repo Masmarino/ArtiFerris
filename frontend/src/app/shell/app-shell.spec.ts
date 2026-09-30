@@ -61,7 +61,8 @@ describe('AppShell', () => {
       .expectOne('/api/me')
       .flush({ is_organization_admin: false, organization_id: 'org-1', ...me })
     httpMock.expectOne('/api/repositories').flush([])
-    // Both a super-admin and an organization admin can see the "Utilisateurs" search category, so refreshSearchData() fires /api/users for either.
+    // Both a super-admin and an organization admin can see the "Utilisateurs" search category, so
+    // refreshSearchData() fires /api/users for either.
     if (me.is_super_admin || me.is_organization_admin) {
       httpMock.expectOne('/api/users').flush([])
     }

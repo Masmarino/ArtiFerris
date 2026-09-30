@@ -42,7 +42,10 @@ const RESULTS = [
   dockerEntry(),
 ]
 
-/** A fake URL plus a fake service answering with `search` and `suggest`; every story declares its own so nothing leaks between them. */
+/**
+ * A fake URL plus a fake service answering with `search` and `suggest`; every story declares its
+ * own so nothing leaks between them.
+ */
 function scenario(
   params: Record<string, string>,
   search: (query: CatalogQuery) => Observable<CatalogSearchResult>,
@@ -88,7 +91,10 @@ const popularSearch = fn((query: CatalogQuery) =>
   of(searchResult(query.sort === 'popular' ? POPULAR_RESULTS : RESULTS)),
 )
 
-/** Without text, sort=popular in the URL lists the most downloaded first, with their weekly downloads. */
+/**
+ * Without text, sort=popular in the URL lists the most downloaded first, with their weekly
+ * downloads.
+ */
 export const PopularItems: Story = {
   decorators: scenario({ sort: 'popular' }, popularSearch),
   play: async ({ canvasElement }) => {

@@ -53,7 +53,7 @@ export class MfaEnrollmentPage {
       next: (enrollment) => {
         this.submitting.set(false)
         this.totpSecret.set(enrollment.secret)
-        // Only needed for this one-time enrollment screen — not worth shipping to every login-page visit.
+        // Only the enrollment screen needs this: keep it out of the login page.
         import('qrcode')
           .then((QRCode) => QRCode.toDataURL(enrollment.otpauth_url))
           .then((dataUrl) => this.qrCodeDataUrl.set(dataUrl))

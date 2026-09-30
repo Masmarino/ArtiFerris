@@ -271,7 +271,10 @@ const passwordUnreadableSmtp = fakeSmtp({
     }),
 })
 
-/** The stored password cannot be decrypted by this server: a warning is shown and the password has to be typed again. */
+/**
+ * The stored password cannot be decrypted by this server: a warning is shown and the password has
+ * to be typed again.
+ */
 export const PasswordUnreadable: Story = {
   decorators: [withSmtp(passwordUnreadableSmtp)],
   play: async ({ canvasElement }) => {
@@ -299,7 +302,9 @@ const keptPasswordRefusedSmtp = fakeSmtp({
   ),
 })
 
-/** Changing the host without retyping the password is refused: the server's own message is shown. */
+/**
+ * Changing the host without retyping the password is refused: the server's own message is shown.
+ */
 export const KeptPasswordRefusedAfterChangingTheHost: Story = {
   decorators: [withSmtp(keptPasswordRefusedSmtp)],
   play: async ({ canvasElement }) => {

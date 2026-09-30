@@ -127,7 +127,10 @@ export class AuthService {
     discardSsoStart()
   }
 
-  /** OIDC return trip. Refused unless this tab started the SSO login, so a pasted `#token=` link signs nobody in. */
+  /**
+   * OIDC return. Refused unless this tab started the login, so a pasted `#token=` link signs nobody
+   * in.
+   */
   completeExternalLogin(token: string): { returnUrl: string | null } | null {
     const start = consumeSsoStart()
     if (!start) {

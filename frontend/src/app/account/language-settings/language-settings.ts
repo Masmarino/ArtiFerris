@@ -44,7 +44,7 @@ export class LanguageSettings {
       await firstValueFrom(this.me.setLanguage(value))
       this.toastService.success(t('account.language.saved'))
     } catch {
-      // Not saved: keep what the account says, so the next visit does not surprise the user.
+      // Not saved: keep the account's language.
       await this.languageService.use(previous)
       this.toastService.error(t('account.language.errors.saveFailed'))
     } finally {

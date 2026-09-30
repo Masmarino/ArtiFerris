@@ -76,7 +76,7 @@ export class SecurityLog {
   private readonly toastService = inject(ToastService)
   private exportRun: Subscription | null = null
 
-  /** Set only when embedded in an org's own admin page — scopes the view and hides the super-admin-only blocked-accounts panel. */
+  /** Scopes the view to one organization and hides the blocked-accounts panel. */
   readonly organizationId = input<string | undefined>(undefined)
 
   private readonly entries = signal<AuditEntry[]>([])
@@ -137,7 +137,7 @@ export class SecurityLog {
   readonly rowId = (r: SecurityLogRow): string =>
     `${r.occurred_at}|${r.event_type}|${r.actor}|${r.details}`
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     inject(DestroyRef).onDestroy(() => this.exportRun?.unsubscribe())
     effect(() => {
@@ -182,7 +182,7 @@ export class SecurityLog {
             this.usernamesById.set(new Map(members.map((m) => [m.id, m.username])))
           },
           error: () => {
-            // Actor names are a display nicety — a failed lookup falls back to raw actor ids.
+            // Actor names are cosmetic: fall back to ids on failure.
           },
         })
       } else {
@@ -194,7 +194,7 @@ export class SecurityLog {
             this.usernamesById.set(new Map(users.map((u) => [u.id, u.username])))
           },
           error: () => {
-            // Actor names are a display nicety — a failed lookup falls back to raw actor ids.
+            // Actor names are cosmetic: fall back to ids on failure.
           },
         })
         this.loadBlockedAccounts(organizationId)
@@ -208,7 +208,7 @@ export class SecurityLog {
           this.repositoryNamesById.set(new Map(repos.map((r) => [r.id, r.name])))
         },
         error: () => {
-          // Repository names are a display nicety — a failed lookup falls back to raw ids.
+          // Repository names are cosmetic: fall back to ids on failure.
         },
       })
     })
@@ -222,7 +222,7 @@ export class SecurityLog {
         }
       },
       error: () => {
-        // Best-effort panel — a failed lookup just leaves it empty rather than blocking the page.
+        // Best effort: a failed lookup leaves the panel empty.
       },
     })
   }

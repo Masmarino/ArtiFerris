@@ -1,6 +1,6 @@
 /**
- * Tag for API paths: every interpolated value becomes one URL path segment. `.` and `..` are
- * refused, since browsers collapse them and the request would land on a different endpoint.
+ * Tag for API paths: each value becomes one path segment; `.` and `..` are refused since browsers
+ * collapse them.
  */
 export function apiPath(strings: TemplateStringsArray, ...segments: string[]): string {
   return strings.reduce((path, literal, index) => {

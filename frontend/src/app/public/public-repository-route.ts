@@ -4,7 +4,7 @@ import { Observable, throwError } from 'rxjs'
 import { RepositoriesService } from '../repositories/application/repositories.service'
 import { RepositorySummary } from '../repositories/domain/repository.entity'
 
-/** `o/:slug/:repoName…` routes carry an organization `slug`, the personal `:username/:repoName…` ones a `username`. */
+/** `o/:slug/…` carries an organization slug, the personal `:username/…` a username. */
 export function resolvePublicRepository(
   repositories: RepositoriesService,
   params: ParamMap,

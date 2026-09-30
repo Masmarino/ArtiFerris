@@ -14,7 +14,9 @@ export default meta
 
 type Story = StoryObj<CatalogResultCard>
 
-/** An npm package of a personal owner, with the install command pointing at the owner's registry. */
+/**
+ * An npm package of a personal owner, with the install command pointing at the owner's registry.
+ */
 export const NpmPackage: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -147,7 +149,10 @@ export const CopyInstallCommand: Story = {
   },
 }
 
-/** Without clipboard access (denied or insecure context) the failure is reported instead of swallowed. */
+/**
+ * Without clipboard access (denied or insecure context) the failure is reported instead of
+ * swallowed.
+ */
 export const CopyFailed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

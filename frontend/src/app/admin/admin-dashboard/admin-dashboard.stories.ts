@@ -206,7 +206,10 @@ export const ChangingTheStorageEvolutionWindow: Story = {
   },
 }
 
-/** Nothing has answered yet: no stat cards, every chart shows its empty message and the activity list its empty state (the page has no spinner). */
+/**
+ * Nothing has answered yet: no stat cards, every chart shows its empty message and the activity
+ * list its empty state (the page has no spinner).
+ */
 export const Loading: Story = {
   decorators: [
     moduleMetadata({
@@ -300,7 +303,9 @@ export const ActivityChartIsPartial: Story = {
 const storageHistory = fn<AdminMetricsService['history']>(() => of(HISTORY))
 const countsHistory = fn<AdminMetricsService['history']>(() => of(HISTORY))
 
-/** Only the storage chart re-queries when its own window changes; the counts chart keeps its data. */
+/**
+ * Only the storage chart re-queries when its own window changes; the counts chart keeps its data.
+ */
 export const StorageWindowRefetchesItsHistory: Story = {
   beforeEach: () => {
     storageHistory.mockClear()

@@ -4,7 +4,7 @@ import { ApiToken, CreatedApiToken } from '../domain/api-token.entity'
 
 export interface ApiTokenPort {
   list(): Observable<ApiToken[]>
-  /** With `currentPassword` the token lasts 365 days instead of 7. */
+  /** With `currentPassword`, the token lasts 365 days instead of 7. */
   create(label: string, currentPassword?: string | null): Observable<CreatedApiToken>
   revoke(id: string): Observable<void>
 }

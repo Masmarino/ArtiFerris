@@ -335,7 +335,9 @@ export const LockedFormat: Story = {
 
 const lockedOwnerServer = filteringServer()
 
-/** On an owner page the owner is sent to the server, which only answers with that owner's packages. */
+/**
+ * On an owner page the owner is sent to the server, which only answers with that owner's packages.
+ */
 export const LockedOwner: Story = {
   args: { owner: { kind: 'organization', slug: 'acme' } },
   decorators: [suggesting(lockedOwnerServer)],

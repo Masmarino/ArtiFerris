@@ -148,7 +148,7 @@ export class MfaSettings implements OnInit {
     })
   }
 
-  /** The backend already revoked this session: the codes had to be shown before signing out. */
+  /** The backend has already revoked the session. */
   dismissRegeneratedCodes(): void {
     this.regeneratedCodes.set(null)
     this.sessionRevocation.signOutAndRedirect()

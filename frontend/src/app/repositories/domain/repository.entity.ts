@@ -10,16 +10,19 @@ export interface RepositorySummary {
   remote_url: string | null
   remote_credentials_set: boolean
   group_members: string[]
-  /** `null` means unlimited. Absent from the public view (anonymous or implicit public read). */
+  /** `null` means unlimited; absent from the public view. */
   quota_bytes?: number | null
-  /** `null` means automatic cleanup is disabled. Absent from the public view. */
+  /** `null` disables cleanup; absent from the public view. */
   retention_keep_last_n?: number | null
   is_public: boolean
   my_role: RepositoryRole | null
   organization_id?: string
   owner_name: string
   owner_is_personal: boolean
-  /** The path of this repository's public page (e.g. `/@alice/libs`), `null` while the repository is private. Always present on a real response; optional here only so existing fixtures do not all need updating. */
+  /**
+   * Path of the public page (e.g. `/@alice/libs`), `null` while private. Optional so fixtures stay
+   * valid.
+   */
   public_path?: string | null
 }
 
@@ -48,7 +51,7 @@ export interface VulnerabilitySummary {
 export interface NpmPackageTreeEntry {
   name: string
   versions: NpmPackageVersionEntry[]
-  /** The package has more versions than the list carries (the server caps it at 200). */
+  /** The package has more versions than the list carries (capped at 200). */
   truncated: boolean
   vulnerability_summary: VulnerabilitySummary
 }
@@ -56,7 +59,7 @@ export interface NpmPackageTreeEntry {
 export interface DockerImageTreeEntry {
   image_name: string
   tags: string[]
-  /** The image has more tags than the list carries (the server caps it at 100). */
+  /** The image has more tags than the list carries (capped at 100). */
   truncated: boolean
   vulnerability_summary: VulnerabilitySummary
 }

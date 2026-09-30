@@ -20,7 +20,7 @@ export class OrganizationMetricsPage {
   readonly stats = signal<AdminStats | null>(null)
   readonly loadFailed = signal(false)
 
-  // effect(), so it re-fetches — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     effect(() => {
       const organizationId = this.organizationId()

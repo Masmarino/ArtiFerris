@@ -23,7 +23,7 @@ export class UsageInstructions {
   readonly host = this.document.location.host
   readonly origin = this.document.location.origin
   readonly isHosted = computed(() => this.repository().repo_type === 'hosted')
-  /** A personal repository lives under `u/{owner}/{name}`, an organization one directly under `{name}`. */
+  /** A personal repository lives under `u/{owner}/{name}`, an organization one under `{name}`. */
   readonly repositoryPath = computed(() => {
     const repository = this.repository()
     return repository.owner_is_personal

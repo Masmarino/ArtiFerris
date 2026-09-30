@@ -69,12 +69,12 @@ export class SmtpSettingsAdmin {
   readonly testRecipient = signal('')
   readonly sendingTest = signal(false)
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     effect(() => {
       const organizationId = this.organizationId()
       const stillCurrent = () => this.organizationId() === organizationId
-      // Nothing typed for the previous organization may end up saved on this one.
+      // Nothing typed for the previous organization may be saved on this one.
       this.password.set('')
       this.attemptedSave.set(false)
       this.testRecipient.set('')
@@ -98,7 +98,7 @@ export class SmtpSettingsAdmin {
             this.passwordSet.set(settings.password_set)
           } else {
             this.secretUnreadable.set(settings !== null)
-            // Reset, or a previous org's SMTP config lingers on screen for one with none.
+            // Reset, so a previous organization's config does not linger.
             this.host.set('')
             this.port.set('587')
             this.username.set('')
@@ -119,7 +119,7 @@ export class SmtpSettingsAdmin {
     })
   }
 
-  // Errors stay hidden until a save is attempted — a freshly opened form isn't a mistake yet.
+  // Errors stay hidden until a save is attempted.
   readonly attemptedSave = signal(false)
 
   private readonly rawPortError = computed(() => {

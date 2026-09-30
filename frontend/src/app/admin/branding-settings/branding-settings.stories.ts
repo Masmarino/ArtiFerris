@@ -41,7 +41,10 @@ export const Default: Story = {
   },
 }
 
-/** Picking a logo file (via gbt-file-upload) enables the import button, which uploads it and refreshes the preview. */
+/**
+ * Picking a logo file (via gbt-file-upload) enables the import button, which uploads it and
+ * refreshes the preview.
+ */
 export const UploadingALogo: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

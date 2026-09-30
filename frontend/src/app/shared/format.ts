@@ -1,7 +1,7 @@
 import { t } from './i18n/translator'
 
-// Each language ships its own plural rules; French treats 0 and 1 alike, and the labels Gabarit
-// takes as functions can't be overridden with a plain attribute.
+// Plural rules differ by language (French treats 0 and 1 alike), and Gabarit's function labels
+// cannot be overridden with an attribute.
 export const formatResultsAnnouncement = (count: number): string =>
   t(count !== 1 ? 'format.results_other' : 'format.results_one', { count })
 

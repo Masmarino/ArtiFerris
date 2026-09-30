@@ -25,7 +25,7 @@ import { formatBytes } from '../../shared/format'
 
 const RECENT_ACTIVITY_LIMIT = 10
 const ACTIVITY_FETCH_LIMIT = 200
-// Bucket span for the activity chart — long enough to show a trend, short enough that a quiet self-hosted instance doesn't render a wall of empty bars.
+// Long enough to show a trend, short enough not to fill a quiet instance with empty bars.
 const ACTIVITY_CHART_DAYS = 7
 
 const evolutionDaysOptions = (): SelectOption<number>[] => [
@@ -70,8 +70,7 @@ export class AdminDashboard implements OnInit {
 
   readonly evolutionDaysOptions = evolutionDaysOptions()
 
-  // Each evolution chart has its own duration control, so each fetches its
-  // own history independently rather than the two sharing one window.
+  // Each chart has its own duration and fetches on its own.
   readonly storageEvolutionDays = signal(1)
   readonly countsEvolutionDays = signal(1)
   readonly storageHistory = signal<MetricsSnapshot[]>([])
@@ -149,7 +148,7 @@ export class AdminDashboard implements OnInit {
     from.setUTCHours(0, 0, 0, 0)
     this.auditService.query({ from: from.toISOString(), limit: ACTIVITY_FETCH_LIMIT }).subscribe({
       next: ({ entries, next_cursor }) => {
-        // Newest-first from the backend, so the same bounded query covers both the chart and the recent list.
+        // Newest first, so one query serves the chart and the recent list.
         this.activityEvents.set(entries)
         this.activityTruncated.set(next_cursor !== null)
         this.recentEvents.set(entries.slice(0, RECENT_ACTIVITY_LIMIT))
@@ -180,8 +179,7 @@ export class AdminDashboard implements OnInit {
     const requestedDays = this.storageEvolutionDays()
     this.metricsService.history(requestedDays).subscribe({
       next: (history) => {
-        // A slower, earlier request can resolve after a newer one — only apply the result
-        // that's still what's selected.
+        // Ignore a slow earlier response once a newer one is selected.
         if (requestedDays === this.storageEvolutionDays()) {
           this.storageHistory.set(history)
         }

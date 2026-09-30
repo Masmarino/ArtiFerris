@@ -76,7 +76,10 @@ export default meta
 
 type Story = StoryObj<UsersList>
 
-/** As a super-admin: every user across every organization, with the org filter and "Nouvel utilisateur". */
+/**
+ * As a super-admin: every user across every organization, with the org filter and "Nouvel
+ * utilisateur".
+ */
 export const Default: Story = {}
 
 /** The org filter defaults to "Public" — switching it to Acme Corp swaps the visible rows. */
@@ -91,7 +94,9 @@ export const FilteredToOneOrganization: Story = {
   },
 }
 
-/** As a plain organization admin: no filter, no "Nouvel utilisateur" — only their own org's users. */
+/**
+ * As a plain organization admin: no filter, no "Nouvel utilisateur" — only their own org's users.
+ */
 export const AsOrganizationAdmin: Story = {
   decorators: [
     moduleMetadata({

@@ -9,7 +9,7 @@ import {
 } from '@angular/router'
 import { BehaviorSubject, Observable, of } from 'rxjs'
 
-/** Stands in for the URL: the query string is read here and written back through `navigateFake`, the path params stay fixed. */
+/** Stands in for the URL: the query string is read and written here, path params stay fixed. */
 export class FakeActivatedRoute {
   private readonly params$: BehaviorSubject<ParamMap>
 

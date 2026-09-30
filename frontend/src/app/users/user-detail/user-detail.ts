@@ -42,7 +42,7 @@ export class UserDetail {
   private readonly pageTitle = inject(PageTitleService)
   private readonly me = inject(MeService)
 
-  // Reactive, not route.snapshot — Angular reuses this component across :id navigations.
+  // Reactive, not route.snapshot: Angular reuses this component across navigations.
   private readonly routeUserId = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('id')!)),
     {
@@ -56,9 +56,9 @@ export class UserDetail {
   readonly selectedCountLabel = formatSelectedCount
   readonly username = computed(() => this.user()?.username ?? '')
 
-  // Granting/revoking super-admin status is not an organization-scoped right.
+  // Super-admin status is not an organization-scoped right.
   readonly isSuperAdminViewer = computed(() => this.me.isSuperAdmin())
-  // Hides delete/resend-invitation on a super-admin target — the backend 403s an org admin there.
+  // Hidden for a super-admin target: the backend 403s an org admin there.
   readonly canManageTarget = computed(
     () => this.isSuperAdminViewer() || !this.user()?.is_super_admin,
   )
@@ -94,7 +94,7 @@ export class UserDetail {
   ]
   readonly permissionRowId = (p: UserPermissionEntry): string => p.repository_id
 
-  // Reused across users: drop the previous one's data.
+  // Reused across navigations: drop the previous data.
   private resetForNewUser(): void {
     this.user.set(null)
     this.permissions.set([])
@@ -215,7 +215,7 @@ export class UserDetail {
         }
       },
       error: () => {
-        // forkJoin only surfaces the first failure, but earlier grants in the batch may have landed
+        // forkJoin reports only the first failure, but earlier grants may have landed.
         this.toastService.error(t('users.detail.errors.grantFailed'))
         if (userId === this.userId) {
           this.reload()

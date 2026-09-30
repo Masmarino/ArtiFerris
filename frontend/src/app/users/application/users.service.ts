@@ -10,8 +10,8 @@ export class UsersService {
 
   private readonly listCache = new TokenScopedCache<UserSummary[]>(() => this.port.list())
 
-  // cached across callers, cleared by any mutation below — forceRefresh is for the shell's
-  // search, which needs to see writes that could've come from another tab
+  // Cached across callers and cleared by any mutation; forceRefresh is for the shell search, which
+  // must see writes from another tab.
   list(options?: { forceRefresh?: boolean }): Observable<UserSummary[]> {
     return this.listCache.get(options?.forceRefresh)
   }

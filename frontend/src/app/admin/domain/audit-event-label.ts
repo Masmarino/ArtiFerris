@@ -7,7 +7,7 @@ function isRecord(raw: unknown): raw is Payload {
   return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
 }
 
-/** The payload as an object; stored events of any age can carry `null` or something else. */
+/** The payload as an object; old events may carry null or another shape. */
 export function auditPayload(entry: AuditEntry): Payload {
   return isRecord(entry.payload) ? entry.payload : {}
 }
@@ -85,7 +85,7 @@ export function auditEventLabel(eventType: string): string {
   return translated(EVENT_TYPES, 'events', eventType) ?? eventType
 }
 
-// Known names only (a Set, not an object lookup), so "constructor" is not a label.
+// A Set, so that "constructor" is not a label.
 function translated(names: Set<string>, group: string, key: string): string | undefined {
   return names.has(key) ? t(`admin.audit.${group}.${key}`) : undefined
 }

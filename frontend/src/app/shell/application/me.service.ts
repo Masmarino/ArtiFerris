@@ -22,7 +22,7 @@ export class MeService {
   private cached$: Observable<MeResponse> | null = null
 
   constructor() {
-    // Skip the effect's first run, or we'd wipe out state a caller just set on inject.
+    // Skip the first run, or it would wipe state set on inject.
     let previousToken = this.auth.token()
     effect(() => {
       const token = this.auth.token()
@@ -37,13 +37,12 @@ export class MeService {
       this.organizationId.set(null)
       this.isOrganizationAdmin.set(false)
       this.language.set(null)
-      // Signing out, or another account signing in: back to what the browser asks for, so the
-      // previous user's language does not linger on the public pages or on a new account.
+      // Signing out, or another account signing in: back to the browser's language.
       this.showBrowserLanguage()
     })
   }
 
-  /** Cached per token: multiple callers (the shell, route guards) share one request. */
+  /** Cached per token: callers share one request. */
   load(options?: { forceRefresh?: boolean }): Observable<MeResponse> {
     if (!this.cached$ || options?.forceRefresh) {
       this.cached$ = this.port.load().pipe(
@@ -56,7 +55,7 @@ export class MeService {
           this.language.set(me.language ?? null)
           this.applyAccountLanguage(me.language)
         }),
-        // Never cache a failure — a transient error must not permanently strand the user.
+        // Never cache a failure.
         catchError((err: unknown) => {
           this.cached$ = null
           return throwError(() => err)
@@ -68,9 +67,8 @@ export class MeService {
   }
 
   /**
-   * The account's language wins over the browser's. An account that never chose one (`null`, not
-   * `undefined`, which is a server that predates the setting) takes the browser's language, and
-   * keeps it: that first sign-in records it on the account, so later ones do not depend on the browser.
+   * The account's language wins. An account without one (`null`; `undefined` is an older server)
+   * takes the browser's and keeps it by recording it.
    */
   private applyAccountLanguage(saved: string | null | undefined): void {
     if (saved && isSupported(saved)) {
@@ -86,7 +84,7 @@ export class MeService {
     this.showBrowserLanguage()
     this.port.setLanguage(browser).subscribe({
       next: () => this.language.set(browser),
-      // Best effort: the next sign-in tries again, and the interface is already in that language.
+      // Best effort: the next sign-in tries again.
       error: () => undefined,
     })
   }

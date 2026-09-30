@@ -12,7 +12,10 @@ import { LoginPage } from './login-page'
 import { AuthService } from '../application/auth.service'
 import type { LoginOutcome, SsoConfig } from '../domain/auth.types'
 
-/** A minimal stand-in for AuthService — only the methods each story actually exercises need a real implementation. */
+/**
+ * A minimal stand-in for AuthService — only the methods each story actually exercises need a real
+ * implementation.
+ */
 function fakeAuth(overrides: Partial<AuthService> = {}): Partial<AuthService> {
   return {
     getSsoConfig: () => of<SsoConfig>({ type: null, registration_enabled: true }),
@@ -57,7 +60,9 @@ export const Default: Story = {
   },
 }
 
-/** Sent back here after an action that ended every session (password change, MFA factor removal). */
+/**
+ * Sent back here after an action that ended every session (password change, MFA factor removal).
+ */
 export const AfterSessionsWereEnded: Story = {
   decorators: [
     moduleMetadata({

@@ -35,7 +35,10 @@ function gaugeTier(gauge: HTMLElement): string | null {
   return gauge.querySelector('.gbt-gauge-bar__fill')?.getAttribute('data-tier') ?? null
 }
 
-/** Chart sorted by usage with formatted sizes, quota gauges only for capped repositories, and the full table. */
+/**
+ * Chart sorted by usage with formatted sizes, quota gauges only for capped repositories, and the
+ * full table.
+ */
 export const Populated: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -52,7 +55,9 @@ export const Populated: Story = {
   },
 }
 
-/** Below 70% no tier, 70% and up warns, 90% and up is critical; unlimited repositories get no gauge. */
+/**
+ * Below 70% no tier, 70% and up warns, 90% and up is critical; unlimited repositories get no gauge.
+ */
 export const QuotaGauges: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -154,7 +159,10 @@ const MANY: RepositoryUsage[] = Array.from({ length: 17 }, (_, i) => ({
   quota_bytes: null,
 }))
 
-/** Past 15 repositories the chart folds the tail into one "Autres" bar; the table still lists all of them. */
+/**
+ * Past 15 repositories the chart folds the tail into one "Autres" bar; the table still lists all of
+ * them.
+ */
 export const MoreThanFifteenRepositories: Story = {
   decorators: [
     moduleMetadata({
@@ -191,7 +199,10 @@ export const ScopedToOrganization: Story = {
   },
 }
 
-/** The component is reused when a super-admin switches organization: it must re-fetch and replace the data. */
+/**
+ * The component is reused when a super-admin switches organization: it must re-fetch and replace
+ * the data.
+ */
 export const SwitchOrganization: Story = {
   decorators: [
     moduleMetadata({

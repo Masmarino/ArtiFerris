@@ -72,7 +72,7 @@ export class RepositoryDetail {
   private readonly me = inject(MeService)
   private readonly pageTitle = inject(PageTitleService)
 
-  // Reactive, not route.snapshot — Angular reuses this component across :id navigations.
+  // Reactive, not route.snapshot: Angular reuses this component across navigations.
   private readonly routeId = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('id')!)),
     {
@@ -83,7 +83,7 @@ export class RepositoryDetail {
   readonly repository = signal<RepositorySummary | null>(null)
   readonly loadError = signal(false)
   readonly repositoryName = computed(() => this.repository()?.name ?? '')
-  // Admin-only actions are hidden, not just left to fail with a 403.
+  // Admin-only actions are hidden, not left to fail with a 403.
   readonly isAdmin = computed(() => this.repository()?.my_role === 'admin')
   readonly groupMemberRows = computed(
     () => this.repository()?.group_members.map((id) => ({ id })) ?? [],
@@ -131,7 +131,7 @@ export class RepositoryDetail {
   ]
   readonly permissionRowId = (p: PermissionEntry): string => p.user_id
 
-  // Reused across repositories: drop the previous one's data.
+  // Reused across navigations: drop the previous data.
   private resetForNewRepository(): void {
     this.repository.set(null)
     this.permissions.set([])
@@ -192,10 +192,9 @@ export class RepositoryDetail {
             this.repositoryNamesById.set(new Map(repositories.map((r) => [r.id, r.name])))
           })
         }
-        // A viewer with only a public repository's implicit read (no explicit grant) is correctly
-        // refused this list by the server (403/404) — the "Droits d'accès" tab never shows them
-        // anyway, so that expected refusal must not block the rest of the page. Anything else
-        // (a real server error) still does.
+        // A viewer with only implicit read on a public repository is refused this list (403/404):
+        // expected, it must not block the page.
+        // A real server error still does.
         this.permissionsService.list(id).subscribe({
           next: (permissions) => {
             if (id === this.routeId()) {

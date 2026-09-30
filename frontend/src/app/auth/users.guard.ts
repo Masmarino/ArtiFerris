@@ -3,8 +3,8 @@ import { CanActivateFn, Router } from '@angular/router'
 import { catchError, map, of } from 'rxjs'
 import { MeService } from '../shell/application/me.service'
 
-// Same defense-in-depth stance as admin.guard.ts, plus an organization admin is let through
-// too: the backend already scopes /api/users to their own organization, so the route is safe.
+// As admin.guard.ts; organization admins pass too, since the backend scopes /api/users to their
+// organization.
 export const usersGuard: CanActivateFn = () => {
   const me = inject(MeService)
   const router = inject(Router)

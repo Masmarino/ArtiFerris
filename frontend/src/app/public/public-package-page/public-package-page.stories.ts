@@ -354,7 +354,10 @@ export const DockerLoadFailed: Story = {
   },
 }
 
-/** Reached through an organization repository (/o/:slug/…): resolved by slug, and the back link stays under /o. */
+/**
+ * Reached through an organization repository (/o/:slug/…): resolved by slug, and the back link
+ * stays under /o.
+ */
 export const OrganizationNpmPackage: Story = {
   decorators: [moduleMetadata({ providers: [withOrgRoute('npm', '@acme/button')] })],
   play: async ({ canvasElement }) => {

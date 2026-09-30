@@ -14,7 +14,7 @@ export interface PermissionEntry {
   role: Role
 }
 
-// Narrower than a full user record — the backend never sends is_super_admin here.
+// The backend never sends is_super_admin here.
 export interface UserLookup {
   id: string
   username: string

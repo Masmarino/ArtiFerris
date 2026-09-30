@@ -27,7 +27,7 @@ export interface UpdateSmtpSettings {
   host: string
   port: number
   username: string
-  /** Omit (or leave `undefined`) to keep the currently stored password. */
+  /** Omitted keeps the stored password. */
   password?: string
   from_name: string
   from_address: string

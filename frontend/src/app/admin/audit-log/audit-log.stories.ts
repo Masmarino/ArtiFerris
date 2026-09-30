@@ -127,7 +127,10 @@ const ADMIN_EVENTS: AuditEntry[] = [
   },
 ]
 
-/** Privilege and configuration changes read in French, with the before/after summary on the same row. */
+/**
+ * Privilege and configuration changes read in French, with the before/after summary on the same
+ * row.
+ */
 export const AdministrativeEvents: Story = {
   decorators: [
     moduleMetadata({
@@ -156,7 +159,9 @@ const pagedQuery = fn<AuditService['query']>((filter) =>
   of(filter?.cursor === 'page-2' ? page([ENTRIES[2]], null) : page(ENTRIES.slice(0, 2), 'page-2')),
 )
 
-/** More entries on the server: "Charger plus" appends the next page and disappears on the last one. */
+/**
+ * More entries on the server: "Charger plus" appends the next page and disappears on the last one.
+ */
 export const LoadMore: Story = {
   decorators: [
     moduleMetadata({ providers: [{ provide: AuditService, useValue: { query: pagedQuery } }] }),
@@ -280,7 +285,9 @@ export const LoadFailed: Story = {
 
 const scopedQuery = fn<AuditService['query']>(() => of(page(ENTRIES)))
 
-/** Embedded in one organization's admin page: the query is scoped to it and still excludes Security. */
+/**
+ * Embedded in one organization's admin page: the query is scoped to it and still excludes Security.
+ */
 export const ScopedToOrganization: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [
@@ -367,7 +374,10 @@ const exportQuery = fn<AuditService['query']>((filter) =>
   of(filter?.cursor === 'page-2' ? page([ENTRIES[2]], null) : page(ENTRIES.slice(0, 2), 'page-2')),
 )
 
-/** With entries still on the server, the export pages through all of them: the file holds the whole log. */
+/**
+ * With entries still on the server, the export pages through all of them: the file holds the whole
+ * log.
+ */
 export const CsvDownloadFetchesEveryPage: Story = {
   decorators: [
     moduleMetadata({ providers: [{ provide: AuditService, useValue: { query: exportQuery } }] }),
@@ -459,7 +469,10 @@ export const CsvExportFailed: Story = {
 
 let slowOrgA = new Subject<AuditPage>()
 
-/** Switching organization while the first request is still in flight: its late response must not overwrite the new organization's rows. */
+/**
+ * Switching organization while the first request is still in flight: its late response must not
+ * overwrite the new organization's rows.
+ */
 export const SwitchOrganizationWhileLoading: Story = {
   decorators: [
     moduleMetadata({

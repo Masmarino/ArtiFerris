@@ -24,7 +24,8 @@ describe('formatBytes', () => {
   })
 })
 
-// An ARIA live-region announcement (RGAA 7.5) — a plural mistake here is only heard by screen reader users, so the boundary at 1 gets its own test case.
+// An ARIA live-region announcement (RGAA 7.5) — a plural mistake here is only heard by screen
+// reader users, so the boundary at 1 gets its own test case.
 describe('formatResultsAnnouncement', () => {
   it('pluralizes zero results', () => {
     expect(formatResultsAnnouncement(0)).toBe('0 résultats')
@@ -54,7 +55,8 @@ describe('formatSuggestionsAnnouncement', () => {
   })
 })
 
-// Drives gbt-select's `selectedCountLabel` — same singular/plural boundary, same reason to test it explicitly rather than by inference.
+// Drives gbt-select's `selectedCountLabel` — same singular/plural boundary, same reason to test it
+// explicitly rather than by inference.
 describe('formatSelectedCount', () => {
   it('pluralizes zero selected', () => {
     expect(formatSelectedCount(0)).toBe('0 sélectionnés')

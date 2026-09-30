@@ -39,7 +39,8 @@ const meta: Meta<OrganizationsList> = {
   decorators: [
     moduleMetadata({
       providers: [
-        // A real Router would try to match the Storybook iframe's own URL against an empty route table.
+        // A real Router would try to match the Storybook iframe's own URL against an empty route
+        // table.
         { provide: Router, useValue: router },
         { provide: OrganizationsService, useValue: fakeOrgs() },
         { provide: ToastService, useValue: toast },

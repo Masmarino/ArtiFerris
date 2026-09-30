@@ -39,7 +39,7 @@ export class ApiTokensAdmin {
   readonly pageLimit = ADMIN_TOKEN_PAGE_LIMIT
   readonly listTruncated = computed(() => this.tokens().length >= ADMIN_TOKEN_PAGE_LIMIT)
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     effect(() => {
       this.organizationId()

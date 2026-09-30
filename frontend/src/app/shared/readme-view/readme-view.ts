@@ -14,7 +14,7 @@ import { Card, EmptyState } from '@masmarino/gabarit'
   imports: [TranslocoPipe, Card, EmptyState],
   templateUrl: './readme-view.html',
   styleUrl: './readme-view.scss',
-  // The rendered markup is created at runtime, so emulated encapsulation would never match it.
+  // The markup is created at runtime, so emulated encapsulation would never match it.
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

@@ -23,7 +23,7 @@ interface FieldSpec {
   labelKey: string
 }
 
-// Mirrors the backend's validation in UpdateSystemSettingsUseCase, kept in sync by hand, so the form can reject an out-of-range value before a round trip.
+// Same ranges as UpdateSystemSettingsUseCase, to reject early.
 const FIELDS: FieldSpec[] = [
   { key: 'maxLoginAttempts', min: 1, max: 1000, labelKey: 'admin.system.maxLoginAttempts' },
   {
@@ -62,7 +62,7 @@ export class SystemSettingsAdmin {
   readonly loadFailed = signal(false)
   readonly saving = signal(false)
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     effect(() => {
       const organizationId = this.organizationId()
@@ -93,7 +93,8 @@ export class SystemSettingsAdmin {
     })
   }
 
-  // The public organization's row stands for the whole instance: its indexing switch and its public-page switch belong to a super-admin.
+  // The public organization's row stands for the whole instance: its switches belong to super-
+  // admins.
   private readonly isInstanceScope = computed(
     () => (this.organizationId() ?? this.me.organizationId()) === PUBLIC_ORGANIZATION_ID,
   )

@@ -222,7 +222,10 @@ export const NpmPackageWithoutDownloads: Story = {
   },
 }
 
-/** The install command comes from the owner's registry URL; the README sits between the versions and the security card. */
+/**
+ * The install command comes from the owner's registry URL; the README sits between the versions and
+ * the security card.
+ */
 /** The backend only sent the newest 200 versions. */
 export const NpmPackageWithTruncatedVersions: Story = {
   decorators: [
