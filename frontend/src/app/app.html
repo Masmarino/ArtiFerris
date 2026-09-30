@@ -1,1 +1,4 @@
-<router-outlet />
+<!-- A language change re-creates the routed view: everything computed once at creation (labels, columns, formatted dates) is rebuilt in the new language. -->
+@for (generation of [viewGeneration()]; track generation) {
+  <router-outlet />
+}

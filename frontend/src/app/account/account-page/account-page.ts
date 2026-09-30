@@ -12,7 +12,7 @@ import {
 import { Button, Card, GbtInput, Tab, Tabs } from '@masmarino/gabarit'
 import { ApiTokensList } from '../../tokens/api-tokens-list/api-tokens-list'
 import { MeService } from '../../shell/application/me.service'
-import { DatePipe } from '@angular/common'
+import { LocalizedDatePipe } from '../../shared/i18n/localized-date'
 import { MfaSettings } from '../mfa-settings/mfa-settings'
 import { PasskeySettings } from '../passkey-settings/passkey-settings'
 import { SessionSettings } from '../session-settings/session-settings'
@@ -35,7 +35,7 @@ function passwordsMatch(group: AbstractControl): ValidationErrors | null {
     GbtInput,
     ApiTokensList,
     Card,
-    DatePipe,
+    LocalizedDatePipe,
     MfaSettings,
     PasskeySettings,
     SessionSettings,

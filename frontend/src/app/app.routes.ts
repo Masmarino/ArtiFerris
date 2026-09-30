@@ -49,6 +49,8 @@ export const routes: Routes = [
   {
     path: '',
     loadComponent: () => import('./shell/app-shell').then((m) => m.AppShell),
+    // The shell re-creates its own routed view on a language change (see App).
+    data: { recreatesViewsOnLanguageChange: true },
     canActivate: [authGuard],
     children: [
       {
