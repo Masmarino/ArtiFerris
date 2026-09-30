@@ -111,3 +111,63 @@ pub enum ApplicationError {
     #[error("api token label is too long")]
     ApiTokenLabelTooLong,
 }
+
+impl ApplicationError {
+    /// A stable, language-independent name for this error, sent to clients next to the message so they can react to it (and translate it) without matching the wording. Changing one is a breaking change of the API.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Domain(inner) => inner.code(),
+            Self::EventStore(_) => "event_store_failure",
+            Self::Storage(_) => "storage_failure",
+            Self::UsernameTaken => "username_taken",
+            Self::InvalidCredentials => "invalid_credentials",
+            // Same code as InvalidCredentials, like their message: a caller must not learn that a token exists but is revoked.
+            Self::InactiveApiToken => "invalid_credentials",
+            Self::RepositoryNameTaken => "repository_name_taken",
+            Self::PersonalOrganizationAlreadyExists => "personal_organization_already_exists",
+            Self::NoPersonalOrganization => "no_personal_organization",
+            Self::LastSuperAdmin => "last_super_admin",
+            Self::PackageVersionExists => "package_version_exists",
+            Self::NpmPackageNotFound => "npm_package_not_found",
+            Self::NpmVersionNotFound => "npm_version_not_found",
+            Self::InvalidNpmPayload(..) => "invalid_npm_payload",
+            Self::DockerBlobAlreadyExists => "docker_blob_already_exists",
+            Self::DockerBlobNotFound => "docker_blob_not_found",
+            Self::DockerManifestNotFound => "docker_manifest_not_found",
+            Self::DockerDigestMismatch { .. } => "docker_digest_mismatch",
+            Self::InvalidDockerPayload(..) => "invalid_docker_payload",
+            Self::DockerUploadSessionNotFound => "docker_upload_session_not_found",
+            Self::DockerChunkOffsetMismatch { .. } => "docker_chunk_offset_mismatch",
+            Self::DockerUploadInProgress => "docker_upload_in_progress",
+            Self::DockerTooManyUploads => "docker_too_many_uploads",
+            Self::DockerTooManyTags => "docker_too_many_tags",
+            Self::DockerUploadTooLarge => "docker_upload_too_large",
+            Self::UpstreamIntegrityMismatch => "upstream_integrity_mismatch",
+            Self::InvalidSystemSettings(..) => "invalid_system_settings",
+            Self::StorageQuotaExceeded => "storage_quota_exceeded",
+            Self::DependencyScanBusy => "dependency_scan_busy",
+            Self::DependencyScanRateLimited => "dependency_scan_rate_limited",
+            Self::InvalidSmtpSettings(..) => "invalid_smtp_settings",
+            Self::InvalidCatalogQuery(..) => "invalid_catalog_query",
+            Self::InvalidEmail(..) => "invalid_email",
+            Self::InvitationNotFound => "invitation_not_found",
+            Self::InvitationExpired => "invitation_expired",
+            Self::MfaAlreadyEnabled => "mfa_already_enabled",
+            Self::MfaNotEnrolled => "mfa_not_enrolled",
+            Self::MfaEnrollmentExpired => "mfa_enrollment_expired",
+            Self::InvalidMfaCode => "invalid_mfa_code",
+            Self::PasskeysUnavailable => "passkeys_unavailable",
+            Self::InstanceNotEmpty => "instance_not_empty",
+            Self::MultiTenantInstance => "multi_tenant_instance",
+            Self::PersonalRepositoriesNotExportable(..) => "personal_repositories_not_exportable",
+            Self::ImportTooLarge(..) => "import_too_large",
+            Self::InvalidBrandingAsset(..) => "invalid_branding_asset",
+            Self::OrganizationSlugTaken => "organization_slug_taken",
+            Self::ReservedOrganizationSlug => "reserved_organization_slug",
+            Self::ActingAdminNotFound => "acting_admin_not_found",
+            Self::ApiTokenNotFound => "api_token_not_found",
+            Self::ApiTokenLimitReached => "api_token_limit_reached",
+            Self::ApiTokenLabelTooLong => "api_token_label_too_long",
+        }
+    }
+}

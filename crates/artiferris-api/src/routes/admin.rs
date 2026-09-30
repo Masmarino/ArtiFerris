@@ -103,7 +103,7 @@ fn decode_audit_cursor(raw: &str) -> Option<AuditCursor> {
 }
 
 fn internal_error<E>(_: E) -> (StatusCode, Json<ErrorResponse>) {
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "internal error".to_string() }))
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string())))
 }
 
 /// Every repository id belonging to `organization_id` — the "which repos are mine" set metrics scoping filters against.
@@ -120,9 +120,9 @@ async fn list_audit_events(
     Query(params): Query<AuditQueryParams>,
 ) -> Result<Json<AuditPageResponse>, (StatusCode, Json<ErrorResponse>)> {
     let scope = requested_organization_override(&user, params.organization_id);
-    require_organization_admin(&user, scope.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, scope.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let cursor = match params.cursor.as_deref() {
-        Some(raw) => Some(decode_audit_cursor(raw).ok_or_else(|| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "invalid cursor".to_string() })))?),
+        Some(raw) => Some(decode_audit_cursor(raw).ok_or_else(|| (StatusCode::BAD_REQUEST, Json(ErrorResponse::message("invalid cursor".to_string()))))?),
         None => None,
     };
     let filter = AuditQueryFilter {
@@ -165,7 +165,7 @@ struct RepositoryUsageResponse {
 
 async fn get_metrics(State(state): State<AppState>, user: AuthUser, Query(scope): Query<OrgScopeParams>) -> Result<Json<Vec<RepositoryUsageResponse>>, (StatusCode, Json<ErrorResponse>)> {
     let target_org = requested_organization_override(&user, scope.organization_id);
-    require_organization_admin(&user, target_org.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, target_org.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let usages = state.get_usage_metrics.execute().await.map_err(|e| application_error_response("failed to get usage metrics", e))?;
     let usages = if let Some(org) = target_org.or_else(|| (!user.is_super_admin).then_some(user.organization_id)) {
         let org_repository_ids = organization_repository_ids(&state, org).await.map_err(internal_error)?;
@@ -200,7 +200,7 @@ async fn get_metrics_history(
     user: AuthUser,
     Query(params): Query<MetricsHistoryParams>,
 ) -> Result<Json<Vec<MetricsSnapshotResponse>>, (StatusCode, Json<ErrorResponse>)> {
-    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let days = params.days.unwrap_or(30).clamp(1, 365);
     let since = Utc::now() - chrono::Duration::days(days);
     let snapshots = state.get_metrics_history.execute(since).await.map_err(|e| application_error_response("failed to get metrics history", e))?;
@@ -251,7 +251,7 @@ struct HealthResponse {
 }
 
 async fn get_health(State(state): State<AppState>, user: AuthUser) -> Result<Json<HealthResponse>, (StatusCode, Json<ErrorResponse>)> {
-    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let status = state.get_health_status.execute().await;
 
     let (db_status, db_detail) = split_component_health(status.database.status);
@@ -286,7 +286,7 @@ struct AdminStatsResponse {
 
 async fn get_stats(State(state): State<AppState>, user: AuthUser, Query(scope): Query<OrgScopeParams>) -> Result<Json<AdminStatsResponse>, (StatusCode, Json<ErrorResponse>)> {
     let target_org = requested_organization_override(&user, scope.organization_id);
-    require_organization_admin(&user, target_org.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, target_org.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let stats = if let Some(org) = target_org.or_else(|| (!user.is_super_admin).then_some(user.organization_id)) {
         // Each of these three counts is now pushed to SQL instead of loading an entire table
         // (users, repositories, or permission grants) and filtering/counting in application code
@@ -313,14 +313,14 @@ struct BlockedUsernameResponse {
 }
 
 async fn list_blocked_usernames(State(state): State<AppState>, user: AuthUser) -> Result<Json<Vec<BlockedUsernameResponse>>, (StatusCode, Json<ErrorResponse>)> {
-    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let blocked = state.login_throttle.blocked_usernames(artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW);
     Ok(Json(blocked.into_iter().map(|b| BlockedUsernameResponse { username: b.username, remaining_seconds: b.remaining_seconds }).collect()))
 }
 
 /// A super-admin can unlock any name, an organization admin only a non-super-admin member of their own organization.
 async fn clear_login_throttle(State(state): State<AppState>, user: AuthUser, Path(username): Path<String>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    let forbidden = || (StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() }));
+    let forbidden = || (StatusCode::FORBIDDEN, Json(ErrorResponse::message("forbidden".to_string())));
     if !user.is_super_admin && !user.is_organization_admin {
         return Err(forbidden());
     }
@@ -330,7 +330,7 @@ async fn clear_login_throttle(State(state): State<AppState>, user: AuthUser, Pat
         Err(_) => None,
     };
     if !user.is_super_admin {
-        let target = target.as_ref().filter(|target| target.organization_id == user.organization_id).ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "not found".to_string() })))?;
+        let target = target.as_ref().filter(|target| target.organization_id == user.organization_id).ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("not found".to_string()))))?;
         if target.is_super_admin {
             return Err(forbidden());
         }
@@ -367,7 +367,7 @@ struct AdminTokenListParams {
 
 async fn list_all_api_tokens(State(state): State<AppState>, user: AuthUser, Query(params): Query<AdminTokenListParams>) -> Result<Json<Vec<AdminApiTokenResponse>>, (StatusCode, Json<ErrorResponse>)> {
     let target_org = requested_organization_override(&user, params.organization_id);
-    require_organization_admin(&user, target_org.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, target_org.unwrap_or(user.organization_id)).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let organization = target_org.or_else(|| (!user.is_super_admin).then_some(user.organization_id));
     let tokens = state
         .admin_list_api_tokens
@@ -392,13 +392,13 @@ async fn list_all_api_tokens(State(state): State<AppState>, user: AuthUser, Quer
 
 async fn admin_revoke_api_token(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     if !user.is_super_admin {
-        require_organization_admin(&user, user.organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+        require_organization_admin(&user, user.organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     }
     let token = state.admin_list_api_tokens.find(id).await.map_err(|e| application_error_response("failed to look up api token", e))?;
     if !user.is_super_admin {
-        let token = token.as_ref().filter(|t| t.organization_id == user.organization_id).ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "not found".to_string() })))?;
+        let token = token.as_ref().filter(|t| t.organization_id == user.organization_id).ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("not found".to_string()))))?;
         if token.owner_is_super_admin {
-            return Err((StatusCode::FORBIDDEN, Json(ErrorResponse { error: "forbidden".to_string() })));
+            return Err((StatusCode::FORBIDDEN, Json(ErrorResponse::message("forbidden".to_string()))));
         }
     }
     let audit = token.map(|t| SecurityAuditRecord { event: SecurityEvent::ApiTokenRevoked { user_id: t.user_id, organization_id: t.organization_id, token_id: id }, actor_id: Some(user.id) });
@@ -408,7 +408,7 @@ async fn admin_revoke_api_token(State(state): State<AppState>, user: AuthUser, P
 
 async fn get_system_settings(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>) -> Result<Json<SystemSettings>, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let settings = state.get_system_settings.execute(organization_id).await.map_err(|e| application_error_response("failed to get system settings", e))?;
     Ok(Json(settings))
 }
@@ -421,7 +421,7 @@ async fn update_system_settings(
     Json(mut settings): Json<SystemSettings>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let before = state.get_system_settings.execute(organization_id).await.map_err(|e| application_error_response("failed to get system settings", e))?;
     // Opening the whole catalog to search engines is an instance-wide decision: an organization admin's save keeps the stored value.
     if !user.is_super_admin {
@@ -454,7 +454,7 @@ enum SmtpSettingsBody {
 
 async fn get_smtp_settings(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>) -> Result<Json<Option<SmtpSettingsBody>>, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let settings = match state.get_smtp_settings.execute(organization_id).await {
         Ok(settings) => settings,
         Err(ApplicationError::Domain(DomainError::SecretUnreadable(_))) => {
@@ -495,9 +495,9 @@ async fn update_smtp_settings(
     Json(body): Json<UpdateSmtpSettingsRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     if body.security == SmtpSecurity::None && !artiferris_infrastructure::ssrf_allowlist::host_is_allow_listed(&body.host, u16::try_from(body.port).unwrap_or_default()).await {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: artiferris_infrastructure::smtp_email_sender::UNENCRYPTED_SMTP_REFUSED.to_string() })));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::message(artiferris_infrastructure::smtp_email_sender::UNENCRYPTED_SMTP_REFUSED.to_string()))));
     }
     // A stored config that can no longer be read must stay replaceable, so this lookup is best effort.
     let before = state.get_smtp_settings.execute(organization_id).await.unwrap_or_else(|e| {
@@ -523,7 +523,7 @@ struct SendTestEmailRequest {
 
 async fn send_test_email(State(state): State<AppState>, user: AuthUser, resolved_org: ResolvedOrganization, Query(scope): Query<OrgScopeParams>, Json(body): Json<SendTestEmailRequest>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
-    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_organization_admin(&user, organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     state.send_test_email.execute(organization_id, &body.to).await.map_err(|e| application_error_response("failed to send test email", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -568,7 +568,7 @@ struct ConfigurationExportResponse {
 }
 
 async fn export_configuration(State(state): State<AppState>, user: AuthUser) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let export = state.export_configuration.execute().await.map_err(|e| application_error_response("failed to export configuration", e))?;
     // Recorded before anything is handed out: an export nobody can account for is not served.
     state
@@ -630,7 +630,7 @@ struct ImportReportResponse {
 }
 
 async fn import_configuration(State(state): State<AppState>, user: AuthUser, Json(body): Json<ConfigurationImportRequest>) -> Result<Json<ImportReportResponse>, (StatusCode, Json<ErrorResponse>)> {
-    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse { error: "forbidden".to_string() })))?;
+    require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let import = artiferris_application::use_cases::admin::ConfigurationImport {
         users: body
             .users

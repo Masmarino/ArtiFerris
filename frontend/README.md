@@ -94,6 +94,16 @@ The unit tests load the real `fr.json`, so they still assert the text users see.
 (`shared/i18n/translations.spec.ts`) fails when the code uses a key that `fr.json` does not define,
 or when a key of `fr.json` is used nowhere.
 
+## API errors
+
+An error answered by the API is `{ "error": "<English text>", "code": "<snake_case_name>" }`. The
+`code` is the contract (each variant of `DomainError` / `ApplicationError` has one, see their
+`code()`); the text may be reworded. Code that reacts to an error reads `errorCode(err)` from
+`shared/api-error.ts`, never a substring of the text, and what is shown to the user is the
+translation `errors.api.<code>` (the server's text only for an error without a code, or a code
+unknown to this build). Adding a code means adding its `errors.api.<code>` message to every language
+file: `translations.spec.ts` reads the Rust sources and fails otherwise.
+
 ## Known issues
 
 ### npm audit — devDependency-only UUID vulnerability (B-44)

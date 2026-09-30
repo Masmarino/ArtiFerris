@@ -6,7 +6,7 @@ import { Router, RouterLink } from '@angular/router'
 import { Button, Divider, GbtInput } from '@masmarino/gabarit'
 import { AuthService } from '../application/auth.service'
 import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
-import { overloadMessage, rejectionMessage } from '../../shared/api-error'
+import { errorCode, overloadMessage } from '../../shared/api-error'
 
 @Component({
   selector: 'app-register-page',
@@ -65,7 +65,7 @@ export class RegisterPage {
       },
       error: (err: unknown) => {
         this.submitting.set(false)
-        this.errorMessage.set(overloadMessage(err) ?? this.messageFor(rejectionMessage(err) ?? ''))
+        this.errorMessage.set(overloadMessage(err) ?? this.messageFor(errorCode(err)))
       },
     })
   }
@@ -74,25 +74,22 @@ export class RegisterPage {
     this.router.navigateByUrl('/')
   }
 
-  private messageFor(backendMessage: string): string {
-    if (backendMessage.includes('username already taken')) {
-      return t('auth.register.errors.usernameTaken')
+  private messageFor(code: string | null): string {
+    switch (code) {
+      case 'username_taken':
+        return t('auth.register.errors.usernameTaken')
+      case 'invalid_email':
+        return t('auth.register.errors.invalidEmail')
+      case 'password_too_short':
+        return t('auth.register.errors.passwordTooShort')
+      case 'registration_unavailable':
+        return t('auth.register.errors.notAvailable')
+      case 'registration_disabled':
+        return t('auth.register.errors.disabled')
+      case 'invalid_username':
+        return t('auth.register.errors.invalidUsername')
+      default:
+        return t('auth.register.errors.generic')
     }
-    if (backendMessage.includes('invalid email')) {
-      return t('auth.register.errors.invalidEmail')
-    }
-    if (backendMessage.includes('password must be at least')) {
-      return t('auth.register.errors.passwordTooShort')
-    }
-    if (backendMessage.includes('not available on this organization')) {
-      return t('auth.register.errors.notAvailable')
-    }
-    if (backendMessage.includes('currently disabled')) {
-      return t('auth.register.errors.disabled')
-    }
-    if (backendMessage.includes('invalid username')) {
-      return t('auth.register.errors.invalidUsername')
-    }
-    return t('auth.register.errors.generic')
   }
 }

@@ -183,7 +183,10 @@ describe('ApiTokensList', () => {
       fixture.componentInstance.createToken()
       httpMock
         .expectOne('/api/tokens')
-        .flush({ error: 'invalid credentials' }, { status: 400, statusText: 'Bad Request' })
+        .flush(
+          { error: 'invalid credentials', code: 'invalid_credentials' },
+          { status: 400, statusText: 'Bad Request' },
+        )
       fixture.detectChanges()
 
       expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain(
