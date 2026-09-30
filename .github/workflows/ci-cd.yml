@@ -9,26 +9,27 @@ on:
       - "fix/**"
       - "release/**"
     tags: ["v*.*.*"]
-  # No branch filter here — PRs always just build+test; scan/docker build only happen on a direct push.
+  # No branch filter: PRs always build and test; scanning and image building happen only on a direct push.
   pull_request:
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Only runs that never publish are superseded: a push to main or a tag can be mid-`docker push`, and cancelling it would leave `latest` and `sha-*` pointing at different images.
+  # Only runs that never publish are superseded: a push to main or a tag may be mid-`docker push`, and cancelling it would leave
+  # `latest` and `sha-*` on different images.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
 
 env:
-  # keep in sync with rust-toolchain.toml — that's the real source of truth
+  # Keep in sync with rust-toolchain.toml, the source of truth.
   RUST_VERSION: "1.98.1"
   NODE_VERSION: "26"
   DOCKER_IMAGE: masmarino/artiferris
 
 jobs:
-  # ── Build & test ────────────────────────────────────────────────────────
+  # Build and test
 
   test-backend:
     name: Backend build & test
@@ -48,7 +49,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      # Offline mode checks queries against the committed .sqlx cache — but sqlx::test still spins up a real (ephemeral) postgres per test.
+      # Offline mode checks queries against the committed .sqlx cache; sqlx::test still starts a real ephemeral Postgres per test.
       SQLX_OFFLINE: "true"
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
@@ -89,8 +90,8 @@ jobs:
       - name: Test
         run: npm test -- --watch=false
 
-  # ── Security scan: source & dependencies ───────────────────────────────
-  # Runs on every PR plus pushes to develop/main/release*/tags. feature/fix branches just get build+test until they open a PR.
+  # Source and dependency scan. Runs on every PR and on pushes to develop, main, release* and tags; other branches only
+  # build and test until they have a PR.
 
   security-scan-source:
     name: Security scan (source & dependencies)
@@ -113,14 +114,14 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
-      # Trivy/Grype only flag a vuln once indexed against the crate version — cargo-audit covers the gap by reading the RUSTSEC feed directly.
+      # Trivy and Grype flag a vulnerability only once it is indexed for the crate version; cargo-audit reads the RUSTSEC feed directly.
       - name: Install cargo-audit
         run: cargo install cargo-audit --version 0.22.2 --locked
 
       - name: cargo audit
         id: cargo-audit
         continue-on-error: true
-        # The one accepted advisory (RUSTSEC-2023-0071, RSA Marvin attack) and why is in .cargo/audit.toml.
+        # The one accepted advisory (RUSTSEC-2023-0071) and why: .cargo/audit.toml.
         run: cargo audit
 
       - name: Trivy filesystem scan
@@ -139,7 +140,7 @@ jobs:
 
       - name: Upload Trivy SARIF
         if: always()
-        # This upload can fail on its own (e.g. Advanced Security disabled) — not a reason to fail the job; the explicit check below is what actually gates it.
+        # This upload can fail on its own (e.g. Advanced Security disabled) without failing the job; the check below is what gates.
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
@@ -172,13 +173,13 @@ jobs:
           echo "See the job log (cargo audit) and the Security tab (Trivy/Grype) for details."
           exit 1
 
-  # ── Tag guard ───────────────────────────────────────────────────────────
-  # Anyone who can push a tag could otherwise publish any commit, from any branch, under a release tag. Runs before anything is built or pushed.
+  # Tag guard. Without it, anyone who can push a tag could publish any commit from any branch under a release tag. Runs
+  # before anything is built or pushed.
 
   verify-tag:
     name: Require the tagged commit to be on main
     runs-on: ubuntu-latest
-    # Runs on every push (a no-op outside tags) so that build-and-push can depend on it without being skipped along with it.
+    # Runs on every push (a no-op outside tags) so build-and-push can depend on it without being skipped.
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -192,8 +193,8 @@ jobs:
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$GITHUB_REF_NAME is not on main, refusing to publish it"; exit 1; }
 
-  # ── Build, scan & (conditionally) push the Docker image ────────────────
-  # Built once, scanned, then pushed as-is (never rebuilt) if it's main or a version tag. release/* just builds+scans as a release-candidate check, never pushed.
+  # Build, scan and push the Docker image. Built once, scanned, then pushed as is for main or a version tag; release/*
+  # only builds and scans, never pushes.
 
   build-and-push:
     name: Build, scan & push Docker image
@@ -301,7 +302,7 @@ jobs:
             [ -n "$tag" ] && docker push "$tag"
           done <<< "$TAGS"
 
-      # The registry's own digest for what was just pushed: the deploy job pins the release to it, so a tag moved afterwards changes nothing.
+      # The registry digest of what was just pushed: the deploy pins the release to it, so a tag moved later changes nothing.
       - name: Resolve the pushed image digest
         id: digest
         if: env.IS_PUBLISHABLE == 'true'
@@ -312,8 +313,8 @@ jobs:
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "unexpected digest: $digest"; exit 1; }
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
-  # ── Deploy: upgrade the production release to the just-pushed image, by digest ──
-  # Only on a version tag, and only when the tagged commit is on main (checked again here, and before the image is published); main/release builds stop at the registry push above.
+  # Deploy: upgrade the production release to the pushed image, by digest. Only on a version tag whose commit is on main
+  # (checked again here and before the image is published).
 
   deploy:
     name: Deploy to Kubernetes
@@ -321,7 +322,7 @@ jobs:
     needs: build-and-push
     if: startsWith(github.ref, 'refs/tags/v')
     environment: production
-    # Two deploys never run at once, and a running one is never cancelled halfway through a helm upgrade.
+    # Never two deploys at once, and a running one is never cancelled halfway through a helm upgrade.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -330,7 +331,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Anyone who can push a tag could otherwise ship any commit, from any branch, to production.
+      # Without this, anyone who can push a tag could ship any commit to production.
       - name: Require the tagged commit to be on main
         run: |
           git fetch --no-tags origin main
@@ -356,7 +357,7 @@ jobs:
           [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no image digest from the build job"; exit 1; }
           # A values file, not --set: commas in the list would be parsed as separate keys.
           jq -n --arg ips "$TRUSTED_PROXY_IPS" '{artiferris: {trustedProxyIps: $ips}}' > "$RUNNER_TEMP/values-ci.json"
-          # --atomic rolls the release back when the upgrade fails. Database migrations already applied are not undone: see "Upgrading" in the README.
+          # --atomic rolls the release back if the upgrade fails. Migrations already applied are not undone (README, "Upgrades and encryption key rotation").
           helm upgrade --install artiferris ./helm/artiferris \
             --namespace artiferris --create-namespace \
             --values "$RUNNER_TEMP/values-ci.json" \

@@ -1,4 +1,3 @@
-# docker-compose.yml
 services:
   postgres:
     image: postgres:18-alpine3.24
@@ -8,18 +7,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: artiferris
     volumes:
-      # postgres:18+ images manage their own version-specific subdirectory
-      # under a single top-level mount — mounting at the old .../data path
-      # instead makes the entrypoint refuse to start (it can no longer tell
-      # whether that path holds real data from a pre-18 image or is just an
-      # empty legacy mount). See https://github.com/docker-library/postgres/pull/1259.
+      # postgres:18+ keeps its data in a version-specific subdirectory under this one mount: the old .../data path
+      # makes the entrypoint refuse to start (docker-library/postgres#1259).
       - artiferris-postgres-data:/var/lib/postgresql
     ports:
-      # Bound to loopback only — exposed so a locally-run backend (`cargo run`,
-      # e.g. via scripts/dev.sh for frontend hot-reload) can connect from the
-      # host. artiferris-api itself reaches this container over the compose
-      # network and doesn't need it. Never publish this on all interfaces:
-      # Postgres has no other network-level access control of its own here.
+      # Loopback only, for a backend run locally (scripts/dev.sh); artiferris-api reaches Postgres over the compose network.
+      # Never publish it on all interfaces.
       - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U artiferris"]
@@ -40,63 +33,48 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # A Docker blob push/pull or npm tarball currently gets buffered fully in
-    # memory (up to the 2 GiB / 200 MiB body limits below), so a few large,
-    # concurrent transfers could otherwise exhaust the whole host. This caps
-    # the blast radius to this container — raise it if legitimate concurrent
-    # large-file traffic gets OOM-killed.
+    # Large transfers are buffered in memory (up to the 2 GiB and 200 MiB body limits), so a few concurrent ones could exhaust the host.
+    # This caps the damage to the container; raise it if legitimate traffic gets OOM-killed.
     deploy:
       resources:
         limits:
           memory: ${ARTIFERRIS_API_MEMORY_LIMIT:-4g}
     environment:
-      # The password is spliced in as is, so it must only hold URL-safe characters (`openssl rand -hex 24`).
+      # The password goes in as is: URL-safe characters only (`openssl rand -hex 24`).
       DATABASE_URL: postgres://artiferris:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/artiferris
-      # Defaults to 10 (see artiferris-infrastructure::postgres::DEFAULT_DB_MAX_CONNECTIONS).
-      # Size against expected concurrent users, not left as a guess — each held connection
-      # is one in-flight request that would otherwise queue on `acquire_timeout` (10s).
+      # Size it against expected concurrent users: each held connection is one in-flight request, and the others queue for 10 s.
       DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-10}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?SECRETS_ENCRYPTION_KEY must be set — generate one with `openssl rand -base64 32`}
-      # Only while rotating SECRETS_ENCRYPTION_KEY: the key the stored secrets are encrypted with today. See the README.
+      # Only while rotating SECRETS_ENCRYPTION_KEY. See the README.
       SECRETS_ENCRYPTION_KEY_PREVIOUS: ${SECRETS_ENCRYPTION_KEY_PREVIOUS:-}
-      # `true` lets the startup pass rewrite stored secrets to the current format / the new key. See "Upgrading and rotating" in the README before enabling it: there is no rollback afterwards.
+      # `true` rewrites stored secrets in the current format or under the new key. Read "Upgrades and encryption key rotation" in the README first.
       SECRETS_REENCRYPT_LEGACY: ${SECRETS_REENCRYPT_LEGACY:-}
       ARTIFERRIS_BASE_DOMAIN: ${ARTIFERRIS_BASE_DOMAIN:?ARTIFERRIS_BASE_DOMAIN must be set}
-      # The URL clients reach this deployment at. Drives the Docker token realm, HSTS, passkeys and canonical URLs,
-      # and the server refuses to start with a 0.0.0.0 one.
+      # The URL clients reach this deployment at: Docker token realm, HSTS, passkeys, canonical URLs. Never 0.0.0.0.
       PUBLIC_URL: ${PUBLIC_URL:?PUBLIC_URL must be set, e.g. https://app.artiferris.example.com}
-      # Private ranges LDAP/SMTP/OIDC/proxy hosts may resolve to. See .env.example.
+      # Private ranges LDAP, SMTP, OIDC and proxy hosts may resolve to. See .env.example.
       ARTIFERRIS_SSRF_ALLOWED_CIDRS: ${ARTIFERRIS_SSRF_ALLOWED_CIDRS:-}
       STORAGE_ROOT: /data
       BIND_ADDR: 0.0.0.0:8080
-      # tracing_subscriber::fmt::init() honours RUST_LOG; without it the
-      # container logs essentially nothing.
+      # Without RUST_LOG the container logs almost nothing.
       RUST_LOG: ${RUST_LOG:-info}
-      # Optional: only creates an account when the users table is empty — safe to
-      # leave set across restarts. Without these, there is no way to create the
-      # first admin account through the running application.
+      # Creates an account only when the users table is empty. Without it there is no first admin.
       ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME: ${ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME:-}
       ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD: ${ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD:-}
-      # The IPs a reverse proxy in front of this container connects from, so
-      # their X-Forwarded-For is believed. Left empty behind a proxy, the
-      # per-IP login throttle becomes one shared bucket for everyone behind
-      # it. See .env.example.
+      # The addresses a reverse proxy connects from, so their X-Forwarded-For is believed. See .env.example.
       TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
-      # Days security and administrative audit events are kept; 0 keeps everything. See .env.example.
+      # Days audit events are kept; 0 keeps everything. See .env.example.
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
-      # Leave empty: the realm is derived from the request's Host and PUBLIC_URL.
-      # See .env.example.
+      # Leave empty: the realm comes from the request. See .env.example.
       ARTIFERRIS_DOCKER_TOKEN_REALM: ${ARTIFERRIS_DOCKER_TOKEN_REALM:-}
-      # The root filesystem is read-only; Trivy caches its vulnerability database here.
+      # The root filesystem is read-only: Trivy caches its database here.
       TRIVY_CACHE_DIR: /tmp/trivy-cache
     ports:
       - "8080:8080"
     volumes:
-      # The image runs as a non-root user. Docker only sets that user's
-      # ownership on this volume the first time it's created (empty). If
-      # you're upgrading from an image that ran as root and artiferris-api
-      # can't write to /data after upgrading, fix ownership once with:
+      # The image runs as a non-root user, and Docker only sets this volume's ownership when it creates it. After upgrading from an
+      # image that ran as root, fix it once with:
       #   docker compose run --rm --user root artiferris-api chown -R artiferris:artiferris /data
       - artiferris-storage:/data
 

@@ -1,21 +1,12 @@
 #!/usr/bin/env bash
-# Runs the backend and frontend locally for development, with Angular hot
-# reload. Postgres comes from docker-compose (started here if not already
-# running) rather than a separate container — same data, one less thing to
-# keep track of. Ctrl+C stops the backend and frontend; Postgres is left
-# running (docker-compose's own `restart: unless-stopped` policy already
-# manages it).
-#
-# The backend still runs as a local `cargo run` process on its own port
-# (8081), not the docker-compose artiferris-api container (8080) — that's what
-# gives the frontend hot reload against a fast-rebuilding local binary.
+# Runs the backend and the frontend locally, with hot reload. Postgres comes from docker-compose and is left running
+# on Ctrl+C. The backend is a local `cargo run` on port 8081, not the compose container.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# docker-compose reads POSTGRES_PASSWORD from .env itself; source it here too
-# so the locally-run backend connects with the same credentials.
+# Same POSTGRES_PASSWORD as docker-compose, so the local backend can connect.
 if [ -f .env ]; then
   set -a
   # shellcheck disable=SC1091
@@ -25,18 +16,13 @@ fi
 
 export DATABASE_URL="postgres://artiferris:${POSTGRES_PASSWORD:-artiferris}@localhost:5432/artiferris"
 export JWT_SECRET="local-dev-secret-not-for-production"
-# Mandatory and must differ from JWT_SECRET (compose also checks it even though only postgres starts here).
-# Fixed rather than random so secrets stored in the dev database stay readable across restarts,
-# and not taken from .env, whose value is the placeholder the server refuses to start with.
+# Fixed so secrets in the dev database stay readable across restarts; not taken from .env, whose value is the placeholder.
 export SECRETS_ENCRYPTION_KEY="local-dev-secrets-key-not-for-production"
 export ARTIFERRIS_BASE_DOMAIN="${ARTIFERRIS_BASE_DOMAIN:-artiferris.localhost}"
 export BIND_ADDR="0.0.0.0:8081"
-# The browser only ever talks to the Angular dev server on 4200 (proxy.conf.json
-# forwards /api, /npm, /v2 to :8081) — it never sees :8081 directly. Without this,
-# the backend computes its WebAuthn relying-party origin from BIND_ADDR's own port
-# (8081), which never matches the :4200 origin a passkey ceremony's clientDataJSON
-# actually records, and every passkey registration/login fails with InvalidRPOrigin.
-# Not PUBLIC_URL itself: .env carries the production one, which would otherwise win here.
+# The browser only talks to the Angular dev server on 4200. Without this, the WebAuthn origin would be computed from
+# port 8081 and every passkey ceremony would fail with InvalidRPOrigin. Not PUBLIC_URL itself: .env carries the
+# production one.
 export PUBLIC_URL="${DEV_PUBLIC_URL:-http://localhost:4200}"
 export STORAGE_ROOT="$ROOT_DIR/data"
 export ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME="admin"
@@ -61,8 +47,7 @@ cleanup() {
   echo "==> Stopping backend"
   kill "$BACKEND_PID" 2>/dev/null || true
   wait "$BACKEND_PID" 2>/dev/null || true
-  # Postgres is left running — stop it manually if you want it down too:
-  #   docker compose stop postgres
+  # Postgres stays up: `docker compose stop postgres` to stop it.
   exit 0
 }
 trap cleanup EXIT INT TERM

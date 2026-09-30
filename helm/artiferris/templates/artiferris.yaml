@@ -101,7 +101,7 @@ spec:
               value: "0.0.0.0:8080"
             - name: RUST_LOG
               value: {{ .Values.artiferris.rustLog | quote }}
-            # The rootfs is read-only; Trivy caches its vulnerability database here.
+            # The root filesystem is read-only: Trivy caches its database here.
             - name: TRIVY_CACHE_DIR
               value: /tmp/trivy-cache
           ports:
@@ -111,7 +111,7 @@ spec:
               mountPath: /data
             - name: tmp
               mountPath: /tmp
-          # Migrations and the secret check run before the port opens; liveness only starts once this has passed.
+          # Migrations and the secret check run before the port opens: liveness starts once this has passed.
           startupProbe:
             httpGet:
               path: /healthz
