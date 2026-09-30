@@ -355,6 +355,14 @@
       "errors": {
         "signOutFailed": "Impossibile chiudere le sessioni. Riprova."
       }
+    },
+    "language": {
+      "heading": "Lingua",
+      "label": "Lingua dell'interfaccia",
+      "saved": "Lingua salvata.",
+      "errors": {
+        "saveFailed": "Impossibile salvare la lingua. Riprova."
+      }
     }
   },
   "tokens": {

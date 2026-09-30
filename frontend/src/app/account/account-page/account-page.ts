@@ -1,5 +1,6 @@
 import { t } from '../../shared/i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
+import { LanguageSettings } from '../language-settings/language-settings'
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import {
   AbstractControl,
@@ -30,6 +31,7 @@ function passwordsMatch(group: AbstractControl): ValidationErrors | null {
   standalone: true,
   imports: [
     TranslocoPipe,
+    LanguageSettings,
     ReactiveFormsModule,
     Button,
     GbtInput,

@@ -9,6 +9,8 @@ pub enum DomainError {
     EmailTaken,
     #[error("username already in use")]
     UsernameTaken,
+    #[error("unsupported language: {0}")]
+    UnsupportedLanguage(String),
     #[error("password must be at least 8 characters")]
     PasswordTooShort,
     #[error("invalid repository name: {0}")]

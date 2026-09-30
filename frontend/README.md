@@ -80,6 +80,10 @@ creation (table columns, option lists) are rebuilt. Dates go through `formatLoca
 the `date` pipe of `shared/i18n/localized-date.ts` — not Angular's `DatePipe`, which is bound to the
 locale the app started in — and the locale is read with `activeLocale()`, not `LOCALE_ID`.
 
+The user picks their language on the account page (`account/language-settings`). The choice is
+saved on the account (`PUT /api/me/language`, read back as `language` by `GET /api/me`; `null` until
+the user has chosen) and applied whenever the account is loaded, so it follows them across devices.
+
 The unit tests load the real `fr.json`, so they still assert the text users see. A spec
 (`shared/i18n/translations.spec.ts`) fails when the code uses a key that `fr.json` does not define,
 or when a key of `fr.json` is used nowhere.

@@ -10,13 +10,14 @@ use artiferris_application::login_throttle::{bounded_identifier, organization_us
 use artiferris_domain::audit::{AuditRecord, LoginMethod, MfaMethod, SecurityAuditRecord, SecurityEvent};
 use artiferris_domain::error::DomainError;
 use artiferris_domain::user::User;
+use artiferris_domain::user_preferences::Language;
 use serde::{Deserialize, Serialize};
 
 use artiferris_domain::user::TokenIssuerPort;
 
 use crate::auth_middleware::AuthUser;
 use crate::dto::{
-    application_error_response, ActivateAccountRequest, ChangePasswordRequest, ErrorResponse, LdapLoginRequest, LoginRequest, LoginResponse, MeResponse, MfaVerifyRequest, RegisterRequest,
+    application_error_response, ActivateAccountRequest, ChangePasswordRequest, ErrorResponse, LdapLoginRequest, LoginRequest, LoginResponse, MeResponse, SetLanguageRequest, MfaVerifyRequest, RegisterRequest,
     SsoConfigResponse, SsoProviderType,
 };
 use crate::organization_middleware::ResolvedOrganization;
@@ -41,6 +42,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/mfa/setup/passkey/finish", post(setup_mfa_passkey_finish))
         .route("/api/auth/logout-all", post(logout_all))
         .route("/api/me", get(me))
+        .route("/api/me/language", axum::routing::put(set_language))
         .route("/api/me/password", axum::routing::put(change_password))
         .layer(axum::extract::DefaultBodyLimit::max(AUTH_BODY_LIMIT_BYTES))
 }
@@ -821,15 +823,24 @@ async fn activate_account(State(state): State<AppState>, Json(body): Json<Activa
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn me(user: AuthUser) -> Json<MeResponse> {
-    Json(MeResponse {
+async fn me(State(state): State<AppState>, user: AuthUser) -> Result<Json<MeResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let language = state.user_preferences.language(user.id).await.map_err(|e| application_error_response("failed to read the user's language", e.into()))?;
+    Ok(Json(MeResponse {
         id: user.id,
         username: user.username,
         is_super_admin: user.is_super_admin,
         is_organization_admin: user.is_organization_admin,
         organization_id: user.organization_id,
         created_at: user.created_at,
-    })
+        language: language.map(|language| language.as_str().to_string()),
+    }))
+}
+
+/// Not throttled or audited: it changes no credential, only how the interface is displayed.
+async fn set_language(State(state): State<AppState>, user: AuthUser, Json(body): Json<SetLanguageRequest>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    let language = Language::parse(&body.language).map_err(|e| application_error_response("unsupported language", e.into()))?;
+    state.user_preferences.set_language(user.id, language).await.map_err(|e| application_error_response("failed to save the user's language", e.into()))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn change_password(
@@ -2397,6 +2408,96 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(json["created_at"].is_string(), "expected created_at in /api/me response, got {json}");
+    }
+
+    async fn signed_in_app(pool: sqlx::PgPool) -> (Router, String) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
+        (build_router(state), token)
+    }
+
+    fn set_language_request(token: &str, body: &str) -> Request<Body> {
+        Request::builder()
+            .method("PUT")
+            .uri("/api/me/language")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+
+    async fn me_json(app: &Router, token: &str) -> serde_json::Value {
+        let response = app.clone().oneshot(Request::builder().uri("/api/me").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap()).await.unwrap();
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn me_has_no_language_until_the_user_chooses_one(pool: sqlx::PgPool) {
+        let (app, token) = signed_in_app(pool).await;
+
+        assert_eq!(me_json(&app, &token).await["language"], serde_json::Value::Null);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_user_can_choose_and_change_their_language(pool: sqlx::PgPool) {
+        let (app, token) = signed_in_app(pool).await;
+
+        let response = app.clone().oneshot(set_language_request(&token, r#"{"language":"de"}"#)).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(me_json(&app, &token).await["language"], "de");
+
+        let response = app.clone().oneshot(set_language_request(&token, r#"{"language":"fr"}"#)).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(me_json(&app, &token).await["language"], "fr");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_unsupported_language_is_refused_and_changes_nothing(pool: sqlx::PgPool) {
+        let (app, token) = signed_in_app(pool).await;
+        app.clone().oneshot(set_language_request(&token, r#"{"language":"es"}"#)).await.unwrap();
+
+        for body in [r#"{"language":"xx"}"#, r#"{"language":"fr-FR"}"#, r#"{"language":"FR"}"#, r#"{"language":""}"#] {
+            let response = app.clone().oneshot(set_language_request(&token, body)).await.unwrap();
+            assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST, "{body}");
+        }
+
+        assert_eq!(me_json(&app, &token).await["language"], "es");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_malformed_language_body_is_a_client_error(pool: sqlx::PgPool) {
+        let (app, token) = signed_in_app(pool).await;
+
+        for body in ["{}", r#"{"language":3}"#, "not json"] {
+            let response = app.clone().oneshot(set_language_request(&token, body)).await.unwrap();
+            assert!(response.status().is_client_error(), "{body}");
+        }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn choosing_a_language_requires_a_session(pool: sqlx::PgPool) {
+        let (app, _) = signed_in_app(pool).await;
+
+        let response = app.oneshot(Request::builder().method("PUT").uri("/api/me/language").header("content-type", "application/json").body(Body::from(r#"{"language":"de"}"#)).unwrap()).await.unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn each_user_has_their_own_language(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let organization = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        state.create_user.execute(organization, "florian", "sup3r-s3cret!", false).await.unwrap();
+        state.create_user.execute(organization, "marie", "sup3r-s3cret!", false).await.unwrap();
+        let florian = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
+        let marie = state.authenticate_user.execute("marie", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+
+        app.clone().oneshot(set_language_request(&florian, r#"{"language":"it"}"#)).await.unwrap();
+
+        assert_eq!(me_json(&app, &florian).await["language"], "it");
+        assert_eq!(me_json(&app, &marie).await["language"], serde_json::Value::Null);
     }
 
     fn change_password_request(token: &str, current_password: &str, new_password: &str) -> Request<Body> {

@@ -1,0 +1,8 @@
+<gbt-card [heading]="'account.language.heading' | transloco" icon="globe">
+  <gbt-select
+    [label]="'account.language.label' | transloco"
+    [options]="options"
+    [ngModel]="current()"
+    (ngModelChange)="choose($event)"
+  />
+</gbt-card>
