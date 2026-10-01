@@ -17,10 +17,12 @@ async function matchedComponentName(url: string): Promise<string> {
   const recognized = firstValueFrom(
     router.events.pipe(filter((e): e is RoutesRecognized => e instanceof RoutesRecognized)),
   )
-  router.navigateByUrl(url).catch(() => {
+  const navigation = router.navigateByUrl(url).catch(() => {
     // A guard rejecting the navigation still fires RoutesRecognized first.
   })
   const event = await recognized
+  // Let loading finish, or a lazy chunk is requested after the test environment is torn down.
+  await navigation
   let route = event.state.root
   while (route.firstChild) {
     route = route.firstChild
