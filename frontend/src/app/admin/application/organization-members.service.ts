@@ -13,11 +13,10 @@ export class OrganizationMembersService {
 
   invite(
     organizationId: string,
-    username: string,
     email: string,
     isOrganizationAdmin: boolean,
   ): Observable<OrganizationMember> {
-    return this.port.invite(organizationId, username, email, isOrganizationAdmin)
+    return this.port.invite(organizationId, email, isOrganizationAdmin)
   }
 
   setOrganizationAdmin(

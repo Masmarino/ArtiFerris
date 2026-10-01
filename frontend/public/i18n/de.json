@@ -274,12 +274,16 @@
       "impossibleHeading": "Aktivierung nicht möglich",
       "tokenMissing": "Ungültiger Aktivierungslink: kein Token angegeben.",
       "heading": "Ihr Konto aktivieren",
+      "username": "Benutzername",
+      "usernameHint": "3 bis 32 Zeichen, beginnt mit einem Buchstaben: Buchstaben, Ziffern, „_“ und „-“.",
       "newPassword": "Neues Passwort",
       "confirmPassword": "Passwort bestätigen",
       "mismatch": "Die Passwörter stimmen nicht überein.",
       "submit": "Mein Konto aktivieren",
       "errors": {
-        "invalidLink": "Dieser Aktivierungslink ist ungültig oder abgelaufen. Bitten Sie einen Administrator, Ihnen eine neue Einladung zu senden."
+        "invalidLink": "Dieser Aktivierungslink ist ungültig oder abgelaufen. Bitten Sie einen Administrator, Ihnen eine neue Einladung zu senden.",
+        "usernameTaken": "Dieser Benutzername ist bereits vergeben.",
+        "invalidUsername": "Ungültiger Benutzername: 3 bis 32 Zeichen, muss mit einem Buchstaben beginnen."
       }
     }
   },
@@ -539,12 +543,12 @@
       "resent": "Einladung erneut gesendet."
     },
     "create": {
-      "created": "Benutzer „{{ username }}“ erstellt.",
+      "created": "Einladung an {{ email }} gesendet.",
       "heading": "Neuer Benutzer",
       "username": "Benutzername",
       "email": "E-Mail-Adresse",
       "superAdmin": "Super-Administrator",
-      "inviteNote": "An diese Adresse wird eine E-Mail gesendet, damit der Benutzer sein Konto innerhalb von 24 Stunden aktiviert und sein Passwort wählt.",
+      "inviteNote": "An diese Adresse wird eine E-Mail gesendet, damit die Person ihr Konto aktiviert und Benutzernamen und Passwort wählt, innerhalb von 24 Stunden.",
       "invite": "Einladen",
       "errors": {
         "createFailed": "Der Benutzer konnte nicht erstellt werden."
@@ -1209,7 +1213,7 @@
       "demote": "Herabstufen",
       "promoted": "{{ username }} ist jetzt Administrator der Organisation.",
       "demoted": "{{ username }} ist kein Administrator der Organisation mehr.",
-      "invited": "{{ username }} wurde eingeladen.",
+      "invited": "Einladung an {{ email }} gesendet.",
       "demoteHint": "Entzieht die Administrationsrechte für diese Organisation.",
       "promoteHint": "Gewährt die vollständigen Administrationsrechte für diese Organisation.",
       "caption": "Mitglieder der Organisation",

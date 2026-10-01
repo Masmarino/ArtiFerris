@@ -216,7 +216,7 @@ pub enum BrandingAsset {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event_type")]
 pub enum AdminAuditEvent {
-    UserInvited { user_id: Uuid, organization_id: Uuid, username: String, is_organization_admin: bool, is_super_admin: bool },
+    UserInvited { user_id: Uuid, organization_id: Uuid, email: String, is_organization_admin: bool, is_super_admin: bool },
     UserActivated { user_id: Uuid, organization_id: Uuid },
     InvitationResent { user_id: Uuid, organization_id: Uuid },
     UserDeleted { user_id: Uuid, organization_id: Uuid, username: String },
@@ -525,7 +525,7 @@ mod tests {
             SecurityEvent::BackupCodesRegenerated { user_id, organization_id },
         ];
         let admin = vec![
-            AdminAuditEvent::UserInvited { user_id, organization_id, username: "alice".to_string(), is_organization_admin: true, is_super_admin: false },
+            AdminAuditEvent::UserInvited { user_id, organization_id, email: "alice@example.com".to_string(), is_organization_admin: true, is_super_admin: false },
             AdminAuditEvent::UserActivated { user_id, organization_id },
             AdminAuditEvent::InvitationResent { user_id, organization_id },
             AdminAuditEvent::UserDeleted { user_id, organization_id, username: "alice".to_string() },

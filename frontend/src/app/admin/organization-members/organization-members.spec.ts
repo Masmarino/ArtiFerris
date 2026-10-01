@@ -78,22 +78,16 @@ describe('OrganizationMembers', () => {
       }),
     )
     component.startAdding()
-    component.newUsername.set('newmember')
     component.newEmail.set('newmember@example.com')
 
     component.invite()
 
-    expect(serviceSpy.invite).toHaveBeenCalledWith(
-      'org-1',
-      'newmember',
-      'newmember@example.com',
-      false,
-    )
+    expect(serviceSpy.invite).toHaveBeenCalledWith('org-1', 'newmember@example.com', false)
     expect(serviceSpy.list).toHaveBeenCalledTimes(2)
     expect(component.addingMember()).toBe(false)
     expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
       variant: 'success',
-      message: 'newmember a été invité·e.',
+      message: 'Invitation envoyée à newmember@example.com.',
     })
   })
 
@@ -101,7 +95,6 @@ describe('OrganizationMembers', () => {
     setup()
     serviceSpy.invite.mockReturnValue(throwError(() => new Error('conflict')))
     component.startAdding()
-    component.newUsername.set('newmember')
     component.newEmail.set('newmember@example.com')
 
     component.invite()
@@ -234,7 +227,6 @@ describe('OrganizationMembers', () => {
   it('drops a half-typed invite when switching to another organization', () => {
     setup()
     component.startAdding()
-    component.newUsername.set('half-typed')
     component.newEmail.set('half@example.com')
     component.newIsOrganizationAdmin.set(true)
 
@@ -242,7 +234,6 @@ describe('OrganizationMembers', () => {
     fixture.detectChanges()
 
     expect(component.addingMember()).toBe(false)
-    expect(component.newUsername()).toBe('')
     expect(component.newEmail()).toBe('')
     expect(component.newIsOrganizationAdmin()).toBe(false)
     component.invite()
@@ -254,7 +245,6 @@ describe('OrganizationMembers', () => {
     const pending = new Subject<void>()
     serviceSpy.invite.mockReturnValue(pending)
     component.startAdding()
-    component.newUsername.set('alice')
     component.newEmail.set('alice@example.com')
     component.invite()
     fixture.componentRef.setInput('organizationId', 'org-b')
@@ -265,6 +255,6 @@ describe('OrganizationMembers', () => {
     pending.complete()
 
     expect(serviceSpy.list).not.toHaveBeenCalled()
-    expect(TestBed.inject(ToastService).toasts().at(-1)?.message).toContain('alice')
+    expect(TestBed.inject(ToastService).toasts().at(-1)?.message).toContain('alice@example.com')
   })
 })

@@ -5,7 +5,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { ActivatedRoute, Router } from '@angular/router'
 import { Button, GbtInput, Alert } from '@masmarino/gabarit'
 import { AuthService } from '../application/auth.service'
-import { overloadMessage } from '../../shared/api-error'
+import { errorCode, overloadMessage } from '../../shared/api-error'
 
 @Component({
   selector: 'app-activate-page',
@@ -24,6 +24,7 @@ export class ActivatePage {
   readonly tokenMissing = this.token === ''
 
   readonly form = new FormGroup({
+    username: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     newPassword: new FormControl('', {
       nonNullable: true,
       validators: [Validators.required, Validators.minLength(8)],
@@ -45,13 +46,25 @@ export class ActivatePage {
     }
     this.submitting.set(true)
     this.errorMessage.set(null)
-    const { newPassword } = this.form.getRawValue()
-    this.auth.activate(this.token, newPassword).subscribe({
+    const { username, newPassword } = this.form.getRawValue()
+    this.auth.activate(this.token, username.trim(), newPassword).subscribe({
       next: () => this.router.navigateByUrl('/login'),
       error: (error: unknown) => {
         this.submitting.set(false)
-        this.errorMessage.set(overloadMessage(error) ?? t('auth.activate.errors.invalidLink'))
+        this.errorMessage.set(overloadMessage(error) ?? this.messageFor(errorCode(error)))
       },
     })
+  }
+
+  private messageFor(code: string | null): string {
+    switch (code) {
+      case 'username_taken':
+        return t('auth.activate.errors.usernameTaken')
+      case 'invalid_username':
+      case 'reserved_name':
+        return t('auth.activate.errors.invalidUsername')
+      default:
+        return t('auth.activate.errors.invalidLink')
+    }
   }
 }

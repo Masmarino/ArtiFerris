@@ -274,12 +274,16 @@
       "impossibleHeading": "Activación imposible",
       "tokenMissing": "Enlace de activación no válido: no se ha proporcionado ningún token.",
       "heading": "Activar su cuenta",
+      "username": "Nombre de usuario",
+      "usernameHint": "De 3 a 32 caracteres, empieza por una letra: letras, cifras, «_» y «-».",
       "newPassword": "Nueva contraseña",
       "confirmPassword": "Confirmar la contraseña",
       "mismatch": "Las contraseñas no coinciden.",
       "submit": "Activar mi cuenta",
       "errors": {
-        "invalidLink": "Este enlace de activación no es válido o ha caducado. Pida a un administrador que le envíe una nueva invitación."
+        "invalidLink": "Este enlace de activación no es válido o ha caducado. Pida a un administrador que le envíe una nueva invitación.",
+        "usernameTaken": "Este nombre de usuario ya está en uso.",
+        "invalidUsername": "Nombre de usuario no válido: de 3 a 32 caracteres, debe empezar por una letra."
       }
     }
   },
@@ -539,12 +543,12 @@
       "resent": "Invitación reenviada."
     },
     "create": {
-      "created": "Usuario «{{ username }}» creado.",
+      "created": "Invitación enviada a {{ email }}.",
       "heading": "Nuevo usuario",
       "username": "Nombre de usuario",
       "email": "Correo electrónico",
       "superAdmin": "Superadministrador",
-      "inviteNote": "Se enviará un correo a esta dirección para que el usuario active su cuenta y elija su contraseña, en un plazo de 24 horas.",
+      "inviteNote": "Se enviará un correo a esta dirección para que la persona active su cuenta y elija su nombre de usuario y su contraseña, en un plazo de 24 horas.",
       "invite": "Invitar",
       "errors": {
         "createFailed": "Error al crear el usuario."
@@ -1209,7 +1213,7 @@
       "demote": "Degradar",
       "promoted": "{{ username }} es ahora administrador de la organización.",
       "demoted": "{{ username }} ya no es administrador de la organización.",
-      "invited": "{{ username }} ha sido invitado.",
+      "invited": "Invitación enviada a {{ email }}.",
       "demoteHint": "Retira los derechos de administración de esta organización.",
       "promoteHint": "Da los derechos de administración completos sobre esta organización.",
       "caption": "Miembros de la organización",

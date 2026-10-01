@@ -314,6 +314,26 @@ impl UserSecurityPort for PostgresUserRepository {
         self.insert_row(user, true).await
     }
 
+    async fn activate_invited(&self, id: Uuid, username: &Username, new_password_hash: String, audit: Option<&AuditRecord>) -> Result<(), DomainError> {
+        let mut tx = self.pool.begin().await.infra_err()?;
+        sqlx::query!(
+            "UPDATE users SET username = $1, password_hash = $2, tokens_valid_after = $3 WHERE id = $4",
+            username.as_str(),
+            new_password_hash,
+            chrono::Utc::now(),
+            id
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| match &e {
+            sqlx::Error::Database(db_err) if matches!(db_err.constraint(), Some("users_username_key" | "users_username_lower_unique")) => DomainError::UsernameTaken,
+            _ => DomainError::Infrastructure(e.to_string()),
+        })?;
+        crate::postgres::event_publisher::insert_audit(&mut tx, audit).await?;
+        tx.commit().await.infra_err()?;
+        Ok(())
+    }
+
     async fn mark_email_verified(&self, id: Uuid) -> Result<bool, DomainError> {
         let result = sqlx::query!(
             "UPDATE users SET email_verified = true \
@@ -369,6 +389,28 @@ mod tests {
     use super::*;
     use artiferris_domain::audit::AdminAuditEvent;
     use std::sync::Arc;
+
+    #[sqlx::test]
+    async fn activating_an_invited_user_sets_the_chosen_username_and_refuses_a_taken_one(pool: sqlx::PgPool) {
+        let repo = PostgresUserRepository::new(pool.clone());
+        let org = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let make = |name: &str| User { id: Uuid::new_v4(), username: Username::parse(name).unwrap(), password_hash: "x".to_string(), is_super_admin: false, is_organization_admin: false, organization_id: org, created_at: chrono::Utc::now(), tokens_valid_after: chrono::Utc::now(), email: None };
+        let taken = make("florian");
+        let invited = make("invite-0123456789ab");
+        repo.insert(&taken).await.unwrap();
+        repo.insert(&invited).await.unwrap();
+
+        let refused = repo.activate_invited(invited.id, &Username::parse("Florian").unwrap(), "new-hash".to_string(), None).await;
+        assert!(matches!(refused, Err(DomainError::UsernameTaken)), "got {refused:?}");
+        let unchanged = repo.find_by_id(invited.id).await.unwrap().unwrap();
+        assert_eq!(unchanged.username.as_str(), "invite-0123456789ab");
+        assert_eq!(unchanged.password_hash, "x", "nothing changes when the name is refused");
+
+        repo.activate_invited(invited.id, &Username::parse("florian2").unwrap(), "new-hash".to_string(), None).await.unwrap();
+        let activated = repo.find_by_id(invited.id).await.unwrap().unwrap();
+        assert_eq!(activated.username.as_str(), "florian2");
+        assert_eq!(activated.password_hash, "new-hash");
+    }
 
     #[sqlx::test]
     async fn inserts_and_finds_a_user_by_username(pool: sqlx::PgPool) {

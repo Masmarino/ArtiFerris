@@ -58,7 +58,8 @@ export const ExpiredOrInvalidToken: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     // GbtInput appends " *" to required-field labels: match by prefix.
-    await userEvent.type(await canvas.findByLabelText(/^Nouveau mot de passe/), 'hunter2222')
+    await userEvent.type(await canvas.findByLabelText(/^Nom d'utilisateur/), 'florian')
+    await userEvent.type(canvas.getByLabelText(/^Nouveau mot de passe/), 'hunter2222')
     await userEvent.type(canvas.getByLabelText(/^Confirmer le mot de passe/), 'hunter2222')
     await userEvent.click(canvas.getByRole('button', { name: 'Activer mon compte' }))
     await waitFor(() =>

@@ -274,12 +274,16 @@
       "impossibleHeading": "Attivazione impossibile",
       "tokenMissing": "Link di attivazione non valido: nessun token fornito.",
       "heading": "Attiva il tuo account",
+      "username": "Nome utente",
+      "usernameHint": "Da 3 a 32 caratteri, inizia con una lettera: lettere, cifre, «_» e «-».",
       "newPassword": "Nuova password",
       "confirmPassword": "Conferma la password",
       "mismatch": "Le password non corrispondono.",
       "submit": "Attiva il mio account",
       "errors": {
-        "invalidLink": "Questo link di attivazione non è valido o è scaduto. Chiedi a un amministratore di inviarti un nuovo invito."
+        "invalidLink": "Questo link di attivazione non è valido o è scaduto. Chiedi a un amministratore di inviarti un nuovo invito.",
+        "usernameTaken": "Questo nome utente è già in uso.",
+        "invalidUsername": "Nome utente non valido: da 3 a 32 caratteri, deve iniziare con una lettera."
       }
     }
   },
@@ -539,12 +543,12 @@
       "resent": "Invito inviato di nuovo."
     },
     "create": {
-      "created": "Utente «{{ username }}» creato.",
+      "created": "Invito inviato a {{ email }}.",
       "heading": "Nuovo utente",
       "username": "Nome utente",
       "email": "Indirizzo e-mail",
       "superAdmin": "Super amministratore",
-      "inviteNote": "Verrà inviata un'e-mail a questo indirizzo affinché l'utente attivi il proprio account e scelga la password, entro 24 ore.",
+      "inviteNote": "Verrà inviata un'e-mail a questo indirizzo affinché l'utente attivi il proprio account e scelga nome utente e password, entro 24 ore.",
       "invite": "Invita",
       "errors": {
         "createFailed": "Impossibile creare l'utente."
@@ -1209,7 +1213,7 @@
       "demote": "Declassa",
       "promoted": "{{ username }} è ora amministratore dell'organizzazione.",
       "demoted": "{{ username }} non è più amministratore dell'organizzazione.",
-      "invited": "{{ username }} è stato invitato.",
+      "invited": "Invito inviato a {{ email }}.",
       "demoteHint": "Rimuove i diritti di amministrazione su questa organizzazione.",
       "promoteHint": "Dà i diritti di amministrazione completi su questa organizzazione.",
       "caption": "Membri dell'organizzazione",

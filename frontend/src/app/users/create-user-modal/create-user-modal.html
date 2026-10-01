@@ -7,11 +7,6 @@
   <form class="stack" [formGroup]="form" (ngSubmit)="submit()">
     <p class="gbt-form-required-note">{{ 'common.requiredNote' | transloco }}</p>
     <gbt-input
-      [label]="'users.create.username' | transloco"
-      formControlName="username"
-      [required]="true"
-    />
-    <gbt-input
       [label]="'users.create.email' | transloco"
       formControlName="email"
       [required]="true"

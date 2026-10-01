@@ -46,7 +46,7 @@ describe('UsersService', () => {
     const service = setup({ list, create })
 
     service.list().subscribe()
-    service.create('newuser', 'newuser@example.com', false).subscribe()
+    service.create('newuser@example.com', false).subscribe()
     service.list().subscribe()
 
     expect(list).toHaveBeenCalledTimes(2)
@@ -78,9 +78,9 @@ describe('UsersService', () => {
 
   it('delegates create() to the port', () => {
     const create = vi.fn().mockReturnValue(of({}))
-    setup({ create }).create('newuser', 'newuser@example.com', false)
+    setup({ create }).create('newuser@example.com', false)
 
-    expect(create).toHaveBeenCalledWith('newuser', 'newuser@example.com', false)
+    expect(create).toHaveBeenCalledWith('newuser@example.com', false)
   })
 
   it('delegates delete() to the port', () => {

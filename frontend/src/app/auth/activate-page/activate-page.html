@@ -15,6 +15,13 @@
           {{ 'common.requiredNote' | transloco }}
         </p>
         <gbt-input
+          [label]="'auth.activate.username' | transloco"
+          [hint]="'auth.activate.usernameHint' | transloco"
+          formControlName="username"
+          [required]="true"
+          autocomplete="username"
+        />
+        <gbt-input
           [label]="'auth.activate.newPassword' | transloco"
           type="password"
           [showPasswordLabel]="'common.showPassword' | transloco"

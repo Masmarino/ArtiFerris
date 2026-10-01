@@ -6,7 +6,6 @@ export interface OrganizationMembersPort {
   list(organizationId: string): Observable<OrganizationMember[]>
   invite(
     organizationId: string,
-    username: string,
     email: string,
     isOrganizationAdmin: boolean,
   ): Observable<OrganizationMember>

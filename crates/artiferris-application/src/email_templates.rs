@@ -235,12 +235,12 @@ fn words(language: Language) -> &'static Words {
     }
 }
 
-pub fn account_created(language: Language, username: &str, activation_url: &str) -> EmailContent {
+pub fn account_created(language: Language, activation_url: &str) -> EmailContent {
     let c = words(language);
     let hello = c.hello;
-    let text = format!("{hello} {username},\n\n{intro}\n\n{activation_url}\n\n{deadline}", intro = c.created_text, deadline = strip_tags(c.created_deadline_html));
+    let text = format!("{hello},\n\n{intro}\n\n{activation_url}\n\n{deadline}", intro = c.created_text, deadline = strip_tags(c.created_deadline_html));
     let body_html = format!(
-        r#"<p style="margin:0 0 16px;">{hello} <strong>{username}</strong>,</p>
+        r#"<p style="margin:0 0 16px;">{hello},</p>
 <p style="margin:0 0 16px;">{intro}</p>
 {button}
 <p style="margin:16px 0 0; font-size:13px; color:{TEXT_SECONDARY};">{deadline}</p>"#,
@@ -300,10 +300,9 @@ mod tests {
     #[test]
     fn account_created_includes_the_activation_link_in_both_bodies() {
         for language in SUPPORTED_LANGUAGES {
-            let content = account_created(language, "florian", URL);
+            let content = account_created(language, URL);
             assert!(content.text.contains(URL), "{language:?}");
             assert!(content.html.contains(URL), "{language:?}");
-            assert!(content.html.contains("florian"));
             assert!(content.html.starts_with("<!doctype html>"));
         }
     }
@@ -312,7 +311,7 @@ mod tests {
     fn every_email_is_written_in_the_requested_language() {
         let subjects = |language| {
             [
-                account_created(language, "florian", URL).subject,
+                account_created(language, URL).subject,
                 password_changed(language, "florian").subject,
                 mfa_enrolled(language, "florian", EnrolledMethod::Passkey).subject,
             ]
@@ -358,7 +357,7 @@ mod tests {
     fn no_placeholder_or_markup_leaks_into_the_plain_text_bodies() {
         for language in SUPPORTED_LANGUAGES {
             for content in [
-                account_created(language, "florian", URL),
+                account_created(language, URL),
                 password_changed(language, "florian"),
                 mfa_enrolled(language, "florian", EnrolledMethod::AuthenticatorApp),
             ] {

@@ -110,7 +110,6 @@ async fn list_organization_members(State(state): State<AppState>, user: AuthUser
 
 #[derive(Deserialize)]
 struct InviteOrganizationMemberRequest {
-    username: String,
     email: String,
     #[serde(default)]
     is_organization_admin: bool,
@@ -126,12 +125,13 @@ async fn invite_organization_member(
     // is_super_admin is never read from this request — an org-scoped invite can never grant it.
     let member_id = state
         .invite_user
-        .execute(id, body.is_organization_admin, &body.username, &body.email, false, user.id)
+        .execute(id, body.is_organization_admin, &body.email, false, user.id)
         .await
         .map_err(|e| application_error_response("failed to invite organization member", e))?;
+    let invited = state.users.find_by_id(member_id).await.ok().flatten().ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     Ok((
         StatusCode::CREATED,
-        Json(OrganizationMemberResponse { id: member_id, username: body.username, email: Some(body.email), is_organization_admin: body.is_organization_admin, invitation_pending: true }),
+        Json(OrganizationMemberResponse { id: member_id, username: invited.username.as_str().to_string(), email: Some(body.email), is_organization_admin: body.is_organization_admin, invitation_pending: true }),
     ))
 }
 
@@ -930,14 +930,14 @@ mod tests {
                     .uri(format!("/api/organizations/{}/users", public_org.id))
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {token}"))
-                    .body(Body::from(r#"{"username":"newmember","email":"newmember@example.com","is_organization_admin":false}"#))
+                    .body(Body::from(r#"{"email":"newmember@example.com","is_organization_admin":false}"#))
                     .unwrap(),
             )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::CREATED);
-        let created = state.users.find_by_username(&artiferris_domain::user::Username::parse("newmember").unwrap()).await.unwrap().unwrap();
+        let created = state.users.find_by_email("newmember@example.com").await.unwrap().unwrap();
         assert_eq!(created.organization_id, public_org.id);
         assert!(!created.is_super_admin, "an org-scoped invite must never grant super-admin");
     }
@@ -959,14 +959,14 @@ mod tests {
                     .uri(format!("/api/organizations/{}/users", public_org.id))
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {token}"))
-                    .body(Body::from(r#"{"username":"sneaky","email":"sneaky@example.com","is_organization_admin":false,"is_super_admin":true}"#))
+                    .body(Body::from(r#"{"email":"sneaky@example.com","is_organization_admin":false,"is_super_admin":true}"#))
                     .unwrap(),
             )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::CREATED);
-        let created = state.users.find_by_username(&artiferris_domain::user::Username::parse("sneaky").unwrap()).await.unwrap().unwrap();
+        let created = state.users.find_by_email("sneaky@example.com").await.unwrap().unwrap();
         assert!(!created.is_super_admin);
     }
 

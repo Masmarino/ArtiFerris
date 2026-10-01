@@ -12,7 +12,7 @@ export interface AuthPort {
   register(username: string, email: string, password: string): Observable<LoginResponse>
   getSsoConfig(): Observable<SsoConfig>
   loginWithLdap(username: string, password: string): Observable<LoginResponse>
-  activate(token: string, newPassword: string): Observable<void>
+  activate(token: string, username: string, newPassword: string): Observable<void>
   /** Revokes every session, Docker token and API token of the caller, this one included. */
   logoutAll(): Observable<void>
   verifyMfa(mfaToken: string, code?: string, backupCode?: string): Observable<LoginResponse>

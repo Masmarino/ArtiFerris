@@ -15,12 +15,10 @@ export class HttpOrganizationMembersAdapter implements OrganizationMembersPort {
 
   invite(
     organizationId: string,
-    username: string,
     email: string,
     isOrganizationAdmin: boolean,
   ): Observable<OrganizationMember> {
     return this.http.post<OrganizationMember>(apiPath`/api/organizations/${organizationId}/users`, {
-      username,
       email,
       is_organization_admin: isOrganizationAdmin,
     })

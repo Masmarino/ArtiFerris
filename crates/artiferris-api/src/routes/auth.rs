@@ -812,7 +812,7 @@ async fn logout_all(State(state): State<AppState>, user: AuthUser) -> Result<Sta
 
 /// Unauthenticated by design — the activation token itself is the credential.
 async fn activate_account(State(state): State<AppState>, Json(body): Json<ActivateAccountRequest>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    state.activate_account.execute(&body.token, &body.new_password).await.map_err(|e| application_error_response("failed to activate account", e))?;
+    state.activate_account.execute(&body.token, &body.username, &body.new_password).await.map_err(|e| application_error_response("failed to activate account", e))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1630,12 +1630,12 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
     }
 
-    fn activate_request(token: &str, new_password: &str) -> Request<Body> {
+    fn activate_request(token: &str, username: &str, new_password: &str) -> Request<Body> {
         Request::builder()
             .method("POST")
             .uri("/api/auth/activate")
             .header("content-type", "application/json")
-            .body(Body::from(format!(r#"{{"token":"{token}","new_password":"{new_password}"}}"#)))
+            .body(Body::from(format!(r#"{{"token":"{token}","username":"{username}","new_password":"{new_password}"}}"#)))
             .unwrap()
     }
 
@@ -1654,15 +1654,15 @@ mod tests {
             .unwrap();
         let app = build_router(state);
 
-        let response = app.clone().oneshot(activate_request("raw-test-token", "new-s3cret!")).await.unwrap();
+        let response = app.clone().oneshot(activate_request("raw-test-token", "invitee", "new-s3cret!")).await.unwrap();
         assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
 
         let login = app.oneshot(login_request("invitee", "new-s3cret!")).await.unwrap();
         assert_eq!(login.status(), axum::http::StatusCode::OK);
     }
 
-    async fn invite_with_known_token(state: &AppState, organization_id: Uuid, username: &str, email: &str, token: &str) -> Uuid {
-        let user_id = state.invite_user.execute(organization_id, false, username, email, false, Uuid::new_v4()).await.unwrap();
+    async fn invite_with_known_token(state: &AppState, organization_id: Uuid, email: &str, token: &str) -> Uuid {
+        let user_id = state.invite_user.execute(organization_id, false, email, false, Uuid::new_v4()).await.unwrap();
         state
             .user_invitations
             .upsert(&artiferris_domain::invitation::UserInvitation {
@@ -1681,12 +1681,12 @@ mod tests {
         let security = artiferris_infrastructure::postgres::user_repository::PostgresUserRepository::new(pool.clone());
         let state = AppState::build(pool, &test_config());
         let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
-        let user_id = invite_with_known_token(&state, public, "invitee", "invitee@corp.example", "raw-test-token").await;
+        let user_id = invite_with_known_token(&state, public, "invitee@corp.example", "raw-test-token").await;
         let app = build_router(state);
 
         assert!(security.find_by_verified_email(public, "invitee@corp.example").await.unwrap().is_none(), "an unredeemed invitation proves nothing about the address");
 
-        let response = app.oneshot(activate_request("raw-test-token", "new-s3cret!")).await.unwrap();
+        let response = app.oneshot(activate_request("raw-test-token", "invitee", "new-s3cret!")).await.unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
         assert_eq!(security.find_by_verified_email(public, "invitee@corp.example").await.unwrap().map(|u| u.id), Some(user_id));
@@ -1699,12 +1699,12 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
         let acme = state.create_organization.execute("acme", "Acme").await.unwrap();
-        let in_public = invite_with_known_token(&state, public, "victim", "victim@corp.example", "public-token").await;
-        let in_acme = invite_with_known_token(&state, acme, "victim-acme", "victim@corp.example", "acme-token").await;
+        let in_public = invite_with_known_token(&state, public, "victim@corp.example", "public-token").await;
+        let in_acme = invite_with_known_token(&state, acme, "victim@corp.example", "acme-token").await;
         let app = build_router(state);
 
-        assert_eq!(app.clone().oneshot(activate_request("public-token", "new-s3cret!")).await.unwrap().status(), axum::http::StatusCode::NO_CONTENT);
-        assert_eq!(app.oneshot(activate_request("acme-token", "new-s3cret!")).await.unwrap().status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(app.clone().oneshot(activate_request("public-token", "victim", "new-s3cret!")).await.unwrap().status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(app.oneshot(activate_request("acme-token", "victim-acme", "new-s3cret!")).await.unwrap().status(), axum::http::StatusCode::NO_CONTENT);
 
         assert_eq!(security.find_by_verified_email(public, "victim@corp.example").await.unwrap().map(|u| u.id), Some(in_public));
         assert_eq!(security.find_by_verified_email(acme, "victim@corp.example").await.unwrap().map(|u| u.id), Some(in_acme));
@@ -1714,13 +1714,13 @@ mod tests {
     async fn a_burst_of_parallel_activations_of_one_link_lets_exactly_one_through(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
         let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
-        invite_with_known_token(&state, public, "invitee", "invitee@corp.example", "raw-test-token").await;
+        invite_with_known_token(&state, public, "invitee@corp.example", "raw-test-token").await;
         let app = build_router(state);
 
         let handles: Vec<_> = (0..8)
             .map(|i| {
                 let app = app.clone();
-                tokio::spawn(async move { status_of(&app, activate_request("raw-test-token", &format!("new-s3cret-{i}!"))).await })
+                tokio::spawn(async move { status_of(&app, activate_request("raw-test-token", "invitee", &format!("new-s3cret-{i}!"))).await })
             })
             .collect();
         let statuses: Vec<_> = futures::future::join_all(handles).await.into_iter().map(|r| r.unwrap()).collect();
@@ -1729,11 +1729,61 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn the_invitee_logs_in_with_the_username_chosen_at_activation(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let user_id = invite_with_known_token(&state, public, "chosen@corp.example", "raw-test-token").await;
+        let placeholder = state.users.find_by_id(user_id).await.unwrap().unwrap().username;
+        let app = build_router(state);
+
+        assert_eq!(app.clone().oneshot(activate_request("raw-test-token", "Chosen-Name", "new-s3cret!")).await.unwrap().status(), axum::http::StatusCode::NO_CONTENT);
+
+        assert_eq!(app.clone().oneshot(login_request("chosen-name", "new-s3cret!")).await.unwrap().status(), axum::http::StatusCode::OK);
+        assert_eq!(app.oneshot(login_request(placeholder.as_str(), "new-s3cret!")).await.unwrap().status(), axum::http::StatusCode::UNAUTHORIZED, "the placeholder name no longer exists");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn activating_with_a_username_already_taken_is_refused_whatever_its_case(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        state.create_user.execute(public, "florian", "sup3r-s3cret!", false).await.unwrap();
+        let invited = invite_with_known_token(&state, public, "other@corp.example", "raw-test-token").await;
+        let app = build_router(state.clone());
+
+        let response = app.clone().oneshot(activate_request("raw-test-token", "FLORIAN", "new-s3cret!")).await.unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+        assert!(state.user_invitations.find_by_user_id(invited).await.unwrap().is_some(), "the link still works after a refused name");
+        assert_eq!(app.oneshot(activate_request("raw-test-token", "florian2", "new-s3cret!")).await.unwrap().status(), axum::http::StatusCode::NO_CONTENT);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn two_invitees_choosing_the_same_username_let_only_the_first_through(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        invite_with_known_token(&state, public, "a@corp.example", "token-a").await;
+        invite_with_known_token(&state, public, "b@corp.example", "token-b").await;
+        let app = build_router(state);
+
+        let handles: Vec<_> = ["token-a", "token-b"]
+            .into_iter()
+            .map(|token| {
+                let app = app.clone();
+                tokio::spawn(async move { status_of(&app, activate_request(token, "same-name", "new-s3cret!")).await })
+            })
+            .collect();
+        let mut statuses: Vec<_> = futures::future::join_all(handles).await.into_iter().map(|r| r.unwrap()).collect();
+        statuses.sort();
+
+        assert_eq!(statuses, vec![axum::http::StatusCode::NO_CONTENT, axum::http::StatusCode::BAD_REQUEST]);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn activating_with_an_unknown_token_fails(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
         let app = build_router(state);
 
-        let response = app.oneshot(activate_request("not-a-real-token", "new-s3cret!")).await.unwrap();
+        let response = app.oneshot(activate_request("not-a-real-token", "invitee", "new-s3cret!")).await.unwrap();
         assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
     }
 
@@ -1752,7 +1802,7 @@ mod tests {
             .unwrap();
         let app = build_router(state);
 
-        let response = app.oneshot(activate_request("raw-test-token", "new-s3cret!")).await.unwrap();
+        let response = app.oneshot(activate_request("raw-test-token", "invitee", "new-s3cret!")).await.unwrap();
         assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
     }
 
@@ -3874,7 +3924,7 @@ mod tests {
             .unwrap();
         let app = build_router(state.clone());
 
-        let response = app.oneshot(activate_request("raw-test-token", "new-s3cret!")).await.unwrap();
+        let response = app.oneshot(activate_request("raw-test-token", "invitee", "new-s3cret!")).await.unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
         let page = state

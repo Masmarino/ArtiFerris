@@ -120,7 +120,11 @@ const ADMIN_EVENTS: AuditEntry[] = [
     aggregate_type: 'Admin',
     aggregate_id: 'a5',
     event_type: 'UserInvited',
-    payload: { username: 'alice', is_organization_admin: true, is_super_admin: false },
+    payload: {
+      email: 'alice@example.com',
+      is_organization_admin: true,
+      is_super_admin: false,
+    },
     occurred_at: '2026-03-03T10:20:00Z',
     actor_id: 'u1',
   },
