@@ -64,6 +64,8 @@ services:
       ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD: ${ARTIFERRIS_BOOTSTRAP_ADMIN_PASSWORD:-}
       # The addresses a reverse proxy connects from, so their X-Forwarded-For is believed. See .env.example.
       TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+      # Anonymous registry reads per minute and client; 0 turns the limit off. See .env.example.
+      ANONYMOUS_REGISTRY_READS_PER_MINUTE: ${ANONYMOUS_REGISTRY_READS_PER_MINUTE:-1200}
       # Days audit events are kept; 0 keeps everything. See .env.example.
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
       # Leave empty: the realm comes from the request. See .env.example.

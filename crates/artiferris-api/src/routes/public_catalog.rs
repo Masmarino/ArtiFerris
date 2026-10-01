@@ -60,12 +60,7 @@ pub(crate) fn within_budget(state: &AppState, headers: &HeaderMap, connect_info:
 
 /// Spends one request of the budget under `key`; false once it is used up.
 pub(crate) fn spend_budget(state: &AppState, key: &str, limit: usize) -> bool {
-    if state.public_throttle.is_throttled(key, limit, WINDOW) {
-        return false;
-    }
-    // Every request spends budget, not only failed ones.
-    state.public_throttle.record_failure(key, limit, WINDOW);
-    true
+    state.anonymous_limiter.allow(key, limit)
 }
 
 fn over_budget_for(

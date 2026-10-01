@@ -18,6 +18,7 @@ pub mod organization_repository;
 pub mod package_repository_store;
 pub mod permission_store;
 pub mod public_catalog_repository;
+pub mod rate_limit_store;
 pub mod reserved_name_audit;
 pub mod smtp_settings_repository;
 pub mod system_settings_repository;

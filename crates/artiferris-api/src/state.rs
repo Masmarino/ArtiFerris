@@ -191,8 +191,13 @@ pub struct AppState {
     pub trusted_proxy_ips: std::collections::HashSet<String>,
     /// `trusted_proxy_ips` parsed once: single addresses or CIDR ranges.
     pub trusted_proxies: Arc<artiferris_application::client_ip::TrustedProxies>,
-    /// Request budgets of the public pages and endpoints, apart from the login counters so that visitors can neither crowd them out nor show up as blocked users.
-    pub public_throttle: LoginThrottle,
+    /// Request budgets of everything anonymous (public pages and endpoints, registry reads), shared between instances
+    /// through `rate_limit_store`. Apart from the login counters so that visitors can neither crowd them out nor show up
+    /// as blocked users.
+    pub anonymous_limiter: Arc<artiferris_application::rate_limiter::RateLimiter>,
+    pub rate_limit_store: Arc<dyn artiferris_domain::rate_limit::RateLimitStorePort>,
+    /// `ANONYMOUS_REGISTRY_READS_PER_MINUTE`: requests per minute and client for anonymous npm and Docker reads.
+    pub anonymous_registry_reads_per_minute: usize,
     /// Budgets for audit events an actor can repeat at will, kept apart from `login_throttle` so they never show up as blocked logins.
     pub audit_throttle: LoginThrottle,
     pub get_system_settings: Arc<GetSystemSettingsUseCase>,
@@ -515,7 +520,9 @@ impl AppState {
                     Default::default()
                 }),
             ),
-            public_throttle: LoginThrottle::new(),
+            anonymous_limiter: Arc::new(artiferris_application::rate_limiter::RateLimiter::new(&artiferris_infrastructure::rate_limit_hash_key(&config.jwt_secret))),
+            rate_limit_store: Arc::new(artiferris_infrastructure::postgres::rate_limit_store::PostgresRateLimitStore::new(pool.clone())),
+            anonymous_registry_reads_per_minute: artiferris_application::rate_limiter::parse_anonymous_registry_reads_per_minute(std::env::var("ANONYMOUS_REGISTRY_READS_PER_MINUTE").ok().as_deref()).unwrap_or_else(|message| panic!("{message}")),
             audit_throttle: LoginThrottle::new(),
             get_system_settings: Arc::new(GetSystemSettingsUseCase::new(system_settings.clone())),
             update_system_settings,

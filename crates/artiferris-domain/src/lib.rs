@@ -7,6 +7,7 @@ pub mod npm_audit;
 pub mod npm_package;
 pub mod package_repository;
 pub mod public_catalog;
+pub mod rate_limit;
 pub mod readme;
 pub mod reserved_names;
 pub mod permission;

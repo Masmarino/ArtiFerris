@@ -54,6 +54,7 @@ async fn main() {
     spawn_upload_sweep_timer(&state);
     spawn_repository_deletion_sweep_timer(&state);
     spawn_download_flush_timer(&state);
+    spawn_rate_limit_sync(&state);
     spawn_download_prune_timer(&state);
     spawn_audit_prune_timer(&state);
     let flush_downloads = state.flush_downloads.clone();
@@ -310,6 +311,32 @@ fn spawn_download_flush_timer(state: &AppState) {
     });
 }
 
+/// Shares the anonymous request budgets with the other instances every couple of seconds. A store that does not answer
+/// leaves this instance limiting on its own count; the warning is logged at most once a minute.
+fn spawn_rate_limit_sync(state: &AppState) {
+    let limiter = state.anonymous_limiter.clone();
+    let store = state.rate_limit_store.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(artiferris_application::rate_limiter::SYNC_INTERVAL);
+        let mut ticks: u64 = 0;
+        let mut last_warning: Option<std::time::Instant> = None;
+        loop {
+            interval.tick().await;
+            ticks += 1;
+            let mut outcome = limiter.sync_once(store.as_ref()).await.map(|()| 0);
+            if outcome.is_ok() && ticks % 15 == 0 {
+                outcome = limiter.purge(store.as_ref()).await;
+            }
+            if let Err(e) = outcome {
+                if last_warning.is_none_or(|at| at.elapsed() >= std::time::Duration::from_secs(60)) {
+                    tracing::warn!("sharing the anonymous request budgets failed, limiting on this instance's own count: {e}");
+                    last_warning = Some(std::time::Instant::now());
+                }
+            }
+        }
+    });
+}
+
 /// Runs daily; no immediate run on startup, same as the other sweep timers.
 fn spawn_download_prune_timer(state: &AppState) {
     let prune_download_stats = state.prune_download_stats.clone();
@@ -357,7 +384,7 @@ fn build_router_with_body_timeouts(
     body_timeouts: BodyTimeouts,
 ) -> Router {
     // One guard for both registries, so the body-memory budget is global.
-    let guard = Arc::new(artiferris_application::request_guard::RequestGuard::new(state.trusted_proxies.clone()));
+    let guard = Arc::new(artiferris_application::request_guard::RequestGuard::new(state.trusted_proxies.clone()).with_anonymous_limit(state.anonymous_limiter.clone(), state.anonymous_registry_reads_per_minute));
     let npm_state = build_npm_state(&state, &public_url, guard.clone());
     let docker_state = build_docker_state(&state, &jwt_secret, docker_token_realm_override, &public_url, guard);
     // Scoped to this JSON surface only — /npm and /v2 already serve compressed binary content.
