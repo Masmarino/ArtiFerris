@@ -27,6 +27,20 @@ impl FromRequestParts<DockerState> for ResolvedOrganization {
             .strip_suffix(&format!(".{}", state.artiferris_base_domain))
             .unwrap_or("");
 
+        // The image scanner reaches this registry over loopback, which names no organization: it takes the one its
+        // scoped token was issued for.
+        if is_loopback_host(host) {
+            if let Some(organization_id) = scanner_token_organization(parts, state) {
+                return state
+                    .organizations
+                    .find_by_id(organization_id)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    .map(ResolvedOrganization)
+                    .ok_or(StatusCode::NOT_FOUND);
+            }
+        }
+
         let org = if label.is_empty() || label == "www" || label == "app" {
             state
                 .organizations
@@ -45,6 +59,25 @@ impl FromRequestParts<DockerState> for ResolvedOrganization {
 
         Ok(ResolvedOrganization(org))
     }
+}
+
+/// A `Host` that is a loopback IP literal, with or without a port (`127.0.0.1:8080`, `[::1]:8080`).
+fn is_loopback_host(host: &str) -> bool {
+    let ip = host
+        .parse::<std::net::SocketAddr>()
+        .map(|address| address.ip())
+        .or_else(|_| host.trim_start_matches('[').trim_end_matches(']').parse::<std::net::IpAddr>());
+    ip.is_ok_and(|ip| ip.is_loopback())
+}
+
+/// The organization of a valid access token granted against one repository (the scanner's token is one). No token, a
+/// token that does not verify, or one without such a grant leaves the `Host` to decide.
+fn scanner_token_organization(parts: &Parts, state: &DockerState) -> Option<uuid::Uuid> {
+    use axum_extra::headers::{Authorization, HeaderMapExt, authorization::Bearer};
+    let Authorization(bearer) = parts.headers.typed_get::<Authorization<Bearer>>()?;
+    let claims = state.token_issuer.verify(bearer.token()).ok()?;
+    claims.granted_scope.as_ref()?.granted_repository_id?;
+    Some(claims.organization_id)
 }
 
 #[cfg(test)]
@@ -85,6 +118,89 @@ mod tests {
             .oneshot(Request::builder().uri("/").header("host", host).body(Body::empty()).unwrap())
             .await
             .unwrap()
+    }
+
+    async fn create_org_with_id(state: &DockerState, slug: &str) -> uuid::Uuid {
+        let id = uuid::Uuid::new_v4();
+        state
+            .organizations
+            .create(&Organization { id, slug: OrganizationSlug::parse(slug).unwrap(), display_name: slug.to_string(), is_public: false, is_personal: false, created_at: chrono::Utc::now() })
+            .await
+            .unwrap();
+        id
+    }
+
+    fn scanner_token(state: &DockerState, organization_id: uuid::Uuid, repository_id: Option<uuid::Uuid>) -> String {
+        let scope = artiferris_domain::docker_registry::DockerGrantedScope {
+            resource_type: "repository".to_string(),
+            name: "acme-docker/app".to_string(),
+            actions: vec!["pull".to_string()],
+            granted_repository_id: repository_id,
+        };
+        state.token_issuer.issue(uuid::Uuid::new_v4(), organization_id, false, Some(scope)).unwrap()
+    }
+
+    async fn resolve_with_token(state: DockerState, host: &str, token: &str) -> axum::response::Response {
+        router(state)
+            .oneshot(Request::builder().uri("/").header("host", host).header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+    }
+
+    async fn body_of(response: axum::response::Response) -> Vec<u8> {
+        axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec()
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_loopback_host_with_a_repository_token_resolves_to_the_tokens_organization(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool, dir.path()).await;
+        let acme = create_org_with_id(&state, "acme").await;
+        let token = scanner_token(&state, acme, Some(uuid::Uuid::new_v4()));
+
+        for host in ["127.0.0.1:8080", "127.0.0.1", "[::1]:8080", "127.0.0.2:8080"] {
+            let response = resolve_with_token(state.clone(), host, &token).await;
+            assert_eq!(response.status(), StatusCode::OK, "{host}");
+            assert_eq!(body_of(response).await, b"acme", "{host}");
+        }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_loopback_host_without_a_usable_token_still_resolves_to_the_public_organization(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool, dir.path()).await;
+        let acme = create_org_with_id(&state, "acme").await;
+
+        let anonymous = resolve(state.clone(), "127.0.0.1:8080").await;
+        assert_eq!(body_of(anonymous).await, b"public");
+        let forged = resolve_with_token(state.clone(), "127.0.0.1:8080", "not-a-token").await;
+        assert_eq!(body_of(forged).await, b"public");
+        let ungranted = resolve_with_token(state.clone(), "127.0.0.1:8080", &scanner_token(&state, acme, None)).await;
+        assert_eq!(body_of(ungranted).await, b"public", "a token with no repository grant does not choose the organization");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn the_token_does_not_override_a_host_that_names_an_organization(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool, dir.path()).await;
+        let acme = create_org_with_id(&state, "acme").await;
+        let token = scanner_token(&state, acme, Some(uuid::Uuid::new_v4()));
+
+        let public_host = resolve_with_token(state.clone(), "artiferris.localhost", &token).await;
+        assert_eq!(body_of(public_host).await, b"public");
+        let lookalike = resolve_with_token(state, "127.0.0.1.evil.com", &token).await;
+        assert_eq!(body_of(lookalike).await, b"public", "only an IP literal counts as loopback");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_loopback_host_with_a_token_for_a_deleted_organization_is_not_found(pool: PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool, dir.path()).await;
+        let token = scanner_token(&state, uuid::Uuid::new_v4(), Some(uuid::Uuid::new_v4()));
+
+        let response = resolve_with_token(state, "127.0.0.1:8080", &token).await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

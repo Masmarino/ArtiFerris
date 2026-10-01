@@ -843,6 +843,86 @@ mod tests {
         assert_eq!(returned.to_vec(), body);
     }
 
+    /// What the Trivy scanner does: it reads over loopback, whose `Host` names no organization, with a token limited to
+    /// the repository it scans.
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_repository_outside_the_public_organization_is_readable_over_loopback_with_its_own_token(pool: sqlx::PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = crate::route_test_support::test_state(pool.clone(), dir.path()).await;
+        let acme_id = Uuid::new_v4();
+        state
+            .organizations
+            .create(&artiferris_domain::organization::Organization {
+                id: acme_id,
+                slug: artiferris_domain::organization::OrganizationSlug::parse("acme").unwrap(),
+                display_name: "Acme".to_string(),
+                is_public: false,
+                is_personal: false,
+                created_at: chrono::Utc::now(),
+            })
+            .await
+            .unwrap();
+        let repo_id = Uuid::new_v4();
+        crate::route_test_support::seed_repository(&pool, acme_id, repo_id, "docker", "hosted").await;
+        let repo_name = format!("repo-{repo_id}");
+        let user_id = crate::route_test_support::seed_user_with_active_token(&pool, acme_id, "acme-plaintext-token").await;
+        let token = crate::route_test_support::issue_test_token_for_org(&state, user_id, acme_id, false, repo_id, &repo_name, "myimage", &["push", "pull"]);
+        let app = crate::router(state);
+
+        let config_bytes = b"scanned-config-bytes";
+        let config_digest = Digest::of(config_bytes);
+        let upload = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/{repo_name}/myimage/blobs/uploads/?digest={}", config_digest.as_str()))
+                    .header("host", "acme.artiferris.localhost")
+                    .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::from(config_bytes.to_vec()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(upload.status(), StatusCode::CREATED);
+        let body = manifest_body(&config_digest);
+        let put = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/{repo_name}/myimage/manifests/latest"))
+                    .header("host", "acme.artiferris.localhost")
+                    .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(axum::http::header::CONTENT_TYPE, "application/vnd.docker.distribution.manifest.v2+json")
+                    .body(Body::from(body.clone()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(put.status(), StatusCode::CREATED);
+
+        let read = |host: &'static str, token: String| {
+            let app = app.clone();
+            let uri = format!("/{repo_name}/myimage/manifests/latest");
+            async move {
+                app.oneshot(Request::builder().method("GET").uri(uri).header("host", host).header(axum::http::header::AUTHORIZATION, format!("Bearer {token}")).body(Body::empty()).unwrap())
+                    .await
+                    .unwrap()
+            }
+        };
+
+        let over_loopback = read("127.0.0.1:8080", token.clone()).await;
+        assert_eq!(over_loopback.status(), StatusCode::OK);
+        let returned = axum::body::to_bytes(over_loopback.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(returned.to_vec(), body);
+
+        let other_org = Uuid::new_v4();
+        let foreign_token = crate::route_test_support::issue_test_token_for_org(&crate::route_test_support::test_state(pool.clone(), dir.path()).await, user_id, other_org, false, repo_id, &repo_name, "myimage", &["pull"]);
+        let wrong_organization = read("127.0.0.1:8080", foreign_token).await;
+        assert_ne!(wrong_organization.status(), StatusCode::OK, "a token issued for another organization must not reach this repository over loopback");
+    }
+
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_manifest_in_one_organizations_repository_is_not_reachable_from_another_organization(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
