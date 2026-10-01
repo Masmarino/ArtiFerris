@@ -1,9 +1,8 @@
 name: Flaky tests
 
-# The CI/CD workflow runs each suite once and turns red on the first failure: a test that fails now and then, with no
-# change in the code, is a red run that gets re-run and forgotten. This one runs the suites again and again, on a busy
-# machine (the conditions that make a timing assumption fail), and names the tests that did not pass every time.
-# It never retries a test: a test that passed only the second time is what it looks for.
+# Runs each suite again and again on a busy machine, where timing assumptions break, and names the tests that
+# did not pass every time. It never retries: a test that passed only the second time is what it looks for.
+
 on:
   schedule:
     - cron: "17 3 * * 1"

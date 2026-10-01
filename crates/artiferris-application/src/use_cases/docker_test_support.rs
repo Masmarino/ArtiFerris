@@ -116,8 +116,7 @@ impl DockerUploadSessionPort for FakeUploadSessions {
 pub struct FakeDockerBlobStore {
     pub blobs: Mutex<HashMap<String, (Vec<u8>, i64)>>, // digest string -> (bytes, ref_count)
     pub repository_links: Mutex<HashSet<(Uuid, String)>>,
-    /// Every digest ever passed to `remove_reclaimed_blob_files`, in call order — this fake has
-    /// no real on-disk file to remove, so this is what tests assert against instead.
+    /// Every digest passed to `remove_reclaimed_blob_files`, in call order.
     pub removed_reclaimed_digests: Mutex<Vec<String>>,
 }
 
@@ -172,10 +171,7 @@ impl DockerBlobStorePort for FakeDockerBlobStore {
         Ok(self.repository_links.lock().unwrap().contains(&(repository_id, digest.as_str().to_string())))
     }
     async fn unlink_from_repository_if_unreferenced(&self, repository_id: Uuid, digest: &Digest) -> Result<(), DomainError> {
-        // No manifest-blob data of its own to re-verify against (unlike the real Postgres adapter's
-        // NOT EXISTS clause) — trusts the caller's own `blob_is_reachable` check, which
-        // `DeleteManifestUseCase` always does first. Single-threaded fakes have no concurrent push to
-        // race against, so that's the whole safety story here.
+        // Trusts the caller's own reachability check; single-threaded fakes have no concurrent push.
         self.repository_links.lock().unwrap().remove(&(repository_id, digest.as_str().to_string()));
         Ok(())
     }
@@ -237,15 +233,12 @@ pub struct FakeDockerManifestRepository {
     pub manifest_blobs: Mutex<HashMap<Uuid, Vec<Digest>>>,
     pub manifest_list_members: Mutex<HashMap<Uuid, Vec<Digest>>>,
     pub tags: Mutex<HashMap<(Uuid, String, String), Uuid>>, // (repo_id, image_name, tag) -> manifest_id
-    /// Append-only log of every `set_tag` call, in order — mirrors `docker_tags.updated_at`
-    /// well enough to answer "which tag was most recently (re)pointed" without a real clock.
+    /// Every `set_tag` call in order, to tell which tag was pointed last.
     tag_updates: Mutex<Vec<(Uuid, String, String)>>,
     /// When each tag was last set, mirroring `docker_tags.updated_at`.
     tag_times: Mutex<HashMap<(Uuid, String, String), chrono::DateTime<chrono::Utc>>>,
-    /// Mirrors production sharing one `PgPool` between `PostgresDockerManifestRepository` and
-    /// `FilesystemDockerBlobStore`: `insert_manifest_with_checks` needs blob-store state
-    /// (`is_uploaded_to_repository`, blob sizes, ref counts) it doesn't itself own. Unset by default —
-    /// only `PutManifestUseCase`'s tests need it, via `link_blob_store`.
+    /// Like production, the manifest repository needs blob-store state (upload links, sizes, ref counts). Unset by
+    /// default; see `link_blob_store`.
     blob_store: Mutex<Option<Arc<FakeDockerBlobStore>>>,
     /// How many times a single manifest was looked up by digest, for tests that assert a listing does not do that per tag.
     pub digest_lookups: AtomicUsize,
@@ -270,9 +263,7 @@ impl FakeDockerManifestRepository {
         }
     }
 
-    /// Links this fake to the same `FakeDockerBlobStore` instance the use case under test holds, so
-    /// `insert_manifest_with_checks` can see `is_uploaded_to_repository`/blob-size state exactly the
-    /// way the real Postgres adapter sees it through its shared pool.
+    /// Links this fake to the use case's `FakeDockerBlobStore`.
     pub fn link_blob_store(&self, blobs: Arc<FakeDockerBlobStore>) {
         *self.blob_store.lock().unwrap() = Some(blobs);
     }
@@ -319,7 +310,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
         Ok(self.manifests.lock().unwrap().values().find(|m| m.package_repository_id == repository_id && &m.image_name == image_name && &m.digest == digest).cloned())
     }
     async fn insert_manifest(&self, manifest: &DockerManifest, blob_digests: &[Digest]) -> Result<(Uuid, bool), DomainError> {
-        // Mirrors the real ON CONFLICT DO NOTHING: an existing (repository, image, digest) keeps its id.
         let existing_id = self
             .manifests
             .lock()
@@ -359,7 +349,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
                 }
                 None => 0,
             };
-            // Mirrors `FakeDockerBlobStore::used_bytes_for_repository`, which always reports zero pre-existing usage (no per-repository tracking).
             let used_bytes: u64 = 0;
             if used_bytes + added_bytes > quota as u64 {
                 return Err(DomainError::StorageQuotaExceeded);
@@ -388,7 +377,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
         let key = (repository_id, image_name.as_str().to_string(), tag.to_string());
         self.tags.lock().unwrap().insert(key.clone(), manifest_id);
         self.tag_updates.lock().unwrap().push(key.clone());
-        // Strictly later than every earlier `set_tag`, like a real clock would be.
         let mut times = self.tag_times.lock().unwrap();
         let latest = times.values().max().copied().unwrap_or(chrono::DateTime::<chrono::Utc>::MIN_UTC);
         times.insert(key, chrono::Utc::now().max(latest + chrono::Duration::microseconds(1)));
@@ -408,7 +396,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
         Ok(self.tags.lock().unwrap().keys().filter(|(rid, name, _)| *rid == repository_id && name == image_name.as_str()).map(|(_, _, tag)| tag.clone()).collect())
     }
     async fn list_repository_image_names(&self, repository_id: Uuid) -> Result<Vec<DockerImageName>, DomainError> {
-        // Intentionally not deduplicating — ListCatalogUseCase is the sole place responsible for that.
         let names: Vec<String> = self.tags.lock().unwrap().keys().filter(|(rid, _, _)| *rid == repository_id).map(|(_, name, _)| name.clone()).collect();
         names.into_iter().map(|n| DockerImageName::parse(&n)).collect()
     }
@@ -432,7 +419,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
         let mut seen = std::collections::HashSet::new();
         let mut per_image_count: HashMap<String, i64> = HashMap::new();
         let mut pairs: Vec<(String, String)> = Vec::new();
-        // Newest update first, like `ORDER BY updated_at DESC`; a tag re-pushed later counts once, at its latest update.
         for (rid, name, tag) in tag_updates.iter().rev() {
             if *rid != repository_id || !image_names.contains(name) || !tags.contains_key(&(*rid, name.clone(), tag.clone())) || !seen.insert((name.clone(), tag.clone())) {
                 continue;
@@ -451,7 +437,6 @@ impl DockerManifestRepositoryPort for FakeDockerManifestRepository {
         let tag_updates = self.tag_updates.lock().unwrap();
         let tags = self.tags.lock().unwrap();
         let mut latest: HashMap<String, Uuid> = HashMap::new();
-        // Walked oldest to newest, so the last write per image wins — mirrors `ORDER BY updated_at DESC LIMIT 1`.
         for (rid, name, tag) in tag_updates.iter() {
             if *rid != repository_id || !image_names.contains(name) {
                 continue;

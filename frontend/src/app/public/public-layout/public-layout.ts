@@ -16,11 +16,9 @@ import { SuggestSearchBox } from '../catalog/suggest-search-box/suggest-search-b
 export class PublicLayout {
   private readonly router = inject(Router)
   private readonly auth = inject(AuthService)
-  // The explorer is now the site's home page, so a signed-in visitor can land here too — give
-  // them a way back to their own dashboard instead of an inapplicable "Se connecter" link.
+  // Signed-in visitors can land here too: give them a way back to their dashboard.
   readonly isAuthenticated = this.auth.isAuthenticated
 
-  /** Stays on the current catalog page when there is one, otherwise goes to the explorer. */
   search(text: string): void {
     const target = catalogNameFromUrl(this.router.url) ?? 'explorer'
     void this.router.navigate(['/', target], { queryParams: { q: text.trim() || null } })

@@ -27,8 +27,7 @@ pub struct ReadableRepository {
     pub owner: Organization,
 }
 
-/// The repositories a caller sees when browsing one organization's page (`resolved_organization_id`): the rule the repository
-/// list has always applied, moved out of the HTTP handler so that other features can start from the same set.
+/// The repositories a caller sees on one organization's page.
 pub struct ListReadableRepositoriesUseCase {
     organizations: Arc<dyn OrganizationRepositoryPort>,
     repositories: Arc<dyn PackageRepositoryQueryPort>,
@@ -48,20 +47,13 @@ impl ListReadableRepositoriesUseCase {
         };
 
         if caller.is_super_admin {
-            // A super-admin's listing is inherently cross-organization — there is no single
-            // `organization_id` to scope a query by here, unlike every branch below.
             return Ok(self.repositories.list_all().await?.into_iter().filter_map(|r| readable(r, Role::Admin, true)).collect());
         }
-        // An organization admin sees every repository in their own org with Admin, regardless
-        // of which domain the request came in on — so this scopes by the caller's organization, not the resolved one.
         if caller.is_organization_admin {
             return Ok(self.repositories.list_by_organization(caller.organization_id).await?.into_iter().filter_map(|r| readable(r, Role::Admin, true)).collect());
         }
-        // One batched lookup instead of one `find_role` per repository.
         let roles: HashMap<Uuid, Role> = self.permissions.list_for_user(caller.user_id).await?.into_iter().collect();
-        // A regular member only sees repositories in the resolved organization, even if they
-        // have stray permission grants elsewhere — scoped at the database level instead of
-        // filtering a full-table `list_all()` read in application code (M-21, B-7).
+        // A regular member only sees the resolved organization, filtered in the database.
         let organization_repositories = self.repositories.list_by_organization(resolved_organization_id).await?;
         let mut visible: Vec<ReadableRepository> = organization_repositories
             .into_iter()
@@ -70,25 +62,16 @@ impl ListReadableRepositoriesUseCase {
                 readable(repository, role, true)
             })
             .collect();
-        // Browsing the public organization doubles as a community page: every public personal
-        // project shows up too, at the same implicit Read `public_repository_bypass_role` already
-        // grants a public-organization member on any public repository — just applied per-repo here
-        // instead of at the single-repository gate. Both the caller's own organization and the
-        // viewed one are required, not redundant: gating on the viewed page alone would leak a
-        // public personal project's existence, and its owner's name, to a caller from an unrelated
-        // organization who then 404s on the repository itself.
-        //
-        // This genuinely needs every organization's repositories — a public personal project can
-        // live in any organization — so it only pays for the full scan when the public
-        // organization's own page is being viewed.
+        // The public organization doubles as a community page: public personal projects show up too, with the implicit
+        // Read. Both the caller's organization and the viewed one are required, or a public personal project's
+        // existence and owner would leak to an unrelated organization. Only this page pays for the full scan.
         if resolved_organization_id == PUBLIC_ORGANIZATION_ID {
             let all = self.repositories.list_all().await?;
             let already_shown: HashSet<Uuid> = visible.iter().map(|r| r.repository.id).collect();
             visible.extend(all.into_iter().filter(|r| !already_shown.contains(&r.id)).filter_map(|repository| {
                 let bypass_role = public_repository_bypass_role(caller.organization_id, repository.is_public)?;
                 organizations.get(&repository.organization_id).filter(|o| o.is_personal)?;
-                // The stronger of the two wins: a caller's own explicit grant on their personal project
-                // (e.g. the owner's Admin) must never be downgraded to Read just because it is also public.
+                // The stronger role wins: an owner's Admin is never downgraded to Read.
                 let (role, explicit) = match roles.get(&repository.id) {
                     Some(explicit) if explicit.satisfies(bypass_role) => (*explicit, true),
                     _ => (bypass_role, false),

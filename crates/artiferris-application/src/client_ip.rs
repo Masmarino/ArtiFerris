@@ -109,9 +109,9 @@ fn parse_hop(entry: &str) -> Option<IpAddr> {
     entry.strip_prefix('[')?.strip_suffix(']')?.parse::<Ipv6Addr>().ok().map(IpAddr::V6)
 }
 
-/// The client behind `direct`. `forwarded_for` is every `X-Forwarded-For` header line. It is read only when `direct` is a trusted
-/// proxy, right to left (the left end is whatever the client claimed), skipping trusted hops. The first hop that doesn't parse ends
-/// the scan at `direct`: whatever sits to its left was written by someone we can't vouch for.
+/// The client behind `direct`. `forwarded_for` is every `X-Forwarded-For` line. It is read only when `direct` is a
+/// trusted proxy, right to left, skipping trusted hops. The first hop that does not parse ends the scan at `direct`:
+/// what sits left of it is not vouched for.
 pub fn client_ip(direct: Option<IpAddr>, forwarded_for: &[&str], trusted: &TrustedProxies) -> String {
     let Some(direct) = direct else { return "unknown".to_string() };
     if forwarded_from_untrusted_private_peer(direct, forwarded_for, trusted) {

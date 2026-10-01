@@ -29,7 +29,6 @@ describe('OrganizationDetail', () => {
   })
 
   function freshSpy() {
-    // No jasmine here (vitest-based runner) — hand-rolled vi.fn() spies stand in.
     return {
       get: vi.fn(),
       getIdentityProvider: vi.fn(),

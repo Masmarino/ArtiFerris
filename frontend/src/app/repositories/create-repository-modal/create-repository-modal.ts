@@ -66,10 +66,9 @@ export class CreateRepositoryModal implements OnInit {
   readonly formatOptions = FORMAT_OPTIONS
   readonly repoTypeOptions = REPO_TYPE_OPTIONS
 
-  // A super-admin using this app's own UI always creates into the public organization —
-  // there's no subdomain-awareness on the frontend, so every request here resolves to it
-  // (see organization_middleware.rs). That's the only "public organization context" this
-  // form ever runs in, so gating on super-admin status alone is correct.
+  // A super-admin using this UI always creates in the public organization (requests resolve to it:
+  // no subdomain awareness),
+  // so the super-admin check is enough.
   readonly isSuperAdmin = computed(() => this.me.isSuperAdmin())
 
   readonly form = new FormGroup({
@@ -84,7 +83,7 @@ export class CreateRepositoryModal implements OnInit {
     isPublic: new FormControl(false, { nonNullable: true }),
   })
 
-  // Zoneless only re-renders on signal changes, so this can't just read the FormControl directly.
+  // Zoneless: only signals trigger a re-render, so the FormControl can't be read directly.
   private readonly format = toSignal(this.form.controls.format.valueChanges, {
     initialValue: this.form.controls.format.value,
   })
@@ -93,9 +92,9 @@ export class CreateRepositoryModal implements OnInit {
   })
   readonly isProxy = computed(() => this.repoType() === 'proxy')
   readonly isGroup = computed(() => this.repoType() === 'group')
-  // A public proxy would relay anonymously to its upstream using the repo's own stored
-  // credentials; a public group would silently expose every member's own visibility (#74) —
-  // the backend rejects both, so the checkbox only makes sense for a hosted repository.
+  // A public proxy would relay anonymously with stored credentials and a public group would expose
+  // every member's visibility:
+  // the backend rejects both.
   readonly canBePublic = computed(() => !this.isProxy() && !this.isGroup())
 
   readonly allRepositories = signal<RepositorySummary[]>([])
@@ -110,13 +109,12 @@ export class CreateRepositoryModal implements OnInit {
   })
 
   constructor() {
-    // A group can only aggregate same-format repositories, so drop stale picks on format change.
+    // A group holds one format, so drop stale picks when it changes.
     effect(() => {
       this.format()
       this.groupMembers.set([])
     })
-    // Drop a stale checked state so it can't survive a repo-type change while the checkbox row
-    // is hidden and still get submitted.
+    // Drop a stale checked state so it is not submitted while the checkbox is hidden.
     effect(() => {
       if (!this.canBePublic()) {
         this.form.controls.isPublic.setValue(false)
@@ -226,8 +224,8 @@ export class CreateRepositoryModal implements OnInit {
             this.toastService.success(t('repositories.create.created', { name }))
             return
           }
-          // The creation endpoint has no visibility field — making it public is a second,
-          // separate call, only ever fired when the checkbox was ticked.
+          // Creation has no visibility field: making it public is a second call, made only when
+          // ticked.
           this.repositoriesService.setVisibility(created.id, true).subscribe({
             next: () => {
               this.creating.set(false)
@@ -236,7 +234,7 @@ export class CreateRepositoryModal implements OnInit {
             },
             error: (err) => {
               this.creating.set(false)
-              // The repository itself was created — only the visibility follow-up failed.
+              // The repository exists; only the visibility call failed.
               this.created.emit()
               this.toastService.error(
                 rejectionMessage(err) ?? t('repositories.create.errors.publicFailed'),

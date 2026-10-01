@@ -30,7 +30,7 @@ import { OrganizationsService } from '../../admin/application/organizations.serv
 import { OrganizationSummary } from '../../admin/domain/organization.entity'
 import { MeService } from '../../shell/application/me.service'
 
-/** Not a real organization id — selects the unfiltered view across every organization. */
+/** Not a real organization id: selects the unfiltered view across organizations. */
 const ALL_ORGANIZATIONS = 'ALL'
 
 @Component({
@@ -58,17 +58,14 @@ export class RepositoriesList implements OnInit {
   private readonly me = inject(MeService)
   private readonly router = inject(Router)
 
-  // 'personal' is the caller's own personal-namespace view (see PersonalRepositoryService) —
-  // there's only ever one organization in it, so every organization-scoped control below is
-  // meaningless there regardless of the viewer's own role.
+  // 'personal' is the caller's own namespace: a single organization, so organization controls are
+  // meaningless.
   readonly mode = input<'organization' | 'personal'>('organization')
 
-  // Gates the organization filter/column — a super-admin is the only one who ever sees
-  // repositories across more than their own organization (see list_repositories's backend
-  // comment), so those controls would be meaningless for anyone else.
+  // Only a super-admin sees repositories across organizations, so the filter and column are for
+  // them.
   readonly isSuperAdmin = computed(() => this.me.isSuperAdmin())
 
-  // Also requires 'organization' mode — see the comment on `mode` above.
   readonly showOrganizationControls = computed(
     () => this.mode() === 'organization' && this.isSuperAdmin(),
   )
@@ -124,7 +121,7 @@ export class RepositoriesList implements OnInit {
   })
   readonly rowId = (r: RepositorySummary): string => r.id
 
-  // Set once — a later reload() must not snap the filter back and discard the viewer's pick.
+  // Set once: a later reload() must not reset the viewer's pick.
   private hasAppliedDefaultOrganizationFilter = false
 
   ngOnInit(): void {
@@ -134,7 +131,7 @@ export class RepositoriesList implements OnInit {
   reload(): void {
     this.error.set(null)
     if (this.mode() === 'personal') {
-      // No organizations to join against here — every project in this view is the caller's own.
+      // Every project here is the caller's own: no organizations to join.
       this.personalRepositoryService.listMyProjects().subscribe({
         next: (repositories) => {
           this.repositories.set(repositories)
@@ -148,7 +145,7 @@ export class RepositoriesList implements OnInit {
       return
     }
     if (!this.isSuperAdmin()) {
-      // Can't call /api/organizations (super-admin only) — no forkJoin needed here.
+      // /api/organizations is super-admin only: no forkJoin here.
       this.repositoriesService.list().subscribe({
         next: (repositories) => {
           this.repositories.set(repositories)
@@ -169,7 +166,7 @@ export class RepositoriesList implements OnInit {
         this.repositories.set(repositories)
         this.organizations.set(organizations)
         if (!this.hasAppliedDefaultOrganizationFilter) {
-          // Defaults to the public organization, not every organization at once.
+          // Defaults to the public organization, not all of them.
           const publicOrganization = organizations.find((o) => o.is_public)
           this.selectedOrganizationId.set(publicOrganization?.id ?? ALL_ORGANIZATIONS)
           this.hasAppliedDefaultOrganizationFilter = true

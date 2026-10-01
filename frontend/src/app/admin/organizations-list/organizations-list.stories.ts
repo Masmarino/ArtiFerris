@@ -39,7 +39,7 @@ const meta: Meta<OrganizationsList> = {
   decorators: [
     moduleMetadata({
       providers: [
-        // A real Router would try to match the Storybook iframe's own URL against an empty route table.
+        // A real Router would match the Storybook iframe URL against an empty route table.
         { provide: Router, useValue: router },
         { provide: OrganizationsService, useValue: fakeOrgs() },
         { provide: ToastService, useValue: toast },
@@ -96,7 +96,6 @@ export const LoadFailed: Story = {
   },
 }
 
-/** Clicking a row opens that organization's detail page. */
 export const OpeningAnOrganization: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -119,7 +118,6 @@ export const CreateOrganizationModalOpen: Story = {
   },
 }
 
-/** Cancelling the modal closes it without reloading the list. */
 export const CreateModalCancelled: Story = {
   decorators: [withOrgs(fakeOrgs())],
   play: async ({ canvasElement }) => {
@@ -144,7 +142,6 @@ const creatingOrgs = fakeOrgs({
     return of(ORGS[1])
   }),
 })
-/** Creating an organization closes the modal and reloads the list with the new row in it. */
 export const CreatingAnOrganization: Story = {
   beforeEach: () => {
     acmeCreated = false

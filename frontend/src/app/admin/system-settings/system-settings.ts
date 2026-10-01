@@ -23,7 +23,7 @@ interface FieldSpec {
   labelKey: string
 }
 
-// Mirrors the backend's validation in UpdateSystemSettingsUseCase, kept in sync by hand, so the form can reject an out-of-range value before a round trip.
+// Same ranges as UpdateSystemSettingsUseCase, to reject early.
 const FIELDS: FieldSpec[] = [
   { key: 'maxLoginAttempts', min: 1, max: 1000, labelKey: 'admin.system.maxLoginAttempts' },
   {
@@ -48,7 +48,6 @@ export class SystemSettingsAdmin {
   private readonly toastService = inject(ToastService)
   private readonly me = inject(MeService)
 
-  /** Set only when embedded in an organization's own admin page — scopes read/write to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
   readonly fields = FIELDS
@@ -63,7 +62,7 @@ export class SystemSettingsAdmin {
   readonly loadFailed = signal(false)
   readonly saving = signal(false)
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     effect(() => {
       const organizationId = this.organizationId()
@@ -94,19 +93,18 @@ export class SystemSettingsAdmin {
     })
   }
 
-  // The public organization's row stands for the whole instance: its indexing switch and its public-page switch belong to a super-admin.
+  // The public organization's row stands for the whole instance: its switches belong to super-
+  // admins.
   private readonly isInstanceScope = computed(
     () => (this.organizationId() ?? this.me.organizationId()) === PUBLIC_ORGANIZATION_ID,
   )
 
   readonly showSeoIndexing = computed(() => this.me.isSuperAdmin() && this.isInstanceScope())
 
-  /** Closing the public pages: an organization's own, or the whole instance's for a super-admin. */
   readonly showPublicPage = computed(() => !this.isInstanceScope() || this.me.isSuperAdmin())
 
   readonly publicPageForInstance = this.isInstanceScope
 
-  /** Keeping search engines away from one organization; the instance has its indexing switch instead. */
   readonly showBlockIndexing = computed(() => !this.isInstanceScope())
 
   value(key: FieldSpec['key']): string {
@@ -117,7 +115,6 @@ export class SystemSettingsAdmin {
     this[key].set(value)
   }
 
-  // Errors stay hidden until a save is attempted — same shape as smtp-settings.ts.
   readonly attemptedSave = signal(false)
 
   private rawFieldError(field: FieldSpec): string | null {

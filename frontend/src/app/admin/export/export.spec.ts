@@ -37,7 +37,7 @@ describe('ExportAdmin', () => {
     req.flush(new Blob(['{}'], { type: 'application/json' }))
 
     expect(createObjectURL).toHaveBeenCalled()
-    // Revoked a moment later: some browsers only start reading the blob after click() returns.
+    // Revoked a moment later: some browsers read the blob after click() returns.
     expect(revokeObjectURL).not.toHaveBeenCalled()
     vi.advanceTimersByTime(1000)
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock')

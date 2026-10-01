@@ -5,7 +5,6 @@ function count(value: number, key: string): string {
   return t(value > 1 ? `${key}_other` : `${key}_one`, { count: value })
 }
 
-/** "2 dépôts · 3 paquets · 4 images", leaving out whatever is zero. */
 export function ownerCountsLabel(summary: OwnerSummary): string {
   return [
     summary.repository_count > 0 && count(summary.repository_count, 'catalog.counts.repository'),

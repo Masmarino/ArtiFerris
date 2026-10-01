@@ -13,7 +13,6 @@ import { CatalogSearch } from '../catalog-search/catalog-search'
 import { OwnerRef } from '../domain/catalog.entity'
 import { ownerCountsLabel } from '../domain/owner-counts'
 
-/** Serves both `/@:username` (param `username`) and `/o/:slug` (param `slug`). */
 @Component({
   selector: 'app-owner-page',
   standalone: true,

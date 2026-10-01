@@ -30,7 +30,6 @@ pub struct PostgresPublicCatalog {
     slot_wait: Duration,
 }
 
-/// A statement cut short by the timeout is load, not a fault.
 fn query_err(error: sqlx::Error) -> DomainError {
     match &error {
         sqlx::Error::Database(db) if db.code().as_deref() == Some(QUERY_CANCELED) => DomainError::Busy("the public catalog query took too long".to_string()),
@@ -59,10 +58,9 @@ impl PostgresPublicCatalog {
     }
 }
 
-/// Visibility is decided here, in SQL, so a private repository cannot reach any result through a later branch.
-/// A personal owner is the user whose personal organization the repository sits in; the slug is
-/// `'u' || first 24 hex characters of the user id` (`personal_organization_slug` in the application crate).
-/// The filter is what a search scope widens: it is spliced in by the macros below, never at run time.
+/// Visibility is decided in SQL, so a private repository cannot reach a result through a later branch. A personal owner
+/// is the user whose personal organization holds the repository (slug `'u' || first 24 hex of the user id`, see
+/// `personal_organization_slug`). The filter is spliced in by the macros, never at run time.
 macro_rules! public_repositories {
     ($filter:expr) => {
         concat!(
@@ -88,7 +86,6 @@ macro_rules! public_repositories {
 
 macro_rules! public_filter {
     () => {
-        // The owner's page may be closed, and so may the whole instance's (the public organization's row).
         "p.repo_type = 'hosted' AND p.is_public AND p.deleted_at IS NULL AND COALESCE(ss.public_page_enabled, true) \
          AND COALESCE((SELECT i.public_page_enabled FROM system_settings i JOIN organizations io ON io.id = i.organization_id WHERE io.is_public), true)"
     };
@@ -110,13 +107,9 @@ macro_rules! listed_filter {
 
 const PUBLIC_REPOSITORIES: &str = concat!("WITH ", public_repositories!(public_filter!()), "\n");
 
-/// Every search statement takes the same thirteen parameters, whichever variant runs, so that one binding code path
-/// serves them all and each statement text is prepared once. `params` mentions the ones a variant may not otherwise use.
-///
-/// $1 lowercased text (or NULL), $2 `%text%` and $3 `text%` LIKE patterns, $4 format filter (or NULL), $5 limit, $6 offset,
-/// $7/$8 owner kind and slug (or NULL), $9 names only (skip description, keyword and tag matches), $10 the repository ids
-/// a signed-in scope adds, $11/$12 repository and entry name for an exact lookup (or NULL), $13 whether downloads decide the
-/// order, so that they are worth summing for every candidate.
+/// Every search statement takes the same thirteen parameters so one binding path serves all variants. $1 lowercased
+/// text, $2 `%text%`, $3 `text%`, $4 format, $5 limit, $6 offset, $7/$8 owner kind and slug, $9 names only, $10 ids a
+/// signed-in scope adds, $11/$12 repository and entry name for an exact lookup, $13 whether downloads decide the order.
 macro_rules! search_params {
     () => {
         "WITH params AS (SELECT $9::bool AS names_only, $10::uuid[] AS scope_ids, $11::text AS repository_name, $12::text AS entry_name, $13::bool AS rank_by_downloads),\n"
@@ -135,17 +128,11 @@ fn repositories_cte(scope: &CatalogScope) -> &'static str {
     }
 }
 
-/// Two stages, so the expensive per-entry work only ever touches one page of rows.
-/// Stage 1 (`candidates`) is cheap: it narrows by name or text through the indexes, tiers each entry and pages it.
-/// Stage 2 (`page`, then the final select) fetches description, keywords, latest version and downloads for those rows alone.
-///
-/// `updated_at` is the newest publication of any version (npm) or tag (Docker). A text hit is a match on any npm
-/// version's description or keywords, or on an exact Docker tag. The fuzzy tier is a trigram name match (`%`, similarity
-/// 0.3 and up), only for text of three characters or more.
-///
-/// Without text every public entry is a candidate, so the candidates come straight from the public repositories.
-/// `npm_scope` and `docker_images` are what a variant considers; the newest-publication and download aggregates that
-/// follow only look at those rows, so a narrow scope (one owner, one entry) never pays for the whole catalog.
+/// Two stages keep the expensive per-entry work to one page. Stage 1 (`candidates`) narrows by name or text through the
+/// indexes, tiers and pages. Stage 2 (`page`) fetches description, keywords, latest version and downloads for those
+/// rows. `updated_at` is the newest publication of any version (npm) or tag (Docker). A text hit matches an npm
+/// version's description or keywords, or an exact Docker tag. The fuzzy tier is a trigram name match (similarity 0.3+),
+/// for text of three characters or more. Without text every public entry is a candidate.
 const CANDIDATES_WITHOUT_TEXT: &str = r#"
 , npm_scope AS (
     SELECT k.id, k.name, false AS text_hit, r.id AS repository_id, r.repository_name
@@ -208,8 +195,8 @@ const CANDIDATES_WITH_TEXT: &str = r#"
 )
 "#;
 
-/// Candidates carry only what ordering needs; the owner's details and the page's extras are joined after the LIMIT.
-/// Downloads are summed over the last seven days for the candidates' repositories only, and only when they decide the order.
+/// Candidates carry only what ordering needs; owner details and extras are joined after the LIMIT. Downloads are summed
+/// over seven days, only when they decide the order.
 const CANDIDATES_COMMON: &str = r#"
 , recent_downloads AS (
     SELECT ds.package_repository_id, ds.kind, ds.name, sum(ds.downloads)::bigint AS downloads
@@ -413,7 +400,6 @@ impl PublicCatalogPort for PostgresPublicCatalog {
         let rows = self.run(query, i64::from(query.per_page), offset, false, None).await?;
         let total = match rows.first() {
             Some(row) => row.total,
-            // A page past the end has no rows to carry the window count, so ask for the first row of the result instead.
             None if offset > 0 => self.run(query, 1, 0, false, None).await?.first().map_or(0, |row| row.total),
             None => 0,
         };
@@ -526,7 +512,6 @@ impl PostgresPublicCatalog {
         let text = query.text.as_deref().map(str::to_lowercase);
         let escaped = text.as_deref().map(escape_like);
         let prefix = escaped.as_ref().map(|e| format!("{e}%"));
-        // Two typed characters are a prefix, not a substring: "im" would otherwise match half the catalog on every keystroke.
         let contains = match (&escaped, names_only && text.as_deref().is_some_and(|t| t.chars().count() < 3)) {
             (Some(_), true) => prefix.clone(),
             (escaped, _) => escaped.as_ref().map(|e| format!("%{e}%")),
@@ -542,7 +527,6 @@ impl PostgresPublicCatalog {
             _ => &[],
         };
         let scope = if text.is_some() { CANDIDATES_WITH_TEXT } else { CANDIDATES_WITHOUT_TEXT };
-        // Only compile-time constants are assembled into the statement (`order` is one of three literals); user text is only ever bound.
         let sql = format!("{}{scope}{CANDIDATES_COMMON}{}", repositories_cte(&query.scope), SEARCH_TAIL.replace("__ORDER__", order));
         let (mut tx, _slot) = self.begin().await?;
         sqlx::query_as(AssertSqlSafe(sql))
@@ -821,7 +805,6 @@ mod tests {
 
         assert!(names(&pool, &query(Some("%"))).await.is_empty());
         assert_eq!(names(&pool, &query(Some("_"))).await, vec!["snake_case"]);
-        // Two characters, so the fuzzy tier stays out of it: were "_" a wildcard, "p_" would match "plain".
         assert!(names(&pool, &query(Some("p_"))).await.is_empty());
     }
 

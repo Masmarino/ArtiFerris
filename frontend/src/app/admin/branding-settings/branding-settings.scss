@@ -10,8 +10,7 @@ p {
 
 .branding-settings__logo-preview {
   display: block;
-  // Fixed box (matching the width/height attributes on the <img> itself) — reserved
-  // before the actual logo loads, so an arbitrarily-sized upload can't shift the layout.
+  // Fixed box, reserved before the logo loads so an upload cannot shift the layout.
   width: 260px;
   height: 80px;
   object-fit: contain;

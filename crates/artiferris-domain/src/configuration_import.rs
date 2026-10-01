@@ -24,7 +24,6 @@ pub struct PermissionStream {
     pub events: Vec<PermissionEvent>,
 }
 
-/// A configuration import, already validated: everything the store has to write.
 #[derive(Debug, Clone)]
 pub struct ImportBatch {
     pub actor_id: Uuid,

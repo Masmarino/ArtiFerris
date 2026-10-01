@@ -2,7 +2,6 @@ import { effect, inject } from '@angular/core'
 import { Observable, catchError, shareReplay, throwError } from 'rxjs'
 import { SessionToken } from '../auth/application/session-token'
 
-/** A shared request result that is dropped on logout or when a different token signs in. */
 export class TokenScopedCache<T> {
   private readonly session = inject(SessionToken)
   private entry: { token: string | null; value$: Observable<T> } | null = null

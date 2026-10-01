@@ -3,7 +3,6 @@ import type { ToastItem, ToastVariant } from '@masmarino/gabarit'
 
 let nextId = 0
 
-/** App-wide toast queue — `gbt-toaster` is purely presentational, so this owns the state it renders. */
 @Injectable({ providedIn: 'root' })
 export class ToastService {
   readonly toasts = signal<ToastItem[]>([])

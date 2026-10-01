@@ -67,7 +67,6 @@ pub enum SecurityEvent {
 }
 
 impl SecurityEvent {
-    /// The form that gets stored.
     pub fn normalized(self) -> Self {
         match self {
             SecurityEvent::LoginFailed { username, ip } => SecurityEvent::LoginFailed { username: recorded_username(&username), ip },
@@ -158,7 +157,6 @@ impl From<&IdentityProviderConfig> for IdentityProviderSummary {
     }
 }
 
-/// Everything about an organization's SMTP settings except the password.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SmtpSettingsSummary {
     pub host: String,
@@ -189,7 +187,6 @@ pub struct SettingChange {
     pub after: serde_json::Value,
 }
 
-/// One entry per setting whose value differs, sorted by name.
 pub fn system_settings_changes(before: &SystemSettings, after: &SystemSettings) -> Vec<SettingChange> {
     let as_map = |settings: &SystemSettings| -> BTreeMap<String, serde_json::Value> {
         match serde_json::to_value(settings) {
@@ -214,8 +211,8 @@ pub enum BrandingAsset {
     Favicon,
 }
 
-/// Privilege and configuration changes made by administrators (and account activation).
-/// Payloads carry ids, names and non-secret settings only, never passwords, tokens or client secrets.
+/// Privilege and configuration changes by administrators, and account activation. Payloads carry ids, names and
+/// non-secret settings only.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event_type")]
 pub enum AdminAuditEvent {
@@ -236,7 +233,6 @@ pub enum AdminAuditEvent {
     SmtpSettingsChanged { organization_id: Uuid, before: Option<SmtpSettingsSummary>, after: SmtpSettingsSummary, password_changed: bool },
     SystemSettingsChanged { organization_id: Uuid, changes: Vec<SettingChange> },
     BrandingChanged { organization_id: Uuid, asset: BrandingAsset, cleared: bool },
-    /// Instance-wide: the export covers every user, so it belongs to no organization.
     ConfigurationExported { users: usize, repositories: usize, permissions: usize },
     ConfigurationImported { users_created: usize, repositories_created: usize, permissions_granted: usize, failures: usize },
 }
@@ -294,7 +290,6 @@ pub struct AdminAuditRecord {
     pub actor_id: Option<Uuid>,
 }
 
-/// The same for a security event.
 #[derive(Debug, Clone)]
 pub struct SecurityAuditRecord {
     pub event: SecurityEvent,
@@ -371,7 +366,6 @@ pub struct AuditCursor {
 #[derive(Debug, Clone, Default)]
 pub struct AuditQueryFilter {
     pub aggregate_type: Option<String>,
-    /// Applied at the SQL level, before `LIMIT`.
     pub exclude_aggregate_type: Option<String>,
     pub aggregate_id: Option<String>,
     pub actor_id: Option<Uuid>,
@@ -393,7 +387,6 @@ impl AuditQueryFilter {
 #[derive(Debug, Clone)]
 pub struct AuditPage {
     pub entries: Vec<AuditEntry>,
-    /// `None` on the last page.
     pub next_cursor: Option<AuditCursor>,
 }
 
@@ -402,8 +395,8 @@ const REDACTED: &str = "[redacted]";
 /// Leads a sealed secret stored as text; `secret_box` writes the same prefix (its tests check they agree).
 pub const SEALED_SECRET_PREFIX: &str = "af1.";
 
-/// Blanks payload values whose key names a password, secret or token (the sealed proxy password in a repository's `Created` event, say),
-/// and any string that is a sealed secret whatever its key is called. Booleans like `secret_changed` and ids like `token_id` stay.
+/// Blanks payload values whose key names a password, secret or token, and any sealed secret whatever its key. Booleans
+/// like `secret_changed` and ids like `token_id` stay.
 pub fn redact_secrets(payload: &mut serde_json::Value) {
     match payload {
         serde_json::Value::Object(fields) => {
@@ -427,7 +420,7 @@ pub fn redact_secrets(payload: &mut serde_json::Value) {
 /// Only security and administrative events are ever aged out. Repository, permission and package events stay: the first two are the source of truth for their aggregates, the last are business history.
 #[async_trait]
 pub trait AuditRetentionPort: Send + Sync {
-    /// Deletes at most `limit` security and administrative events that happened before `cutoff`, oldest first, and returns how many went.
+    /// Deletes at most `limit` security and administrative events older than `cutoff`, oldest first; returns how many.
     async fn delete_audit_events_before(&self, cutoff: DateTime<Utc>, limit: i64) -> Result<u64, EventStoreError>;
 }
 

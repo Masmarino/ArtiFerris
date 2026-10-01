@@ -11,7 +11,6 @@ export interface MetricsPort {
   usage(organizationId?: string): Observable<RepositoryUsage[]>
   health(): Observable<HealthStatus>
   stats(organizationId?: string): Observable<AdminStats>
-  /** Evolution over time. `days` defaults to 30 server-side. */
   history(days?: number): Observable<MetricsSnapshot[]>
 }
 

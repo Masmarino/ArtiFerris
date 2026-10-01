@@ -3,8 +3,7 @@ use std::path::{Path, PathBuf};
 use tokio::fs;
 use uuid::Uuid;
 
-/// Removes its file when dropped, so a write that is cancelled or fails can't leave a partial file behind.
-/// Harmless once the file has been renamed away.
+/// Removes its file when dropped, so a cancelled or failed write leaves no partial file.
 pub struct TempFileGuard(PathBuf);
 
 impl TempFileGuard {
@@ -19,12 +18,9 @@ impl Drop for TempFileGuard {
     }
 }
 
-/// First half of `atomic_write`: creates `target`'s parent directory and writes `data` to a
-/// fresh sibling `{tmp_name_prefix}.tmp-{uuid}` file, returning its path. Doesn't touch `target`
-/// itself, so this can safely run without holding any lock that only guards `target` — the temp
-/// path's per-call UUID suffix can't collide with any concurrent writer or deleter of the same
-/// logical target. The caller must follow up with `finish_atomic_write` (or otherwise consume/
-/// remove the temp file) to avoid leaking it.
+/// First half of `atomic_write`: writes `data` to a fresh sibling `{tmp_name_prefix}.tmp-{uuid}` file and returns its
+/// path. It never touches `target`, so it needs no lock on it. The caller must call `finish_atomic_write`, or remove
+/// the temp file.
 pub async fn write_temp(target: &Path, tmp_name_prefix: &str, data: &[u8]) -> std::io::Result<PathBuf> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).await?;
@@ -37,9 +33,8 @@ pub async fn write_temp(target: &Path, tmp_name_prefix: &str, data: &[u8]) -> st
     Ok(tmp_path)
 }
 
-/// Second half of `atomic_write`: renames a temp file written by `write_temp` onto `target`
-/// (atomic on the same filesystem). This is the only step that touches `target` itself, so it's
-/// the only step that needs to run under a lock scoped to `target`. A failed rename removes the temp file.
+/// Second half of `atomic_write`: renames the temp file onto `target`, atomic on one filesystem. The only step that
+/// needs a lock scoped to `target`. A failed rename removes the temp file.
 pub async fn finish_atomic_write(tmp_path: &Path, target: &Path) -> std::io::Result<()> {
     let renamed = fs::rename(tmp_path, target).await;
     if renamed.is_err() {
@@ -48,17 +43,9 @@ pub async fn finish_atomic_write(tmp_path: &Path, target: &Path) -> std::io::Res
     renamed
 }
 
-/// Writes `data` to `target` without ever leaving a partially-written file at that path. Doesn't
-/// fsync.
-///
-/// `tmp_name_prefix` is caller-chosen (e.g. the target's own file name, or just a digest) so
-/// each caller keeps its own staging-file naming; it only has to be unique enough that two
-/// concurrent writes to different targets in the same directory don't collide, which the
-/// per-call UUID suffix guarantees on its own.
-///
-/// This convenience wrapper's only caller is `filesystem_storage.rs`'s npm storage backend.
-/// `FilesystemDockerBlobStore::write` calls `write_temp` and `finish_atomic_write` directly
-/// instead, to shrink its lock's critical section to just the final rename.
+/// Writes `data` to `target` without ever leaving a partial file there. Does not fsync. `tmp_name_prefix` is chosen by
+/// the caller; the per-call UUID keeps concurrent writes apart. The Docker blob store calls `write_temp` and
+/// `finish_atomic_write` directly to keep its lock short.
 pub async fn atomic_write(target: &Path, tmp_name_prefix: &str, data: &[u8]) -> std::io::Result<()> {
     let tmp_path = write_temp(target, tmp_name_prefix, data).await?;
     finish_atomic_write(&tmp_path, target).await

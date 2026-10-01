@@ -216,13 +216,10 @@ impl SearchReadableCatalogUseCase {
     }
 
     async fn readable_ids(&self, caller: &ReadableRepositoriesCaller) -> Result<Vec<Uuid>, ApplicationError> {
-        // An organization admin reads their whole organization ...
         let mut ids: HashSet<Uuid> = HashSet::new();
         if caller.is_organization_admin {
             ids.extend(self.repositories.list_by_organization(caller.organization_id).await?.into_iter().map(|r| r.id));
         }
-        // ... anyone else what they were granted, but only where a grant actually opens a door: a repository of their own
-        // organization, or a personal project (the one place a grant crosses organizations).
         let mut personal: HashMap<Uuid, bool> = HashMap::new();
         for (repository_id, _) in self.permissions.list_for_user(caller.user_id).await? {
             if ids.contains(&repository_id) {

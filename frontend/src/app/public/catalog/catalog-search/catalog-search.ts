@@ -64,9 +64,8 @@ export class CatalogSearch {
   private readonly destroyRef = inject(DestroyRef)
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-  /** When set, the format filter is hidden and every search is restricted to this format. */
   readonly format = input<CatalogFormat | null>(null)
-  /** When set, every search is restricted to this owner's public entries. It comes from the route, never the query string. */
+  /** Restricts every search to this owner. Comes from the route, never the query string. */
   readonly owner = input<OwnerRef | null>(null)
   readonly catalogs = input<CatalogInfo[]>([])
 
@@ -159,7 +158,7 @@ export class CatalogSearch {
     effect(() => {
       const urlQuery = this.urlQuery()
       untracked(() => {
-        // Skip while the user is mid-typing, or the URL catching up would overwrite their keystrokes.
+        // Skip while the user is typing, or the URL catching up would overwrite it.
         if (this.debounceTimer === null && urlQuery !== this.text()) {
           this.text.set(urlQuery)
         }

@@ -42,7 +42,7 @@ async fn unpublish_package(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
     require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    // Role before type (B-14): see publish.rs's identical reordering.
+    // Role before type, as in publish.rs.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write)
         .await
         .map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;
@@ -88,7 +88,7 @@ async fn unpublish_via_document_put(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
     require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    // Role before type (B-14): see publish.rs's identical reordering.
+    // Role before type, as in publish.rs.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write)
         .await
         .map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;
@@ -123,8 +123,8 @@ async fn unpublish_via_document_put_personal(
     Ok(Json(json!({ "ok": true })))
 }
 
-/// Shared by `unpublish_via_document_put` and its personal-namespace sibling — the diff-and-remove
-/// logic is identical once the repository has been resolved and authorized.
+/// Shared by `unpublish_via_document_put` and its personal sibling: the diff-and-remove is the same once the repository
+/// is resolved and authorized.
 async fn apply_unpublish_diff(state: &NpmState, repository_id: Uuid, name: &NpmPackageName, doc: UnpublishDocument, user_id: Uuid) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
     let document = state
         .metadata
@@ -161,7 +161,7 @@ async fn unpublish_version(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
     require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    // Role before type (B-14): see publish.rs's identical reordering.
+    // Role before type, as in publish.rs.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write)
         .await
         .map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;
@@ -229,7 +229,6 @@ mod tests {
     use tower::ServiceExt;
     use uuid::Uuid;
 
-    /// Mirrors `routes/metadata.rs`'s `test_state` — no shared test-support module for the HTTP-router `NpmState` builder.
     async fn test_state(pool: PgPool, root: &std::path::Path) -> NpmState {
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
         let repositories = Arc::new(PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string()));
@@ -329,8 +328,6 @@ mod tests {
         .unwrap();
     }
 
-    /// Same as `seed_user_with_active_token`, but with a caller-chosen username — needed to hit
-    /// `/u/{username}/...` routes. Mirrors `routes/metadata.rs`'s identical helper.
     async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: Uuid, username: &str, plaintext_token: &str) -> Uuid {
         let user_id = Uuid::new_v4();
         sqlx::query!(
@@ -354,8 +351,6 @@ mod tests {
         user_id
     }
 
-    /// Creates `owner_user_id`'s personal organization and a hosted npm project inside it,
-    /// returning the new repository's id. Mirrors `routes/metadata.rs`'s identical helper.
     async fn create_personal_project(pool: &PgPool, owner_user_id: Uuid, project_name: &str) -> Uuid {
         let organizations = Arc::new(PostgresOrganizationRepository::new(pool.clone()));
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
@@ -634,7 +629,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND, "a write-role grant on a repository in a DIFFERENT organization must not let unpublish through the actual route");
     }
 
-    // ---- B-13: personal-namespace write support ----
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn unpublishing_a_personal_project_by_its_owner_succeeds(pool: PgPool) {

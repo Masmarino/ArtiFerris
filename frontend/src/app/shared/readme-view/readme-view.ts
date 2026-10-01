@@ -8,14 +8,13 @@ import {
 } from '@angular/core'
 import { Card, EmptyState } from '@masmarino/gabarit'
 
-/** `html` comes sanitized from the backend; Angular's sanitizer still runs on the binding. */
 @Component({
   selector: 'app-readme-view',
   standalone: true,
   imports: [TranslocoPipe, Card, EmptyState],
   templateUrl: './readme-view.html',
   styleUrl: './readme-view.scss',
-  // The rendered markup is created at runtime, so emulated encapsulation would never match it.
+  // The markup is created at runtime, so emulated encapsulation would never match it.
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

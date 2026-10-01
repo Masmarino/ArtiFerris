@@ -13,8 +13,7 @@ impl CacheProxiedManifestUseCase {
         Self { manifests }
     }
 
-    /// No blob references or manifest-list-member rows are recorded. `ON CONFLICT DO NOTHING`
-    /// in `insert_manifest` makes this safe to call concurrently for the same manifest.
+    /// Records no blob references or manifest-list members. Safe to call concurrently for the same manifest.
     pub async fn execute(&self, manifest: &DockerManifest) -> Result<(), ApplicationError> {
         self.manifests.insert_manifest(manifest, &[]).await?;
         Ok(())

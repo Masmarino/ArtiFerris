@@ -39,7 +39,6 @@ export default meta
 
 type Story = StoryObj<CreateUserModal>
 
-/** The "Inviter" button is disabled until both required fields are valid. */
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -99,7 +98,6 @@ export const InvitingASuperAdmin: Story = {
   },
 }
 
-/** The request is in flight: the button is busy and cannot be clicked again. */
 export const Submitting: Story = {
   decorators: [withServices(fakeUsers({ create: () => NEVER }))],
   play: async ({ canvasElement, args }) => {
@@ -117,7 +115,6 @@ export const Submitting: Story = {
 
 const conflictToasts = new ToastService()
 
-/** The backend's own message (here a duplicate username) is surfaced and the modal stays open. */
 export const ServerRejectsTheUser: Story = {
   decorators: [
     withServices(
@@ -156,7 +153,6 @@ export const ServerRejectsTheUser: Story = {
 
 const genericFailureToasts = new ToastService()
 
-/** An error with no message from the backend falls back to a generic one. */
 export const CreationFailsWithoutDetails: Story = {
   decorators: [
     withServices(

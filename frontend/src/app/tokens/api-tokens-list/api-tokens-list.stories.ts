@@ -71,7 +71,6 @@ export const Empty: Story = {
   },
 }
 
-/** The "Créer" button stays disabled until the token has a name. */
 export const CreateFormRequiresALabel: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -98,7 +97,6 @@ export const CancellingTheCreateForm: Story = {
 let listAfterCreate: ApiToken[] = [LAPTOP]
 const createTokens = fakeTokens({ list: fn(() => of(listAfterCreate)) })
 
-/** The secret is only shown once, in a dedicated modal; the list is reloaded behind it. Without a password the token lasts 7 days. */
 export const CreatingAToken: Story = {
   decorators: [withTokens(createTokens)],
   beforeEach: () => {
@@ -125,7 +123,6 @@ export const CreatingAToken: Story = {
 
 const passwordTokens = fakeTokens()
 
-/** Typing a password switches the hint from 7 to 365 days and sends the password with the request. */
 export const CreatingALongLivedToken: Story = {
   decorators: [withTokens(passwordTokens)],
   play: async ({ canvasElement }) => {
@@ -172,7 +169,6 @@ export const WrongPasswordForALongLivedToken: Story = {
 
 const createFailsTokens = fakeTokens({ create: fn(() => throwError(() => new Error('500'))) })
 
-/** The form stays open with an error and the button is usable again so the user can retry. */
 export const CreateFailed: Story = {
   decorators: [withTokens(createFailsTokens)],
   play: async ({ canvasElement }) => {
@@ -193,7 +189,6 @@ let listAfterRevoke: ApiToken[] = [LAPTOP, CI]
 const revokeTokens = fakeTokens({ list: fn(() => of(listAfterRevoke)) })
 const acceptingConfirm = { ask: fn(() => Promise.resolve(true)) }
 
-/** Clicking a row asks for confirmation, then revokes that token and reloads the list. */
 export const RevokingAToken: Story = {
   decorators: [withTokens(revokeTokens, acceptingConfirm)],
   beforeEach: () => {

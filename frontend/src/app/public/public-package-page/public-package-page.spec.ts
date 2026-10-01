@@ -71,8 +71,8 @@ const DOCKER_DETAILS = {
 
 const DOCKER_PARAMS = { username: '@alice', repoName: 'my-image', format: 'docker', name: 'hello' }
 
-// whenStable() never resolves while a test deliberately holds a request open, so just let the
-// resource's async loader run and re-render.
+// whenStable() never resolves while a test holds a request open: just let the loader run and re-
+// render.
 async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve))
   fixture.detectChanges()
@@ -453,9 +453,7 @@ describe('PublicPackagePage', () => {
   it('links back to the public repository page, not the authenticated one', async () => {
     const { fixture } = await render()
 
-    // PublicLayout itself renders a "Se connecter" <a routerLink="/login"> in its header, before
-    // the projected content — so a plain `By.css('a')` would match that one instead. Target the
-    // back-link by its own class.
+    // PublicLayout renders its own "Se connecter" link first: target the back-link by its class.
     const back = fixture.debugElement.query(By.css('.public-package-page__back'))
     expect(back.attributes['href']).toBe('/@alice/my-lib')
   })

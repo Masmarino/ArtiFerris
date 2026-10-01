@@ -16,7 +16,6 @@ describe('MfaEnrollmentPage', () => {
   }
 
   beforeEach(() => {
-    // No jasmine here (vitest-based runner) — hand-rolled vi.fn() spies stand in.
     authServiceSpy = {
       startTotpSetup: vi.fn(),
       confirmTotpSetup: vi.fn(),
@@ -87,7 +86,6 @@ describe('MfaEnrollmentPage', () => {
     expect(component.backupCodes()).toEqual(['aaaa', 'bbbb'])
   })
 
-  // Also ported from the pre-extraction login-page.spec.ts (see note above).
   it('registers a passkey during mandatory setup and emits completed', async () => {
     Object.defineProperty(navigator, 'credentials', {
       configurable: true,

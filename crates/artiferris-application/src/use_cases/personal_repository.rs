@@ -90,11 +90,9 @@ impl CreateUserProjectUseCase {
 
         let repository_id = Uuid::new_v4();
         let created = PackageRepository::create(repository_id, personal_org.id, name, format, repo_type, None, None, None)?;
-        // GrantPermissionUseCase would reject this: a personal org is never the owner's real org.
         let grant = Permission::default().grant(owner_user_id, repository_id, Role::Admin);
 
-        // Repository creation and the owner's grant persist together in one transaction, or
-        // neither does — see `PersonalProjectProvisioningPort`'s doc comment for why that matters.
+        // Repository creation and the owner's grant persist in one transaction, or neither does.
         self.provisioning.create_with_owner_grant(repository_id, created, owner_user_id, grant, owner_user_id).await?;
 
         Ok(repository_id)
@@ -216,8 +214,7 @@ mod tests {
         assert!(matches!(err, ApplicationError::NoPersonalOrganization));
     }
 
-    /// A fake `PersonalProjectProvisioningPort` that always fails, simulating a transient error
-    /// (pool exhaustion, a dropped connection) hitting the atomic provisioning call.
+    /// A `PersonalProjectProvisioningPort` that always fails, like pool exhaustion.
     struct AlwaysFailsProvisioning;
 
     #[async_trait::async_trait]
@@ -242,21 +239,16 @@ mod tests {
         let user_id = seed_user(&pool, "alice").await;
         ReservePersonalOrganizationUseCase::new(organizations.clone(), users).execute(user_id).await.unwrap();
 
-        // The provisioning call fails outright (as it would under pool exhaustion or a transient
-        // connection error hitting the single atomic transaction).
         let failing_create_project = CreateUserProjectUseCase::new(organizations.clone(), Arc::new(AlwaysFailsProvisioning), repository_store.clone());
         let err = failing_create_project.execute(user_id, "my-lib", RepositoryFormat::Npm, RepositoryType::Hosted).await.unwrap_err();
         assert!(matches!(err, ApplicationError::EventStore(_)), "expected the provisioning failure to propagate, got {err:?}");
 
-        // Nothing was created at all: the name is still free...
         let personal_org = organizations.find_by_slug(&personal_organization_slug(user_id)).await.unwrap().unwrap();
         assert!(
             repository_store.find_by_org_and_name(personal_org.id, "my-lib").await.unwrap().is_none(),
             "the failed attempt must not have left a repository behind"
         );
 
-        // ...and a retry with the same name succeeds, proving the first attempt left no partial
-        // state for the retry to collide with.
         let retry_create_project = CreateUserProjectUseCase::new(organizations, repository_store.clone(), repository_store.clone());
         let repo_id = retry_create_project.execute(user_id, "my-lib", RepositoryFormat::Npm, RepositoryType::Hosted).await.unwrap();
         assert!(repository_store.find_by_id(repo_id).await.unwrap().is_some());

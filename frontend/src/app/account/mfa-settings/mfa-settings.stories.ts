@@ -62,7 +62,6 @@ export const Loading: Story = {
   },
 }
 
-/** The status could not be loaded: an error and a retry instead of an endless spinner. */
 export const LoadFailed: Story = {
   decorators: [withServices(fakeMfa({ getStatus: () => throwError(() => new Error('boom')) }))],
   play: async ({ canvasElement }) => {
@@ -75,7 +74,6 @@ export const LoadFailed: Story = {
   },
 }
 
-/** TOTP not enabled yet: an explanation and the "Activer" entry point. */
 export const Disabled: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -86,7 +84,6 @@ export const Disabled: Story = {
   },
 }
 
-/** The confirm button stays disabled until a verification code is typed. */
 export const EnrollingInTotp: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -140,7 +137,6 @@ export const EnrollmentWithInvalidCode: Story = {
 let statusAfterEnrollment: MfaStatus = DISABLED
 const enrollmentMfa = fakeMfa({ getStatus: fn(() => of(statusAfterEnrollment)) })
 
-/** A valid code shows the one-time backup codes; acknowledging them reloads the status. */
 export const EnrollmentSucceedsWithBackupCodes: Story = {
   decorators: [withServices(enrollmentMfa)],
   beforeEach: () => {
@@ -180,7 +176,6 @@ export const Enabled: Story = {
 const regenMfa = fakeMfa({ getStatus: fn(() => of(ENABLED)) })
 const regenSignOut = fn()
 
-/** The backend ends the session on a regeneration: the codes stay visible until acknowledged, then the user is signed out. */
 export const RegeneratingBackupCodes: Story = {
   decorators: [withServices(regenMfa, new ToastService(), regenSignOut)],
   beforeEach: () => regenSignOut.mockClear(),
@@ -255,7 +250,6 @@ export const RegenerationServerError: Story = {
 const disableMfa = fakeMfa({ getStatus: fn(() => of(ENABLED)) })
 const disableSignOut = fn()
 
-/** Disabling TOTP ends the session on the backend: the user is signed out straight away. */
 export const DisablingMfa: Story = {
   decorators: [withServices(disableMfa, new ToastService(), disableSignOut)],
   beforeEach: () => disableSignOut.mockClear(),
@@ -297,7 +291,6 @@ export const DisablingWithWrongPassword: Story = {
 
 const emptyPasswordMfa = fakeMfa({ getStatus: () => of(ENABLED) })
 
-/** Clicking the danger actions with no password typed sends nothing. */
 export const EmptyPasswordIsIgnored: Story = {
   decorators: [withServices(emptyPasswordMfa)],
   play: async ({ canvasElement }) => {

@@ -8,7 +8,7 @@ import { ExportPort } from '../application/export.port'
 export class HttpExportAdapter implements ExportPort {
   private readonly http = inject(HttpClient)
 
-  /** Fetched via HttpClient, not a plain link, so the Bearer auth header attaches. */
+  /** Through HttpClient, not a plain link, so the auth header goes along. */
   exportConfiguration(): Observable<Blob> {
     return this.http.get('/api/admin/export/configuration', { responseType: 'blob' })
   }

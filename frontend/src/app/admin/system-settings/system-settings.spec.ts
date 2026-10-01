@@ -119,7 +119,9 @@ describe('SystemSettingsAdmin', () => {
 
       expect(fixture.nativeElement.textContent).toContain('Page publique')
       expect(checkbox(fixture, "Afficher la page publique de l'organisation")).toBeDefined()
-      expect(checkbox(fixture, 'Bloquer les moteurs de recherche pour cette organisation')).toBeDefined()
+      expect(
+        checkbox(fixture, 'Bloquer les moteurs de recherche pour cette organisation'),
+      ).toBeDefined()
     })
 
     it("offers the instance's pages, and nothing about one organization's crawlers, to a super-admin on the public organization", () => {

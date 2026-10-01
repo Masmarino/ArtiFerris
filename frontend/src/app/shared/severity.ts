@@ -2,7 +2,7 @@ import { t } from './i18n/translator'
 import { Pipe, PipeTransform } from '@angular/core'
 import type { SelectOption } from '@masmarino/gabarit'
 
-// Case-insensitive so npm's lowercase and Trivy's uppercase severities sort the same way. "medium" and "moderate" are the same tier under different vocabularies.
+// Case-insensitive, and "medium" is "moderate" (npm vs Trivy).
 const SEVERITY_RANK: Record<string, number> = {
   critical: 0,
   high: 1,

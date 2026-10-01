@@ -32,7 +32,6 @@ export default meta
 
 type Story = StoryObj<BrandingSettingsAdmin>
 
-/** Renders the current logo and favicon previews fetched from the authenticated endpoint. */
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -41,7 +40,6 @@ export const Default: Story = {
   },
 }
 
-/** Picking a logo file (via gbt-file-upload) enables the import button, which uploads it and refreshes the preview. */
 export const UploadingALogo: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -59,10 +57,6 @@ export const UploadingALogo: Story = {
   },
 }
 
-/** A rejected upload reports the error as a toast (asserted in this component's own unit spec,
- * which can reach ToastService directly — a play function can't). What's observable here is the
- * DOM consequence: unlike a successful upload, the picked file is kept selected so the user can
- * retry, instead of being cleared. */
 export const UploadFailed: Story = {
   decorators: [
     moduleMetadata({
@@ -94,7 +88,6 @@ export const UploadFailed: Story = {
   },
 }
 
-/** Resetting reverts the logo to ArtiFerris's own default. */
 export const ResettingTheLogo: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

@@ -4,8 +4,8 @@ use sqlx::PgPool;
 
 use crate::error_ext::InfraErr;
 
-/// Names created before the `artiferris-` reservation existed. They keep working (lookups stay
-/// lenient), but an operator should rename them, so startup lists them.
+/// Names created before the `artiferris-` reservation. They keep working, but the operator should rename them, so
+/// startup lists them.
 pub async fn find_reserved_name_conflicts(pool: &PgPool) -> Result<Vec<String>, DomainError> {
     let pattern = format!("{RESERVED_NAME_PREFIX}%");
     let rows: Vec<(String,)> = sqlx::query_as(

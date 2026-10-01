@@ -26,7 +26,6 @@ export class CopyableCommand {
   private copiedTimer: ReturnType<typeof setTimeout> | null = null
 
   readonly command = input.required<string>()
-  /** Accessible name of the copy button. */
   readonly label = input.required<string>()
 
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle')

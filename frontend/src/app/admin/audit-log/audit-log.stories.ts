@@ -62,7 +62,6 @@ export default meta
 
 type Story = StoryObj<AuditLog>
 
-/** Entries grouped by type in the summary, most frequent first, then the full table. */
 export const Populated: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -127,7 +126,6 @@ const ADMIN_EVENTS: AuditEntry[] = [
   },
 ]
 
-/** Privilege and configuration changes read in French, with the before/after summary on the same row. */
 export const AdministrativeEvents: Story = {
   decorators: [
     moduleMetadata({
@@ -156,7 +154,6 @@ const pagedQuery = fn<AuditService['query']>((filter) =>
   of(filter?.cursor === 'page-2' ? page([ENTRIES[2]], null) : page(ENTRIES.slice(0, 2), 'page-2')),
 )
 
-/** More entries on the server: "Charger plus" appends the next page and disappears on the last one. */
 export const LoadMore: Story = {
   decorators: [
     moduleMetadata({ providers: [{ provide: AuditService, useValue: { query: pagedQuery } }] }),
@@ -178,7 +175,6 @@ export const LoadMore: Story = {
   },
 }
 
-/** The next page is on its way: the button is disabled and says so. */
 export const LoadingMore: Story = {
   decorators: [
     moduleMetadata({
@@ -200,7 +196,6 @@ export const LoadingMore: Story = {
   },
 }
 
-/** A failed next page keeps what is already on screen and lets the reader try again. */
 export const LoadMoreFailed: Story = {
   decorators: [
     moduleMetadata({
@@ -280,7 +275,6 @@ export const LoadFailed: Story = {
 
 const scopedQuery = fn<AuditService['query']>(() => of(page(ENTRIES)))
 
-/** Embedded in one organization's admin page: the query is scoped to it and still excludes Security. */
 export const ScopedToOrganization: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [
@@ -295,7 +289,6 @@ export const ScopedToOrganization: Story = {
   },
 }
 
-/** Super-admin view: no organization, Security events excluded server-side. */
 export const Unscoped: Story = {
   decorators: [
     moduleMetadata({ providers: [{ provide: AuditService, useValue: { query: scopedQuery } }] }),
@@ -309,7 +302,6 @@ export const Unscoped: Story = {
   },
 }
 
-/** Exports what is on screen: a CSV blob with one line per loaded entry. */
 export const CsvDownload: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -342,7 +334,6 @@ export const CsvDownload: Story = {
   },
 }
 
-/** While older entries exist, the summary and the export say what they cover. */
 export const PartialCoverageNotes: Story = {
   decorators: [
     moduleMetadata({
@@ -367,7 +358,6 @@ const exportQuery = fn<AuditService['query']>((filter) =>
   of(filter?.cursor === 'page-2' ? page([ENTRIES[2]], null) : page(ENTRIES.slice(0, 2), 'page-2')),
 )
 
-/** With entries still on the server, the export pages through all of them: the file holds the whole log. */
 export const CsvDownloadFetchesEveryPage: Story = {
   decorators: [
     moduleMetadata({ providers: [{ provide: AuditService, useValue: { query: exportQuery } }] }),
@@ -393,7 +383,6 @@ export const CsvDownloadFetchesEveryPage: Story = {
   },
 }
 
-/** A slow export shows how many entries it has and can be cancelled without producing a file. */
 export const CsvExportInProgress: Story = {
   decorators: [
     moduleMetadata({
@@ -426,7 +415,6 @@ export const CsvExportInProgress: Story = {
   },
 }
 
-/** A page that fails midway produces no file, and the reader is told. */
 export const CsvExportFailed: Story = {
   decorators: [
     moduleMetadata({
@@ -459,7 +447,6 @@ export const CsvExportFailed: Story = {
 
 let slowOrgA = new Subject<AuditPage>()
 
-/** Switching organization while the first request is still in flight: its late response must not overwrite the new organization's rows. */
 export const SwitchOrganizationWhileLoading: Story = {
   decorators: [
     moduleMetadata({

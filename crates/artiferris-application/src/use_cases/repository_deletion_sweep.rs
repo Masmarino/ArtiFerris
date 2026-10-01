@@ -6,14 +6,8 @@ use artiferris_domain::storage::StorageBackendPort;
 
 use crate::error::ApplicationError;
 
-/// Run daily by a background timer, not on any request path — hard-deletes repositories that have
-/// been soft-deleted past their 30-day undo window, freeing the storage a soft delete alone never
-/// reclaims (B-39). Mirrors `SweepExpiredDockerUploadsUseCase`'s shape: a thin wrapper around a single
-/// port call, plus best-effort on-disk cleanup for what that call reports as reclaimed — the DB-side
-/// bookkeeping (the cascade, the group-membership fix, the blob reference-count decrement) is already
-/// durably committed by the time either cleanup step runs, so a failure in either is logged and
-/// skipped rather than propagated (fix round 1, Findings 2 & 3): a stray on-disk file is recoverable
-/// by a future cleanup pass, unlike DB state lost mid-sweep.
+/// Run daily: hard-deletes repositories soft-deleted past their 30-day undo window, then removes their files on a
+/// best-effort basis. The database work is already committed by then, so a file failure is logged, not propagated.
 pub struct RepositoryDeletionSweepUseCase {
     repositories: Arc<dyn RepositoryDeletionSweepPort>,
     blobs: Arc<dyn DockerBlobStorePort>,
@@ -29,19 +23,11 @@ impl RepositoryDeletionSweepUseCase {
     pub async fn execute(&self) -> Result<usize, ApplicationError> {
         let result = self.repositories.hard_delete_repositories_past_grace_period().await?;
 
-        // Best-effort: the reference-count decrement and the `docker_blobs` row deletion already
-        // committed inside the port call above, so a failure removing any one file here is logged,
-        // not propagated — it can never re-inflate a reference count or block a future cleanup pass.
-        // `remove_reclaimed_blob_files` re-locks and re-checks each digest before touching its file,
-        // closing the race where a concurrent write for the same digest lands in the gap between the
-        // port call's commit above and this call.
         let reclaimed_digests: Vec<Digest> = result
             .reclaimed_docker_blob_digests
             .iter()
             .filter_map(|d| match Digest::parse(d) {
                 Ok(digest) => Some(digest),
-                // Every digest here came from a `docker_blobs.digest` the port call itself just
-                // deleted, so this can't actually happen — kept as a defensive skip-and-log.
                 Err(e) => {
                     tracing::warn!(digest = %d, error = %e, "repository deletion sweep reported a malformed digest; skipping its file removal");
                     None
@@ -50,9 +36,6 @@ impl RepositoryDeletionSweepUseCase {
             .collect();
         self.blobs.remove_reclaimed_blob_files(&reclaimed_digests).await;
 
-        // Best-effort on-disk cleanup for each swept repository's own storage directory (Finding 2,
-        // fix round 1) — a no-op for a Docker-format repository, which never had one. Also logged,
-        // not propagated: the repository's DB rows are already gone by this point regardless.
         for repository_id in &result.swept_repository_ids {
             if let Err(e) = self.storage.delete_repository(*repository_id).await {
                 tracing::warn!(repository_id = %repository_id, error = %e, "repository deletion sweep hard-deleted a repository's rows but failed to remove its on-disk storage directory");
@@ -107,11 +90,8 @@ mod tests {
         assert_eq!(removed, 3);
     }
 
-    /// Fix round 1, Finding 3: the port itself now does the reference-count decrement (and deletes
-    /// any blob row that reaches zero) transactionally, before ever returning — this use case's only
-    /// remaining job for Docker blobs is best-effort on-disk file cleanup for what the port reports
-    /// as already reclaimed, routed through `remove_reclaimed_blob_files` (the locked, re-checking
-    /// primitive).
+    /// The port decrements blob reference counts (deleting rows that reach zero) before returning; this use case only
+    /// removes the reclaimed files.
     #[tokio::test]
     async fn sweeping_best_effort_removes_every_docker_blob_file_the_port_reports_as_reclaimed() {
         let blobs = Arc::new(FakeDockerBlobStore::new());
@@ -129,9 +109,8 @@ mod tests {
         assert_eq!(blobs.removed_reclaimed_digests.lock().unwrap().as_slice(), [digest]);
     }
 
-    /// Fix round 1, Finding 2: npm tarballs (and anything else under a repository's own storage
-    /// root) are on-disk, not just in the DB — the cascade delete the port runs never touches them,
-    /// so the use case must explicitly reclaim each swept repository's directory afterward.
+    /// npm tarballs live under the repository's storage root, which the cascade delete never touches: reclaim that
+    /// directory afterwards.
     #[tokio::test]
     async fn sweeping_removes_each_swept_repositorys_on_disk_storage_directory() {
         let swept_repository_id = Uuid::new_v4();

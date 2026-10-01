@@ -15,7 +15,7 @@ import { OrganizationMetricsPage } from '../organization-metrics-page/organizati
 import { SystemSettingsAdmin } from '../system-settings/system-settings'
 import { SmtpSettingsAdmin } from '../smtp-settings/smtp-settings'
 
-// Detail panel only shows once an id is present in the route.
+// The detail panel shows once the route has an id.
 @Component({
   selector: 'app-organizations-page',
   standalone: true,
@@ -40,7 +40,7 @@ import { SmtpSettingsAdmin } from '../smtp-settings/smtp-settings'
 export class OrganizationsPage {
   private readonly route = inject(ActivatedRoute)
 
-  // list_organizations is super-admin only.
+  // Only super-admins can list organizations.
   readonly isSuperAdmin = inject(MeService).isSuperAdmin
 
   readonly organizationId = toSignal(this.route.paramMap.pipe(map((params) => params.get('id'))), {

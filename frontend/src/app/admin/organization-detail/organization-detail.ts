@@ -67,7 +67,6 @@ export class OrganizationDetail {
   readonly selectedProviderType = signal<'ldap' | 'oidc'>('ldap')
 
   readonly identityProviderConfigured = signal(false)
-  /** The stored secret cannot be decrypted by this server: the provider must be configured again. */
   readonly secretUnreadable = signal(false)
   readonly serverUrl = signal('')
   readonly bindDn = signal('')
@@ -111,7 +110,7 @@ export class OrganizationDetail {
     )
   })
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     effect(() => {
       this.organizationId()
@@ -121,7 +120,7 @@ export class OrganizationDetail {
 
   reload(): void {
     const requestedId = this.organizationId()
-    // The form shows only once both answers are in, so a failed lookup never leaves defaults to save.
+    // The form waits for both answers, so a failed lookup never leaves defaults to save.
     this.organization.set(null)
     this.resetIdentityProvider()
     this.loading.set(true)

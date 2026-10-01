@@ -159,7 +159,7 @@ describe('RepositoriesList', () => {
     expect(fixture.nativeElement.querySelector('gbt-spinner')).toBeNull()
     expect(fixture.componentInstance.error()).not.toBeNull()
 
-    // organizationsService.list() caches — a reload only re-requests repositories.
+    // organizationsService.list() caches: a reload only re-requests repositories.
     fixture.componentInstance.reload()
     httpMock.expectOne('/api/repositories').flush([PUBLIC_REPO])
     fixture.detectChanges()
@@ -241,8 +241,7 @@ describe('RepositoriesList', () => {
     flushInitialLoad(httpMock, [PUBLIC_REPO, ACME_REPO])
     fixture.componentInstance.selectedOrganizationId.set('ALL')
 
-    // Both services cache their list() — a bare reload() with no intervening mutation
-    // replays from cache rather than issuing a second request.
+    // Both services cache list(): a bare reload() replays from cache.
     fixture.componentInstance.reload()
 
     expect(fixture.componentInstance.selectedOrganizationId()).toBe('ALL')

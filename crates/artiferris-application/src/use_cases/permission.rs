@@ -20,8 +20,6 @@ impl GrantPermissionUseCase {
     }
 
     pub async fn execute(&self, user_id: Uuid, repository_id: Uuid, role: Role, actor_id: Uuid) -> Result<(), ApplicationError> {
-        // A grantee outside the repository's own organization must be rejected here regardless
-        // of what the route already checked — a super-admin grantee legitimately operates cross-org.
         let (repo, grantee) = tokio::join!(self.repositories.find_by_id(repository_id), self.users.find_by_id(user_id));
         let mismatch = match (repo?, grantee?) {
             (Some(repo), Some(grantee)) => !grantee.is_super_admin && grantee.organization_id != repo.organization_id,
@@ -63,8 +61,6 @@ mod tests {
     use chrono::Utc;
     use artiferris_domain::error::EventStoreError;
     use artiferris_domain::package_repository::{PackageRepositorySummary, RepositoryFormat, RepositoryType};
-    // Only the test double implements the query side; the use cases here are
-    // write-only, so this import stays scoped to the tests.
     use artiferris_domain::permission::{PermissionEvent, PermissionQueryPort};
     use artiferris_domain::user::{User, Username};
     use std::collections::HashMap;
@@ -209,9 +205,8 @@ mod tests {
         }
     }
 
-    /// No repository/user registered in either fake, so `execute`'s lookups both come back
-    /// `None` and the organization check is skipped — same behavior the pre-fix use case had
-    /// for every test below, which only exercise the grant/revoke event-sourcing mechanics.
+    /// No repository or user registered: the organization check is skipped. These tests only cover the grant/revoke
+    /// events.
     fn use_case_without_organization_data(store: Arc<FakePermissionStore>) -> GrantPermissionUseCase {
         GrantPermissionUseCase::new(store, Arc::new(FakeRepositories::new()), Arc::new(FakeUsers::new()))
     }

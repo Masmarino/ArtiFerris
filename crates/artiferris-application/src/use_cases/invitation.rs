@@ -13,9 +13,8 @@ use uuid::Uuid;
 
 use crate::error::ApplicationError;
 
-/// `https://<slug>.<artiferris_base_domain>` (or `https://app.<artiferris_base_domain>` for the
-/// public org — the main app's own reserved host, see `organization_middleware`'s "app" label) —
-/// the origin an invited/imported user's own org is served from.
+/// `https://<slug>.<base_domain>`, or `https://app.<base_domain>` for the public organization: where an invited user's
+/// organization is served.
 pub fn organization_origin(artiferris_base_domain: &str, organization: &Organization) -> String {
     let host = if organization.is_public { format!("app.{}", artiferris_base_domain) } else { format!("{}.{}", organization.slug.as_str(), artiferris_base_domain) };
     format!("{}://{}", crate::base_domain::scheme_for_domain(artiferris_base_domain), host)
@@ -128,11 +127,12 @@ impl InviteUserUseCase {
             return Err(e.into());
         }
 
-        // After persisting the user, not before — if the org lookup ever fails, the account still exists and can be reached via ResendInvitationUseCase.
+        // After persisting the user: if the org lookup fails, the account exists and `ResendInvitationUseCase` can
+        // reach it.
         let organization = require_organization(self.organizations.as_ref(), organization_id).await?;
         let origin = organization_origin(&self.artiferris_base_domain, &organization);
 
-        // A delivery failure shouldn't fail account creation — retry via ResendInvitationUseCase.
+        // A delivery failure does not fail account creation.
         let activation_url = format!("{origin}/activate?token={token}");
         // The invitee cannot have chosen a language yet: write in the one of the admin who invites them.
         let language = self.email.language_for(actor_id).await;

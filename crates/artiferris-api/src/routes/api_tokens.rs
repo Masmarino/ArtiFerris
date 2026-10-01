@@ -104,7 +104,6 @@ mod tests {
     use tower::ServiceExt;
     use uuid::Uuid;
 
-    // Same local pattern as every other route test module (see routes/auth.rs's own `test_config()`).
     fn test_config() -> Config {
         Config {
             database_url: String::new(),
@@ -271,7 +270,6 @@ mod tests {
         assert_eq!(json.as_array().unwrap().len(), 0);
     }
 
-    // Does the HTTP handler actually check that the caller owns the token being revoked?
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn revoking_another_users_token_is_rejected_and_does_not_revoke_it(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -296,7 +294,6 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let alices_token_id = json["id"].as_str().unwrap();
 
-        // Bob attempts to revoke Alice's token by id.
         let revoke_response = app
             .clone()
             .oneshot(

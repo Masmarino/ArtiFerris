@@ -6,8 +6,7 @@ use uuid::Uuid;
 
 use crate::package_repository::{RepositoryFormat, RepositoryType};
 
-/// One public catalog per supported format. Adding a format (Helm, say) means adding an entry here
-/// and a query branch in the adapter; the search and the pages iterate this list.
+/// One public catalog per format. A new format means an entry here and a query branch in the adapter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CatalogFormatSpec {
     pub format: RepositoryFormat,

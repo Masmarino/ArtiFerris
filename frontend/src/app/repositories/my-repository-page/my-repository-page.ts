@@ -33,7 +33,7 @@ export class MyRepositoryPage implements OnInit {
         this.loading.set(false)
       },
       error: () => {
-        // Assume not reserved yet — the create flow re-checks via reserve() regardless.
+        // Assume not reserved: the create flow re-checks anyway.
         this.loading.set(false)
         this.toastService.error(t('repositories.mine.errors.checkFailed'))
       },
@@ -61,9 +61,7 @@ export class MyRepositoryPage implements OnInit {
       },
       error: (err) => {
         this.reserving.set(false)
-        // 409 means another request (this tab or another) already reserved it —
-        // treat it as success rather than stranding the user on a create screen
-        // for a namespace that now exists.
+        // 409: already reserved (by this tab or another); treat it as success.
         if (err instanceof HttpErrorResponse && err.status === 409) {
           this.showConfirmModal.set(false)
           this.reserved.set(true)

@@ -66,10 +66,10 @@ impl PatchBlobUploadUseCase {
         self.execute_stream(session_id, repository_id, body, expected_start, u64::MAX).await
     }
 
-    /// `expected_start`, from a client-sent `Content-Range`, must match the offset at write time. At most `request_limit`
-    /// bytes, and no more than the quota has left after referenced blobs, unreferenced uploads and every session's staged bytes.
-    /// Sessions streaming at the same moment can each see the whole room, so the total is checked again once the chunk has
-    /// landed and the chunk is taken back if it doesn't fit.
+    /// `expected_start`, from a client `Content-Range`, must match the offset at write time. At most `request_limit`
+    /// bytes, and no more than the quota has left after referenced blobs, unreferenced uploads and staged bytes.
+    /// Concurrent sessions can each see the whole room, so the total is checked again after the chunk lands and the
+    /// chunk is taken back if it does not fit.
     pub async fn execute_stream(&self, session_id: Uuid, repository_id: Uuid, body: ByteStream, expected_start: Option<i64>, request_limit: u64) -> Result<i64, ApplicationError> {
         let session = find_own_session(&*self.sessions, session_id, repository_id).await?;
         let quota = self.repositories.find_by_id(repository_id).await?.and_then(|repo| repo.quota_bytes).map(|quota| quota.max(0) as u64);
@@ -123,8 +123,9 @@ impl CompleteBlobUploadUseCase {
         Self { sessions, blobs }
     }
 
-    /// Verifies staged bytes hash to `expected_digest` before storing — never trusts the client's claim. Doesn't increment the blob's ref count; that's `PutManifestUseCase`'s job.
-    /// The session is sealed first, so no chunk can land between the hash and the adoption. A mismatch discards it.
+    /// Verifies the staged bytes hash to `expected_digest`; a mismatch discards the upload. Does not bump the ref
+    /// count: that is `PutManifestUseCase`'s job. The session is sealed first, so no chunk lands between hash and
+    /// adoption.
     pub async fn execute(&self, session_id: Uuid, repository_id: Uuid, expected_digest: &Digest) -> Result<(), ApplicationError> {
         find_own_session(&*self.sessions, session_id, repository_id).await?;
         let session = self.sessions.seal(session_id).await.map_err(upload_error)?;
@@ -136,7 +137,6 @@ impl CompleteBlobUploadUseCase {
                 computed: computed.as_str().to_string(),
             });
         }
-        // The staged file already holds these exact bytes — adopt it in place, no second full copy.
         self.blobs.adopt_staged_file(&computed, &session.staging_path, size_bytes).await?;
         self.blobs.link_to_repository(session.package_repository_id, &computed).await?;
         self.sessions.delete(session_id).await?;
@@ -201,8 +201,7 @@ mod tests {
         }
     }
 
-    /// `PatchBlobUploadUseCase` with no repository registered — `find_by_id` returns `None`, so the
-    /// quota check is skipped, same as `repo_with_quota(id, None)` would give.
+    /// `PatchBlobUploadUseCase` with no repository registered: the quota check is skipped.
     fn patch_use_case(sessions: Arc<FakeUploadSessions>) -> PatchBlobUploadUseCase {
         PatchBlobUploadUseCase::new(sessions, Arc::new(FakeDockerBlobStore::new()), Arc::new(FakeRepositories::new()), Arc::new(FakeRepositoryQuotaLock::new()))
     }
@@ -239,7 +238,6 @@ mod tests {
         let use_case = patch_use_case(sessions);
         use_case.execute(session.id, repository_id, b"hello ", None).await.unwrap();
 
-        // A retried or reordered chunk claiming to start at 0 when 6 bytes are already staged.
         let err = use_case.execute(session.id, repository_id, b"world", Some(0)).await.unwrap_err();
 
         assert!(matches!(err, ApplicationError::DockerChunkOffsetMismatch { expected: 6, got: 0 }), "got {err:?}");

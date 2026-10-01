@@ -44,7 +44,6 @@ export default meta
 
 type Story = StoryObj<CatalogPage>
 
-/** The npm catalog: named after itself, search locked to npm. */
 export const NpmCatalog: Story = {
   decorators: catalog('artiferris-npm', 'npm'),
   play: async ({ canvasElement }) => {

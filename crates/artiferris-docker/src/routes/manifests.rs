@@ -136,10 +136,9 @@ pub async fn get_manifest(
         return docker_error(StatusCode::BAD_REQUEST, "TAG_INVALID", "the reference must be a tag or a digest").into_response();
     }
 
-    // Deliberately `user`, not `caller`: `caller` is `None` for a public top-level repository, and a
-    // caller who did authenticate must not lose their own organization's members because the group
-    // wrapping them happens to be public. `caller.is_some()` is exactly "this caller's token was
-    // verified against this top-level repository" — see `member_is_readable`.
+    // `user`, not `caller`: `caller` is `None` for a public top-level repository, and an authenticated caller must not
+    // lose their organization's members because the wrapping group is public. `caller.is_some()` means exactly "this
+    // token was verified against this top-level repository" (see `member_is_readable`).
     let caller_user = user.as_ref();
     let top_level_organization_id = repo.organization_id;
     let top_level_was_authorized = caller.is_some();
@@ -283,8 +282,8 @@ mod tests {
         digest
     }
 
-    /// Request a manifest for a repository that doesn't exist at all — `require_readable_repository_by_name`
-    /// returns `Err(StatusCode::NOT_FOUND)` with today's code, no body (B-17).
+    /// A manifest for a repository that does not exist: `require_readable_repository_by_name` returns
+    /// `Err(StatusCode::NOT_FOUND)`, no body.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_authz_rejection_still_carries_the_oci_error_envelope(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -438,10 +437,8 @@ mod tests {
         assert_eq!(put_response.status(), StatusCode::INSUFFICIENT_STORAGE);
     }
 
-    /// Regression test for a fix round 2 finding: a malformed tag used to bubble up as a bare
-    /// `ApplicationError::Domain(DomainError::Validation(_))`, which `docker_error_response` has no
-    /// explicit arm for — it fell into the catch-all 500. It must be a client-input 400 like every
-    /// other malformed-payload rejection in this file (M-16).
+    /// Regression: a malformed tag bubbled up as a bare `DomainError::Validation`, which `docker_error_response` has no
+    /// arm for, so it became a 500. It must be a 400 like every other malformed payload.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn pushing_a_manifest_with_a_malformed_tag_is_a_400_not_a_500(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -774,7 +771,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = crate::route_test_support::test_state(pool.clone(), dir.path()).await;
 
-        // Proves the positive case: a non-public org's own Host header resolves to its own data.
         let acme_id = Uuid::new_v4();
         state
             .organizations
@@ -844,7 +840,6 @@ mod tests {
             .unwrap();
         assert_eq!(get_response.status(), StatusCode::OK);
         let returned = axum::body::to_bytes(get_response.into_body(), usize::MAX).await.unwrap();
-        // Byte-exact: proves the manifest actually pushed under "acme" was the one returned.
         assert_eq!(returned.to_vec(), body);
     }
 
@@ -902,7 +897,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    /// Unlike the isolation test above, this token's embedded org differs but the request targets the repository's OWNING org — only an explicit organization check can reject it.
+    /// This token's embedded organization differs but the request targets the repository's owning organization, so only
+    /// an explicit organization check can reject it.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_token_holders_own_organization_must_match_even_with_a_valid_granted_scope(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -940,7 +936,6 @@ mod tests {
         let repo_name = format!("repo-{repo_id}");
         let app = crate::router(state.clone());
 
-        // Push a real manifest first, so the assertion below is explained by the org check, not a missing manifest.
         let acme_user_id = crate::route_test_support::seed_user_with_active_token(&pool, acme_id, "acme-owns-this-manifest").await;
         let acme_token = crate::route_test_support::issue_test_token_for_org(&state, acme_user_id, acme_id, false, repo_id, &repo_name, "myimage", &["push", "pull"]);
         let config_bytes = b"cross-org-replay-config-bytes";
@@ -976,7 +971,6 @@ mod tests {
             .unwrap();
         assert_eq!(put_response.status(), StatusCode::CREATED);
 
-        // Sanity check: acme's own token can fetch the manifest it just pushed.
         let acme_get = app
             .clone()
             .oneshot(
@@ -1015,11 +1009,7 @@ mod tests {
         );
     }
 
-    // ---- C-1: per-member authorization on group traversal, exercised through the real routes ----
 
-    /// Attaches `member_id` to `group_id` through the repository event store — the same events the
-    /// API's add-group-member route emits, so the projection the group traversal later reads is
-    /// built by production code rather than by hand-written SQL.
     async fn attach_group_member(pool: &sqlx::PgPool, group_id: Uuid, member_id: Uuid) {
         use artiferris_domain::package_repository::{PackageRepositoryEvent, PackageRepositoryEventStorePort};
         let store = artiferris_infrastructure::postgres::package_repository_store::PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string());
@@ -1045,12 +1035,10 @@ mod tests {
             .unwrap();
     }
 
-    /// C-1, Docker's concrete hole: once the top-level group is public no token is required at all,
-    /// so an anonymous puller would otherwise reach a private member's manifest straight through it.
-    /// The companion assertion at the end pulls the same manifest with a real token and must still
-    /// succeed — that is what proves the 404 comes from the per-member policy rather than from a
-    /// group traversal that never reached the member, and it also pins the identity the policy runs
-    /// as: a public top level yields no `caller`, so the check has to use the raw authenticated user.
+    /// Once the top-level group is public no token is needed, so an anonymous puller would reach a private member's
+    /// manifest through it. The closing assertion pulls the same manifest with a real token and must succeed: that
+    /// proves the 404 comes from the per-member policy, and pins the identity the policy runs as (a public top level
+    /// yields no `caller`, so it uses the raw authenticated user).
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_private_group_member_is_not_reachable_through_a_public_group_by_an_anonymous_caller(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -1059,7 +1047,6 @@ mod tests {
         seed_repository(&pool, PUBLIC_ORGANIZATION_ID, group_id, "docker", "group").await;
         let group_name = format!("repo-{group_id}");
         attach_group_member(&pool, group_id, member_id).await;
-        // The member stays private; only the group wrapping it is public.
         mark_repository_public(&pool, group_id).await;
 
         let state = test_state(pool.clone(), dir.path()).await;
@@ -1113,12 +1100,10 @@ mod tests {
         assert_eq!(returned.to_vec(), body);
     }
 
-    /// Regression for the personal-namespace hole in the per-member policy. A personal
-    /// organization's id never equals any real user's `organization_id`, so comparing every member
-    /// against the CALLER's own organization locked a user out of their own personal group's
-    /// members: alice owns both projects here, yet pulling the member through the group 404'd.
-    /// The policy also accepts a member sharing the organization of a top-level repository the
-    /// caller's token was actually verified against — which is what makes a personal group work.
+    /// Regression: a personal organization's id never equals a real user's `organization_id`, so comparing every member
+    /// to the caller's organization locked alice out of her own group's members. The policy also accepts a member
+    /// sharing the organization of a top-level repository the token was verified against, which makes a personal group
+    /// work.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_personal_group_members_own_owner_can_pull_it_through_the_group(pool: sqlx::PgPool) {
         use artiferris_domain::package_repository::RepositoryFormat;
@@ -1129,8 +1114,6 @@ mod tests {
         let alice_id = seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "alice", "alice-token").await;
         let (group_id, member_id) = create_personal_group_over_a_personal_member(&pool, alice_id, "my-group", "my-image", RepositoryFormat::Docker).await;
 
-        // Alice's own org is the public org; both projects live in her personal org — exactly the
-        // mismatch the old policy rejected on.
         let push_token = issue_test_token(&state, alice_id, member_id, "my-image", "myimage", &["push", "pull"]);
         let group_pull_token = issue_test_token(&state, alice_id, group_id, "my-group", "myimage", &["pull"]);
         let app = crate::router(state);
@@ -1187,8 +1170,7 @@ mod tests {
         let returned = axum::body::to_bytes(through_group.into_body(), usize::MAX).await.unwrap();
         assert_eq!(returned.to_vec(), body);
 
-        // The same blob must come back through the group too — `get_blob` carries its own copy of
-        // the policy, and the blob path had no per-member coverage before this.
+        // The same blob must come back through the group: `get_blob` carries its own copy of the policy.
         let blob_through_group = app
             .clone()
             .oneshot(
@@ -1205,11 +1187,9 @@ mod tests {
         let blob_bytes = axum::body::to_bytes(blob_through_group.into_body(), usize::MAX).await.unwrap();
         assert_eq!(blob_bytes.to_vec(), config_bytes.to_vec());
 
-        // The other half: the relaxation must not hand the member to a caller who was never
-        // authorized against the group itself. Mallory holds no grant on either project, so the
-        // real `/v2/token` endpoint issues her a scope with no actions and the top-level gate
-        // rejects her before the traversal ever starts. Going through that endpoint rather than
-        // `issue_test_token` is the point — it's what decides whether a scope is granted at all.
+        // The other half: the relaxation must not hand the member to a caller never authorized against the group.
+        // Mallory holds no grant, so the real `/v2/token` endpoint issues her a scope without actions and the top-level
+        // gate rejects her before traversal. Going through that endpoint, not `issue_test_token`, is the point.
         seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "mallory", "mallory-token").await;
         let mut basic = axum::http::HeaderMap::new();
         axum_extra::headers::HeaderMapExt::typed_insert(&mut basic, axum_extra::headers::Authorization::basic("ignored", "mallory-token"));
@@ -1370,10 +1350,9 @@ mod tests {
                 .unwrap()
         };
         let stalled: Vec<_> = (0..artiferris_application::body_budget::MAX_BODIES_PER_CLIENT).map(|_| tokio::spawn(app.clone().oneshot(stalled_request()))).collect();
-        // Each spawned request has to clear real auth/DB work before it registers with the body budget, which is slow on a
-        // contended CI runner. Wait for all the slots to be taken rather than for a while: a probe arriving while one is still free
-        // is admitted as a 5th stalled body instead of rejected, and the test hangs on its own idle timeout (408) rather than
-        // seeing the 429 this test is actually about.
+        // Each spawned request clears auth and DB work before registering with the body budget, slow on a contended
+        // runner. Wait for every slot to be taken: a probe arriving while one is free is admitted as a fifth stalled
+        // body and the test hangs on its idle timeout (408) instead of seeing the 429.
         for _ in 0..500 {
             if guard.body_budget.most_in_flight_from_one_client() == artiferris_application::body_budget::MAX_BODIES_PER_CLIENT {
                 break;

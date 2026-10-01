@@ -28,10 +28,7 @@ struct UserRow {
     email: Option<String>,
 }
 
-/// Escapes ILIKE's own wildcard metacharacters — `%`, `_`, and the default `\` escape character
-/// itself — in user-supplied search text before it's wrapped in a `%...%` pattern. Without this, a
-/// caller's own `%`/`_` would be interpreted as ILIKE wildcards instead of literal characters
-/// (e.g. searching for a literal underscore would instead match every username).
+/// Escapes ILIKE's `%`, `_` and `\` in user text before it is wrapped in `%...%`.
 fn escape_ilike_wildcards(raw: &str) -> String {
     raw.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
 }
@@ -216,9 +213,6 @@ impl UserRepositoryPort for PostgresUserRepository {
     async fn delete_unless_last_super_admin(&self, id: Uuid, audit: Option<&AdminAuditRecord>) -> Result<bool, DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
 
-        // Serializes any operation that could change the super-admin count —
-        // a per-row lock isn't enough since two concurrent ops can each
-        // target a different admin.
         sqlx::query!("SELECT pg_advisory_xact_lock(hashtext('user_super_admin_guard'))")
             .execute(&mut *tx)
             .await
@@ -580,8 +574,7 @@ mod tests {
         assert_eq!(results.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), vec!["match-alice", "match-bob", "match-charlie"]);
     }
 
-    /// A literal `_` in the query must not act as ILIKE's single-character wildcard — otherwise
-    /// searching for `a_b` would also match `axb`, `a5b`, etc.
+    /// A literal `_` must not match any character (`a_b` must not match `axb`).
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn search_by_organization_treats_an_underscore_in_the_query_as_a_literal_character(pool: sqlx::PgPool) {
         let org_id = Uuid::new_v4();
@@ -596,7 +589,7 @@ mod tests {
         assert_eq!(results[0].username.as_str(), "under_score");
     }
 
-    /// A literal `%` in the query must not act as ILIKE's any-substring wildcard.
+    /// A literal `%` must not match any substring.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn search_by_organization_treats_a_percent_sign_in_the_query_as_a_literal_character(pool: sqlx::PgPool) {
         let org_id = Uuid::new_v4();

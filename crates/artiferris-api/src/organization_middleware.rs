@@ -60,9 +60,6 @@ mod tests {
     use artiferris_domain::organization::OrganizationSlug;
     use tower::ServiceExt;
 
-    // This crate has no shared test Config helper — every route test module defines its own
-    // local copy (see crates/artiferris-api/src/routes/repositories.rs's own `test_config()` for
-    // the established pattern this mirrors).
     fn test_config() -> Config {
         Config {
             database_url: String::new(),
@@ -225,8 +222,7 @@ mod tests {
             .await
             .unwrap();
         let app = router(state);
-        // DNS is case-insensitive, so a real client can send an uppercase Host header — it
-        // must resolve exactly like the lowercase form, not silently fall through to the
+        // DNS is case-insensitive: an uppercase Host must resolve like the lowercase one, not fall through to the
         // public organization.
         let response = app
             .oneshot(

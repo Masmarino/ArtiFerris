@@ -103,7 +103,6 @@ export default meta
 
 type Story = StoryObj<PackageTree>
 
-/** Each npm package with its version count, vulnerability badge and a link to its detail page. */
 export const NpmPackages: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -139,7 +138,6 @@ const FULL_VERSIONS = Array.from({ length: 200 }, (_, i) => ({
   deprecated: false,
 }))
 
-/** A package whose versions were cut at the server's cap says so; the untouched one doesn't. */
 export const TruncatedPackage: Story = {
   decorators: [
     withPackages({
@@ -183,7 +181,6 @@ export const TruncatedDockerImage: Story = {
   },
 }
 
-/** The public view links under `/@user/repo` instead of `/repositories/:id`. */
 export const CustomBasePath: Story = {
   args: { basePath: ['/@alice', 'ui-kit'] },
   decorators: [withPackages(DOCKER_IMAGES)],
@@ -195,7 +192,6 @@ export const CustomBasePath: Story = {
   },
 }
 
-/** A cursor means more packages exist: "Charger plus" fetches them and appends them. */
 export const MorePackagesToLoad: Story = {
   decorators: [
     moduleMetadata({

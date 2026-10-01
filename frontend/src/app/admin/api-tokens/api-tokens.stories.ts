@@ -47,7 +47,6 @@ function fakeTokens(
 
 const toast = { success: fn(), error: fn() }
 
-/** Stands in for the confirmation dialog the component opens before revoking. */
 function fakeConfirm(answer = true) {
   return { ask: fn(() => Promise.resolve(answer)) }
 }
@@ -84,7 +83,6 @@ export default meta
 
 type Story = StoryObj<ApiTokensAdmin>
 
-/** Active tokens with a "Révoquer" action, and the revoked ones listed separately without one. */
 export const ActiveAndRevoked: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -111,7 +109,6 @@ export const NoTokens: Story = {
   },
 }
 
-/** Every token has been revoked: the active card falls back to its empty message. */
 export const OnlyRevokedTokens: Story = {
   decorators: [withTokens(fakeTokens({ list: () => of([REVOKED_TOKEN]) }))],
   play: async ({ canvasElement }) => {
@@ -123,7 +120,6 @@ export const OnlyRevokedTokens: Story = {
 }
 
 const scopedTokens = fakeTokens()
-/** Embedded in one organization's admin page: the list is scoped to it. */
 export const ScopedToAnOrganization: Story = {
   args: { organizationId: 'org-acme' },
   decorators: [withTokens(scopedTokens)],
@@ -205,7 +201,6 @@ const fullPage = Array.from({ length: 500 }, (_, i) => ({
   id: `tok-page-${i}`,
   label: `key-${i}`,
 }))
-/** The server caps the list at 500 rows, so the admin is told it may be incomplete. */
 export const ListTruncated: Story = {
   decorators: [withTokens(fakeTokens({ list: () => of(fullPage) }))],
   play: async ({ canvasElement }) => {

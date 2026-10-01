@@ -53,9 +53,10 @@ export class PackageTree {
   private readonly repositoriesService = inject(RepositoriesService)
 
   readonly repositoryId = input.required<string>()
-  /** Overrides the link prefix — defaults to `/repositories/:id`. The public repository view
-   * (#72) passes `['/' + rawUsernameSegment, repoName]` instead, since it has no repository id
-   * in its own URL. */
+  /**
+   * Overrides the link prefix (default `/repositories/:id`); the public view passes its own, having
+   * no repository id in its URL.
+   */
   readonly basePath = input<string[] | null>(null)
 
   readonly tree = signal<RepositoryPackages | null>(null)

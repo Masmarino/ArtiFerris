@@ -1,7 +1,8 @@
 pub struct Config {
     pub database_url: String,
     pub jwt_secret: String,
-    /// Encrypts secrets at rest (SMTP/LDAP/OIDC/TOTP). Separate from `jwt_secret` so a leaked JWT_SECRET doesn't also expose these. Mandatory, no fallback.
+    /// Encrypts secrets at rest (SMTP, LDAP, OIDC, TOTP). Separate from `jwt_secret` so a leaked JWT_SECRET does not
+    /// expose them. Mandatory, no fallback.
     pub secrets_encryption_key: String,
     pub storage_root: String,
     pub bind_addr: String,
@@ -57,9 +58,8 @@ fn validated_jwt_secret(raw: Option<String>) -> Result<String, String> {
     Ok(secret)
 }
 
-/// Reusing JWT_SECRET here means one leaked secret both forges sessions and decrypts every stored
-/// secret, so it's refused at startup. Kept out of `from_env` so the rule is testable without
-/// touching process-global env vars.
+/// Reusing JWT_SECRET here would let one leaked secret both forge sessions and decrypt every stored secret, so it is
+/// refused at startup. Kept out of `from_env` so the rule is testable without process-global env vars.
 fn validated_secrets_encryption_key(raw: Option<String>, jwt_secret: &str) -> Result<String, String> {
     let key = raw
         .filter(|s| !s.is_empty())

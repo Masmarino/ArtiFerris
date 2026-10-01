@@ -36,8 +36,8 @@ impl PublishNpmPackageUseCase {
         Self { packages, storage, repositories, quota_lock, events }
     }
 
-    /// `dist_tags` are the tags the publisher asked for (`--tag`); with none, a stable version moves `latest` and a
-    /// prerelease moves nothing. `name` and `version` are written into the stored manifest.
+    /// `dist_tags` are the tags the publisher asked for (`--tag`); with none a stable version moves `latest` and a
+    /// prerelease moves nothing.
     #[allow(clippy::too_many_arguments)]
     pub async fn execute(
         &self,
@@ -62,22 +62,18 @@ impl PublishNpmPackageUseCase {
             return Err(ApplicationError::InvalidNpmPayload(format!("the version manifest is larger than {MAX_MANIFEST_BYTES} bytes")));
         }
 
-        // An unpublished version never comes back.
         if self.packages.was_unpublished(repository_id, name, version).await? {
             return Err(ApplicationError::PackageVersionExists);
         }
 
-        // Cheap early refusal; the authoritative check is the one `publish_version` makes under the package lock.
         if let Some(existing) = self.packages.find_package(repository_id, name).await? {
             if self.packages.find_version(existing.id, version).await?.is_some() {
                 return Err(ApplicationError::PackageVersionExists);
             }
         }
 
-        // Hashing a full tarball is CPU-bound; off the async executor so a large publish doesn't stall other requests.
-        // `Bytes::clone()` is a refcount bump (O(1)), not a copy — unlike the `Vec<u8>` this used to be built from.
-        // Done before the quota lock below, and before the storage key is derived: hashing only
-        // needs the tarball bytes, and the storage key below needs `shasum` already computed.
+        // Hashing a tarball is CPU-bound: off the async executor. `Bytes::clone()` is a refcount bump, not a copy. Done
+        // before the quota lock and before the storage key, which needs the shasum.
         let tarball_for_hashing = tarball_bytes.clone();
         let (shasum, integrity) = tokio::task::spawn_blocking(move || {
             let shasum = hex::encode(Sha1::digest(&tarball_for_hashing));
@@ -89,9 +85,8 @@ impl PublishNpmPackageUseCase {
 
         let quota_bytes = self.repositories.find_by_id(repository_id).await?.and_then(|repo| repo.quota_bytes);
 
-        // Held across the recheck-and-write, only when a quota applies (unlimited repos have nothing
-        // to race on). Closes the TOCTOU window between reading used_bytes and the tarball landing on
-        // disk — same pg_advisory_xact_lock convention as Docker's B-18 fix.
+        // Held across the recheck-and-write, only when a quota applies: closes the window between reading used_bytes
+        // and the tarball landing on disk.
         let lock = if let Some(quota) = quota_bytes {
             let lock = self.quota_lock.acquire_repository_lock(repository_id).await?;
             let used = self.storage.used_bytes(repository_id).await?;
@@ -103,14 +98,14 @@ impl PublishNpmPackageUseCase {
             None
         };
 
-        // Derived server-side, never from the client's filename. The per-attempt `attempt_id` keeps two publishes of the same
-        // version, identical bytes included, from sharing a file, so the loser's cleanup can't delete the winner's tarball.
+        // Derived server-side, never from the client's filename. The per-attempt `attempt_id` keeps two publishes of
+        // the same version, identical bytes included, from sharing a file, so the loser's cleanup cannot delete the
+        // winner's tarball.
         let attempt_id = Uuid::new_v4();
         let safe_scope_and_name = name.as_str().trim_start_matches('@');
         let tarball_name = format!("{}-{shasum}-{attempt_id}.tgz", version.as_str());
         let storage_key = format!("{safe_scope_and_name}/-/{tarball_name}");
         self.storage.write(repository_id, &storage_key, &tarball_bytes).await?;
-        // The write it protected is done; the rest doesn't need the quota lock.
         drop(lock);
 
         let package = NpmPackage {
@@ -137,7 +132,6 @@ impl PublishNpmPackageUseCase {
             published_at: Utc::now(),
             origin: NpmPackageOrigin::Local,
         };
-        // A prerelease never moves `latest` on its own.
         let tags_to_set: Vec<String> = if !dist_tags.is_empty() {
             dist_tags.to_vec()
         } else if !version.is_prerelease() {
@@ -208,16 +202,8 @@ mod tests {
         assert_eq!(latest, Some(version), "publishing a package's first (stable) version must set the `latest` dist-tag to it");
     }
 
-    /// Storage keys are content-derived AND unique per publish attempt (Bug 4b, fix rounds 1-3) —
-    /// `{scope/name}/-/{version}-{shasum}-{attempt-uuid}.tgz`. The package name appears ONLY in the
-    /// directory prefix, not in the filename itself (fix round 3: repeating it in the filename ate
-    /// into the filesystem's NAME_MAX for no benefit). The trailing UUID is generated fresh inside
-    /// `execute` on every call and can't be predicted from the outside, so tests can only assert the
-    /// shasum-bearing PREFIX this way; the actual persisted key is read back off the fake
-    /// repository's own version record (the equivalent of a DB row) rather than reconstructed
-    /// independently — see the review of fix round 1, which found that independently reconstructing
-    /// the full key is a weaker proof, since it can pass even when production and the test happen to
-    /// compute the same (wrong) key.
+    /// Storage keys are `{scope/name}/-/{version}-{shasum}-{attempt-uuid}.tgz`, the name only in the directory prefix.
+    /// The UUID is random, so tests assert the shasum prefix and read the real key back from the stored version.
     fn expected_tgz_name_prefix(version: &str, tarball: &[u8]) -> String {
         format!("{version}-{}-", hex::encode(Sha1::digest(tarball)))
     }
@@ -275,22 +261,8 @@ mod tests {
         assert_eq!(storage.read(repository_id, &key).await.unwrap(), b"bytes");
     }
 
-    /// Bug 4b, fix round 3 regression test: a maximum-length npm package name must still be
-    /// publishable now that the filename no longer repeats the package name (only the directory
-    /// prefix does). Uses a real `FilesystemStorageBackend` against a tempdir — the bug was a raw
-    /// filesystem NAME_MAX error, which a `FakeStorage` (an in-memory `HashMap`) can't reproduce.
-    ///
-    /// Boundary math (all figures count bytes; version "1.0.0", a 40-hex-char SHA-1 shasum and a
-    /// 36-character UUID `attempt_id`, all ASCII):
-    ///   OLD filename `{name}-{version}-{shasum}-{attempt_id}.tgz`, at the 214-character maximum
-    ///   npm package-name length: 214 + 1 + 5 + 1 + 40 + 1 + 36 + 4 = 302 bytes — over the
-    ///   255-byte NAME_MAX that APFS, ext4 and overlayfs all enforce per path component, so this
-    ///   used to fail with a raw "File name too long" I/O error before the version row was ever
-    ///   inserted.
-    ///   NEW filename `{version}-{shasum}-{attempt_id}.tgz`: 5 + 1 + 40 + 1 + 36 + 4 = 87 bytes,
-    ///   independent of the package name — comfortably under NAME_MAX regardless of how long the
-    ///   name is. The name itself only appears in the directory-prefix path component (214 bytes
-    ///   here, itself well under NAME_MAX).
+    /// A maximum-length package name must still publish: repeating it in the filename exceeded the filesystem's
+    /// NAME_MAX. Uses a real filesystem backend, which an in-memory fake cannot reproduce.
     #[tokio::test]
     async fn publishing_a_package_name_at_the_npm_length_limit_succeeds() {
         let name_raw = "a".repeat(214);
@@ -463,24 +435,14 @@ mod tests {
         let name = NpmPackageName::parse("left-pad").unwrap();
         let version = NpmVersion::parse("1.0.0").unwrap();
 
-        // No repository was ever inserted into the fake — find_by_id returns
-        // None, same as an unlimited repository would.
         let result = use_case.execute(repository_id, &name, &version, serde_json::json!({}), Bytes::from_static(b"0123456789"), &[], Uuid::new_v4()).await;
 
         assert!(result.is_ok(), "got {result:?}");
     }
 
-    /// Fakes can't model this: the race is between two real, independent `execute` calls, each
-    /// with its own view of `used_bytes` (a real directory scan). Races two publishes of
-    /// different versions to the SAME tightly-quota'd repository — each under quota alone,
-    /// together over it — through the real Postgres-backed lock and a `FilesystemStorageBackend`
-    /// shared across both tasks. Before the fix, both could read `used_bytes` before either had
-    /// written its tarball, both pass, and both write.
-    ///
-    /// This is a real-concurrency smoke test, kept alongside the deterministic test below (which
-    /// is what actually proves the lock blocks) — see that test's doc comment for why this one
-    /// alone isn't enough: it relies on OS thread scheduling for the interleaving, and mutation
-    /// testing showed that luck overwhelmingly favors NOT catching a broken-but-present lock.
+    /// Two publishes to one tightly-quota'd repository, each fitting alone, through the real Postgres lock and a shared
+    /// filesystem backend. A smoke test relying on thread scheduling; the deterministic test below proves the lock
+    /// blocks.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn two_concurrent_publishes_that_together_exceed_the_quota_do_not_both_succeed(pool: sqlx::PgPool) {
         let repository_id = Uuid::new_v4();
@@ -504,17 +466,9 @@ mod tests {
         let version_a = NpmVersion::parse("1.0.0").unwrap();
         let version_b = NpmVersion::parse("2.0.0").unwrap();
 
-        // Two 20-byte tarballs — individually well under the 30-byte quota, together over it.
         let tarball_a = Bytes::from_static(b"aaaaaaaaaaaaaaaaaaaa");
         let tarball_b = Bytes::from_static(b"bbbbbbbbbbbbbbbbbbbb");
 
-        // Same reasoning as Docker's `two_concurrent_pushes_that_together_exceed_the_quota_do_not_both_succeed`
-        // (`docker_manifest_put.rs`): `#[sqlx::test]` drives this whole test on a single-threaded
-        // current-thread Tokio runtime, and on localhost every query round trip resolves fast enough that a
-        // plain `tokio::join!` never actually interleaves the two publishes. `spawn_blocking` puts each
-        // publish on its own real OS thread for genuine preemptive concurrency, while
-        // `Handle::current().block_on` keeps both on the SAME runtime as `pool` — a `PgPool` isn't safe to
-        // drive from a second, unrelated runtime.
         let run_publish = |pool: sqlx::PgPool, storage: Arc<dyn StorageBackendPort>, version: NpmVersion, tarball: Bytes| {
             let name = name.clone();
             let handle = tokio::runtime::Handle::current();
@@ -526,8 +480,6 @@ mod tests {
                     ));
                     let packages = Arc::new(FakePackages::new());
                     let events = Arc::new(FakeEvents::new());
-                    // Same instance for BOTH `repositories` and `quota_lock` — it implements both
-                    // ports, and this is the whole point of the test: it needs the REAL lock.
                     let use_case = PublishNpmPackageUseCase::new(packages, storage, repositories.clone(), repositories, events);
                     use_case.execute(repository_id, &name, &version, serde_json::json!({}), tarball, &[], Uuid::new_v4()).await
                 })
@@ -545,17 +497,8 @@ mod tests {
         assert!(matches!(rejected, Err(ApplicationError::StorageQuotaExceeded)), "the rejected publish must fail with StorageQuotaExceeded, got {rejected:?}");
     }
 
-    /// Test-only decorator that pauses a `write()` call mid-flight, under program control, so a
-    /// test can drive the exact interleaving of two racing publishes instead of hoping OS thread
-    /// scheduling produces it. `write()` signals `entered_write` (execution has reached the
-    /// storage layer — i.e. after the caller already acquired the lock and passed its own quota
-    /// recheck) and then waits on `release_write` before delegating to the real backend.
-    ///
-    /// Also records the `path` (the storage key `execute` actually derived and attempted to write)
-    /// into `written_key`, so a test can learn a LOSING publish's real, randomly-suffixed key by
-    /// observing what production code actually did — not by independently re-deriving the key
-    /// formula (Bug 4b, fix round 1 review, Issue 2: re-deriving the key is weaker proof than
-    /// reading back what was actually used).
+    /// Test decorator that pauses `write()` under the test's control, so the interleaving of two publishes is
+    /// deterministic. It also records the key written, so tests read what production derived instead of recomputing it.
     struct PausingStorage {
         inner: Arc<dyn StorageBackendPort>,
         entered_write: Arc<tokio::sync::Notify>,
@@ -600,18 +543,9 @@ mod tests {
         }
     }
 
-    /// Deterministic companion to the timing-based test above (opus fix-review,
-    /// bug2-fix-review.md section 4): that test relies on real OS-thread scheduling to interleave
-    /// two racing publishes, and mutation testing showed the luck goes the wrong way most of the
-    /// time — it misses a broken lock query (4% catch rate) and an early-released lock (0%).
-    ///
-    /// This test drives the interleaving directly instead of hoping for it: publish A is paused
-    /// inside `write()` (having already acquired the lock and passed its own quota recheck), and
-    /// the test asserts — by polling `pg_stat_activity` for a lock wait, the same technique Bug
-    /// 1's `a_concurrent_link_landing_between_the_guard_and_the_delete_does_not_lose_the_decrement`
-    /// uses (`filesystem_docker_blob_store.rs`), not a sleep-and-hope — that publish B is
-    /// genuinely BLOCKED trying to acquire the same advisory lock, before letting A finish and
-    /// checking that B is then rejected for quota.
+    /// Deterministic companion of the timing-based test above: publish A is paused inside `write()` after the lock and
+    /// quota recheck, and B is confirmed blocked on the advisory lock via `pg_stat_activity` before A is released. B
+    /// must then be rejected for quota.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_publish_blocked_on_the_quota_lock_is_rejected_once_the_holder_writes_over_quota(pool: sqlx::PgPool) {
         let repository_id = Uuid::new_v4();
@@ -639,7 +573,6 @@ mod tests {
         let name = NpmPackageName::parse("left-pad").unwrap();
         let version_a = NpmVersion::parse("1.0.0").unwrap();
         let version_b = NpmVersion::parse("2.0.0").unwrap();
-        // 20 bytes each: individually under the 30-byte quota, together over it.
         let tarball_a = Bytes::from_static(b"aaaaaaaaaaaaaaaaaaaa");
         let tarball_b = Bytes::from_static(b"bbbbbbbbbbbbbbbbbbbb");
 
@@ -651,8 +584,6 @@ mod tests {
         let name_a = name.clone();
         let handle_a = tokio::spawn(async move { use_case_a.execute(repository_id, &name_a, &version_a, serde_json::json!({}), tarball_a, &[], Uuid::new_v4()).await });
 
-        // Wait until A is paused inside write() — it has already acquired the lock and passed its
-        // own quota recheck. Everything B does from here races the lock, not the quota read.
         entered_write.notified().await;
 
         let repositories_b = Arc::new(artiferris_infrastructure::postgres::package_repository_store::PostgresPackageRepositoryStore::new(
@@ -663,8 +594,6 @@ mod tests {
         let name_b = name.clone();
         let handle_b = tokio::spawn(async move { use_case_b.execute(repository_id, &name_b, &version_b, serde_json::json!({}), tarball_b, &[], Uuid::new_v4()).await });
 
-        // Poll pg_stat_activity instead of sleeping-and-hoping, so the test proves B is genuinely
-        // waiting on the lock, not merely "hasn't finished yet".
         let mut observed_blocked = false;
         for _ in 0..500 {
             let blocked: (i64,) = sqlx::query_as(
@@ -682,8 +611,6 @@ mod tests {
         }
         assert!(observed_blocked, "publish B never entered a lock wait on pg_advisory_xact_lock — this test isn't exercising the blocking it claims to");
 
-        // Only now let A finish. If B were merely racing rather than genuinely blocked, it could
-        // already have read a stale `used_bytes` and be past its own check by this point.
         release_write.notify_one();
 
         let result_a = handle_a.await.unwrap();
@@ -693,10 +620,7 @@ mod tests {
         assert!(matches!(result_b, Err(ApplicationError::StorageQuotaExceeded)), "publish B, unblocked only after A's write landed, must be rejected for quota, got {result_b:?}");
     }
 
-    /// Test helper: sets up a repository + publisher user row and returns the pieces every
-    /// concurrent-publish test below needs — kept in one place so the two race tests (different
-    /// bytes, identical bytes) stay focused on the interleaving and assertions that differ between
-    /// them, not on repeated boilerplate.
+    /// Sets up a repository and a publisher user row for the concurrent-publish tests.
     async fn setup_version_race_fixtures(pool: &sqlx::PgPool) -> (Uuid, Uuid) {
         let repository_id = Uuid::new_v4();
         let organization_id = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
@@ -711,7 +635,6 @@ mod tests {
         .await
         .unwrap();
 
-        // `insert_version` sets `published_by`, which has an FK to `users` — needs a real row.
         let publisher_id = Uuid::new_v4();
         sqlx::query!(
             "INSERT INTO users (id, username, password_hash, organization_id) VALUES ($1, $2, 'x', $3)",
@@ -726,28 +649,9 @@ mod tests {
         (repository_id, publisher_id)
     }
 
-    /// Regression test for the same-version publish integrity race (batch-2 follow-up
-    /// investigation, found in passing while investigating Docker's B-18 test), fix round 1: the
-    /// advisory lock this file used to test here was removed (it starved the connection pool under
-    /// concurrent load — see `npm_publish.rs::execute`'s storage-key comment) in favor of making the
-    /// storage key content-derived, so two concurrent publishes of the SAME not-yet-existing version
-    /// with DIFFERENT tarball bytes can never write to the same path. Simpler than the old lock-based
-    /// test: there's no lock to prove is held, so no `pg_stat_activity` polling — the existing unique
-    /// `(npm_package_id, version)` constraint on `insert_version` is what resolves the race, and this
-    /// test only needs to force the two `execute` calls to genuinely overlap.
-    ///
-    /// Publish A is paused inside `write()` (having already passed its own early `find_version`
-    /// check, same as B). While A is paused, B runs to completion for real against the real Postgres
-    /// pool and real filesystem storage — B's own early check also still sees no row, so this is a
-    /// genuine concurrent race, not a sequential retry. Releasing A then lets it write its own
-    /// (different) key and hit `insert_version`, which now loses to B's already-committed row.
-    ///
-    /// Strengthened (Bug 4b, fix round 2, per the round-1 review's Issue 2): the winner's storage key
-    /// is now read back off the persisted DB row (`row.tarball_storage_key`) instead of being
-    /// independently re-derived from the same formula production uses — re-deriving is weaker proof,
-    /// since it can pass even when production and the test happen to compute the same (wrong) key.
-    /// The loser's key is likewise learned from `PausingStorage`'s `written_key` (what production
-    /// actually attempted to write), not recomputed either.
+    /// Two concurrent publishes of one new version with different bytes: A is paused in `write()`, B completes, then A
+    /// loses at the unique `(npm_package_id, version)` constraint. The winner's file at its persisted key must hold B's
+    /// bytes, and the loser's file must be cleaned up.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn two_concurrent_publishes_of_the_same_new_version_with_different_bytes_do_not_corrupt_each_others_state(pool: sqlx::PgPool) {
         let (repository_id, publisher_id) = setup_version_race_fixtures(&pool).await;
@@ -763,8 +667,6 @@ mod tests {
 
         let name = NpmPackageName::parse("left-pad").unwrap();
         let version = NpmVersion::parse("1.0.0").unwrap();
-        // Deliberately different content (and length) — under the OLD deterministic storage key,
-        // whichever write landed last would win the file on disk regardless of which insert won.
         let tarball_a = Bytes::from_static(b"tarball-content-from-publisher-A");
         let tarball_b = Bytes::from_static(b"totally-different-bytes-from-publisher-B-here");
 
@@ -777,8 +679,6 @@ mod tests {
         let handle_a =
             tokio::spawn(async move { use_case_a.execute(repository_id, &name_a, &version_a, serde_json::json!({"from": "A"}), tarball_a_for_task, &[], publisher_id).await });
 
-        // Wait until A is paused inside write() — it has already passed its own early find_version
-        // check, but hasn't written or inserted anything yet.
         entered_write.notified().await;
 
         let packages_b = Arc::new(artiferris_infrastructure::postgres::npm_package_repository::PostgresNpmPackageRepository::new(pool.clone()));
@@ -789,13 +689,9 @@ mod tests {
             Arc::new(FakeRepositoryQuotaLock::new()),
             Arc::new(FakeEvents::new()),
         );
-        // B runs to full completion here, for real, while A is still paused mid-write — a genuine
-        // concurrent overlap between the two `execute` calls, not a sequential retry.
         let result_b = use_case_b.execute(repository_id, &name, &version, serde_json::json!({"from": "B"}), tarball_b.clone(), &[], publisher_id).await;
         assert!(result_b.is_ok(), "publish B, racing A with no lock in its way, must succeed, got {result_b:?}");
 
-        // Only now let A proceed. It writes to its own (different) key, then loses at the
-        // `insert_version` unique constraint against the row B already committed.
         release_write.notify_one();
         let result_a = handle_a.await.unwrap();
         assert!(
@@ -803,8 +699,6 @@ mod tests {
             "publish A, unblocked only after B committed its version row, must be rejected as already existing, got {result_a:?}"
         );
 
-        // Read the winner's storage key back off the PERSISTED ROW — not re-derived from the key
-        // formula — and only then use it to check what's actually on disk and in the row together.
         let expected_shasum = hex::encode(Sha1::digest(&tarball_b));
         let row = sqlx::query!(
             "SELECT npv.shasum, npv.tarball_size_bytes, npv.tarball_storage_key FROM npm_package_versions npv \
@@ -818,41 +712,18 @@ mod tests {
         assert_eq!(row.shasum, expected_shasum, "the persisted shasum must match publish B's actual content");
         assert_eq!(row.tarball_size_bytes as usize, tarball_b.len(), "the persisted size must match the bytes actually on disk");
 
-        // The critical assertion: the bytes actually on disk AT THE ROW'S OWN KEY must be publish
-        // B's content — the only publish that actually won and was persisted — never some
-        // interleaving of A's and B's, and never one's content paired with the other's metadata.
         let on_disk = real_storage.read(repository_id, &row.tarball_storage_key).await.unwrap();
         assert_eq!(on_disk, tarball_b.to_vec(), "the bytes on disk at the winner's own persisted key must be B's content");
 
-        // The loser's file must not linger: best-effort cleanup after the losing insert_version.
-        // Its key comes from what production actually wrote (`PausingStorage`), not a re-derived
-        // formula, and must differ from the winner's persisted key.
         let key_a = written_key_a.lock().unwrap().clone().expect("publish A must have reached write() before being rejected");
         assert_ne!(key_a, row.tarball_storage_key, "sanity check: the two different-bytes publishes must land on different storage keys");
         let loser_still_on_disk = real_storage.read(repository_id, &key_a).await;
         assert!(loser_still_on_disk.is_err(), "publish A's orphaned tarball must have been cleaned up after it lost the race, found: {loser_still_on_disk:?}");
     }
 
-    /// Regression test for the IDENTICAL-bytes collision (Bug 4b, fix round 2). Fix round 1's
-    /// content-derived key (name+version+shasum, no random component) closed the DIFFERENT-bytes
-    /// race exercised by the test above, but opened a narrower one: two concurrent publishes of the
-    /// SAME not-yet-existing version with IDENTICAL tarball bytes hash to the SAME shasum and
-    /// therefore the SAME storage key. This is realistic, not just theoretical — `npm pack` output
-    /// is deterministic for a given commit, so a double-triggered CI run, or an npm client retrying a
-    /// slow/timed-out upload, produces byte-identical tarballs.
-    ///
-    /// Under a purely shasum-derived key, both writes land on the SAME path (harmless by itself,
-    /// since the bytes are identical), but the LOSER's best-effort cleanup then deletes "its own"
-    /// key — which is ALSO the winner's key, since they collided — leaving the winning row pointing
-    /// at a now-missing file. Every future install of that version 500s, and republishing is refused
-    /// as a duplicate; the only way out is to unpublish. Fixed by folding a fresh random `attempt_id`
-    /// (a `Uuid::new_v4()` generated on every call to `execute`) into the key, so identical bytes no
-    /// longer imply identical keys: the loser's cleanup then only ever deletes ITS OWN,
-    /// genuinely-unique file, never the winner's.
-    ///
-    /// Same interleaving technique as the different-bytes test above — A paused mid-`write()`, B run
-    /// to full completion, then A released — but both tarballs are byte-for-byte identical here,
-    /// which is exactly the scenario that test cannot exercise.
+    /// Two concurrent publishes of one new version with identical bytes (a double-triggered CI run, a client retry):
+    /// the loser's cleanup must not delete the winner's file. Same interleaving as above; the per-attempt key keeps the
+    /// files apart.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn two_concurrent_publishes_of_the_same_new_version_with_identical_bytes_do_not_corrupt_each_others_state(pool: sqlx::PgPool) {
         let (repository_id, publisher_id) = setup_version_race_fixtures(&pool).await;
@@ -868,9 +739,6 @@ mod tests {
 
         let name = NpmPackageName::parse("left-pad").unwrap();
         let version = NpmVersion::parse("1.0.0").unwrap();
-        // Byte-for-byte IDENTICAL for both publishers — the whole point of this test. A real-world
-        // trigger: `npm pack` is deterministic for a given commit, so a double-triggered CI run
-        // publishing the same commit twice concurrently produces exactly this.
         let tarball = Bytes::from_static(b"identical-tarball-bytes-raced-by-two-publishers");
 
         let packages_a = Arc::new(artiferris_infrastructure::postgres::npm_package_repository::PostgresNpmPackageRepository::new(pool.clone()));
@@ -882,8 +750,6 @@ mod tests {
         let handle_a =
             tokio::spawn(async move { use_case_a.execute(repository_id, &name_a, &version_a, serde_json::json!({"from": "A"}), tarball_a_for_task, &[], publisher_id).await });
 
-        // Wait until A is paused inside write() — it has already passed its own early find_version
-        // check, but hasn't written or inserted anything yet.
         entered_write.notified().await;
 
         let packages_b = Arc::new(artiferris_infrastructure::postgres::npm_package_repository::PostgresNpmPackageRepository::new(pool.clone()));
@@ -894,13 +760,9 @@ mod tests {
             Arc::new(FakeRepositoryQuotaLock::new()),
             Arc::new(FakeEvents::new()),
         );
-        // B runs to full completion here, for real, with the SAME bytes A is about to write, while A
-        // is still paused mid-write — a genuine concurrent overlap, not a sequential retry.
         let result_b = use_case_b.execute(repository_id, &name, &version, serde_json::json!({"from": "B"}), tarball.clone(), &[], publisher_id).await;
         assert!(result_b.is_ok(), "publish B, racing A with identical bytes, must succeed, got {result_b:?}");
 
-        // Only now let A proceed. It writes to its own key and then loses at the `insert_version`
-        // unique constraint against the row B already committed.
         release_write.notify_one();
         let result_a = handle_a.await.unwrap();
         assert!(
@@ -908,7 +770,6 @@ mod tests {
             "publish A, unblocked only after B committed its version row, must be rejected as already existing, got {result_a:?}"
         );
 
-        // Read the winner's storage key back off the PERSISTED ROW.
         let expected_shasum = hex::encode(Sha1::digest(&tarball));
         let row = sqlx::query!(
             "SELECT npv.shasum, npv.tarball_size_bytes, npv.tarball_storage_key FROM npm_package_versions npv \
@@ -922,24 +783,15 @@ mod tests {
         assert_eq!(row.shasum, expected_shasum, "the persisted shasum must match the (shared) tarball content");
         assert_eq!(row.tarball_size_bytes as usize, tarball.len(), "the persisted size must match the bytes actually on disk");
 
-        // The critical assertion, and the one that fails under the pre-fix (shasum-only) key: the
-        // winner's own file, at the winner's own persisted key, must still be there and intact — NOT
-        // deleted by the loser's cleanup, which would happen if the two keys collided.
         let on_disk = real_storage.read(repository_id, &row.tarball_storage_key).await.unwrap();
         assert_eq!(on_disk, tarball.to_vec(), "the winner's file must survive the loser's cleanup — it must NOT have been deleted");
 
-        // The loser's own key (what it actually attempted to write, captured by the test decorator)
-        // must be DIFFERENT from the winner's persisted key, despite byte-for-byte identical content
-        // — that's the whole point of the per-attempt random component.
         let key_a = written_key_a.lock().unwrap().clone().expect("publish A must have reached write() before being rejected");
         assert_ne!(
             key_a, row.tarball_storage_key,
             "publish A and publish B wrote IDENTICAL bytes but must still land on DIFFERENT storage keys, or the collision this test guards against is back"
         );
 
-        // The loser's own (genuinely distinct) file must have been cleaned up — and, since it's a
-        // different path than the winner's, this cleanup cannot have touched the winner's file
-        // (already confirmed present and correct above).
         let loser_still_on_disk = real_storage.read(repository_id, &key_a).await;
         assert!(loser_still_on_disk.is_err(), "publish A's orphaned tarball must have been cleaned up after it lost the race, found: {loser_still_on_disk:?}");
     }
@@ -948,7 +800,7 @@ mod tests {
         std::fs::read_dir(root).unwrap().flatten().map(|entry| if entry.path().is_dir() { tarball_files_under(&entry.path()) } else { usize::from(entry.path().extension().is_some_and(|ext| ext == "tgz")) }).sum()
     }
 
-    /// The package this publish found is deleted, by unpublishing its only version, while the publish is still writing its tarball.
+    /// The package this publish found is unpublished while it is writing its tarball.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_publish_survives_its_package_being_unpublished_out_from_under_it_and_leaks_no_tarball(pool: sqlx::PgPool) {
         use crate::use_cases::npm_unpublish::UnpublishNpmPackageUseCase;
@@ -970,7 +822,6 @@ mod tests {
             let name = name.clone();
             tokio::spawn(async move { publish_second.execute(repository_id, &name, &NpmVersion::parse("2.0.0").unwrap(), serde_json::json!({}), Bytes::from_static(b"second"), &[], publisher_id).await })
         };
-        // The second publish has found the package and is about to write its tarball.
         entered_write.notified().await;
         UnpublishNpmPackageUseCase::new(packages.clone(), real_storage.clone(), Arc::new(FakeEvents::new()))
             .execute_version(repository_id, &name, &NpmVersion::parse("1.0.0").unwrap(), publisher_id)

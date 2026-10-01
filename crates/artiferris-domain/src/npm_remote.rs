@@ -5,9 +5,8 @@ use crate::npm_package::NpmPackageName;
 
 #[async_trait]
 pub trait RemoteNpmRegistryPort: Send + Sync {
-    /// Raw JSON document as received. With a username, `username`/`password`
-    /// authenticate as HTTP Basic; with only a password, as a Bearer token
-    /// (`.npmrc`-style `_authToken`). `Ok(None)` for a genuine upstream 404 — not an error.
+    /// Raw JSON as received. With a username, `username` and `password` authenticate as HTTP Basic; with only a
+    /// password, as a Bearer token (`_authToken`). `Ok(None)` for a genuine upstream 404.
     async fn fetch_metadata(
         &self,
         base_url: &str,

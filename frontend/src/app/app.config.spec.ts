@@ -9,10 +9,9 @@ vi.mock('@angular/core', async (importOriginal) => ({
 
 describe('appConfig', () => {
   it('turns Transloco prodMode on when Angular is not in dev mode', async () => {
-    // Forces a fresh module graph for this dynamic import: without it, a shared worker that
-    // already loaded the real (unmocked) '@angular/core' for an earlier test file can hand
-    // app.config the real isDevMode instead of this file's hoisted vi.mock override — passes
-    // locally, flakes in CI where file-to-worker scheduling differs.
+    // A fresh module graph for the dynamic import: a shared worker that already loaded the real
+    // '@angular/core'
+    // would ignore this file's vi.mock (passes locally, flaky in CI).
     vi.resetModules()
     const { appConfig } = await import('./app.config')
     TestBed.configureTestingModule({

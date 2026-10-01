@@ -85,8 +85,7 @@
   }
 }
 
-// Same vocabulary as package-detail-page.scss: the shared SeverityClassPipe (shared/severity.ts)
-// emits these exact class names, whichever page renders it.
+// Same class names as package-detail-page.scss: SeverityClassPipe emits them for both pages.
 .package-detail__audit-header {
   display: flex;
   align-items: flex-start;

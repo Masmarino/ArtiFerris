@@ -5,7 +5,8 @@ use artiferris_domain::organization::{Organization, OrganizationSlug};
 
 use crate::state::NpmState;
 
-/// Copy of `artiferris_api::organization_middleware::ResolvedOrganization`, adapted to this crate's own `NpmState` — can't share across the crate boundary.
+/// Copy of `artiferris_api::organization_middleware::ResolvedOrganization` for this crate's `NpmState`: it cannot be
+/// shared across the crate boundary.
 #[derive(Clone)]
 pub struct ResolvedOrganization(pub Organization);
 
@@ -230,8 +231,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    /// Guards against a substring match instead of an exact dot-boundary label match —
-    /// `evilacme` contains `acme` but is a distinct slug, so this must 404.
+    /// `evilacme` contains `acme` but is another slug: match whole dot-separated labels.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_host_that_merely_contains_another_organizations_slug_is_not_confused_with_it(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -245,9 +245,8 @@ mod tests {
         );
     }
 
-    /// Guards against matching the base domain's first occurrence instead of anchoring to
-    /// the end of the host — a spoofed `acme.artiferris.localhost.evil.com` must fall back to
-    /// public, not resolve to acme.
+    /// Anchor the base domain to the end of the host: `acme.artiferris.localhost.evil.com` falls back to public, not to
+    /// acme.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_host_where_the_base_domain_appears_as_a_substring_but_not_as_the_final_label_does_not_match(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();

@@ -125,10 +125,9 @@ pub async fn seed_repository(pool: &PgPool, organization_id: Uuid, id: Uuid, for
     .unwrap();
 }
 
-/// A user row with no API token attached. `DockerAuthUser` now re-reads the token holder's
-/// `tokens_valid_after` on every data-plane request (M-17), so even a test that only cares about a
-/// token's granted scope needs its holder to actually exist — a bare `Uuid::new_v4()` holder is
-/// rejected as a deleted account, exactly as it would be in production.
+/// A user row with no API token. `DockerAuthUser` re-reads the holder's `tokens_valid_after` on every request, so even
+/// a test that only cares about a token's scope needs a holder that exists: a bare `Uuid::new_v4()` is rejected as a
+/// deleted account.
 pub async fn seed_bare_user(pool: &PgPool, organization_id: Uuid) -> Uuid {
     let user_id = Uuid::new_v4();
     sqlx::query!(
@@ -145,7 +144,7 @@ pub async fn seed_bare_user(pool: &PgPool, organization_id: Uuid) -> Uuid {
 
 pub async fn seed_user_with_active_token(pool: &PgPool, organization_id: Uuid, plaintext_token: &str) -> Uuid {
     let user_id = Uuid::new_v4();
-    // Usernames cap at 32 chars, so truncate the UUID rather than use it whole.
+    // Usernames cap at 32 characters: truncate the UUID.
     sqlx::query!(
         "INSERT INTO users (id, username, password_hash, is_super_admin, organization_id, created_at) VALUES ($1, $2, 'irrelevant', false, $3, now())",
         user_id,
@@ -227,9 +226,6 @@ pub async fn seed_permission(pool: &PgPool, user_id: Uuid, repository_id: Uuid, 
     .unwrap();
 }
 
-/// Same as `seed_user_with_active_token`, but with a caller-chosen username — needed to hit
-/// `/u/{username}/...` routes, which address a user by their real, stable username rather than
-/// the throwaway `user-{uuid}` names `seed_user_with_active_token` generates.
 pub async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: Uuid, username: &str, plaintext_token: &str) -> Uuid {
     let user_id = Uuid::new_v4();
     sqlx::query!(
@@ -253,8 +249,6 @@ pub async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: U
     user_id
 }
 
-/// Reserves `owner_user_id`'s personal organization and creates a project inside it, returning the
-/// new repository's id — mirrors the setup `ResolvePersonalRepositoryUseCase`'s own tests use.
 pub async fn create_personal_project(
     pool: &PgPool,
     owner_user_id: Uuid,
@@ -270,10 +264,8 @@ pub async fn create_personal_project(
     create_project.execute(owner_user_id, project_name, format, artiferris_domain::package_repository::RepositoryType::Hosted).await.unwrap()
 }
 
-/// Reserves `owner_user_id`'s personal namespace once, then creates a GROUP project and a HOSTED
-/// project inside it and attaches the latter to the former — the exact shape the public API
-/// produces. Returns `(group id, member id)`. `CreateUserProjectUseCase` grants the owner `Admin`
-/// on each project it creates.
+/// Reserves a personal namespace, creates a group and a hosted project in it and attaches the project to the group: the
+/// shape the public API produces. Returns `(group id, member id)`.
 pub async fn create_personal_group_over_a_personal_member(
     pool: &PgPool,
     owner_user_id: Uuid,
@@ -292,7 +284,6 @@ pub async fn create_personal_group_over_a_personal_member(
     let group_id = create_project.execute(owner_user_id, group_name, format, RepositoryType::Group).await.unwrap();
     let member_id = create_project.execute(owner_user_id, member_name, format, RepositoryType::Hosted).await.unwrap();
 
-    // Attached through the event store — the same event the API's add-group-member route emits.
     let (version, _) = repository_store.load(group_id).await.unwrap();
     repository_store
         .append(

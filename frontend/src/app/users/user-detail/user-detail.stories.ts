@@ -118,10 +118,8 @@ export default meta
 
 type Story = StoryObj<UserDetail>
 
-/** As a super-admin: sees permissions, the grant form, and both promote/delete actions. */
 export const Default: Story = {}
 
-/** A plain organization admin can manage permissions but not the super-admin toggle. */
 export const AsOrganizationAdmin: Story = {
   decorators: [moduleMetadata({ providers: [{ provide: MeService, useValue: fakeMe(false) }] })],
   play: async ({ canvasElement }) => {
@@ -134,7 +132,6 @@ export const AsOrganizationAdmin: Story = {
   },
 }
 
-/** A pending invitation offers a resend action instead of showing permissions as settled. */
 export const PendingInvitation: Story = {
   decorators: [
     moduleMetadata({
@@ -147,7 +144,6 @@ export const PendingInvitation: Story = {
   ],
 }
 
-/** No access rights granted yet: the table shows its specific empty message. */
 export const NoPermissions: Story = {
   decorators: [
     moduleMetadata({

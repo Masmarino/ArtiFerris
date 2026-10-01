@@ -13,12 +13,9 @@ use crate::authz::{member_is_readable, require_docker_repository, require_grante
 use crate::errors::{docker_authz_error, docker_error, docker_error_response};
 use crate::state::DockerState;
 
-/// Parses the `start` out of a `Content-Range: <start>-<end>` header value.
-///
-/// `Ok(None)` — no `Content-Range` header at all (offset validation skipped, as before).
-/// `Ok(Some(n))` — a well-formed header naming start offset `n`.
-/// `Err(())` — a `Content-Range` header WAS sent but couldn't be parsed — must be rejected, not
-/// silently treated as absent (M-14).
+/// Parses the `start` of a `Content-Range: <start>-<end>` header. `Ok(None)`: no header (offset validation skipped).
+/// `Ok(Some(n))`: a well-formed start `n`. `Err(())`: a header was sent but cannot be parsed, which must be rejected,
+/// not treated as absent.
 fn parse_content_range_start(header: Option<&str>) -> Result<Option<i64>, ()> {
     let Some(header) = header else { return Ok(None) };
     header.split('-').next().and_then(|s| s.trim().parse().ok()).map(Some).ok_or(())
@@ -246,7 +243,7 @@ pub async fn get_blob(
         return docker_error(StatusCode::BAD_REQUEST, "DIGEST_INVALID", "invalid digest").into_response();
     };
 
-    // Deliberately `user`, not `caller` — see `member_is_readable`'s note on the public-group case.
+    // `user`, not `caller`: see `member_is_readable` for the public-group case.
     let caller_user = user.as_ref();
     let top_level_organization_id = repo.organization_id;
     let top_level_was_authorized = caller.is_some();
@@ -302,7 +299,7 @@ pub async fn head_blob(
         return docker_error(StatusCode::BAD_REQUEST, "DIGEST_INVALID", "invalid digest").into_response();
     };
 
-    // Deliberately `user`, not `caller` — see `member_is_readable`'s note on the public-group case.
+    // `user`, not `caller`: see `member_is_readable` for the public-group case.
     let caller_user = user.as_ref();
     let top_level_organization_id = repo.organization_id;
     let top_level_was_authorized = caller.is_some();
@@ -657,7 +654,6 @@ mod tests {
             .unwrap();
         assert_eq!(retried_from_zero.status(), StatusCode::RANGE_NOT_SATISFIABLE);
 
-        // The correctly-offset chunk still succeeds afterward.
         let second_patch = app
             .oneshot(
                 Request::builder()

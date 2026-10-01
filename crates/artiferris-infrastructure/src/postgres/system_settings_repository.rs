@@ -122,12 +122,6 @@ mod tests {
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_pre_migration_singleton_row_is_reattached_to_the_public_organization(pool: sqlx::PgPool) {
-        // Migration 0004 runs as part of `migrations = "../artiferris-infrastructure/migrations"`
-        // above, on a fresh database with no prior data — so this proves the *shape* the
-        // migration produces (a row addressable by organization_id) rather than replaying an
-        // upgrade from a populated instance. `update` below exercises exactly the path a
-        // pre-migration singleton row is expected to end up in after the `UPDATE ... SET
-        // organization_id = ...` statement: reachable by the public organization's id.
         let repo = PostgresSystemSettingsRepository::new(pool.clone());
         repo.update(artiferris_domain::organization::PUBLIC_ORGANIZATION_ID, &SystemSettings { max_login_attempts: 7, login_attempt_window_seconds: 90, session_ttl_hours: 6, registration_enabled: false, seo_indexing_enabled: false, seo_indexing_blocked: false, public_page_enabled: true }, None).await.unwrap();
 

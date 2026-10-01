@@ -81,7 +81,6 @@ export default meta
 
 type Story = StoryObj<AccountPage>
 
-/** Profile tab: username, member-since date, and the password-change form. */
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -99,7 +98,6 @@ export const AsSuperAdmin: Story = {
   },
 }
 
-/** Confirming with a different password than just typed surfaces a mismatch error. */
 export const PasswordMismatch: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -112,7 +110,6 @@ export const PasswordMismatch: Story = {
   },
 }
 
-/** The backend ends every session on a password change, so the user is signed out afterwards. */
 export const ChangingPassword: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -128,7 +125,6 @@ export const ChangingPassword: Story = {
   },
 }
 
-/** The "Sécurité" tab shows MFA (disabled by default) and the passkeys list. */
 export const SwitchingToTheSecurityTab: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -142,7 +138,6 @@ export const SwitchingToTheSecurityTab: Story = {
   },
 }
 
-/** Starting TOTP enrollment shows the QR code, secret, and confirmation field. */
 export const EnrollingInTotp: Story = {
   decorators: [
     moduleMetadata({
@@ -166,7 +161,6 @@ export const EnrollingInTotp: Story = {
   },
 }
 
-/** An account with MFA already enabled shows its backup-code count and management actions. */
 export const AsMfaEnabledUser: Story = {
   decorators: [
     moduleMetadata({
@@ -191,7 +185,6 @@ export const AsMfaEnabledUser: Story = {
   },
 }
 
-/** The "Jetons API" tab lists existing tokens and lets you create a new one. */
 export const CreatingAnApiToken: Story = {
   decorators: [
     moduleMetadata({

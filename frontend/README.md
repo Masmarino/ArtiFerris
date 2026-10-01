@@ -1,115 +1,46 @@
-# ArtiFerrisWeb
+# ArtiFerris frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.1.4.
-
-## Development server
-
-To start a local development server, run:
+Angular 22, standalone components and signals.
 
 ```bash
-ng serve
-```
-
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
+ng serve        # http://localhost:4200
 ng build
+ng test         # Vitest
+ng lint
+npm run storybook
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+## Translations
 
-## Running unit tests
+Every string of the interface lives in `public/i18n/<lang>.json` (`fr`, `en`, `es`, `it`, `de`; `fr.json` is the
+reference) and is read through [Transloco](https://jsverse.gitbook.io/transloco).
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Internationalisation (i18n)
-
-Every user-facing string of the interface lives in `public/i18n/<lang>.json` (`fr`, `en`, `es`, `it`,
-`de`; `fr.json` is the reference language) and is read through [Transloco](https://jsverse.gitbook.io/transloco):
-
-- In a template, use the pipe: `{{ 'auth.login.submit' | transloco }}`, or
-  `[label]="'auth.login.username' | transloco"` for an attribute, with parameters as
+- In a template: `{{ 'auth.login.submit' | transloco }}`, with parameters as
   `{{ 'users.detail.email' | transloco: { email } }}` (`"E-mail : {{ email }}"` in the JSON).
-- In TypeScript, call `t('some.key', { param })` from `shared/i18n/translator`. It works without an
-  injection context (validators, formatters, error mappers). Do not call it at module level: the
-  dictionary is only loaded when the application starts.
-- Plurals are a `_one` / `_other` pair (`format.results_one`, `format.results_other`); the code picks
-  the right key.
-- `meta.locale` holds the BCP 47 tag used for number and relative-date formatting.
+- In TypeScript: `t('some.key', { param })` from `shared/i18n/translator`. It works without an injection context
+  (validators, formatters, error mappers). Do not call it at module level: the dictionary loads when the app starts.
+- Plurals are a `_one` / `_other` pair; `meta.locale` holds the BCP 47 tag used for numbers and relative dates.
+- Adding a language means a new `<lang>.json`, an entry in `LANGUAGE_LOCALES` (`shared/i18n/languages.ts`) and its
+  Angular locale data in `app.config.ts`.
 
-The language is picked at startup from the browser's `navigator.languages` (`fr-CA` gives `fr`),
-English when none of them is translated (`shared/i18n/languages.ts`). Adding a language means a
-new `<lang>.json`, an entry in `LANGUAGE_LOCALES` and its Angular locale data in `app.config.ts`.
+**Which language wins**: the account's, then the browser's (`navigator.languages`, `fr-CA` gives `fr`), then English.
+Signed out, the browser's applies. An account that has not chosen (`language: null`) takes the browser's at its first
+sign-in and records it (`MeService`); if recording fails, the next sign-in tries again. The user changes it on the
+account page; it is saved with `PUT /api/me/language` and read back from `GET /api/me`.
 
-The language can change while the app runs (`LanguageService.use('de')`): the dictionary is loaded,
-then `activeLanguage` (a signal) and `<html lang>` follow. What reads `t()` inside a `computed`
-updates by itself; the routed view is re-created (`App` and `AppShell`), so labels built once at
-creation (table columns, option lists) are rebuilt. Dates go through `formatLocalizedDate` /
-the `date` pipe of `shared/i18n/localized-date.ts` — not Angular's `DatePipe`, which is bound to the
-locale the app started in — and the locale is read with `activeLocale()`, not `LOCALE_ID`.
+**Changing language while the app runs** (`LanguageService.use('de')`) loads the dictionary, then updates
+`activeLanguage` (a signal) and `<html lang>`. A `computed` that calls `t()` follows by itself; the routed view is
+re-created so labels built once (table columns, option lists) are rebuilt. Format dates with `formatLocalizedDate` or
+the `date` pipe of `shared/i18n/localized-date.ts` and read the locale with `activeLocale()`, not Angular's `DatePipe`
+or `LOCALE_ID`, which stay on the start-up locale.
 
-The user picks their language on the account page (`account/language-settings`). The choice is
-saved on the account (`PUT /api/me/language`, read back as `language` by `GET /api/me`; `null` until
-the user has chosen) and applied whenever the account is loaded, so it follows them across devices.
-
-Which language wins, in order: the account's, then the browser's (`navigator.languages`), then
-English. Before signing in, and after signing out, the browser's applies. An account that has not
-chosen yet (`language: null`) takes the browser's at its first sign-in, and that choice is recorded
-on the account (`MeService`), so a later sign-in from another browser or device shows the same
-language; if recording fails, the next sign-in tries again.
-
-The unit tests load the real `fr.json`, so they still assert the text users see. A spec
-(`shared/i18n/translations.spec.ts`) fails when the code uses a key that `fr.json` does not define,
-or when a key of `fr.json` is used nowhere.
+Unit tests load the real `fr.json`. `shared/i18n/translations.spec.ts` fails when the code uses a key `fr.json` does
+not define, or when a key is used nowhere.
 
 ## API errors
 
-An error answered by the API is `{ "error": "<English text>", "code": "<snake_case_name>" }`. The
-`code` is the contract (each variant of `DomainError` / `ApplicationError` has one, see their
-`code()`); the text may be reworded. Code that reacts to an error reads `errorCode(err)` from
-`shared/api-error.ts`, never a substring of the text, and what is shown to the user is the
-translation `errors.api.<code>` (the server's text only for an error without a code, or a code
-unknown to this build). Adding a code means adding its `errors.api.<code>` message to every language
-file: `translations.spec.ts` reads the Rust sources and fails otherwise.
-
-## Known issues
-
-### npm audit — devDependency-only UUID vulnerability (B-44)
-
-`npm audit` reports 5 moderate findings in a devDependency chain (`uuid <11.1.1` via `sockjs` → `webpack-dev-server` → `@angular-devkit/build-angular`). These never reach production (`npm audit --omit=dev` reports 0 findings). No fix is currently available upstream: `sockjs` has not released a version compatible with `uuid ≥ 11.1.1`, and `@angular-devkit/build-angular` still pins `webpack-dev-server` to the `5.2.x` line. This is accepted as a monitored risk — Dependabot runs weekly and will open a PR automatically once an upstream fix ships. Do not force an `npm overrides` entry for `uuid`, as that would deviate from `sockjs`'s own tested dependency contract for no production benefit.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+The API answers errors as `{ "error": "<English text>", "code": "<snake_case_name>" }`. The `code` is the contract
+(each variant of `DomainError` and `ApplicationError` has one, see their `code()`); the text may be reworded. React to
+`errorCode(err)` from `shared/api-error.ts`, never to a substring of the text. The user sees the translation
+`errors.api.<code>`, and the server's text only for an error without a code. A new code needs its `errors.api.<code>`
+message in every language file: `translations.spec.ts` reads the Rust sources and fails otherwise.

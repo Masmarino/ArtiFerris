@@ -1,7 +1,10 @@
 import { t } from './i18n/translator'
 import { HttpErrorResponse } from '@angular/common/http'
 
-/** Same as `badRequestMessage` for a request made with `responseType: 'blob'`, where the error body arrives as a Blob. */
+/**
+ * Same as `badRequestMessage` for a request made with `responseType: 'blob'`, whose error body
+ * arrives as a Blob.
+ */
 export async function badRequestBlobMessage(error: unknown): Promise<string | null> {
   if (
     !(error instanceof HttpErrorResponse) ||
@@ -17,7 +20,6 @@ export async function badRequestBlobMessage(error: unknown): Promise<string | nu
   }
 }
 
-/** The stable name of the kind of error the server reported (`username_taken`…), when it sent one. */
 export function errorCode(error: unknown): string | null {
   return error instanceof HttpErrorResponse ? codeOf(error.error) : null
 }
@@ -28,9 +30,8 @@ function codeOf(body: unknown): string | null {
 }
 
 /**
- * What to tell the user about an error body: the translation of its `code` when there is one, so
- * the wording is ours and in the user's language; otherwise the server's own text (an error that
- * has no code yet).
+ * The translation of the error's `code` when there is one (our wording, the user's language), else
+ * the server's text.
  */
 function messageOf(body: unknown): string | null {
   const code = codeOf(body)
@@ -49,19 +50,16 @@ function bodyMessage(error: HttpErrorResponse): string | null {
   return messageOf(error.error)
 }
 
-/** The server's own explanation of a 400, or null for any other failure. */
 export function badRequestMessage(error: unknown): string | null {
   return error instanceof HttpErrorResponse && error.status === 400 ? bodyMessage(error) : null
 }
 
-/** Translation keys that replace the default wording of an overload status. */
 export interface OverloadMessages {
   tooManyRequests?: string
   busy?: string
   timeout?: string
 }
 
-/** A 429, 503 or 408: the server is limiting or shedding load, which is not the same as failing. */
 export function overloadMessage(error: unknown, messages: OverloadMessages = {}): string | null {
   if (!(error instanceof HttpErrorResponse)) {
     return null
@@ -78,15 +76,12 @@ export function overloadMessage(error: unknown, messages: OverloadMessages = {})
   }
 }
 
-/** What a settings form says when the stored secret can no longer be decrypted. */
 export const secretUnreadableMessage = (): string => t('errors.secretUnreadable')
 
-/** A 409 from a settings route that stores a secret means the stored one cannot be decrypted. */
 export function isSecretUnreadable(error: unknown): boolean {
   return error instanceof HttpErrorResponse && error.status === 409
 }
 
-/** What a settings form holding a secret tells the user about a failed save. */
 export function secretFormFailureMessage(error: unknown, fallback: string): string {
   if (isSecretUnreadable(error)) {
     return secretUnreadableMessage()
@@ -94,7 +89,7 @@ export function secretFormFailureMessage(error: unknown, fallback: string): stri
   return badRequestMessage(error) ?? overloadMessage(error) ?? fallback
 }
 
-/** Like `badRequestMessage`, plus a 409 (a name already taken is worth telling the user) and the overload statuses. */
+/** Like `badRequestMessage`, plus a 409 (a name already taken) and the overload statuses. */
 export function rejectionMessage(error: unknown): string | null {
   return error instanceof HttpErrorResponse && (error.status === 400 || error.status === 409)
     ? bodyMessage(error)

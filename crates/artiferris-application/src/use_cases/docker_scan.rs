@@ -32,7 +32,6 @@ impl ScanDockerImageUseCase {
         let repository = self.repositories.find_by_id(repository_id).await?.ok_or(ApplicationError::DockerManifestNotFound)?;
         let manifest = self.manifests.find_manifest_by_tag(repository_id, image_name, tag).await?.ok_or(ApplicationError::DockerManifestNotFound)?;
 
-        // A manifest list has nothing to scan itself — pick a concrete linux-platform member.
         let (scan_reference, platform) = if manifest.media_type.is_index() {
             match pick_linux_member(&manifest.body) {
                 Some((digest, platform)) => (digest.as_str().to_string(), Some(platform)),
@@ -48,7 +47,6 @@ impl ScanDockerImageUseCase {
             actions: vec!["pull".to_string()],
             granted_repository_id: Some(repository.id),
         };
-        // Internal system-initiated pull — the scanner fetching the image it's about to scan. Minted when the scan starts, which can be a while after this call if it queues.
         let mint_token = || self.token_issuer.issue(triggered_by, repository.organization_id, false, Some(scope.clone()));
 
         let vulnerabilities = self.scanner.scan(&repository.name, image_name.as_str(), &scan_reference, platform.as_deref(), &mint_token).await?;

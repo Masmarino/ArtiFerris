@@ -2,7 +2,7 @@ image:
   repository: masmarino/artiferris
   # Required: a release tag such as 1.4.2. `latest` works but is always pulled.
   tag: ""
-  # Optional sha256:... digest; when set the pod runs exactly that image and the tag only documents it.
+  # Optional sha256:... digest: the pod then runs exactly that image.
   digest: ""
   pullPolicy: IfNotPresent
 
@@ -38,18 +38,18 @@ securityContext:
 networkPolicy:
   # Only the ArtiFerris pod may open connections to Postgres. Needs a CNI that enforces NetworkPolicy.
   enabled: true
-  # Who may reach the ArtiFerris pod on its port, as NetworkPolicy peers. Empty means anyone, which is what
-  # an ingress controller in another namespace needs unless you name its namespace here.
+  # Who may reach the ArtiFerris pod, as NetworkPolicy peers. Empty means anyone; an ingress controller in another
+  # namespace needs its namespace named here.
   appIngressFrom: []
-  # Only ingress is restricted. The ArtiFerris pod can still open outbound connections anywhere (LDAP, SMTP, OIDC, proxied registries,
-  # npm advisories), so the outbound-request guard is the only control on them; add an egress policy of your own if your cluster needs one.
+  # Only ingress is restricted. Outbound connections (LDAP, SMTP, OIDC, proxied registries, npm advisories) are limited only by
+  # the outbound-request guard; add an egress policy if your cluster needs one.
 
 persistence:
-  # Keeps both volumes (registry data and database) when the release is uninstalled. Delete the PVCs by hand to wipe the data.
+  # Keeps both volumes (registry data and database) on uninstall. Delete the PVCs by hand to wipe the data.
   keepOnUninstall: true
 
 storage:
-  # Registry blob storage (Docker layers, npm tarballs) — grows with usage.
+  # Registry storage (Docker layers, npm tarballs): grows with usage.
   size: 20Gi
   storageClassName: "" # empty = cluster default
 
@@ -58,34 +58,30 @@ ingress:
   host: app.artiferris.pro
   wildcardHost: "*.artiferris.pro"
   clusterIssuer: artiferris-dns01-issuer
-  # Traefik Middleware resources this ingress refers to (name@kubernetescrd, comma-separated), assumed to
-  # exist already: https redirect, security headers and rate limiting. The chart does not create them.
-  # Empty means the ingress uses none. The ingress also refers to a Traefik TLSOption named traefik-mintls13 (TLS 1.3 minimum) in the same way.
+  # Traefik Middlewares (name@kubernetescrd, comma-separated) that must already exist: https redirect, security headers, rate
+  # limiting. Empty uses none. The ingress also refers to a Traefik TLSOption named traefik-mintls13 (TLS 1.3 minimum).
   middlewares: "traefik-https@kubernetescrd,traefik-headers@kubernetescrd,traefik-ratelimit@kubernetescrd"
 
 artiferris:
   baseDomain: artiferris.pro
   bootstrapAdminUsername: admin
   rustLog: info
-  # Leave unset — artiferris-api derives the Docker token realm per request from Host and
-  # PUBLIC_URL's scheme, correct for every organization subdomain under wildcardHost. Setting
-  # this pins every client to one fixed realm instead, which breaks Docker auth for every
-  # subdomain except whichever one it points to.
+  # Leave unset: the Docker token realm is derived per request. Setting it pins every client to one realm and breaks
+  # Docker auth on every other subdomain.
   dockerTokenRealmOverride: ""
-  # The ingress controller's address range, comma-separated CIDRs (pod IPs change, so use the pod network range of the controller's namespace,
-  # e.g. "10.42.0.0/16"). Only requests coming from it get their X-Forwarded-For believed. LEFT EMPTY, every visitor looks like the ingress pod:
-  # ten failed logins from anyone lock every user out, and the public catalog's request budget is shared by the whole internet.
-  # With ingress.enabled the chart refuses to render while this is empty or blank, unless allowSharedThrottleBucket is true.
-  # Several CIDRs on the command line: --set-string artiferris.trustedProxyIps='10.42.0.0/16\,10.43.0.0/16', or use a values file.
+  # The ingress controller's pod network, as comma-separated CIDRs (e.g. "10.42.0.0/16"). Only requests from it get their
+  # X-Forwarded-For believed. Empty, every visitor looks like the ingress pod: ten failed logins lock everyone out and the
+  # public catalog budget is shared by the whole internet. With ingress.enabled the chart refuses to render while it is
+  # empty, unless allowSharedThrottleBucket is true. Several CIDRs on the command line:
+  # --set-string artiferris.trustedProxyIps='10.42.0.0/16\,10.43.0.0/16', or use a values file.
   trustedProxyIps: ""
-  # Accept trustedProxyIps being empty behind the ingress (one shared login and public-catalog throttle bucket for every visitor).
+  # Accept an empty trustedProxyIps behind the ingress (one shared throttle bucket for every visitor).
   allowSharedThrottleBucket: false
-  # Days security and administrative audit events (logins, privilege and configuration changes) are kept; a daily sweep deletes older ones.
-  # Package, repository and permission events are never deleted. Set "0" to keep everything.
+  # Days audit events are kept (daily sweep); package, repository and permission events are never deleted. "0" keeps everything.
   auditRetentionDays: "365"
-  # Rewrites the stored SMTP/LDAP/OIDC/proxy secrets and TOTP seeds to the current format (and moves them to a new secrets.secretsEncryptionKey after a rotation) at startup.
-  # Leave it false until the upgrade is verified: releases before the versioned secret format cannot read the rewritten values.
-  # Rolling back after the database migrations ran needs a database restore either way (see the README, "Upgrading").
+  # Rewrites stored secrets in the current format, and under a new secrets.secretsEncryptionKey after a rotation, at startup.
+  # Leave it false until the upgrade is verified: earlier releases cannot read the rewritten values. Rolling back after the
+  # migrations ran needs a database restore either way (README, "Upgrades and encryption key rotation").
   reencryptStoredSecrets: false
 
 postgres:
@@ -114,18 +110,16 @@ postgres:
     limits:
       memory: 1Gi
 
-# Left empty, Helm generates each of these once on first install (see templates/secret.yaml)
-# and finds them again on every later `helm upgrade` with `lookup` — no need to supply them from CI.
-# `lookup` only sees the cluster during a real `helm install`/`helm upgrade`: under `helm template`,
-# `--dry-run`, Argo CD or Flux it returns nothing, so every render would invent new values (a new database
-# password nobody can log in with, and a new encryption key that makes every stored secret unreadable).
-# With those tools, set all of these yourself. The Secret carries `helm.sh/resource-policy: keep`.
-# Rotating the encryption key: set secretsEncryptionKey to the new value (an explicit value replaces the stored one), secretsEncryptionKeyPrevious to the old one
-# and artiferris.reencryptStoredSecrets to true, upgrade, then remove the Previous key. See the README.
+# Left empty, Helm generates each of these on first install (templates/secret.yaml) and finds them again on upgrade with
+# `lookup`. Under `helm template`, `--dry-run`, Argo CD or Flux `lookup` returns nothing and every render would invent new
+# values (a database password nobody knows, an encryption key that makes stored secrets unreadable): set all of these
+# yourself. The Secret carries `helm.sh/resource-policy: keep`.
+# Rotating the key: set secretsEncryptionKey to the new value, secretsEncryptionKeyPrevious to the old one and
+# artiferris.reencryptStoredSecrets to true, upgrade, then remove the Previous key. See the README.
 secrets:
   postgresPassword: ""
   jwtSecret: ""
   secretsEncryptionKey: ""
-  # Only while rotating; not kept in the Secret once it is removed from the values.
+  # Only while rotating; dropped from the Secret once removed from the values.
   secretsEncryptionKeyPrevious: ""
   bootstrapAdminPassword: ""

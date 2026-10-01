@@ -7,7 +7,6 @@ import {
   TotpSetupEnrollment,
 } from '../domain/auth.types'
 
-/** Everything the application layer needs to reach the backend's auth endpoints — implemented by an infrastructure adapter, never called directly by a component. */
 export interface AuthPort {
   login(username: string, password: string): Observable<LoginResponse>
   register(username: string, email: string, password: string): Observable<LoginResponse>
@@ -17,8 +16,7 @@ export interface AuthPort {
   /** Revokes every session, Docker token and API token of the caller, this one included. */
   logoutAll(): Observable<void>
   verifyMfa(mfaToken: string, code?: string, backupCode?: string): Observable<LoginResponse>
-  // The server's JSON-safe WebAuthn options, passed straight through to the browser's
-  // credentials API — never inspected here.
+  // WebAuthn options from the server, passed to the browser as is.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   startMfaPasskey(mfaToken: string): Observable<{ challenge_id: string; public_key: any }>
   finishMfaPasskey(

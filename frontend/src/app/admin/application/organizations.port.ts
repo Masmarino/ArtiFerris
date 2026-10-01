@@ -7,7 +7,6 @@ import {
   OrganizationSummary,
 } from '../domain/organization.entity'
 
-/** Everything the application layer needs from wherever organizations actually live — implemented by an infrastructure adapter, never called directly by a component. */
 export interface OrganizationsPort {
   list(): Observable<OrganizationSummary[]>
   get(id: string): Observable<OrganizationSummary>

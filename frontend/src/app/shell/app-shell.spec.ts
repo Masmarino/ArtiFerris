@@ -61,7 +61,8 @@ describe('AppShell', () => {
       .expectOne('/api/me')
       .flush({ is_organization_admin: false, organization_id: 'org-1', ...me })
     httpMock.expectOne('/api/repositories').flush([])
-    // Both a super-admin and an organization admin can see the "Utilisateurs" search category, so refreshSearchData() fires /api/users for either.
+    // Super-admins and organization admins both see the Utilisateurs category, so
+    // refreshSearchData() fires /api/users.
     if (me.is_super_admin || me.is_organization_admin) {
       httpMock.expectOne('/api/users').flush([])
     }
@@ -165,8 +166,8 @@ describe('AppShell', () => {
     expect(actions).toContain('my-repository')
   })
 
-  // The "Explorer" item links to '/', which non-exact routerLinkActive would treat as a prefix
-  // of every other route, lighting it up everywhere — it needs its own exact match.
+  // "Explorer" links to '/', which non-exact routerLinkActive would light up everywhere: it needs
+  // an exact match.
   it('never marks the "Explorer" item active while on an authenticated page', async () => {
     TestBed.resetTestingModule()
     TestBed.configureTestingModule({

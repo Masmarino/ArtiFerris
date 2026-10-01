@@ -244,8 +244,9 @@ describe('ApiTokensAdmin', () => {
       last_used_at: null,
       revoked_at: revoked ? '2026-02-01T00:00:00Z' : null,
     })
-    // The limit counts every token the page returned. Revoked ones are plain table rows: 500 active ones would
-    // build 500 buttons and tooltips, which takes longer than the test timeout when the machine is busy.
+    // The limit counts every token returned, revoked ones included. Revoked rows are plain table
+    // rows, while 500 active
+    // ones build 500 buttons and tooltips: too slow when the machine is busy.
     flushTokens(
       httpMock,
       Array.from({ length: 500 }, (_, i) => token(i, i > 0)),

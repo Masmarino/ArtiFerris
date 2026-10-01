@@ -42,7 +42,6 @@ const RESULTS = [
   dockerEntry(),
 ]
 
-/** A fake URL plus a fake service answering with `search` and `suggest`; every story declares its own so nothing leaks between them. */
 function scenario(
   params: Record<string, string>,
   search: (query: CatalogQuery) => Observable<CatalogSearchResult>,
@@ -64,7 +63,6 @@ export default meta
 
 type Story = StoryObj<CatalogSearch>
 
-/** No text: the most recently updated items. */
 export const RecentItems: Story = {
   decorators: scenario({}, () => of(searchResult(RESULTS))),
   play: async ({ canvasElement }) => {
@@ -88,7 +86,6 @@ const popularSearch = fn((query: CatalogQuery) =>
   of(searchResult(query.sort === 'popular' ? POPULAR_RESULTS : RESULTS)),
 )
 
-/** Without text, sort=popular in the URL lists the most downloaded first, with their weekly downloads. */
 export const PopularItems: Story = {
   decorators: scenario({ sort: 'popular' }, popularSearch),
   play: async ({ canvasElement }) => {
@@ -109,7 +106,6 @@ const pickPopularSearch = fn((query: CatalogQuery) =>
   of(searchResult(query.sort === 'popular' ? POPULAR_RESULTS : RESULTS, { total: 45 })),
 )
 
-/** Picking Populaires re-runs the search and sends the reader back to the first page. */
 export const PickPopularSort: Story = {
   decorators: scenario({ page: '2' }, pickPopularSearch),
   play: async ({ canvasElement }) => {
@@ -130,7 +126,6 @@ export const PickPopularSort: Story = {
   },
 }
 
-/** With text, the popular sort keeps the results heading and ranks the matches by downloads. */
 export const PopularSortWithText: Story = {
   decorators: scenario({ q: 'demo', sort: 'popular' }, popularSearch),
   play: async ({ canvasElement }) => {
@@ -147,7 +142,6 @@ const typedSearch = fn((query: CatalogQuery) =>
   of(searchResult(query.q ? RESULTS.slice(0, 1) : RESULTS)),
 )
 
-/** Typing searches after a short pause. */
 export const DebouncedTyping: Story = {
   decorators: scenario({}, typedSearch),
   play: async ({ canvasElement }) => {
@@ -171,7 +165,6 @@ const enterSearch = fn((query: CatalogQuery) =>
   of(searchResult(query.q ? RESULTS.slice(2) : RESULTS)),
 )
 
-/** Enter searches right away. */
 export const SearchOnEnter: Story = {
   decorators: scenario({}, enterSearch),
   play: async ({ canvasElement }) => {
@@ -192,7 +185,6 @@ const formatSearch = fn((query: CatalogQuery) =>
   of(searchResult(RESULTS.filter((entry) => !query.format || entry.kind === query.format))),
 )
 
-/** The format filter narrows the results. */
 export const FormatFilter: Story = {
   args: { catalogs: CATALOG_INFOS },
   decorators: scenario({}, formatSearch),
@@ -217,7 +209,6 @@ const lockedSearch = fn((query: CatalogQuery) =>
   of(searchResult(RESULTS.filter((entry) => entry.kind === query.format))),
 )
 
-/** On a catalog page the format is fixed: no format filter, and only that format comes back. */
 export const LockedFormat: Story = {
   args: { format: 'npm' },
   decorators: scenario({ format: 'docker' }, lockedSearch),
@@ -235,7 +226,6 @@ const ownerSearch = fn((query: CatalogQuery) =>
   of(searchResult(RESULTS.filter((entry) => entry.owner.slug === query.owner?.slug))),
 )
 
-/** On an owner page every search is restricted to that owner, and the format filter stays. */
 export const LockedOwner: Story = {
   args: { owner: { kind: 'organization', slug: 'acme' }, catalogs: CATALOG_INFOS },
   decorators: scenario({}, ownerSearch),
@@ -251,7 +241,6 @@ export const LockedOwner: Story = {
   },
 }
 
-/** The owner has entries, just none in the chosen format. */
 export const LockedOwnerNothingInFormat: Story = {
   args: { owner: { kind: 'personal', slug: 'admin' }, catalogs: CATALOG_INFOS },
   decorators: scenario({ format: 'docker' }, () => of(searchResult([]))),
@@ -269,7 +258,6 @@ const pagedSearch = fn((query: CatalogQuery) =>
   of(searchResult(RESULTS.slice(0, 2), { total: 45, page: query.page, per_page: 20 })),
 )
 
-/** Previous and next stay within the first and last page. */
 export const Pagination: Story = {
   decorators: scenario({}, pagedSearch),
   play: async ({ canvasElement }) => {
@@ -299,7 +287,6 @@ export const Loading: Story = {
 
 let attempts = 0
 
-/** A failed search can be retried. */
 export const ErrorWithRetry: Story = {
   decorators: scenario({}, () =>
     ++attempts % 2 === 1
@@ -333,7 +320,6 @@ export const RateLimited: Story = {
   },
 }
 
-/** Nothing matches the text: suggests another search and offers to start over. */
 export const NoResults: Story = {
   decorators: scenario({ q: 'zzz' }, (query) => of(searchResult(query.q ? [] : RESULTS))),
   play: async ({ canvasElement }) => {
@@ -350,7 +336,6 @@ export const NoResults: Story = {
   },
 }
 
-/** Nothing public at all yet. */
 export const InstanceEmpty: Story = {
   decorators: scenario({}, () => of(searchResult([]))),
   play: async ({ canvasElement }) => {
@@ -370,7 +355,6 @@ const SUGGESTIONS = [
   dockerSuggestion(),
 ]
 
-/** Typing suggests package names in a popup under the search box. */
 export const SuggestionsWhileTyping: Story = {
   decorators: scenario(
     {},
@@ -388,7 +372,6 @@ export const SuggestionsWhileTyping: Story = {
   },
 }
 
-/** On a catalog page the format goes to the server, so the suggestions stay within it. */
 export const SuggestionsLockedFormat: Story = {
   args: { format: 'docker' },
   decorators: scenario(
@@ -414,7 +397,6 @@ const FUZZY_RESULTS = [
   dockerEntry({ name: 'team/lefft', match_kind: 'fuzzy' }),
 ]
 
-/** Exact results first, typo-tolerant ones after them under their own heading. */
 export const ApproximateResultsMixed: Story = {
   decorators: scenario({ q: 'left' }, () =>
     of(searchResult([catalogEntry({ name: 'left-pad', match_kind: 'prefix' }), ...FUZZY_RESULTS])),
@@ -433,7 +415,6 @@ export const ApproximateResultsMixed: Story = {
   },
 }
 
-/** Nothing matches exactly: the hint explains why only approximate results show. */
 export const ApproximateResultsOnly: Story = {
   decorators: scenario({ q: 'lefft' }, () => of(searchResult(FUZZY_RESULTS))),
   play: async ({ canvasElement }) => {

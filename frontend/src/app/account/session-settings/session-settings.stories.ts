@@ -39,7 +39,6 @@ export const Default: Story = {
   },
 }
 
-/** Confirming ends every session server-side, then sends the user to the login page. */
 const confirmedSignOut = fn()
 export const SigningOutEverywhere: Story = {
   decorators: [withServices(() => of(undefined), true, confirmedSignOut)],

@@ -9,7 +9,6 @@ export interface AuditEntry {
 
 export interface AuditPage {
   entries: AuditEntry[]
-  /** Pass back as `cursor` to get the next page; null on the last one. */
   next_cursor: string | null
 }
 

@@ -23,7 +23,7 @@ const DOCKER_ACCESS_TOKEN_TYPE: &str = "docker-access";
 #[serde(deny_unknown_fields)]
 struct Claims {
     sub: Uuid,
-    /// Lets the data-plane extractor reject a token minted before the user's `tokens_valid_after` (M-17).
+    /// Lets the data-plane extractor reject a token minted before the user's `tokens_valid_after`.
     iat: i64,
     exp: i64,
     scope: Option<ScopeClaim>,
@@ -114,8 +114,8 @@ mod tests {
         assert!(claims.granted_scope.is_none());
     }
 
-    /// `issued_at` is what `TokensValidAfterCache` compares against `tokens_valid_after`, so it has
-    /// to survive the round trip — and land on the issuance instant, not on `exp` or the epoch.
+    /// `issued_at` is what `TokensValidAfterCache` compares, so it must survive the round trip and equal the issuance
+    /// instant.
     #[test]
     fn issuing_then_verifying_round_trips_the_issuance_instant() {
         let issuer = JwtDockerTokenIssuer::new("test-secret".to_string());
@@ -125,14 +125,11 @@ mod tests {
 
         let claims = issuer.verify(&token).unwrap();
 
-        // `iat` is truncated to whole seconds, so `before` can round up past it by under a second.
         assert!(claims.issued_at >= before - Duration::seconds(1), "issued_at {} predates issuance", claims.issued_at);
         assert!(claims.issued_at <= after, "issued_at {} postdates issuance", claims.issued_at);
     }
 
-    /// A token minted before this change has no `iat` at all, and `deny_unknown_fields` aside, a
-    /// missing required claim must fail closed rather than decode as the epoch (which would read as
-    /// "issued in 1970" and be rejected by every `tokens_valid_after` check anyway — but loudly).
+    /// A token without `iat` must fail closed rather than decode as the epoch.
     #[test]
     fn a_token_without_an_iat_claim_does_not_verify() {
         #[derive(Serialize)]

@@ -54,9 +54,7 @@ impl RenamePackageRepositoryUseCase {
 
     pub async fn execute(&self, repository_id: Uuid, new_name: &str, actor_id: Uuid) -> Result<(), ApplicationError> {
         let new_name = parse_repository_name(new_name)?;
-        // Fetch-then-check: the repository being renamed carries its own organization_id, which scopes the name-uniqueness check below.
         if let Some(current) = self.query.find_by_id(repository_id).await? {
-            // Renaming to your own current name stays a no-op rather than a conflict.
             if let Some(existing) = self.query.find_by_org_and_name(current.organization_id, &new_name).await? {
                 if existing.id != repository_id {
                     return Err(ApplicationError::RepositoryNameTaken);
@@ -106,14 +104,12 @@ impl AddGroupMemberUseCase {
         position: i32,
         actor_id: Uuid,
     ) -> Result<(), ApplicationError> {
-        // Only direct self-membership is rejected — transitive cycles are out of scope.
         if member_repository_id == repository_id {
             return Err(DomainError::SelfGroupMembership.into());
         }
         let Some(member) = self.query.find_by_id(member_repository_id).await? else {
             return Err(DomainError::UnknownGroupMember(member_repository_id).into());
         };
-        // Fetch-then-check, same pattern as the format check below: a group must not gain a member from a different organization.
         if let Some(group) = self.query.find_by_id(repository_id).await? {
             if group.organization_id != member.organization_id {
                 return Err(DomainError::GroupMemberOrganizationMismatch(member_repository_id).into());
@@ -121,7 +117,6 @@ impl AddGroupMemberUseCase {
         }
         let (version, past_events) = self.events.load(repository_id).await?;
         let repo = PackageRepository::from_events(&past_events);
-        // A group mixing formats would silently serve the wrong content for mismatched members.
         if repo.format.is_some_and(|group_format| group_format != member.format) {
             return Err(DomainError::GroupMemberFormatMismatch(member_repository_id).into());
         }
@@ -232,8 +227,6 @@ mod tests {
             if repo.deleted || repo.name.is_none() {
                 return None;
             }
-            // The aggregate itself doesn't track organization_id, so pull it from the Created
-            // event, mirroring how the real Postgres projection persists it as its own column.
             let organization_id = events
                 .iter()
                 .find_map(|event| match event {

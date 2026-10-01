@@ -14,7 +14,6 @@ export default meta
 
 type Story = StoryObj<CatalogResultCard>
 
-/** An npm package of a personal owner, with the install command pointing at the owner's registry. */
 export const NpmPackage: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -38,7 +37,6 @@ export const NpmPackage: Story = {
   },
 }
 
-/** A Docker image of an organization: the slash in its name stays inside one URL segment. */
 export const DockerImage: Story = {
   args: { entry: dockerEntry() },
   play: async ({ canvasElement }) => {
@@ -61,7 +59,6 @@ export const DockerImage: Story = {
   },
 }
 
-/** Weekly downloads sit in the meta line, after the update date. */
 export const WithDownloads: Story = {
   args: { entry: catalogEntry({ downloads_7d: 42 }) },
   play: async ({ canvasElement }) => {
@@ -76,7 +73,6 @@ export const SingleDownload: Story = {
   },
 }
 
-/** Large counts get a narrow no-break space between thousands. */
 export const LargeDownloads: Story = {
   args: { entry: catalogEntry({ downloads_7d: 1_250_000 }) },
   play: async ({ canvasElement }) => {
@@ -86,14 +82,12 @@ export const LargeDownloads: Story = {
   },
 }
 
-/** Without downloads the line stays quiet. */
 export const NoDownloads: Story = {
   play: async ({ canvasElement }) => {
     expect(within(canvasElement).queryByText(/téléchargement/)).toBeNull()
   },
 }
 
-/** No tag yet: the pull command has no tag part. */
 export const DockerImageWithoutTag: Story = {
   args: { entry: dockerEntry({ latest: null }) },
   play: async ({ canvasElement }) => {
@@ -103,7 +97,6 @@ export const DockerImageWithoutTag: Story = {
   },
 }
 
-/** No description, keywords or version: only the essentials are drawn. */
 export const Minimal: Story = {
   args: { entry: catalogEntry({ description: null, keywords: [], latest: null }) },
   play: async ({ canvasElement }) => {
@@ -113,7 +106,6 @@ export const Minimal: Story = {
   },
 }
 
-/** A long description is cut at two lines, long keyword lists wrap. */
 export const LongContent: Story = {
   args: {
     entry: catalogEntry({
@@ -127,7 +119,6 @@ export const LongContent: Story = {
   },
 }
 
-/** Copy puts the exact command on the clipboard and confirms it. */
 export const CopyInstallCommand: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -147,7 +138,6 @@ export const CopyInstallCommand: Story = {
   },
 }
 
-/** Without clipboard access (denied or insecure context) the failure is reported instead of swallowed. */
 export const CopyFailed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

@@ -101,9 +101,7 @@ pub enum ApplicationError {
     ReservedOrganizationSlug,
     #[error("the acting admin's own user record could not be found — its token was valid enough to identify a user, but that user no longer exists")]
     ActingAdminNotFound,
-    /// Either the id doesn't exist at all, or it belongs to a different user —
-    /// deliberately indistinguishable to the caller, same as a cross-organization
-    /// lookup elsewhere in this codebase.
+    /// The id does not exist, or belongs to another user. The caller cannot tell which.
     #[error("api token not found")]
     ApiTokenNotFound,
     #[error("too many active api tokens, revoke one first")]

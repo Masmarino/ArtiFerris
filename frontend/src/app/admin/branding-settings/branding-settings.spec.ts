@@ -28,8 +28,7 @@ function selectFile(fixture: ReturnType<typeof render>['fixture'], which: 'logo'
   const file = new File(['fake-image-bytes'], which === 'logo' ? 'logo.png' : 'favicon.ico', {
     type: 'image/png',
   })
-  // Simulates the (ngModelChange) that gbt-file-upload emits once it accepts a picked file —
-  // oversize rejection is the library's own responsibility, not this component's.
+  // Simulates the ngModelChange gbt-file-upload emits once it accepts a file.
   const target = which === 'logo' ? 'selectedLogoFile' : 'selectedFaviconFile'
   fixture.componentInstance[target].set([file])
   return file

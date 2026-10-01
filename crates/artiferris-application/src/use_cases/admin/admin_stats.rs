@@ -13,11 +13,6 @@ pub struct AdminStats {
     pub total_active_permissions: usize,
 }
 
-/// Partially dead code: Plan 5's Task 7 moved the org-scoped stats path directly into
-/// `crates/artiferris-api/src/routes/admin.rs`'s `get_stats` handler (it calls
-/// `count_by_organization`/`count_for_repositories` inline instead), so `execute()` below is now
-/// only reached for the super-admin/no-org-scope case. Left as-is deliberately — removing the
-/// bypass is a separate, deliberate behavior decision, not part of this file-split.
 pub struct GetAdminStatsUseCase {
     users: Arc<dyn UserRepositoryPort>,
     repositories: Arc<dyn PackageRepositoryQueryPort>,

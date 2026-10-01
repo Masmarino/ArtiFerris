@@ -5,9 +5,8 @@ use uuid::Uuid;
 
 use crate::error::ApplicationError;
 
-/// True for anything shaped like a personal-org slug (`u` + 24 lowercase hex chars) — a normal
-/// organization must never be creatable with a slug in this shape, or it could squat a real or
-/// future user's personal namespace (B-9).
+/// True for a personal-org slug (`u` + 24 lowercase hex). A normal organization must not take one, or it could squat a
+/// user's personal namespace.
 fn looks_like_personal_org_slug(slug: &str) -> bool {
     slug.len() == 25 && slug.starts_with('u') && slug[1..].chars().all(|c| c.is_ascii_hexdigit())
 }

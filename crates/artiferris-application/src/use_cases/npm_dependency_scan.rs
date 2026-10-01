@@ -141,11 +141,8 @@ impl ScanDependencyTreeUseCase {
                 Some(cached) => cached.clone(),
                 None => {
                     let fetched = match NpmPackageName::parse(&dep_name) {
-                        // Never look up on the public registry a package this repository publishes itself.
                         Ok(parsed) if self.packages.find_package(repository_id, &parsed).await?.is_some() => None,
-                        // `.ok()` turns a fetch error into "unresolvable, skip it"; `.flatten()`
-                        // additionally folds a genuine upstream 404 (`Ok(None)`) into the same
-                        // "skip it" outcome, since either way there's no packument to resolve against.
+                        // `.ok().flatten()` turns a fetch error and an upstream 404 into "skip".
                         Ok(parsed) => {
                             if requests >= self.limits.max_requests {
                                 truncated = true;
@@ -269,7 +266,8 @@ fn extract_dependencies(manifest: &serde_json::Value, max: usize) -> (Vec<(Strin
     (dependencies, deps.len() > max)
 }
 
-/// node-semver treats a bare `"1.2.3"` as an exact match, not a caret range like Rust's `semver` crate — force an explicit `=` on. `x`/`X` wildcards normalize to `*`.
+/// node-semver treats a bare `1.2.3` as an exact match, unlike Rust's `semver`: force `=`. `x`/`X` wildcards become
+/// `*`.
 fn normalize_comparator(part: &str) -> String {
     let part = part.replace(['x', 'X'], "*");
     if part.starts_with(['^', '~', '>', '<', '=']) {
@@ -471,7 +469,6 @@ mod tests {
     #[tokio::test]
     async fn a_chain_deeper_than_the_depth_cap_is_reported_as_truncated() {
         let h = Harness::new();
-        // Build a chain dep-0 -> dep-1 -> ... -> dep-14, deeper than MAX_DEPTH (10).
         let chain_len = 15;
         h.seed_root(manifest_with_deps(&[("dep-0", "^1.0.0")])).await;
         for i in 0..chain_len {
@@ -612,7 +609,6 @@ mod tests {
         h.seed_root(manifest_with_deps(&[("corp-internal", "^1.0.0")])).await;
         let internal = NpmPackage { id: Uuid::new_v4(), package_repository_id: h.repository_id, name: NpmPackageName::parse("corp-internal").unwrap(), created_at: Utc::now(), updated_at: Utc::now(), metadata_fetched_at: None, cached_metadata: None };
         h.packages.create_package(&internal).await.unwrap();
-        // Somebody registered the same name on the public registry.
         h.remote.set_package("corp-internal", packument(&[("1.0.0", serde_json::json!({}))]));
 
         let result = h.use_case().execute(Uuid::new_v4(), h.repository_id, &h.name, &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();

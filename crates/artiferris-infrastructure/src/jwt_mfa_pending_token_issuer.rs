@@ -35,9 +35,8 @@ impl JwtMfaPendingTokenIssuer {
 
 #[async_trait]
 impl TokenIssuerPort for JwtMfaPendingTokenIssuer {
-    // `ttl` is ignored: an mfa-pending token is a short-lived "password verified" proof,
-    // never a session token, so it always uses its own fixed 5-minute lifetime regardless
-    // of any organization's configured session TTL.
+    // `ttl` is ignored: an mfa-pending token is a short-lived proof that the password was verified, with its own fixed
+    // 5-minute lifetime.
     fn issue(&self, user_id: Uuid, _ttl: Duration) -> Result<String, DomainError> {
         let now = Utc::now();
         let claims = Claims { sub: user_id, exp: (now + self.ttl).timestamp(), iat: now.timestamp(), typ: MFA_PENDING_TOKEN_TYPE.to_string(), jti: Uuid::new_v4() };

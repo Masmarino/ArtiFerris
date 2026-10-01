@@ -30,14 +30,12 @@ async fn find_repository_by_name(state: &DockerState, organization_id: Uuid, nam
     authz_primitives::find_repository_by_name(&state.repositories, organization_id, name).await.map_err(map_access_error)
 }
 
-/// Resolves whether `repo`'s organization is personal — the single source of truth every caller
-/// uses to decide whether a denied grant should read as 404 instead of 403 (see
-/// `require_granted_action_for_route`). Derived from the resolved organization itself, not from
-/// which route the request arrived through: a personal org's slug is a syntactically valid
-/// subdomain label, so a caller can reach a personal repo via the plain org-based route too.
+/// Whether `repo`'s organization is personal: the single source of truth for turning a denied grant into 404 instead of
+/// 403. Derived from the resolved organization, not the route: a personal organization's slug is a valid subdomain
+/// label, so a personal repository is reachable through the plain organization route too.
 async fn resolve_is_personal(state: &DockerState, user: &DockerAuthUser, repo: &PackageRepositorySummary) -> Result<bool, StatusCode> {
-    // A caller whose own org already matches can never be in a personal org — a real user's
-    // organization_id is never a personal org's id — so this is the cheap, common case, no extra query.
+    // A caller whose own organization matches cannot be in a personal one (a real user's `organization_id` is never a
+    // personal organization's id): the cheap, common case, with no extra query.
     if require_same_organization(user, repo.organization_id).is_ok() {
         return Ok(false);
     }
@@ -48,21 +46,18 @@ async fn resolve_is_personal(state: &DockerState, user: &DockerAuthUser, repo: &
     Ok(true)
 }
 
-/// The write path's gate: `resolve_is_personal` applied to a `find_repository_by_name` result —
-/// unlike `require_readable_repository_by_name` below, always requires a real caller, `is_public`
-/// or not, since a write is never anonymous.
+/// The write path's gate: `resolve_is_personal` on a `find_repository_by_name` result. Unlike
+/// `require_readable_repository_by_name`, it always needs a real caller, public or not.
 pub async fn require_repository_by_name(state: &DockerState, user: &DockerAuthUser, organization_id: Uuid, name: &str) -> Result<(PackageRepositorySummary, bool), StatusCode> {
     let repo = find_repository_by_name(state, organization_id, name).await?;
     let is_personal = resolve_is_personal(state, user, &repo).await?;
     Ok((repo, is_personal))
 }
 
-/// The read-path counterpart of `require_repository_by_name`: resolves the repository first, and
-/// only requires a caller — is_personal resolution included — when it isn't public. `Ok((repo,
-/// None))` means public, served with no grant check at all; `Ok((repo, Some((caller,
-/// is_personal))))` means private, and the caller must still pass
-/// `require_granted_action_for_route`. Handing the caller back alongside `is_personal` (rather than
-/// making the route re-derive or unwrap `user`) is the same shape `artiferris-npm`'s counterpart uses.
+/// The read-path counterpart of `require_repository_by_name`: resolves the repository, and requires a caller (with
+/// `is_personal`) only when it is private. `Ok((repo, None))` means public, served with no grant check; `Ok((repo,
+/// Some((caller, is_personal))))` means private, and the caller must still pass `require_granted_action_for_route`.
+/// Same shape as `artiferris-npm`'s counterpart.
 pub async fn require_readable_repository_by_name<'a>(
     state: &DockerState,
     user: Option<&'a DockerAuthUser>,
@@ -73,22 +68,17 @@ pub async fn require_readable_repository_by_name<'a>(
     if repo.is_public {
         return Ok((repo, None));
     }
-    // No Authorization header at all on a private repository is indistinguishable from a
-    // nonexistent one — same 404-not-401 discipline as everywhere else in this file.
     let user = user.ok_or(StatusCode::NOT_FOUND)?;
     let is_personal = resolve_is_personal(state, user, &repo).await?;
     Ok((repo, Some((user, is_personal))))
 }
 
-/// Resolves `/u/{username}/{repo}` via the shared `ResolvePersonalRepositoryUseCase` stored on
-/// `DockerState`, translating its `ApplicationError`/`None` into the `StatusCode`s this crate's
-/// handlers expect. A missing user, an unreserved personal namespace, and an unknown repo name are
-/// all 404 — deliberately indistinguishable, same as the use case's own contract.
+/// Resolves `/u/{username}/{repo}` with `ResolvePersonalRepositoryUseCase` and maps its result to the status codes
+/// handlers expect. A missing user, an unreserved namespace and an unknown repository are all 404, indistinguishable.
 pub async fn resolve_personal_repository(state: &DockerState, username: &str, repo_name: &str) -> Result<PackageRepositorySummary, StatusCode> {
     state.resolve_personal_repository.execute(username, repo_name).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)
 }
 
-/// Delegates to the shared primitive — kept here so docker's routes keep importing `require_same_organization` from `crate::authz` unchanged.
 pub fn require_same_organization(user: &DockerAuthUser, organization_id: Uuid) -> Result<(), StatusCode> {
     authz_primitives::require_same_organization(user, organization_id).map_err(map_access_error)
 }
@@ -98,24 +88,20 @@ pub fn require_docker_repository(repo: &PackageRepositorySummary) -> Result<(), 
     authz_primitives::require_format(repo, RepositoryFormat::Docker).map_err(map_access_error)
 }
 
-/// Writes only make sense against a hosted repository — proxy/group have no local storage.
+/// Writes need a hosted repository: proxies and groups have no local storage.
 pub fn require_hosted(repo: &PackageRepositorySummary) -> Result<(), StatusCode> {
     authz_primitives::require_hosted(repo).map_err(map_access_error)
 }
 
-/// Docker's per-member read policy for group traversal (C-1). A private member is checked on its own terms, live, like
-/// npm: the caller's organization (or the group's own, for a personal namespace) and a grant of at least `Read` on it.
+/// Per-member read policy for group traversal. A private member is checked live, like npm: the caller's organization
+/// (or the group's, for a personal namespace) and at least `Read` on it.
 ///
-/// `top_level_*` describe the repository the request actually addressed. `top_level_was_authorized`
-/// means the caller's token scope was verified against that exact repository — which
-/// `IssueDockerAccessTokenUseCase` only grants off a live role on it. That branch is what makes a
-/// PERSONAL group's members reachable: a personal org's id never equals a real user's
-/// `organization_id`, so the caller-org test can never hold there, and members are same-org-as-the
-/// group by construction (`create_repository`/`AddGroupMemberUseCase`). It only ever widens the
-/// caller-org test — a public top-level repository is served with no token, so the flag is `false`
-/// there and the caller-org rule stands alone.
+/// `top_level_was_authorized` means the token's scope was verified against the addressed repository from a live role.
+/// That is what makes a personal group's members reachable, since a personal organization's id never equals a real
+/// user's `organization_id`. A public top-level repository is served without a token, so the flag is `false` there.
 ///
-/// Takes the member's fields by value so the returned future outlives the traversal's borrow. A failed lookup reads as not readable.
+/// Takes the member's fields by value so the future outlives the traversal's borrow. A failed lookup reads as not
+/// readable.
 pub async fn member_is_readable(
     state: &DockerState,
     caller: Option<&DockerAuthUser>,
@@ -142,8 +128,9 @@ async fn caller_can_read(state: &DockerState, user: &DockerAuthUser, repository_
     matches!(state.permissions.find_role(user.user_id, repository_id).await, Ok(Some(role)) if role.satisfies(Role::Read))
 }
 
-/// Checks the token's already-granted scope, not the image-name segment. `resolved_repository_id` also has to match, not just the name — names are only unique per-org, so a
-/// name-only check would let a token for one org's "backend" repo validate against another org's same-named one.
+/// Checks the token's granted scope, not the image-name segment. `resolved_repository_id` must match too: names are
+/// unique only per organization, so a name-only check would let a token for one organization's "backend" validate
+/// against another's.
 pub fn require_granted_action(user: &DockerAuthUser, resolved_repository_id: Uuid, repository_name: &str, action: &str) -> Result<(), StatusCode> {
     let scope = user.granted_scope.as_ref().ok_or(StatusCode::FORBIDDEN)?;
     let scope_repository = scope.name.split('/').next().unwrap_or(&scope.name);
@@ -156,10 +143,9 @@ pub fn require_granted_action(user: &DockerAuthUser, resolved_repository_id: Uui
     Ok(())
 }
 
-/// `require_granted_action`, but for a personal repository reached via `/u/{username}/{repo}` — a
-/// real org's cross-org boundary is fenced by `require_same_organization`, so a denied caller is
-/// only ever a fellow org member; a personal org has no such fence, so the same 403 would leak a
-/// private personal project's existence to any authenticated registry user. 404, not 403.
+/// `require_granted_action` for a personal repository reached via `/u/{username}/{repo}`. A real organization's
+/// cross-organization boundary is fenced by `require_same_organization`; a personal one has no such fence, so a 403
+/// would reveal a private personal project to any authenticated user. 404, not 403.
 pub fn require_personal_granted_action(user: &DockerAuthUser, resolved_repository_id: Uuid, repository_name: &str, action: &str) -> Result<(), StatusCode> {
     require_granted_action(user, resolved_repository_id, repository_name, action).map_err(|status| match status {
         StatusCode::FORBIDDEN => StatusCode::NOT_FOUND,
@@ -365,11 +351,9 @@ mod tests {
                 .unwrap();
         }
 
-        /// A personal repo's owner never has the personal org in their own `organization_id` JWT
-        /// claim — access there is a direct `Permission` grant, never org membership. This must
-        /// return `is_personal = true` regardless of the `organization_id` passed in — it's derived
-        /// from the resolved organization, so it's the same whether that id came from `/u/...` or
-        /// from a personal org's own (syntactically valid) subdomain.
+        /// A personal repository's owner never has the personal organization in their `organization_id` claim: access
+        /// there is a direct grant. This must return `is_personal = true` whatever `organization_id` is passed, since
+        /// it derives from the resolved organization.
         #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
         async fn a_personal_repositorys_owner_is_not_rejected_by_the_organization_check(pool: PgPool) {
             let dir = tempfile::tempdir().unwrap();
@@ -379,7 +363,6 @@ mod tests {
             let repo_id = Uuid::new_v4();
             seed_repository(&pool, personal_org_id, repo_id, "docker", "hosted").await;
             let repo_name = format!("repo-{repo_id}");
-            // The owner's real organization is unrelated to the personal org — that's the whole point.
             let owner = user(false, Uuid::new_v4());
 
             let (found, is_personal) = require_repository_by_name(&state, &owner, personal_org_id, &repo_name).await.unwrap();
@@ -404,7 +387,6 @@ mod tests {
             }),
         };
 
-        // Same name ("backend") but a different resolved repository id.
         let result = require_granted_action(&user, repo_b_id, "backend", "pull");
 
         assert_eq!(result, Err(StatusCode::FORBIDDEN));

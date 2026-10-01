@@ -43,13 +43,12 @@ impl FromRequestParts<NpmState> for NpmAuthUser {
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             .ok_or(StatusCode::UNAUTHORIZED)?;
-        // A password change bumps tokens_valid_after — an API token created before that must not
-        // survive it, same as a session JWT (B-6).
+        // A password change bumps tokens_valid_after: an API token created before it must not survive.
         if token.created_at < user.tokens_valid_after {
             return Err(StatusCode::UNAUTHORIZED);
         }
-        // Only touch last_used_at once the token has passed every validity check — a
-        // rejected/stale token shouldn't be recorded as "used". At most once a minute, so parallel installs don't all write one row.
+        // Touch last_used_at only after every validity check passed, at most once a minute, so parallel installs do not
+        // all write one row.
         let now = Utc::now();
         if token.last_used_at.is_none_or(|last| now - last >= LAST_USED_REFRESH) {
             let _ = state.api_tokens.touch_last_used_at(token.id, now).await;
@@ -58,11 +57,9 @@ impl FromRequestParts<NpmState> for NpmAuthUser {
     }
 }
 
-/// Since axum 0.8 (axum-core 0.5), `Option<T>` as an extractor no longer falls back to a blanket
-/// `FromRequestParts` impl on any rejection — it needs this trait implemented explicitly. This is
-/// that opt-in: any rejection (no `Authorization` header, a malformed one, a revoked token, ...)
-/// becomes `None` rather than failing the request, so a read-only handler taking
-/// `Option<NpmAuthUser>` can treat every one of those the same way an anonymous caller would.
+/// axum 0.8 no longer falls back to a blanket impl for `Option<T>` extractors, so this opts in: any rejection (no
+/// header, malformed, revoked token) becomes `None`, and a read-only handler taking `Option<NpmAuthUser>` treats them
+/// all like an anonymous caller.
 impl OptionalFromRequestParts<NpmState> for NpmAuthUser {
     type Rejection = StatusCode;
 
@@ -107,9 +104,6 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
-    /// Mirrors the `NpmState` builder duplicated in `routes/metadata.rs`,
-    /// `authz.rs` and `organization_resolution.rs` — this crate has no shared
-    /// test-support module (see `routes/metadata.rs`'s own note on this).
     async fn test_state(pool: PgPool, root: &std::path::Path) -> NpmState {
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
         let repositories = Arc::new(PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string()));
@@ -167,7 +161,7 @@ mod tests {
 
     async fn seed_user_with_active_token(pool: &PgPool, organization_id: Uuid, plaintext_token: &str) -> Uuid {
         let user_id = Uuid::new_v4();
-        // Usernames cap at 32 chars, so truncate the UUID rather than use it whole.
+        // Usernames cap at 32 characters: truncate the UUID.
         sqlx::query!(
             "INSERT INTO users (id, username, password_hash, is_super_admin, organization_id, created_at) VALUES ($1, $2, 'irrelevant', false, $3, now())",
             user_id,
@@ -200,8 +194,7 @@ mod tests {
         .execute(pool)
         .await
         .unwrap();
-        // A previously-issued, now-revoked token — must behave exactly like one that never
-        // existed, not merely like an unauthenticated request.
+        // A revoked token must behave exactly like one that never existed.
         sqlx::query!(
             "INSERT INTO api_tokens (id, user_id, token_hash, label, created_at, revoked_at) VALUES ($1, $2, $3, 'test', now(), now())",
             Uuid::new_v4(),
@@ -280,7 +273,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
 
-        // Wrong auth scheme entirely — `TypedHeader<Authorization<Bearer>>` extraction fails.
         let response = request(state, Some("Basic dXNlcjpwYXNz")).await;
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -291,7 +283,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
 
-        // No token with this hash exists in the database at all.
         let response = request(state, Some("Bearer this-token-was-never-issued")).await;
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -309,8 +300,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "a revoked token must not authenticate");
     }
 
-    /// B-6: an API token minted before a password change must not survive it, same as a
-    /// session JWT already does via `tokens_valid_after`.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_api_token_created_before_a_password_change_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -327,7 +316,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "a token created before tokens_valid_after was bumped must be rejected");
     }
 
-    /// B-6: `ApiToken` previously had no expiry at all — tokens lived forever.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_expired_api_token_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();

@@ -144,7 +144,6 @@ export default meta
 
 type Story = StoryObj<PublicPackagePage>
 
-/** An npm package: dist-tags, install command, README, then the version history. */
 export const NpmPackage: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -166,7 +165,6 @@ export const NpmPackage: Story = {
   },
 }
 
-/** Nobody downloaded it this week: the line is not drawn. */
 export const NpmPackageWithoutDownloads: Story = {
   decorators: [
     withRepositories({ npmPackageDetails: () => of({ ...NPM_DETAILS, downloads_7d: 0 }) }),
@@ -178,7 +176,6 @@ export const NpmPackageWithoutDownloads: Story = {
   },
 }
 
-/** The backend only sent the newest 200 versions. */
 export const NpmPackageWithTruncatedVersions: Story = {
   decorators: [
     withRepositories({ npmPackageDetails: () => of({ ...NPM_DETAILS, truncated: true }) }),
@@ -192,7 +189,6 @@ export const NpmPackageWithTruncatedVersions: Story = {
   },
 }
 
-/** The backend only sent the newest 100 tags. */
 export const DockerImageWithTruncatedTags: Story = {
   decorators: [
     moduleMetadata({ providers: [withRoute('docker', 'web')] }),
@@ -216,7 +212,6 @@ export const NpmPackageWithoutReadme: Story = {
   },
 }
 
-/** Wide code, tables and images stay inside the card. */
 export const NpmPackageWithOverflowingReadme: Story = {
   decorators: [
     withRepositories({
@@ -241,7 +236,6 @@ export const NpmPackageWithoutDistTags: Story = {
   },
 }
 
-/** The pull command targets the latest tag, and each tag shows its size ("—" when unknown). */
 export const DockerImage: Story = {
   decorators: [moduleMetadata({ providers: [withRoute('docker', 'web')] })],
   play: async ({ canvasElement }) => {
@@ -272,7 +266,6 @@ export const DockerImageWithoutDownloads: Story = {
   },
 }
 
-/** No tag yet: the pull command is the bare image reference. */
 export const DockerImageWithoutTags: Story = {
   decorators: [
     moduleMetadata({ providers: [withRoute('docker', 'web')] }),
@@ -295,7 +288,6 @@ export const Loading: Story = {
   },
 }
 
-/** The repository is private or unknown, or the package doesn't exist in it. */
 export const NotFound: Story = {
   decorators: [
     withRepositories({
@@ -322,7 +314,6 @@ export const RepositoryNotFound: Story = {
   },
 }
 
-/** A server error is reported as a failure, not as "not found". */
 export const LoadFailed: Story = {
   decorators: [
     withRepositories({
@@ -354,7 +345,6 @@ export const DockerLoadFailed: Story = {
   },
 }
 
-/** Reached through an organization repository (/o/:slug/…): resolved by slug, and the back link stays under /o. */
 export const OrganizationNpmPackage: Story = {
   decorators: [moduleMetadata({ providers: [withOrgRoute('npm', '@acme/button')] })],
   play: async ({ canvasElement }) => {

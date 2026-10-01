@@ -9,22 +9,20 @@ export interface ConfirmOptions {
   confirmLabel?: string
   cancelLabel?: string
   danger?: boolean
-  /** The exact text the user has to retype; switches to Gabarit's type-to-confirm dialog. */
   typeToConfirm?: string
 }
 
-export interface PendingConfirm {
+interface PendingConfirm {
   options: ConfirmOptions
   resolve: (confirmed: boolean) => void
 }
 
-/** App-wide confirmation dialog — `ConfirmHost` renders the pending request, this owns its state. */
 @Injectable({ providedIn: 'root' })
 export class ConfirmService {
   readonly pending = signal<PendingConfirm | null>(null)
 
   constructor() {
-    // A dialog outliving its page (Back button, 401, sign-out) would act on a stale target.
+    // A dialog outliving its page (Back, 401, sign-out) would act on a stale target.
     const subscription = inject(Router)
       .events.pipe(filter((event) => event instanceof NavigationStart))
       .subscribe(() => this.answer(false))
@@ -42,7 +40,7 @@ export class ConfirmService {
   }
 
   ask(options: ConfirmOptions): Promise<boolean> {
-    // Untracked: a caller running inside an effect must not become dependent on `pending`.
+    // Untracked: a caller inside an effect must not depend on `pending`.
     untracked(() => this.pending())?.resolve(false)
     return new Promise((resolve) => this.pending.set({ options, resolve }))
   }

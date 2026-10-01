@@ -90,7 +90,6 @@ export default meta
 
 type Story = StoryObj<RepositoriesList>
 
-/** As a super-admin: defaults to the public organization's repos, with the org filter shown. */
 export const Default: Story = {}
 
 export const FilteredToOneOrganization: Story = {
@@ -114,7 +113,6 @@ export const FilteredToOneOrganization: Story = {
   },
 }
 
-/** A plain organization admin: no filter, no organization column — just their own repos. */
 export const AsOrganizationAdmin: Story = {
   decorators: [
     moduleMetadata({
@@ -167,7 +165,6 @@ export const EmptyPersonalMode: Story = {
   },
 }
 
-/** Repositories exist, but none belong to the organization picked in the filter. */
 export const EmptyAfterFiltering: Story = {
   decorators: [
     moduleMetadata({
@@ -230,7 +227,6 @@ export const CreateRepositoryModal: Story = {
   },
 }
 
-/** The caller's own personal namespace: no organization filter/column, even as a super-admin. */
 export const PersonalMode: Story = {
   args: { mode: 'personal' },
   decorators: [

@@ -45,9 +45,8 @@ impl GetNpmPackageMetadataUseCase {
         Ok(Some(build_metadata_document(name, versions, &dist_tags)))
     }
 
-    /// `authorize_member` is the caller's read policy, consulted for every group member the
-    /// traversal would descend into — the top-level repository's own access is the caller's
-    /// responsibility, checked once before this is ever called (C-1).
+    /// `authorize_member` is the caller's read policy for every group member descended into; the top-level repository
+    /// is checked by the caller.
     pub fn execute<'a, FAuthorize, FutAuthorize>(
         &'a self,
         repository_id: Uuid,
@@ -100,17 +99,15 @@ impl GetNpmPackageMetadataUseCase {
                                 metadata_fetched_at: None,
                                 cached_metadata: None,
                             };
-                            // Two cold requests race here; both get the same row.
                             self.packages.create_package(&created).await?
                         }
                     };
                     self.packages.set_cached_metadata(package_id, document).await?;
                     self.packages.touch_metadata_fetched_at(package_id, Utc::now()).await?;
                 }
-                // Genuinely not found upstream — leave any existing (stale) cache as-is rather
-                // than manufacturing a package entry for something that doesn't exist remotely.
+                // Not found upstream: keep any stale cache rather than invent an entry.
                 Ok(None) => {}
-                // Remote unreachable, but we have a stale cache — serve it rather than fail.
+                // Remote unreachable: serve the stale cache.
                 Err(_e) if existing.is_some() => {}
                 Err(e) => return Err(e.into()),
             }
@@ -125,11 +122,9 @@ fn build_metadata_document(name: &NpmPackageName, versions: Vec<NpmPackageVersio
     for v in versions {
         let mut manifest = v.manifest;
         if let Some(obj) = manifest.as_object_mut() {
-            // The row's identity wins over the manifest's.
             obj.insert("name".to_string(), json!(name.as_str()));
             obj.insert("version".to_string(), json!(v.version.as_str()));
             obj.insert("dist".to_string(), json!({ "shasum": v.shasum, "integrity": v.integrity }));
-            // npm's protocol wants the deprecation message as the field's value; absence means "not deprecated".
             if v.deprecated {
                 if let Some(message) = &v.deprecated_message {
                     obj.insert("deprecated".to_string(), json!(message));
@@ -242,10 +237,7 @@ mod tests {
         assert_eq!(doc["versions"]["1.0.0"]["deprecated"], json!("use left-pad2 instead"));
     }
 
-    /// B-16 regression: a first-time proxy fetch (no existing cache) whose upstream call
-    /// genuinely 404s (`fetch_metadata` returns `Ok(None)`) must come out the other end of
-    /// `execute_proxy` as "not found" — not an error, and without manufacturing a package entry
-    /// for something that doesn't exist remotely.
+    /// A first proxy fetch that 404s upstream is "not found": no error, no invented entry.
     #[tokio::test]
     async fn a_first_time_proxy_fetch_that_404s_upstream_returns_not_found() {
         let packages = Arc::new(FakePackages::new());
@@ -339,8 +331,7 @@ mod tests {
         assert!(result.unwrap().is_none());
     }
 
-    /// A group member the caller-supplied policy rejects must not be reachable through the group,
-    /// even though it's readable directly — the group's own broader access must not leak into it (C-1).
+    /// A member rejected by the caller's policy stays unreachable through the group.
     #[tokio::test]
     async fn metadata_from_a_group_skips_a_member_the_caller_is_not_authorized_to_read() {
         let packages = Arc::new(FakePackages::new());
@@ -409,7 +400,6 @@ mod tests {
 
         let use_case = GetNpmPackageMetadataUseCase::new(packages, repositories, Arc::new(FakeRemoteRegistry::new()));
 
-        // Sanity check: the member really does hold the package, so the assertion below is explained by the policy, not a missing package.
         assert!(use_case.execute_hosted(forbidden_member_id, &name).await.unwrap().is_some());
 
         let result = use_case.execute(group_id, &name, |_repo: &PackageRepositorySummary| async { false }).await.unwrap();

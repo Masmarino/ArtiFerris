@@ -19,6 +19,9 @@
     (rowClick)="revokeToken($event)"
   />
 }
+@if (loadError(); as message) {
+  <p class="gbt-form-error" role="alert">{{ message }}</p>
+}
 @if (revokeError(); as message) {
   <p class="gbt-form-error" role="alert">{{ message }}</p>
 }

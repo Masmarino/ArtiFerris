@@ -26,18 +26,14 @@ mod docker;
 mod npm;
 mod permissions;
 
-/// The shared gate for every `/api/repositories/{id}/...` handler: same organization as the
-/// caller, unless either (a) the repo is in a personal org and the caller's permission grant
-/// satisfies `minimum_role` on this exact repository, or (b) the repo is public and the caller is
-/// a public-organization member wanting no more than `Read`. (b) is checked directly against
-/// `public_repository_bypass_role`, never through the org-blind `Permission` lookup (a)'s
-/// `effective_repository_role` call falls through to — that lookup has no organization awareness
-/// at all, so gating it on `is_public` instead of `is_personal` would let a stale cross-org grant
-/// on ANY public repository act at its full role, not just Read. Personal orgs stay single-member
-/// — not because of this gate, but because `GrantPermissionUseCase::execute` rejects any grantee
-/// whose `organization_id` doesn't match the repo's org (`GranteeOrganizationMismatch`), and a
-/// personal org's id never matches a real user's org. Real, multi-tenant orgs still 404 on
-/// cross-org access for anything beyond those two cases.
+/// The shared gate of every `/api/repositories/{id}/...` handler: same organization as the caller, unless (a) the
+/// repository is in a personal organization and the caller's grant satisfies `minimum_role` on it, or (b) it is public
+/// and the caller is a public-organization member wanting no more than `Read`. (b) is checked against
+/// `public_repository_bypass_role`, never through the organization-blind `Permission` lookup that (a)'s
+/// `effective_repository_role` falls to: gating that on `is_public` would let a stale cross-organization grant on any
+/// public repository act at its full role. Personal organizations stay single-member because `GrantPermissionUseCase`
+/// rejects a grantee whose `organization_id` differs from the repository's. Real organizations still 404 on
+/// cross-organization access beyond those two cases.
 async fn require_repository_access(
     state: &AppState,
     user: &AuthUser,
@@ -59,16 +55,11 @@ async fn require_repository_access(
     require_repository_role(state, user, repository_id, minimum_role, action).await
 }
 
-/// The read-path counterpart of `require_repository_access`, for informational "detail" and
-/// security-audit routes — never for writes, and never for `list_permissions` (see #75:
-/// `list_permissions` exposes who has access to a repository, not package content, so it goes
-/// through `require_management_access` instead, which never honors the public bypass). Viewing a
-/// public repository's dependency-audit/image-scan findings, by contrast, is itself a form of
-/// package-content transparency — deliberately open to the same anonymous-or-not audience as the
-/// package listing itself. A public repository is readable by anyone, `AuthUser` or not; a
-/// private one still needs the full, authenticated `require_repository_access` gate — an absent
-/// caller is simply not eligible for any of its "who is asking" branches, so it 404s the same way
-/// a nonexistent repository would.
+/// The read-path counterpart of `require_repository_access`, for informational detail and security-audit routes, never
+/// for writes or `list_permissions` (which goes through `require_management_access`, never honoring the public bypass).
+/// Viewing a public repository's audit or scan findings is package-content transparency, open like the package listing.
+/// A public repository is readable by anyone; a private one needs the full authenticated gate, and an absent caller
+/// 404s like a missing repository.
 async fn require_readable_repository_access(
     state: &AppState,
     user: Option<&AuthUser>,
@@ -95,12 +86,9 @@ fn repository_access_error(status: StatusCode) -> (StatusCode, Json<ErrorRespons
     (status, Json(ErrorResponse::message(message.to_string())))
 }
 
-/// The lookup-only half of the `find_by_id → map internal error → 404 if missing` pattern
-/// repeated across this file's `/api/repositories/{id}/...` handlers (Q-5). Deliberately does
-/// NOT perform any access check: which gate a handler calls afterward (`require_repository_access`,
-/// `require_readable_repository_access`, or `list_permissions`'s deliberately-stricter
-/// `require_management_access`) is a security-relevant choice that must stay explicit at each call
-/// site rather than being folded into a shared helper.
+/// The lookup half of the `find_by_id`, map internal error, 404 if missing pattern of these handlers. It deliberately
+/// does no access check: which gate follows (`require_repository_access`, `require_readable_repository_access` or the
+/// stricter `require_management_access`) is a security choice that stays explicit at each call site.
 async fn load_repository(state: &AppState, id: Uuid) -> Result<PackageRepositorySummary, (StatusCode, Json<ErrorResponse>)> {
     state
         .repositories
@@ -199,9 +187,8 @@ struct RepositoryResponse {
     /// `None` disables automatic cleanup.
     retention_keep_last_n: Option<i32>,
     is_public: bool,
-    /// `Admin` for a super-admin regardless of any explicit grant. Lets the frontend decide which
-    /// actions to offer. `None` only for an anonymous caller on a public repository — every other
-    /// caller of this route already has a real, authenticated role.
+    /// `Admin` for a super-admin whatever the grants, to let the frontend choose which actions to offer. `None` only
+    /// for an anonymous caller on a public repository.
     my_role: Option<Role>,
     /// Lets a super-admin's client-side organization filter work, same as the Users list.
     organization_id: Uuid,
@@ -237,9 +224,8 @@ impl RepositoryResponse {
     }
 }
 
-/// A personal organization's own `slug` is an internal, unguessable identifier (see
-/// `personal_organization_slug`), never the path the public `/@username` route resolves — that path
-/// uses the display name, which personal-repository creation sets to the username itself.
+/// A personal organization's `slug` is an internal, unguessable identifier (`personal_organization_slug`), never the
+/// path of `/@username`, which uses the display name (the username itself).
 fn owner_ref(owner: &Organization) -> OwnerRef {
     if owner.is_personal {
         OwnerRef { kind: OwnerKind::Personal, slug: owner.display_name.clone() }
@@ -352,14 +338,11 @@ struct CreateRepositoryRequest {
     retention_keep_last_n: Option<i32>,
 }
 
-/// `create_repository`'s own error body (B-35): identical to `ErrorResponse` — and serializes to
-/// the exact same `{"error": "..."}` JSON — as long as `repository_id` is `None`, which it is for
-/// every failure before the repository itself exists. Once creation has succeeded, the group-
-/// member/quota/retention steps that follow are each independently fallible; a failure there sets
-/// `repository_id` so the caller can never mistake a partially-configured repository for a total
-/// failure. Kept local to this handler rather than changing `application_error_response`/
-/// `ErrorResponse` themselves, which many other, unrelated handlers in this file depend on for
-/// their own (unaugmented) response shape.
+/// `create_repository`'s error body: the same `{"error": "..."}` JSON as `ErrorResponse` while `repository_id` is
+/// `None`, which holds for every failure before the repository exists. After creation, the group-member, quota and
+/// retention steps are each fallible: a failure there sets `repository_id`, so the caller never mistakes a partially
+/// configured repository for a total failure. Kept local rather than changing `application_error_response` or
+/// `ErrorResponse`, which other handlers depend on.
 #[derive(Serialize)]
 struct CreateRepositoryErrorBody {
     error: String,
@@ -373,8 +356,7 @@ fn create_repository_error(status: StatusCode, message: impl Into<String>, repos
     (status, Json(CreateRepositoryErrorBody { error: message.into(), code: None, repository_id }))
 }
 
-/// Reuses `application_error_response` for its status-code/message mapping without adopting its
-/// `Json<ErrorResponse>` body type, so the two never have to agree on a shape.
+/// Reuses `application_error_response`'s status and message mapping without its `Json<ErrorResponse>` body type.
 fn create_repository_application_error(
     context: &str,
     error: artiferris_application::error::ApplicationError,
@@ -401,8 +383,8 @@ async fn create_repository(
     let organization_id = target_organization_id(&user, &resolved_org, scope.organization_id);
     let group_members = body.group_members.unwrap_or_default();
 
-    // Validate every member up front, before creating anything. No `repository_id` exists yet
-    // for any error in this block — the repository has not been created.
+    // Validate every member up front, before creating anything: no `repository_id` exists yet for an error in this
+    // block.
     if !group_members.is_empty() {
         if body.repo_type != RepositoryType::Group {
             return Err(create_repository_error(StatusCode::BAD_REQUEST, "group_members is only valid for a group repository", None));
@@ -420,7 +402,7 @@ async fn create_repository(
                         None,
                     )
                 })?;
-            // Checked up front so a cross-org member is rejected before the repository is created, not after.
+            // Checked up front, so a cross-organization member is rejected before the repository is created.
             if member.organization_id != organization_id {
                 return Err(create_repository_application_error(
                     "failed to create repository",
@@ -435,8 +417,8 @@ async fn create_repository(
                     None,
                 ));
             }
-            // Same rationale as `add_group_member`: creating a group must not let its (possibly
-            // broader) access transitively expose a member the caller can't read on its own (C-1).
+            // As in `add_group_member`: a group's (possibly broader) access must not transitively expose a member the
+            // caller cannot read on their own.
             require_repository_access(&state, &user, member.organization_id, member.id, member.is_public, Role::Read, "create repository")
                 .await
                 .map_err(repository_access_error)
@@ -459,10 +441,9 @@ async fn create_repository(
         .await
         .map_err(|e| create_repository_application_error("failed to create repository", e, None))?;
 
-    // From here on the repository itself exists (B-35): full cross-use-case transactional
-    // atomicity across the three steps below (each with its own optimistic-concurrency version)
-    // is a bigger lift than this finding warrants, so instead every error from here carries `id`
-    // — no caller is ever told "creation failed" for a repository that in fact now exists.
+    // From here the repository exists: full transactional atomicity across the three steps below, each with its own
+    // optimistic-concurrency version, is more than this warrants, so every error carries `id` and no caller is told
+    // "creation failed" for a repository that now exists.
     for (position, member_id) in group_members.iter().enumerate() {
         state
             .add_group_member
@@ -500,16 +481,14 @@ async fn create_repository(
     Ok((StatusCode::CREATED, Json(RepositoryResponse::new(created, Some(Role::Admin), &owner))))
 }
 
-/// Idempotent from the caller's point of view — a second call is a `409`, not a silent no-op,
-/// so the frontend can tell "already have one" apart from "just created one".
+/// A second call is a `409`, not a silent no-op, so the frontend can tell "already have one" from "just created one".
 async fn reserve_personal_repository(State(state): State<AppState>, user: AuthUser) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     state.reserve_personal_organization.execute(user.id).await.map_err(|e| application_error_response("failed to reserve personal repository", e))?;
     Ok(StatusCode::CREATED)
 }
 
-/// The read-only counterpart of `reserve_personal_repository`: 404 if not reserved, same as any
-/// other "does this exist" check, rather than a 409 the caller would otherwise have to trigger
-/// (and survive) just to find out.
+/// The read-only counterpart of `reserve_personal_repository`: 404 if not reserved, rather than a 409 the caller would
+/// have to trigger to find out.
 async fn get_my_personal_repository(State(state): State<AppState>, user: AuthUser) -> StatusCode {
     match state.find_my_personal_organization.execute(user.id).await {
         Ok(Some(_)) => StatusCode::OK,
@@ -547,23 +526,19 @@ async fn create_user_project(
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
         .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
-    // Same convention as `create_repository` above: the caller who just created this always
-    // holds Admin on it (that's exactly what `CreateUserProjectUseCase::execute` just granted),
-    // so there's no need to re-derive it with another round trip.
+    // As in `create_repository`: the creator just got Admin from `CreateUserProjectUseCase::execute`, so there is no
+    // need for another round trip to derive it.
     Ok((StatusCode::CREATED, Json(RepositoryResponse::new(created, Some(Role::Admin), &owner))))
 }
 
-/// Deliberately separate from `list_repositories` — this route never touches its regular-member/
-/// org-admin/super-admin branches, only the caller's own personal org. An empty array (not a
-/// 404) is the right answer when no personal namespace is reserved yet: the caller simply has no
-/// projects, which is different from `get_my_personal_repository`'s existence check.
+/// Separate from `list_repositories`: it touches only the caller's own personal organization. An empty array, not a
+/// 404, when no namespace is reserved: the caller simply has no projects, unlike `get_my_personal_repository`'s
+/// existence check.
 async fn list_my_projects(State(state): State<AppState>, user: AuthUser) -> Result<Json<Vec<RepositoryResponse>>, StatusCode> {
     let Some(organization_id) = state.find_my_personal_organization.execute(user.id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? else {
         return Ok(Json(Vec::new()));
     };
     let owner = state.organizations.find_by_id(organization_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-    // Scoped at the database level instead of filtering a full-table `list_all()` read in
-    // application code (M-21, B-7).
     let org_repos = state.repositories.list_by_organization(organization_id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let roles: std::collections::HashMap<Uuid, Role> =
         state.permissions.list_for_user(user.id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.into_iter().collect();
@@ -588,11 +563,9 @@ async fn get_repository(
     repository_view(&state, &user, repo).await
 }
 
-/// The read path for the public web view (#72): resolves a personal project by its owner's
-/// username and its own name, instead of by id, then applies the exact same anonymous-safe gate
-/// `get_repository` does. Never resolves a non-personal (organization-owned) repository — that's
-/// `ResolvePersonalRepositoryUseCase`'s own scope, matching how npm/Docker already address a
-/// personal project as `@username/name`.
+/// The read path of the public web view: a personal project by owner username and name, behind the same anonymous-safe
+/// gate as `get_repository`. It never resolves an organization-owned repository (npm and Docker address a personal
+/// project as `@username/name` too).
 async fn get_repository_by_owner(
     State(state): State<AppState>,
     user: Option<AuthUser>,
@@ -613,9 +586,8 @@ async fn get_repository_by_owner(
     repository_view(&state, &user, repo).await
 }
 
-/// The organization-owned counterpart of `get_repository_by_owner`, for the public catalog's links. Never
-/// resolves a personal organization (those go through `by-owner`), and a repository the caller can't read is a
-/// 404, same as one that doesn't exist.
+/// The organization-owned counterpart of `get_repository_by_owner`, for the public catalog's links. It never resolves a
+/// personal organization (those use `by-owner`), and a repository the caller cannot read is a 404, like a missing one.
 async fn get_repository_by_org(
     State(state): State<AppState>,
     user: Option<AuthUser>,
@@ -672,9 +644,8 @@ async fn add_group_member(
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let repo = load_repository(&state, id).await?;
     require_repository_access(&state, &user, repo.organization_id, id, repo.is_public, Role::Admin, "add group member").await.map_err(repository_access_error)?;
-    // Attaching a repository the caller can't read as a group member would let anyone who can read
-    // the (possibly broader-access) group transitively read it too — the caller must be able to
-    // read the member on its own terms first (C-1).
+    // Attaching a repository the caller cannot read would let anyone who can read the group read it too: the caller
+    // must be able to read the member on their own first.
     let member = load_repository(&state, body.member_repository_id).await?;
     require_repository_access(&state, &user, member.organization_id, member.id, member.is_public, Role::Read, "add group member")
         .await
@@ -1207,14 +1178,10 @@ mod tests {
         assert_eq!(json["retention_keep_last_n"], 5);
     }
 
-    /// B-35: the group-member/quota/retention steps that run after repository creation are each
-    /// independently fallible, but every member in `group_members` is fully validated up front
-    /// (existence, same organization, matching format, read access — see lines ~299-338), so
-    /// `add_group_member` itself cannot deterministically fail post-creation without a genuine
-    /// race (a member vanishing mid-request). `quota_bytes`, by contrast, gets NO such up-front
-    /// validation — the negative-quota check lives only inside `SetRepositoryQuotaUseCase` /
-    /// `PackageRepository::set_quota`, so this is the smallest reliable way to make one of the
-    /// three post-creation steps fail after step 1 (creation) has already succeeded.
+    /// The steps after creation (group members, quota, retention) are each fallible. Members are validated up front, so
+    /// `add_group_member` cannot fail after creation without a race, while `quota_bytes` has no up-front validation
+    /// (the negative-quota check lives in `SetRepositoryQuotaUseCase`), so it is the smallest reliable way to fail a
+    /// step after creation.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_failure_setting_the_quota_after_creation_reports_the_repository_id_not_a_bare_failure(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -1240,8 +1207,7 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(!json["error"].as_str().unwrap_or("").is_empty(), "the failure must carry a real message, not an empty body");
-        // The repository itself was already created before the quota step failed — the error
-        // response must say so, so the client never mistakes this for "nothing was created".
+        // The repository already exists when the quota step fails: the response must say so.
         let repository_id = Uuid::parse_str(
             json["repository_id"].as_str().expect("repository_id must be present once the repository has actually been created"),
         )
@@ -1576,8 +1542,7 @@ mod tests {
         assert_eq!(json["is_public"], true);
     }
 
-    /// #74: a public proxy would be an anonymous, unauthenticated relay to its upstream using the
-    /// repository's own stored credentials.
+    /// A public proxy would be an anonymous relay to its upstream using the repository's own stored credentials.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn making_a_proxy_repository_public_is_rejected(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -1615,9 +1580,8 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
     }
 
-    /// #74: `resolve_in_group`'s fan-out authorizes only once, at the group itself — making a
-    /// group public would silently expose every member repository too, regardless of their own
-    /// visibility.
+    /// `resolve_in_group` authorizes only once, at the group: a public group would silently expose every member
+    /// whatever its own visibility.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn making_a_group_repository_public_is_rejected(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -1728,11 +1692,9 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
     }
 
-    /// Regression test: `require_readable_repository_access`'s public branch grants access
-    /// without ever consulting the caller's own role, so an authenticated caller from a completely
-    /// unrelated organization must still see the repository — and, per B-43, `effective_repository_role`
-    /// now reports that access honestly as an implicit `my_role: "read"` via `public_repository_read_bypass`,
-    /// rather than `403`-ing on "no role" or silently reporting `null` for a caller who can plainly view it.
+    /// Regression: `require_readable_repository_access`'s public branch grants access without consulting the caller's
+    /// role, so an authenticated caller from an unrelated organization must see the repository, and
+    /// `effective_repository_role` reports it honestly as an implicit `my_role: "read"` rather than 403 or `null`.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_authenticated_caller_from_an_unrelated_organization_can_view_a_public_repositorys_details(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -1752,14 +1714,11 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK, "an authenticated but unrelated caller must still see a public repository's details");
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["my_role"], "read", "a public repository grants an implicit Read to any caller, including one from an unrelated organization (B-43)");
+        assert_eq!(json["my_role"], "read", "a public repository grants an implicit Read to any caller, including one from an unrelated organization");
     }
 
-    /// Same route, different way to reach the "no explicit grant" case: a same-organization member
-    /// with no explicit grant. This caller still gets the implicit public-repository Read via the
-    /// new, org-blind `public_repository_read_bypass` (B-43) — same outcome as a caller from a
-    /// completely unrelated organization above, since the bypass no longer depends on membership in
-    /// the special public organization the way `public_repository_bypass_role` does.
+    /// The same case reached by a same-organization member with no explicit grant: it also gets the implicit public
+    /// `Read`, since the bypass no longer depends on membership of the public organization.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_authenticated_same_organization_member_with_no_grant_can_view_a_public_repositorys_details(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -1778,7 +1737,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK, "same-organization membership alone must not turn into a 403 just because there's no explicit grant");
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["my_role"], "read", "a public repository grants an implicit Read to any caller, including a same-organization member with no explicit grant (B-43)");
+        assert_eq!(json["my_role"], "read", "a public repository grants an implicit Read to any caller, including a same-organization member with no explicit grant");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -1853,10 +1812,9 @@ mod tests {
             .await
             .unwrap();
 
-        // 404, not 403: require_repository_access's cross-org branch (the same one the personal-org
-        // bypass already uses) checks the bypass role against minimum_role itself, before ever
-        // reaching require_repository_role — an insufficient bypass role reads as "not accessible"
-        // for a cross-org caller, exactly like the personal-org owner case already does.
+        // 404, not 403: `require_repository_access`'s cross-organization branch checks the bypass role against
+        // `minimum_role` itself, so an insufficient bypass role reads as "not accessible", as for a
+        // personal-organization owner.
         assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND, "visibility grants Read, never more — a public-organization member cannot rename a repository they don't own");
     }
 
@@ -1883,10 +1841,8 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND, "being a public-organization member is not enough on its own — the repository must actually be public");
     }
 
-    /// Regression test for the public bypass's own review: gating it on `is_public` instead of on
-    /// the caller actually being a public-organization member (as `require_repository_access`'s
-    /// cross-org branch does now) would let this exact stale grant act at its full role on any
-    /// public repository, not just Read.
+    /// Regression: gating the public bypass on `is_public` rather than on the caller being a public-organization member
+    /// would let this stale grant act at its full role on any public repository, not just Read.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_stale_cross_organization_permission_grant_does_not_work_even_on_a_public_repository(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -1925,9 +1881,8 @@ mod tests {
         );
     }
 
-    /// Regression test for the public bypass's own review: an early-returning bypass that shadows
-    /// the caller's real `Permission` row (rather than combining with it) would silently downgrade
-    /// this owner from Admin to Read the moment they made their own project public.
+    /// Regression: a bypass that returns early and shadows the caller's real `Permission` row would silently downgrade
+    /// this owner from Admin to Read when they make their own project public.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn making_a_personal_project_public_does_not_downgrade_its_owners_admin_grant(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -2148,10 +2103,9 @@ mod tests {
         assert_eq!(self_entry["my_role"], "admin", "the owner's real Admin grant must not be downgraded to Read just because her project is also public");
         assert!(self_entry.get("quota_bytes").is_some() && self_entry.get("organization_id").is_some(), "the owner keeps the full shape");
 
-        // A caller from an unrelated, real organization must never see this — gating on the
-        // organization being viewed alone (ignoring who the caller actually is) would leak the
-        // repository's existence, and its owner's name, to any outsider who happens to hit the
-        // public organization's own listing.
+        // A caller from an unrelated organization must never see this: gating on the organization being viewed alone
+        // would leak the repository's existence and its owner's name to any outsider hitting the public organization's
+        // listing.
         let acme_id = state.create_organization.execute("acme", "Acme Corp").await.unwrap();
         let carol_token = bearer(&state, acme_id, "carol", "sup3r-s3cret!", false).await;
         let carol_no_host = app
@@ -2212,11 +2166,10 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
     }
 
-    /// C-1, write side: Admin on the *group* is not enough. Attaching a repository the caller can't
-    /// read would let everyone who can read the group read that member through it, so the member's
-    /// own access is checked too. `carol` deliberately isn't an organization admin — an org admin
-    /// holds `Admin` on every repository in their own org via the bypass, so only a caller whose
-    /// rights come from an explicit grant can exercise this gap at all.
+    /// Write side: Admin on the group is not enough. Attaching a repository the caller cannot read would let everyone
+    /// who reads the group read that member through it, so the member's own access is checked too. `carol` is
+    /// deliberately not an organization admin, since the bypass gives an organization admin Admin on every repository
+    /// of their organization.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn adding_a_group_member_the_caller_cannot_read_is_refused(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -2253,10 +2206,8 @@ mod tests {
         assert!(!group.group_members.contains(&private_id), "the refused member must not have been attached anyway");
     }
 
-    /// `create_repository` gained the same member-readability check. Today no caller can reach that
-    /// route without already holding Read on every same-organization member (super-admin, or the
-    /// org-admin bypass), so the check is defence in depth — this pins down that it doesn't break
-    /// the legitimate path it now sits on, which the existing super-admin-only test wouldn't catch.
+    /// `create_repository` gained the same member-readability check. No caller can reach it today without Read on every
+    /// same-organization member, so it is defense in depth: this pins that it does not break the legitimate path.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_organization_admin_can_still_create_a_group_around_a_private_member_of_their_own_organization(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());

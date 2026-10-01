@@ -21,7 +21,6 @@ export class App {
   private readonly languageService = inject(LanguageService)
   private readonly outlet = viewChild(RouterOutlet)
 
-  /** Bumped on a language change to re-create the routed view. */
   protected readonly viewGeneration = signal(0)
 
   constructor() {
@@ -29,7 +28,6 @@ export class App {
     effect(() => {
       this.languageService.language()
       untracked(() => {
-        // The shell re-creates its own routed view, and keeps its session data and navigation state.
         if (
           firstRun ||
           this.outlet()?.activatedRouteData['recreatesViewsOnLanguageChange'] === true

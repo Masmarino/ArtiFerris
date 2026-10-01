@@ -33,7 +33,7 @@ export class OrganizationMembers {
   readonly newIsOrganizationAdmin = signal(false)
   readonly inviting = signal(false)
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     effect(() => {
       this.organizationId()

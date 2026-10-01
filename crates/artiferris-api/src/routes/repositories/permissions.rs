@@ -23,8 +23,6 @@ pub(super) async fn list_permissions(State(state): State<AppState>, user: AuthUs
     let repo = state.repositories.find_by_id(id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
     require_management_access(&state, &user, repo.organization_id, id, Role::Read, "view permissions").await?;
     let entries = state.permissions.list_for_repository(id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    // Scoped at the database level to exactly the handful of user_ids in `entries`, instead of an
-    // unbounded `list_all()` load of every user in the system (M-21, B-7).
     let user_ids: Vec<Uuid> = entries.iter().map(|(user_id, _)| *user_id).collect();
     let users = state.users.find_by_ids(&user_ids).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let username_by_id: std::collections::HashMap<Uuid, String> = users.into_iter().map(|u| (u.id, u.username.as_str().to_string())).collect();
@@ -109,9 +107,8 @@ mod tests {
         assert_eq!(entries[0]["role"], "write");
     }
 
-    /// #75: the public-organization bypass only ever unlocks reading package content — a member
-    /// of a different, unrelated organization must not be able to enumerate who has access to a
-    /// repository just because it's `is_public`.
+    /// The public-organization bypass only unlocks reading package content: a member of an unrelated organization must
+    /// not enumerate who has access to a repository because it is `is_public`.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_public_organization_member_cannot_list_permissions_on_a_public_repository_in_another_organization(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -138,11 +135,9 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND, "must not confirm the repository exists to a caller with no real access");
     }
 
-    /// #75, the same-org variant: even a member of the repository's OWN organization must not see
-    /// the permission roster just from that repository being public — same-org visibility for
-    /// `list_permissions` has always required a real grant (or org-admin), and a public repository
-    /// owned by the default public organization must not accidentally reopen that for every
-    /// self-registered member of that org via the public bypass baked into `effective_repository_role`.
+    /// The same-organization variant: even a member of the repository's own organization must not see the permission
+    /// roster because the repository is public. It has always required a real grant or organization admin, and a public
+    /// repository of the default public organization must not reopen it for every self-registered member.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_same_organization_member_without_a_grant_cannot_list_permissions_on_a_public_repository(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -167,10 +162,8 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::FORBIDDEN);
     }
 
-    /// #75: `require_management_access`'s personal-org branch — untested by the two denial cases
-    /// above, since neither exercises a personal project. A personal project's owner holds their
-    /// own explicit `Admin` grant (from creation) and must still be able to list it, exactly as
-    /// before this ticket.
+    /// `require_management_access`'s personal-organization branch, which the two denials above do not exercise: a
+    /// personal project's owner holds their own explicit `Admin` grant from creation and must still list it.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_owner_can_list_permissions_on_their_own_personal_project(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());

@@ -44,7 +44,6 @@ import { dockerPullCommand, npmInstallCommand, preferredTag } from '../domain/in
 
 const PAGE_SIZE = 20
 
-/** Pure pipe: memoized by Angular per digest, unlike calling a method directly in the template. */
 @Pipe({ name: 'shortDigest' })
 class ShortDigestPipe implements PipeTransform {
   transform(digest: string): string {
@@ -84,7 +83,7 @@ export class PackageDetailPage {
   private readonly toastService = inject(ToastService)
   private readonly confirmService = inject(ConfirmService)
 
-  // Reactive, not route.snapshot — Angular reuses this component across param changes.
+  // Reactive, not route.snapshot: Angular reuses this component across navigations.
   private readonly routeParams = toSignal(
     this.route.paramMap.pipe(
       map((params) => ({
@@ -106,7 +105,6 @@ export class PackageDetailPage {
   readonly npmDetails = signal<NpmPackageDetails | null>(null)
   readonly dockerDetails = signal<DockerImageDetails | null>(null)
 
-  // A long publish/tag history renders hundreds of rows otherwise.
   readonly versionsPage = signal(1)
   readonly versionsTotalPages = computed(() =>
     Math.max(1, Math.ceil((this.npmDetails()?.versions.length ?? 0) / PAGE_SIZE)),
@@ -135,17 +133,16 @@ export class PackageDetailPage {
     return details.tags.slice(start, start + PAGE_SIZE)
   })
 
-  // Fetched once on load so delete/rescan buttons can be hidden for a read-only viewer.
+  // Fetched once so write buttons can be hidden for a read-only viewer.
   readonly canWrite = signal(false)
 
-  // An outage in npm's advisory database shouldn't block viewing the package.
+  // An npm advisory outage must not block viewing the package.
   readonly auditLoading = signal(true)
   readonly auditAdvisories = signal<NpmAdvisory[] | null>(null)
   readonly auditFailed = signal(false)
-  /** Set when the failure was the server limiting or shedding load, not npm's database being down. */
   readonly auditNotice = signal<string | null>(null)
 
-  // Reads the last persisted result for `latest` — a fresh scan needs a click.
+  // Reads the last saved result for `latest`; a fresh scan needs a click.
   readonly depAuditLoading = signal(true)
   readonly depAuditResult = signal<NpmDependencyAuditResult | null>(null)
   readonly depAuditFailed = signal(false)
@@ -176,7 +173,7 @@ export class PackageDetailPage {
     return this.filteredFindings().slice(start, start + PAGE_SIZE)
   })
 
-  // Same as the dependency audit — reads the last completed Trivy scan, not a live one.
+  // Reads the last completed Trivy scan, not a live one.
   readonly imageScanLoading = signal(true)
   readonly imageScanResult = signal<DockerImageScanResult | null>(null)
   readonly imageScanFailed = signal(false)
@@ -224,13 +221,13 @@ export class PackageDetailPage {
           this.canWrite.set(repo.my_role === 'write' || repo.my_role === 'admin')
         },
         error: () => {
-          // canWrite stays false: write buttons are a convenience, the backend re-checks the role.
+          // canWrite stays false: the buttons are a convenience, the backend re-checks the role.
         },
       })
     })
   }
 
-  // Reused across packages: drop the previous one's data.
+  // Reused across navigations: drop the previous data.
   private resetPackageState(): void {
     this.npmDetails.set(null)
     this.dockerDetails.set(null)
@@ -256,7 +253,6 @@ export class PackageDetailPage {
     this.imageScanPage.set(1)
   }
 
-  // Drops a response for a package the user has since left.
   private stillCurrentGuard(): () => boolean {
     const requested = { repositoryId: this.repositoryId, format: this.format, name: this.name }
     return () => {
@@ -296,7 +292,7 @@ export class PackageDetailPage {
           if (!stillCurrent()) {
             return
           }
-          // Deleting the last tag leaves the image with none — nothing left to manage here.
+          // Deleting the last tag leaves nothing to manage.
           if (details.tags.length === 0) {
             this.backToRepository()
             return
@@ -352,7 +348,7 @@ export class PackageDetailPage {
     if (latestTag) {
       return latestTag.version
     }
-    // No `latest` tag: the newest published version, whatever order the list comes in.
+    // No `latest` tag: the newest version, whatever the list order.
     const newest = details.versions.reduce<NpmVersionDetail | null>(
       (best, candidate) =>
         best === null || Date.parse(candidate.published_at) > Date.parse(best.published_at)

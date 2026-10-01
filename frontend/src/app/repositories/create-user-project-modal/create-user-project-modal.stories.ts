@@ -37,7 +37,7 @@ function fakeRepositoriesService(
 
 async function fillProjectName(canvasElement: HTMLElement, name: string) {
   const canvas = within(canvasElement)
-  // Required-field labels get a trailing " *" appended by GbtInput — match by prefix.
+  // GbtInput appends " *" to required-field labels: match by prefix.
   await userEvent.type(await canvas.findByLabelText(/^Nom/), name)
 }
 
@@ -57,7 +57,6 @@ export default meta
 
 type Story = StoryObj<CreateUserProjectModal>
 
-/** The project-creation form, before it's ever been submitted. */
 export const Default: Story = {}
 
 export const CreatingAPublicProject: Story = {
@@ -91,8 +90,7 @@ export const CreationFailed: Story = {
   ],
   play: async ({ canvasElement }) => {
     await fillProjectName(canvasElement, 'my-project')
-    // The error surfaces as a toast, rendered by the app shell — not present in this isolated
-    // story, so there's nothing further to assert on here beyond exercising the failure path.
+    // The error toast is rendered by the app shell, absent here: nothing more to assert.
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Créer' }))
   },
 }

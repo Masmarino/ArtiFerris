@@ -26,7 +26,6 @@ export interface OwnerSummary extends CatalogOwner {
   image_count: number
 }
 
-/** What the search-as-you-type popup shows: a name and where to find it. */
 export interface CatalogSuggestion {
   kind: CatalogFormat
   name: string
@@ -37,16 +36,13 @@ export interface CatalogSuggestion {
 export interface CatalogEntry extends CatalogSuggestion {
   description: string | null
   keywords: string[]
-  /** Latest version (npm) or most recently updated tag (docker). */
+  /** Latest version (npm) or latest tag (docker). */
   latest: string | null
   updated_at: string
-  /** Downloads over the last 7 days, indicative only. */
   downloads_7d: number
-  /** `null` when the search had no text. `fuzzy` is a typo-tolerant name match, always ranked last. */
+  /** `null` without search text. `fuzzy` is a typo match, always last. */
   match_kind: CatalogMatchKind | null
-  /** npm entries only. */
   registry_url: string | null
-  /** Docker entries only, without tag or scheme. */
   image_reference: string | null
 }
 
@@ -57,7 +53,6 @@ export interface CatalogSearchResult {
   per_page: number
 }
 
-/** What narrows the suggestions on the server. `limit` defaults to 8 there and is capped at 20. */
 export interface SuggestOptions {
   format?: CatalogFormat | null
   owner?: OwnerRef | null

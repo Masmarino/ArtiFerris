@@ -126,7 +126,6 @@ impl AuditNpmPackageUseCase {
     ) -> Result<Vec<NpmAdvisory>, ApplicationError> {
         let turn = tokio::time::timeout(self.limits.queue_timeout, async {
             let flight_guard = flight.clone().lock_owned().await;
-            // Whoever held the lock before may have just stored the result.
             if let Some(advisories) = self.fresh(key, &listed) {
                 return Turn::Cached(advisories);
             }

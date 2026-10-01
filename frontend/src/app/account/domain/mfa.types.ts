@@ -21,7 +21,7 @@ export interface PasskeySummary {
 
 export interface PasskeyRegistrationStart {
   challenge_id: string
-  // Passed straight through to createPasskeyCredential, never inspected here.
+  // Passed to createPasskeyCredential as is.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public_key: any
 }

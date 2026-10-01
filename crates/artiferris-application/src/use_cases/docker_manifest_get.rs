@@ -32,9 +32,8 @@ impl GetManifestUseCase {
         Ok(self.manifests.find_manifest_by_tag(repository_id, image_name, reference).await?)
     }
 
-    /// `authorize_member` is the caller's read policy, consulted for every group member the
-    /// traversal would descend into — the top-level repository's own access is the caller's
-    /// responsibility, checked once before this is ever called (C-1).
+    /// `authorize_member` is the caller's read policy for every group member descended into; the top-level repository
+    /// is checked by the caller.
     pub fn execute<'a, FAuthorize, FutAuthorize>(
         &'a self,
         repository_id: Uuid,
@@ -65,7 +64,6 @@ impl GetManifestUseCase {
             }
         }
         let remote_url = repo.remote_url.as_deref().ok_or_else(|| ApplicationError::InvalidDockerPayload("proxy repository has no remote_url configured".into()))?;
-        // `None` means the remote genuinely 404'd — a real "not found", not an infra failure.
         let Some((bytes, content_type)) = self.remote.fetch_manifest(remote_url, image_name, reference, repo.remote_username.as_deref(), repo.remote_password.as_deref()).await? else {
             return Ok(None);
         };
@@ -75,7 +73,6 @@ impl GetManifestUseCase {
                 return Err(ApplicationError::DockerDigestMismatch { expected: requested.as_str().to_string(), computed: digest.as_str().to_string() });
             }
         }
-        // Caching the fetched manifest locally is the route layer's job, not this use case's.
         Ok(Some(DockerManifest {
             id: Uuid::new_v4(),
             package_repository_id: repository_id,
@@ -130,8 +127,7 @@ mod tests {
         assert!(result.is_none());
     }
 
-    // `docker pull` probes references that legitimately 404 upstream (e.g. OCI referrers);
-    // that must resolve to Ok(None), not Err, so the pull continues gracefully.
+    // `docker pull` probes references that 404 upstream (OCI referrers): that is `Ok(None)`, not an error.
     #[tokio::test]
     async fn a_proxy_repositorys_remote_404_resolves_to_none_not_an_error() {
         let repositories = Arc::new(FakeRepositories::new());

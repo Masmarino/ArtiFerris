@@ -116,7 +116,6 @@ mod tests {
             invitations: vec![UserInvitation { user_id: member.id, token_hash: "hash".to_string(), expires_at: Utc::now() + chrono::Duration::hours(24) }],
             permission_streams: vec![PermissionStream { user_id: member.id, repository_id: hosted_id, events: vec![PermissionEvent::Granted { user_id: member.id, repository_id: hosted_id, role: Role::Write }] }],
             users: vec![member],
-            // The group is listed before its member, and gets its membership only afterwards.
             repository_streams: vec![
                 group,
                 created(hosted_id, "my-hosted", RepositoryType::Hosted),
@@ -154,7 +153,6 @@ mod tests {
     async fn a_failure_late_in_the_batch_rolls_back_everything_before_it(pool: PgPool) {
         let actor_id = Uuid::new_v4();
         let (mut batch, _, _) = full_batch(actor_id);
-        // The users, both repositories, the grant, the invitation and the settings are fine; the second "my-hosted" is not.
         batch.repository_streams.push(created(Uuid::new_v4(), "my-hosted", RepositoryType::Hosted));
         let before = counts(&pool).await;
 
@@ -164,7 +162,6 @@ mod tests {
         assert_eq!(counts(&pool).await, before, "not one row of the failed import remains");
         let settings: i64 = sqlx::query_scalar("SELECT count(*) FROM system_settings WHERE max_login_attempts = 7").fetch_one(&pool).await.unwrap();
         assert_eq!(settings, 0);
-        // The same file can be applied again once the clash is gone.
         batch.repository_streams.pop();
         PostgresConfigurationImport::new(pool.clone(), KEY.to_string()).apply(&batch).await.unwrap();
         assert_eq!(counts(&pool).await.0, before.0 + 1);

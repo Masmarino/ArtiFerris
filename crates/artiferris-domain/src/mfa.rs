@@ -43,17 +43,12 @@ pub trait TotpCredentialPort: Send + Sync {
 
 #[async_trait]
 pub trait BackupCodePort: Send + Sync {
-    /// Replaces the whole set — invalidates every prior code. Each entry is an opaque, individually
-    /// salted hash string (`<salt-hex>:<digest-hex>`, see `hash_backup_code` in the application
-    /// layer) — never a raw digest, and never directly comparable by equality against a plaintext.
-    /// `audit` is written in the same transaction as the new set.
+    /// Replaces the whole set, invalidating every prior code. Each entry is an opaque salted hash
+    /// (`<salt-hex>:<digest-hex>`), never comparable to a plaintext. `audit` goes in the same transaction.
     async fn replace_all(&self, user_id: Uuid, code_hashes: &[String], audit: Option<&SecurityAuditRecord>) -> Result<(), DomainError>;
-    /// Takes the *plaintext* candidate code, not a hash: because each stored hash carries its own
-    /// random salt, there is no single re-derived value to look up by exact match. Implementations
-    /// must fetch this user's still-unused stored hashes and verify the plaintext against each
-    /// (e.g. via `verify_backup_code`) until one matches.
-    /// Atomic: `true` only if a matching code existed and was still unused, so two concurrent
-    /// attempts on the same code can't both succeed.
+    /// Takes the plaintext code, not a hash: each stored hash has its own salt, so implementations fetch the user's
+    /// unused hashes and verify against each. Atomic: `true` only if a matching unused code existed, so two concurrent
+    /// attempts cannot both succeed.
     async fn try_consume(&self, user_id: Uuid, plaintext_code: &str) -> Result<bool, DomainError>;
     async fn count_unused(&self, user_id: Uuid) -> Result<i64, DomainError>;
     async fn delete_all(&self, user_id: Uuid) -> Result<(), DomainError>;

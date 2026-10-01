@@ -22,8 +22,8 @@ pub struct DockerAuthUser {
     pub granted_scope: Option<DockerGrantedScope>,
 }
 
-/// `None` for a route with no `:repository`/`*rest` params (e.g. `/_catalog`) — falls back to the unscoped challenge, same as `GET /v2/`.
-/// Also tries the personal route's 3-segment shape, keeping the hint unstripped — the client's own request form.
+/// `None` for a route without `:repository`/`*rest` params (e.g. `/_catalog`): the unscoped challenge, like `GET /v2/`.
+/// Also tries the personal route's 3-segment shape, keeping the hint unstripped, as the client sent it.
 async fn scope_hint(parts: &mut Parts, state: &DockerState) -> Option<String> {
     let org_route: Option<Path<(String, String)>> = parts.extract_with_state(state).await.ok();
     if let Some(Path((repository, rest))) = org_route {
@@ -35,7 +35,8 @@ async fn scope_hint(parts: &mut Parts, state: &DockerState) -> Option<String> {
     Some(format!("repository:u/{username}/{repo}/{image_name}:pull,push"))
 }
 
-/// Always challenges with the combined `pull,push` scope — `docker push` relies on this for its first, unauthenticated request. Safe: it's an upper bound, narrowed later by `IssueDockerAccessTokenUseCase`.
+/// Always challenges with `pull,push`: `docker push` relies on it for its first, unauthenticated request. An upper
+/// bound, narrowed later by `IssueDockerAccessTokenUseCase`.
 fn unauthorized(state: &DockerState, host: &str, scope: Option<&str>) -> Response {
     (
         StatusCode::UNAUTHORIZED,
@@ -57,9 +58,8 @@ impl FromRequestParts<DockerState> for DockerAuthUser {
             parts.extract::<TypedHeader<Authorization<Bearer>>>().await.map_err(|_| unauthorized(state, &host, scope.as_deref()))?;
         let claims = state.token_issuer.verify(bearer.token()).map_err(|_| unauthorized(state, &host, scope.as_deref()))?;
 
-        // A valid signature and a live `exp` only prove the token was minted; they say nothing about
-        // whether the user has since been deactivated or had their tokens rotated. Cached, so this
-        // costs a query at most once per user per cache TTL rather than once per request (M-17).
+        // A valid signature and `exp` only prove the token was minted, not that the user is still active or kept their
+        // tokens. Cached, so this costs a query at most once per user per cache TTL.
         let still_valid = state
             .tokens_valid_after_cache
             .is_valid(&state.users, claims.user_id, claims.issued_at)
@@ -69,7 +69,7 @@ impl FromRequestParts<DockerState> for DockerAuthUser {
             return Err(unauthorized(state, &host, scope.as_deref()));
         }
 
-        // Revoking the API token this one was exchanged for has to end it too, same cache lifetime.
+        // Revoking the API token this one came from ends it too, with the same cache lifetime.
         if let Some(api_token_id) = claims.api_token_id {
             let source_active = state
                 .tokens_valid_after_cache
@@ -90,8 +90,8 @@ impl FromRequestParts<DockerState> for DockerAuthUser {
     }
 }
 
-/// No bearer token, or the placeholder handed to anonymous callers, is anonymous (`None`). A bearer token that was
-/// presented but does not check out (expired, forged, revoked) is a 401 challenge instead, so the client fetches a new one.
+/// No bearer token, or the placeholder given to anonymous callers, is anonymous (`None`). A bearer token that does not
+/// check out (expired, forged, revoked) is a 401 challenge, so the client fetches a new one.
 impl OptionalFromRequestParts<DockerState> for DockerAuthUser {
     type Rejection = Response;
 
@@ -123,7 +123,6 @@ mod tests {
     use sqlx::PgPool;
     use tower::ServiceExt;
 
-    /// No `:repository`/`*rest` params, so `DockerAuthUser` gets exercised in isolation without `dispatch.rs`'s routing machinery.
     fn router(state: DockerState) -> Router {
         async fn handler(user: DockerAuthUser) -> Json<serde_json::Value> {
             Json(json!({
@@ -200,7 +199,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
 
-        // Wrong auth scheme entirely — `TypedHeader<Authorization<Bearer>>` extraction fails.
         let response = request(state, Some("Basic dXNlcjpwYXNz")).await;
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -211,19 +209,17 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool, dir.path()).await;
 
-        // Not a JWT at all — three-part structural decoding fails immediately.
         let response = request(state, Some("Bearer not-a-real-jwt")).await;
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// A structurally well-formed, correctly-signed JWT — just signed with a secret this server doesn't recognize. Must be rejected exactly like garbage.
+    /// A well-formed JWT signed with a secret this server does not know: rejected like garbage.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_token_signed_with_a_different_secret_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool.clone(), dir.path()).await; // route_test_support wires "test-secret"
-        // A real, seeded holder — so rejection is attributable to the signature check alone, not
-        // conflated with the unknown-holder rejection `DockerAuthUser::from_request_parts` also does (M-17).
+        // A real, seeded holder, so the rejection comes from the signature check alone.
         let holder = seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await;
         let other_issuer = JwtDockerTokenIssuer::new("a-different-secret".to_string());
         let token = other_issuer.issue(holder, Uuid::new_v4(), false, None).unwrap();
@@ -233,13 +229,11 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// A syntactically valid, correctly-shaped token whose signature has been tampered with must not verify.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_token_with_a_tampered_signature_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool.clone(), dir.path()).await;
-        // A real, seeded holder — so rejection is attributable to the signature check alone, not
-        // conflated with the unknown-holder rejection `DockerAuthUser::from_request_parts` also does (M-17).
+        // A real, seeded holder, so the rejection comes from the signature check alone.
         let holder = seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await;
         let token = state.token_issuer.issue(holder, Uuid::new_v4(), false, None).unwrap();
         let mut tampered = token.clone();
@@ -265,9 +259,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// Pushes `tokens_valid_after` to `offset_seconds` away from now. `iat` only has
-    /// second granularity, so a bump has to land in a strictly later second than the token's
-    /// issuance to be observable at all — hence the explicit offsets rather than a bare `now()`.
+    /// Moves `tokens_valid_after` `offset_seconds` from now. `iat` has second granularity, so a bump must land in a
+    /// later second than the token's issuance to be observable.
     async fn set_tokens_valid_after(pool: &PgPool, user_id: Uuid, offset_seconds: i32) {
         sqlx::query!(
             "UPDATE users SET tokens_valid_after = now() + make_interval(secs => $2) WHERE id = $1",
@@ -279,9 +272,8 @@ mod tests {
         .unwrap();
     }
 
-    /// The revocation window this whole mechanism exists to close (M-17): the user's tokens were
-    /// invalidated after this token was minted, so the token must stop working even though its
-    /// signature and `exp` are both still perfectly good.
+    /// The revocation this mechanism exists for: the user's tokens were invalidated after this one was minted, so it
+    /// must stop working though its signature and `exp` are good.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_token_issued_before_the_users_tokens_valid_after_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -295,7 +287,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// The other half of the same check — the common case must not regress into a blanket 401.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_token_issued_after_the_users_tokens_valid_after_is_accepted(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -309,9 +300,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    /// The revocation has to land while the user's entry is already cached — otherwise the test
-    /// only proves the cold-miss path, and a warm entry could happily serve a revoked token
-    /// forever. A zero TTL makes every check re-read, which is what the 30s TTL does on expiry.
+    /// The revocation must land while the user's entry is cached, or the test only proves the cold path. A zero TTL
+    /// makes every check re-read, like the 30 s TTL does on expiry.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_revocation_takes_effect_once_the_cached_entry_goes_stale(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -320,7 +310,6 @@ mod tests {
         set_tokens_valid_after(&pool, user_id, -3600).await;
         let token = state.token_issuer.issue(user_id, Uuid::new_v4(), false, None).unwrap();
 
-        // Warms the cache entry for this user.
         let response = request(state.clone(), Some(&format!("Bearer {token}"))).await;
         assert_eq!(response.status(), StatusCode::OK, "the token must work before anything revokes it");
 
@@ -385,8 +374,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    /// Fails closed on a deleted account, matching `artiferris-api`'s `AuthUser`: nothing ever bumps
-    /// a `tokens_valid_after` for a row that no longer exists, so "unknown" must not read as "fine".
+    /// Fails closed on a deleted account, like `artiferris-api`'s `AuthUser`: nothing bumps `tokens_valid_after` for a
+    /// row that no longer exists, so "unknown" must not read as fine.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_token_whose_user_no_longer_exists_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -400,8 +389,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// Mirrors `router` above, but mounted at the personal-repository path shape — needed since
-    /// `scope_hint`'s original `Path<(String, String)>` attempt can't match a 3-segment route.
+    /// `router` above, mounted at the personal-repository path shape, which `scope_hint`'s two-segment path cannot
+    /// match.
     fn personal_router(state: DockerState) -> Router {
         async fn handler(_user: DockerAuthUser) -> StatusCode {
             StatusCode::OK
@@ -409,8 +398,8 @@ mod tests {
         Router::new().route("/u/{username}/{repo}/{*rest}", get(handler)).with_state(state)
     }
 
-    /// A client's first, unauthenticated request under `/u/{username}/{repo}/...` must still get
-    /// a real scope hint — without it, `docker push` has nothing to ask `/v2/token` for.
+    /// A client's first, unauthenticated request under `/u/{username}/{repo}/...` must get a scope hint, or `docker
+    /// push` has nothing to ask `/v2/token` for.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_unauthenticated_request_under_a_personal_repository_path_still_gets_a_scope_hint(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();

@@ -25,16 +25,11 @@ pub struct VolumeSpace {
 pub trait StorageBackendPort: Send + Sync {
     async fn write(&self, repository_id: Uuid, path: &str, data: &[u8]) -> Result<(), StorageError>;
     async fn read(&self, repository_id: Uuid, path: &str) -> Result<Vec<u8>, StorageError>;
-    /// Same content as `read`, chunked instead of buffered whole — for a large object
-    /// (an npm tarball) on the download path, where the client would otherwise force the
-    /// whole file into memory before the first byte goes out.
+    /// Same content as `read`, chunked, so a large download (an npm tarball) is not buffered whole.
     async fn read_stream(&self, repository_id: Uuid, path: &str) -> Result<ByteStream, StorageError>;
     async fn delete(&self, repository_id: Uuid, path: &str) -> Result<(), StorageError>;
-    /// Removes everything stored under `repository_id`'s own root, not just one object at a time —
-    /// used by the repository deletion sweep (B-39) to reclaim a hard-deleted repository's on-disk
-    /// files (npm tarballs) once its DB rows are gone. A repository with nothing on disk (or whose
-    /// directory never existed, e.g. a Docker-format repository, which never uses this backend) is a
-    /// no-op, matching `delete`'s "already gone" semantics.
+    /// Removes everything under `repository_id`'s root, for the repository deletion sweep to reclaim a hard-deleted
+    /// repository's files. Nothing on disk (or no directory, as for Docker) is a no-op, like `delete`.
     async fn delete_repository(&self, repository_id: Uuid) -> Result<(), StorageError>;
     async fn used_bytes(&self, repository_id: Uuid) -> Result<u64, StorageError>;
     async fn is_healthy(&self) -> bool;

@@ -52,11 +52,9 @@ impl FromRequestParts<AppState> for AuthUser {
     }
 }
 
-/// Since axum 0.8 (axum-core 0.5), `Option<T>` as an extractor no longer falls back to a blanket
-/// `FromRequestParts` impl on any rejection — it needs this trait implemented explicitly. This is
-/// that opt-in: any rejection (no `Authorization` header, a malformed one, an expired or otherwise
-/// invalid token, ...) becomes `None` rather than failing the request, so a read-only handler taking
-/// `Option<AuthUser>` can treat every one of those the same way an anonymous caller would.
+/// axum 0.8 no longer falls back to a blanket impl for `Option<T>` extractors, so this opts in: any rejection (no
+/// header, malformed, expired or invalid token) becomes `None`, and a read-only handler taking `Option<AuthUser>`
+/// treats them all like an anonymous caller.
 impl OptionalFromRequestParts<AppState> for AuthUser {
     type Rejection = StatusCode;
 
@@ -79,7 +77,6 @@ mod tests {
     use axum::Router;
     use tower::ServiceExt;
 
-    // Same local pattern as every other route/middleware test module (see organization_middleware.rs).
     fn test_config() -> Config {
         Config {
             database_url: String::new(),
@@ -135,7 +132,6 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         let app = router(state);
 
-        // Neither a well-formed JWT nor even the right scheme.
         let response = app.oneshot(Request::builder().uri("/").header("authorization", "Bearer not-a-jwt").body(Body::empty()).unwrap()).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -164,7 +160,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    // Verifies this file's own doc comment on AuthUser.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_token_for_a_deleted_user_is_rejected(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());

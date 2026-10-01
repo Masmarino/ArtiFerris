@@ -5,8 +5,8 @@ import { usersGuard } from './auth/users.guard'
 import { organizationAdminGuard } from './auth/organization-admin.guard'
 import { CATALOGS } from './public/catalog/domain/catalog.registry'
 import { personalOwnerMatcher } from './public/catalog/owner-url-matcher'
+import { knownFormatAt } from './public/known-format'
 
-// One route per catalog: single-segment literals, so they're safe ahead of AppShell.
 const catalogRoutes: Routes = CATALOGS.map((catalog) => ({
   path: catalog.name,
   loadComponent: () =>
@@ -32,8 +32,7 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./public/catalog/explorer-page/explorer-page').then((m) => m.ExplorerPage),
   },
-  // The site's home page, reachable to anyone signed in or not (see 'explorer' above, same
-  // component): must stay ahead of AppShell below, whose own '' would otherwise claim it first.
+  // The home page. It must stay ahead of AppShell, whose own '' would claim it.
   {
     path: '',
     pathMatch: 'full',
@@ -41,7 +40,7 @@ export const routes: Routes = [
       import('./public/catalog/explorer-page/explorer-page').then((m) => m.ExplorerPage),
   },
   ...catalogRoutes,
-  // Authenticated single-segment routes never start with '@', so this can't shadow any.
+  // Authenticated routes never start with '@'.
   {
     matcher: personalOwnerMatcher,
     loadComponent: () => import('./public/catalog/owner-page/owner-page').then((m) => m.OwnerPage),
@@ -49,7 +48,6 @@ export const routes: Routes = [
   {
     path: '',
     loadComponent: () => import('./shell/app-shell').then((m) => m.AppShell),
-    // The shell re-creates its own routed view on a language change (see App).
     data: { recreatesViewsOnLanguageChange: true },
     canActivate: [authGuard],
     children: [
@@ -95,6 +93,7 @@ export const routes: Routes = [
       },
       {
         path: 'repositories/:id/packages/:format/:name',
+        canMatch: [knownFormatAt(3)],
         loadComponent: () =>
           import('./repositories/package-detail-page/package-detail-page').then(
             (m) => m.PackageDetailPage,
@@ -135,10 +134,9 @@ export const routes: Routes = [
       },
     ],
   },
-  // These must come AFTER the AppShell entry above: as leaf routes with wildcard params,
-  // they'd otherwise match any 2- or 5-segment URL outright (e.g. /repositories/:id,
-  // /users/:id, /admin/export) before the router ever gets to try AppShell's own children.
-  // 'o/:slug' must also stay ahead of ':username/:repoName', which would swallow it.
+  // After AppShell: as leaf routes with wildcard params they would match any 2- or 5-segment URL
+  // first.
+  // 'o/:slug' stays ahead of ':username/:repoName', which would swallow it.
   {
     path: 'o/:slug',
     loadComponent: () => import('./public/catalog/owner-page/owner-page').then((m) => m.OwnerPage),
@@ -152,6 +150,7 @@ export const routes: Routes = [
   },
   {
     path: ':username/:repoName/packages/:format/:name',
+    canMatch: [knownFormatAt(3)],
     loadComponent: () =>
       import('./public/public-package-page/public-package-page').then((m) => m.PublicPackagePage),
   },
@@ -164,10 +163,10 @@ export const routes: Routes = [
   },
   {
     path: 'o/:slug/:repoName/packages/:format/:name',
+    canMatch: [knownFormatAt(4)],
     loadComponent: () =>
       import('./public/public-package-page/public-package-page').then((m) => m.PublicPackagePage),
   },
-  // Keep last.
   {
     path: '**',
     loadComponent: () => import('./not-found/not-found-page').then((m) => m.NotFoundPage),

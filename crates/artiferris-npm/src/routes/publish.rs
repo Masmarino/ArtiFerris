@@ -67,9 +67,8 @@ async fn publish(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
     require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found or inaccessible" }))))?;
-    // Role before type (B-14): otherwise an unauthorized caller could tell a proxy repository
-    // (405 from require_hosted) apart from a hosted one (403 from the role check below) without
-    // ever having read access to either.
+    // Role before type: otherwise an unauthorized caller could tell a proxy repository (405 from `require_hosted`) from
+    // a hosted one (403) without any read access.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write)
         .await
         .map_err(|s| (s, Json(json!({ "error": "insufficient permissions to publish" }))))?;
@@ -102,8 +101,8 @@ async fn publish_personal(
     publish_to_repository(&state, repo.id, &name, doc, user.id).await
 }
 
-/// Shared by `publish` and `publish_personal` — everything after the two routes' differing
-/// resolution/authorization preludes is identical, so it lives here once rather than twice.
+/// Shared by `publish` and `publish_personal`: the code after their differing resolution and authorization preludes is
+/// the same.
 async fn publish_to_repository(
     state: &NpmState,
     repository_id: Uuid,
@@ -118,7 +117,7 @@ async fn publish_to_repository(
     }
 
     if doc.attachments.is_empty() {
-        // No tarball attached — a metadata-only update (`npm deprecate`), not a new publish.
+        // No tarball: a metadata-only update (`npm deprecate`), not a publish.
         if doc.versions.len() > MAX_DEPRECATED_VERSIONS_PER_REQUEST {
             return Err(bad_request("too many versions in one deprecation request"));
         }
@@ -221,7 +220,6 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
-    /// Mirrors `routes/metadata.rs`'s `test_state` — no shared test-support module for the HTTP-router `NpmState` builder.
     async fn test_state(pool: PgPool, root: &std::path::Path) -> NpmState {
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
         let repositories = Arc::new(PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string()));
@@ -344,8 +342,6 @@ mod tests {
         .unwrap();
     }
 
-    /// Same as `seed_user_with_active_token`, but with a caller-chosen username — needed to hit
-    /// `/u/{username}/...` routes. Mirrors `routes/metadata.rs`'s identical helper.
     async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: Uuid, username: &str, plaintext_token: &str) -> Uuid {
         let user_id = Uuid::new_v4();
         sqlx::query!(
@@ -369,8 +365,6 @@ mod tests {
         user_id
     }
 
-    /// Creates `owner_user_id`'s personal organization and a hosted npm project inside it,
-    /// returning the new repository's id. Mirrors `routes/metadata.rs`'s identical helper.
     async fn create_personal_project(pool: &PgPool, owner_user_id: Uuid, project_name: &str) -> Uuid {
         let organizations = Arc::new(PostgresOrganizationRepository::new(pool.clone()));
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
@@ -620,7 +614,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
-    /// Proves `require_hosted` is actually wired up at this route, not just unit-tested in `authz.rs`.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn publishing_against_a_proxy_repository_is_rejected(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -728,12 +721,9 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
     }
 
-    /// B-14: `publish`'s TYPE check (`require_hosted`, which 405s a proxy/group repository) must
-    /// not run before the ROLE check — otherwise an unauthorized caller can tell a private proxy
-    /// repository apart from a private hosted one purely from the status code, without ever having
-    /// read access. A caller from a DIFFERENT organization already gets 404 before either check
-    /// (`require_repository_by_name`'s own org-membership gate) regardless of ordering, so this
-    /// needs a caller in the REPOSITORIES' OWN organization who simply holds no grant at all.
+    /// Role before type: a private proxy must not be tellable from a private hosted repository by status code. A caller
+    /// from another organization already gets 404, so this needs a caller in the repositories' own organization with no
+    /// grant.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_unauthorized_publish_against_a_proxy_repository_leaks_no_more_than_against_a_hosted_one(pool: PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -746,8 +736,6 @@ mod tests {
         let proxy_repo_id = Uuid::new_v4();
         seed_repository(&pool, org_id, proxy_repo_id, "npm", "proxy").await;
         let proxy_repo_name = format!("repo-{proxy_repo_id}");
-        // Same organization as both repositories, but deliberately no `seed_permission` call —
-        // genuinely unauthorized, not merely cross-org (which is already 404 before any type check).
         let _user_id = seed_user_with_active_token(&pool, org_id, "acme-token").await;
 
         let tarball_b64 = base64::engine::general_purpose::STANDARD.encode(b"tarball-bytes");
@@ -776,7 +764,6 @@ mod tests {
         assert_eq!(hosted_response.status(), StatusCode::FORBIDDEN, "role must be checked before repository type, so a plain permission denial (403) comes back either way");
     }
 
-    // ---- B-13: personal-namespace write support ----
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn publishing_to_a_personal_project_by_its_owner_succeeds(pool: PgPool) {
@@ -812,8 +799,7 @@ mod tests {
         let alice_id = seed_named_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "alice", "alice-token").await;
         create_personal_project(&pool, alice_id, "my-lib").await;
 
-        // Mallory belongs to an unrelated organization and holds no grant on alice's personal
-        // repository — same 404-not-403 discipline as the existing read-only personal routes.
+        // Mallory is in an unrelated organization with no grant on alice's personal repository: 404, not 403.
         let other_id = Uuid::new_v4();
         create_org(&state, other_id, "other-corp").await;
         seed_named_user_with_active_token(&pool, other_id, "mallory", "mallory-token").await;
@@ -842,7 +828,6 @@ mod tests {
         );
     }
 
-    // ---- B-1 / B-12 / B-13 / B-16 ----
 
     struct Fixture {
         state: NpmState,
@@ -995,8 +980,8 @@ mod tests {
     async fn one_user_cannot_have_more_than_a_few_publish_bodies_in_flight(pool: PgPool) {
         let f = fixture(&pool).await;
         let stalled: Vec<_> = (0..artiferris_application::body_budget::MAX_BODIES_PER_CLIENT).map(|_| tokio::spawn(f.app.clone().oneshot(stalled_publish(&f, 1024)))).collect();
-        // Each publish clears auth and DB work before it takes a slot, which is slow on a busy CI runner: wait for all the slots to
-        // be taken rather than for a while, or the probe below steals one and is admitted instead of turned away.
+        // Each publish clears auth and DB work before taking a slot, slow on a busy runner: wait for every slot to be
+        // taken, or the probe steals one and is admitted instead of turned away.
         wait_until(|| f.state.guard.body_budget.most_in_flight_from_one_client() == artiferris_application::body_budget::MAX_BODIES_PER_CLIENT).await;
 
         let response = f.app.clone().oneshot(stalled_publish(&f, 1024)).await.unwrap();

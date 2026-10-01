@@ -79,9 +79,9 @@ impl LoginThrottle {
         tracked.timestamps.len() >= max_attempts
     }
 
-    /// Counts the attempt against every budget in one step, or counts nothing and returns `false` if any of them is already full.
-    /// Reserving before the password check (rather than recording a failure after it) is what stops a burst of parallel requests from all passing the check first.
-    /// Give back a reservation with `release`, or wipe a key with `clear`, once the attempt turns out fine.
+    /// Counts the attempt against every budget in one step, or counts nothing and returns `false` if one is full.
+    /// Reserving before the password check is what stops parallel requests from all passing it. `release` gives a
+    /// reservation back, `clear` wipes a key.
     pub fn reserve_all(&self, budgets: &[(&str, usize, Duration)]) -> bool {
         let mut attempts = self.lock();
         for &(key, max_attempts, window) in budgets {
@@ -142,8 +142,7 @@ impl LoginThrottle {
         self.lock().retain(|key, _| key != &shared && !is_organization_key_of(key, username));
     }
 
-    /// Reports every currently-blocked key against the given limits — a caller with several
-    /// orgs' worth of tracked keys would call this once per distinct limit it cares about.
+    /// Every currently blocked key against the given limits.
     pub fn blocked_usernames(&self, max_attempts: usize, window: Duration) -> Vec<BlockedUsername> {
         let mut attempts = self.lock();
         let now = Instant::now();
@@ -175,8 +174,8 @@ impl LoginThrottle {
     }
 }
 
-/// Makes space for `key` if it's new and the map is full, by dropping the quietest key that isn't blocked (judged against its OWN threshold, so
-/// flooding fresh keys can't unblock a victim, B-3). `false` if every tracked key is blocked and there's no room.
+/// Makes room for a new `key` when the map is full by dropping the quietest key that is not blocked, judged against its
+/// own threshold, so flooding fresh keys cannot unblock a victim. `false` if every key is blocked.
 fn make_room(attempts: &mut HashMap<String, TrackedKey>, key: &str) -> bool {
     if attempts.contains_key(key) || attempts.len() < MAX_TRACKED_USERNAMES {
         return true;
@@ -296,12 +295,10 @@ mod tests {
     #[test]
     fn eviction_never_unblocks_an_actively_blocked_key() {
         let throttle = LoginThrottle::new();
-        // Block "victim" first, at a small cap so it's easy to trip.
         throttle.record_failure("victim", 2, LOGIN_ATTEMPT_WINDOW);
         throttle.record_failure("victim", 2, LOGIN_ATTEMPT_WINDOW);
         assert!(throttle.is_throttled("victim", 2, LOGIN_ATTEMPT_WINDOW));
 
-        // Flood past the cap with distinct fresh keys, each under its own limit (not blocked).
         for i in 0..MAX_TRACKED_USERNAMES {
             throttle.record_failure(&format!("attacker-{i}"), MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW);
         }

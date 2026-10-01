@@ -188,10 +188,9 @@ struct UserLookupResponse {
     username: String,
 }
 
-/// Scoped to the caller's OWN organization (`user.organization_id`), never the Host-resolved one —
-/// `ResolvedOrganization` is attacker-controlled (derived from the `Host` header), so scoping on it
-/// let any authenticated user enumerate another organization's usernames by spoofing that
-/// organization's subdomain (audit finding C-3).
+/// Scoped to the caller's own organization (`user.organization_id`), never the Host-resolved one:
+/// `ResolvedOrganization` comes from the `Host` header, so scoping on it let any authenticated user enumerate another
+/// organization's usernames by spoofing its subdomain.
 async fn lookup_user(State(state): State<AppState>, user: AuthUser, Query(params): Query<LookupQuery>) -> Result<Json<UserLookupResponse>, (StatusCode, Json<ErrorResponse>)> {
     let not_found = || (StatusCode::NOT_FOUND, Json(ErrorResponse::message("user not found".to_string())));
     let username = artiferris_domain::user::Username::parse(&params.username).map_err(|_| not_found())?;
@@ -214,20 +213,15 @@ struct SearchQuery {
 
 const SEARCH_RESULT_LIMIT: usize = 10;
 
-/// Same privacy contract as `lookup_user`. Empty `q` returns no results.
-///
-/// Scoped to the caller's OWN organization (`user.organization_id`), never the Host-resolved one —
-/// `ResolvedOrganization` is attacker-controlled (derived from the `Host` header), so scoping on it
-/// let any authenticated user enumerate another organization's usernames by spoofing that
-/// organization's subdomain (audit finding C-3).
+/// Same privacy contract as `lookup_user`. An empty `q` returns nothing. Scoped to the caller's own organization, never
+/// the Host-resolved one, for the same reason.
 async fn search_users(State(state): State<AppState>, user: AuthUser, Query(params): Query<SearchQuery>) -> Result<Json<Vec<UserLookupResponse>>, (StatusCode, Json<ErrorResponse>)> {
     let query = params.q.trim().to_lowercase();
     if query.is_empty() {
         return Ok(Json(vec![]));
     }
-    // Scoped (and, for a super-admin, cross-organization) at the database level instead of
-    // filtering a full-table `list_all()` read in application code (M-21, B-7). A super-admin's
-    // search is intentionally cross-organization — same bypass `list_users` already applies.
+    // Scoped in SQL (and cross-organization for a super-admin, like `list_users`) instead of filtering a full-table
+    // read.
     let matches = if user.is_super_admin {
         state.users.search_all_organizations(&query, SEARCH_RESULT_LIMIT as i64).await
     } else {
@@ -276,8 +270,8 @@ async fn list_user_permissions(
     let result = entries
         .into_iter()
         .filter_map(|(repository_id, role)| repos.get(&repository_id).map(|repo| (repository_id, role, repo)))
-        // A non-super-admin caller only sees the target's grants within the target's own
-        // (non-personal) organization — their personal-namespace projects are theirs alone (B-1).
+        // A non-super-admin caller sees the target's grants only within the target's own (non-personal) organization:
+        // personal-namespace projects are theirs alone.
         .filter(|(_, _, repo)| user.is_super_admin || repo.organization_id == target.organization_id)
         .map(|(repository_id, role, repo)| UserPermissionEntryResponse { repository_id, repository_name: repo.name.clone(), format: repo.format, role })
         .collect();
@@ -867,10 +861,8 @@ mod tests {
             })
             .await
             .unwrap();
-        // Non-super-admin caller in the public organization.
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "public-regular", "sup3r-s3cret!", false).await.unwrap();
         let token = state.authenticate_user.execute("public-regular", "sup3r-s3cret!").await.unwrap();
-        // The target username exists, but only in a different ("acme") organization.
         state.create_user.execute(acme_id, "acme-florian", "sup3r-s3cret!", false).await.unwrap();
         let app = build_router(state);
 
@@ -942,14 +934,13 @@ mod tests {
             })
             .await
             .unwrap();
-        // Caller belongs to the public organization, not acme.
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "public-regular", "sup3r-s3cret!", false).await.unwrap();
         let token = state.authenticate_user.execute("public-regular", "sup3r-s3cret!").await.unwrap();
         state.create_user.execute(acme_id, "acme-florian", "sup3r-s3cret!", false).await.unwrap();
         let app = build_router(state);
 
-        // The caller spoofs acme's own subdomain in Host — without this fix, resolved_org becomes
-        // acme, and since the target also belongs to acme, the lookup would succeed.
+        // The caller spoofs acme's subdomain in `Host`: without the fix, `resolved_org` becomes acme and, the target
+        // being in acme, the lookup would succeed.
         let response = app
             .oneshot(
                 Request::builder()
@@ -1091,9 +1082,8 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::FORBIDDEN);
     }
 
-    /// B-1: an org-admin's reach into a member's permission grants must stop at that member's own
-    /// organization — it must never surface grants inside the member's personal namespace, which
-    /// is theirs alone.
+    /// An organization admin's reach into a member's grants stops at the member's own organization: grants inside their
+    /// personal namespace are theirs alone.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn list_user_permissions_does_not_leak_a_targets_personal_project_to_their_org_admin(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -1125,9 +1115,8 @@ mod tests {
         assert_eq!(entries.as_array().unwrap().len(), 0, "the target's personal-org project must not be visible to their normal org's admin: {entries}");
     }
 
-    /// The counterpart to the leak test above: filtering to the target's own organization must
-    /// not over-filter — a grant that genuinely lives in the target's normal org still has to
-    /// show up for that org's admin.
+    /// The counterpart of the leak test: filtering to the target's organization must not over-filter; a grant in the
+    /// target's normal organization still shows for that organization's admin.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn list_user_permissions_still_shows_the_targets_own_organization_grants(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -1141,8 +1130,6 @@ mod tests {
         let repo_id =
             state.create_repository.execute(acme_id, "acme-repo", RepositoryFormat::Npm, RepositoryType::Hosted, None, None, None, org_admin_id).await.unwrap();
         state.grant_permission.execute(target_id, repo_id, Role::Write, org_admin_id).await.unwrap();
-        // Also give the target a personal project, to prove it's filtered out alongside the
-        // normal-org grant being kept.
         state.reserve_personal_organization.execute(target_id).await.unwrap();
         state.create_user_project.execute(target_id, "target-secret-lib", RepositoryFormat::Npm, RepositoryType::Hosted).await.unwrap();
 
@@ -1167,8 +1154,8 @@ mod tests {
         assert_eq!(entries[0]["repository_name"], "acme-repo");
     }
 
-    /// A super-admin caller must keep seeing everything, personal-org projects included — the B-1
-    /// scoping only applies to the org-admin path.
+    /// A super-admin keeps seeing everything, personal projects included: the scoping applies only to the
+    /// organization-admin path.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn a_super_admin_still_sees_a_targets_personal_project_in_their_permissions(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -1247,8 +1234,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::FORBIDDEN);
     }
 
-    /// The invited-into organization must follow the request's `Host` header, not the
-    /// calling super-admin's own organization.
+    /// The invited-into organization follows the request's `Host`, not the calling super-admin's own organization.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn inviting_a_user_targets_the_hosts_organization_not_the_callers(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -1348,7 +1334,6 @@ mod tests {
         let org_admin_id = state.create_user.execute(acme_id, "acme-admin", "sup3r-s3cret!", false).await.unwrap();
         state.users.set_organization_admin(org_admin_id, true, None).await.unwrap();
         state.create_user.execute(acme_id, "acme-user", "sup3r-s3cret!", false).await.unwrap();
-        // A super-admin in a different organization must never show up in the org-admin's view.
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
         let org_admin_token = state.authenticate_user.execute("acme-admin", "sup3r-s3cret!").await.unwrap();
         let app = build_router(state);
@@ -1382,7 +1367,6 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::FORBIDDEN);
     }
 
-    // --- An organization admin's reach into their own organization's users ---
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_organization_admin_can_get_a_user_in_their_own_organization(pool: sqlx::PgPool) {
@@ -1528,7 +1512,6 @@ mod tests {
             .await
             .unwrap();
 
-        // No SMTP configured, so this 500s past authorization — what matters is it isn't 403/404.
         assert_ne!(response.status(), axum::http::StatusCode::FORBIDDEN);
         assert_ne!(response.status(), axum::http::StatusCode::NOT_FOUND);
     }

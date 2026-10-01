@@ -48,7 +48,6 @@ export class SmtpSettingsAdmin {
   private readonly settingsService = inject(SmtpSettingsService)
   private readonly toastService = inject(ToastService)
 
-  /** Set only when embedded in an organization's own admin page — scopes read/write to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
   readonly securityOptions = securityOptions()
@@ -61,7 +60,6 @@ export class SmtpSettingsAdmin {
   readonly fromAddress = signal('')
   readonly security = signal<SmtpSecurity>('start_tls')
   readonly passwordSet = signal(false)
-  /** The stored password cannot be decrypted by this server: it has to be typed again. */
   readonly secretUnreadable = signal(false)
 
   readonly loading = signal(true)
@@ -71,12 +69,12 @@ export class SmtpSettingsAdmin {
   readonly testRecipient = signal('')
   readonly sendingTest = signal(false)
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     effect(() => {
       const organizationId = this.organizationId()
       const stillCurrent = () => this.organizationId() === organizationId
-      // Nothing typed for the previous organization may end up saved on this one.
+      // Nothing typed for the previous organization may be saved on this one.
       this.password.set('')
       this.attemptedSave.set(false)
       this.testRecipient.set('')
@@ -100,7 +98,7 @@ export class SmtpSettingsAdmin {
             this.passwordSet.set(settings.password_set)
           } else {
             this.secretUnreadable.set(settings !== null)
-            // Reset, or a previous org's SMTP config lingers on screen for one with none.
+            // Reset, so a previous organization's config does not linger.
             this.host.set('')
             this.port.set('587')
             this.username.set('')
@@ -121,7 +119,7 @@ export class SmtpSettingsAdmin {
     })
   }
 
-  // Errors stay hidden until a save is attempted — a freshly opened form isn't a mistake yet.
+  // Errors stay hidden until a save is attempted.
   readonly attemptedSave = signal(false)
 
   private readonly rawPortError = computed(() => {

@@ -63,7 +63,6 @@ export default meta
 
 type Story = StoryObj<MyRepositoryPage>
 
-/** The caller has not reserved their personal namespace yet — offers to create it. */
 export const NotYetReserved: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -72,7 +71,6 @@ export const NotYetReserved: Story = {
   },
 }
 
-/** Clicking the create button opens the confirmation modal explaining what reserving does. */
 export const OpeningTheConfirmModal: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -87,7 +85,6 @@ export const OpeningTheConfirmModal: Story = {
   },
 }
 
-/** Confirming reserves the namespace, then shows the caller's own (now empty) project list. */
 export const ReservingTheNamespace: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -99,7 +96,6 @@ export const ReservingTheNamespace: Story = {
   },
 }
 
-/** The caller already has a personal namespace — their own projects are shown directly. */
 export const AlreadyReserved: Story = {
   decorators: [
     moduleMetadata({
@@ -149,7 +145,6 @@ export const Loading: Story = {
 }
 
 const checkFailed = withFakes({ hasReservedNamespace: () => throwError(() => new Error('down')) })
-/** If the check fails the caller is treated as not reserved yet, and told so. */
 export const CheckingReservationFailed: Story = {
   decorators: [checkFailed.decorator],
   play: async ({ canvasElement }) => {
@@ -164,7 +159,6 @@ export const CheckingReservationFailed: Story = {
 }
 
 const reserving = withFakes({ reserve: fn(() => NEVER) })
-/** While the reservation request is pending, the confirm button is busy. */
 export const Reserving: Story = {
   decorators: [reserving.decorator],
   play: async ({ canvasElement }) => {
@@ -185,7 +179,6 @@ const reserveFailed = withFakes({
     ),
   ),
 })
-/** A failed reservation keeps the modal open and shows the server's own message. */
 export const ReservationFailed: Story = {
   decorators: [reserveFailed.decorator],
   play: async ({ canvasElement }) => {
@@ -220,7 +213,6 @@ export const ReservationFailedWithoutServerMessage: Story = {
 const alreadyReservedElsewhere = withFakes({
   reserve: fn(() => throwError(() => new HttpErrorResponse({ status: 409 }))),
 })
-/** A 409 means the namespace already exists (e.g. another tab), which counts as success. */
 export const ReservationConflict: Story = {
   decorators: [alreadyReservedElsewhere.decorator],
   play: async ({ canvasElement }) => {

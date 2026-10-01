@@ -15,7 +15,7 @@ import { AdminMetricsService } from '../application/metrics.service'
 import { RepositoryUsage } from '../domain/metrics.entity'
 import { formatBytes } from '../../shared/format'
 
-// Past this many, the tail gets folded into one "Autres" bar — the table below still lists everything.
+// Past this many, the rest folds into one "Autres" bar.
 const CHART_TOP_N = 15
 
 @Component({
@@ -29,7 +29,6 @@ const CHART_TOP_N = 15
 export class UsageMetrics {
   private readonly metricsService = inject(AdminMetricsService)
 
-  /** Set only when embedded in an organization's own admin page — scopes the usage to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
   readonly locale = activeLocale()

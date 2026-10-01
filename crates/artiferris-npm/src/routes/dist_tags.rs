@@ -70,7 +70,7 @@ async fn set_tag(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
     require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    // Role before type (B-14): see publish.rs's identical reordering.
+    // Role before type, as in publish.rs.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write).await.map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;
     require_hosted(&repo).map_err(|s| (s, Json(json!({ "error": "dist-tags cannot be set on a proxy or group repository" }))))?;
     let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
@@ -91,7 +91,7 @@ async fn delete_tag(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let repo = require_repository_by_name(&state, &user, resolved_org.0.id, &repository).await.map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
     require_npm_format_repository(&repo).map_err(|s| (s, Json(json!({ "error": "repository not found" }))))?;
-    // Role before type (B-14): see publish.rs's identical reordering.
+    // Role before type, as in publish.rs.
     require_repository_role(&state, &user, repo.id, repo.organization_id, Role::Write).await.map_err(|s| (s, Json(json!({ "error": "insufficient permissions" }))))?;
     require_hosted(&repo).map_err(|s| (s, Json(json!({ "error": "dist-tags cannot be deleted on a proxy or group repository" }))))?;
     let name = NpmPackageName::parse(&package).map_err(|_| bad_request("invalid package name"))?;
@@ -175,8 +175,6 @@ mod tests {
     use tower::ServiceExt;
     use uuid::Uuid;
 
-    /// Mirrors `routes/metadata.rs`'s `test_state` — this crate has no shared
-    /// test-support module for the HTTP-router `NpmState` builder.
     async fn test_state(pool: PgPool, root: &std::path::Path) -> NpmState {
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
         let repositories = Arc::new(PostgresPackageRepositoryStore::new(pool.clone(), "test-secret".to_string()));
@@ -276,8 +274,6 @@ mod tests {
         .unwrap();
     }
 
-    /// Same as `seed_user_with_active_token`, but with a caller-chosen username — needed to hit
-    /// `/u/{username}/...` routes. Mirrors `routes/metadata.rs`'s identical helper.
     async fn seed_named_user_with_active_token(pool: &PgPool, organization_id: Uuid, username: &str, plaintext_token: &str) -> Uuid {
         let user_id = Uuid::new_v4();
         sqlx::query!(
@@ -301,8 +297,6 @@ mod tests {
         user_id
     }
 
-    /// Creates `owner_user_id`'s personal organization and a hosted npm project inside it,
-    /// returning the new repository's id. Mirrors `routes/metadata.rs`'s identical helper.
     async fn create_personal_project(pool: &PgPool, owner_user_id: Uuid, project_name: &str) -> Uuid {
         let organizations = Arc::new(PostgresOrganizationRepository::new(pool.clone()));
         let users = Arc::new(PostgresUserRepository::new(pool.clone()));
@@ -313,9 +307,8 @@ mod tests {
         create_project.execute(owner_user_id, project_name, RepositoryFormat::Npm, RepositoryType::Hosted).await.unwrap()
     }
 
-    /// npm-hosted repository, a user with write+read access, and one published version
-    /// (1.0.0, which the publish use case's own `latest`-on-first-publish behavior already
-    /// tags). Returns (TempDir guard — MUST be kept alive, state, repo_id, repo_name, user_id).
+    /// An npm-hosted repository, a user with write and read access and one published version (1.0.0). Returns (TempDir
+    /// guard to keep alive, state, repo_id, repo_name, user_id).
     async fn setup_with_one_published_version(pool: &PgPool) -> (tempfile::TempDir, NpmState, Uuid, String, Uuid) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool.clone(), dir.path()).await;
@@ -359,9 +352,8 @@ mod tests {
         assert!(tags.iter().any(|t| t.tag == "beta" && t.version.as_str() == "1.0.0"));
     }
 
-    /// The hand-rolled `body.trim().trim_matches('"')` parsing this file uses instead of a
-    /// full JSON parse — npm's actual HTTP client sends the version JSON-string-quoted
-    /// (`"1.0.0"`), not bare, so this is the realistic wire format, not the edge case.
+    /// npm's client sends the version as a JSON string (`"1.0.0"`), which is why this parses by trimming quotes: the
+    /// realistic wire format.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn setting_a_dist_tag_with_a_json_quoted_version_is_correctly_unquoted(pool: PgPool) {
         let (_dir, state, repo_id, repo_name, _user_id) = setup_with_one_published_version(&pool).await;
@@ -501,7 +493,6 @@ mod tests {
         );
     }
 
-    // ---- B-13: personal-namespace write support ----
 
     fn put_personal_dist_tag(app: axum::Router, username: &str, repo_name: &str, tag: &str, raw_body: &str, bearer: &str) -> impl std::future::Future<Output = axum::response::Response> {
         let request = Request::builder()

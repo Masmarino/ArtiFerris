@@ -16,10 +16,8 @@ pub type ByteStream = BoxStream<'static, Result<Bytes, DomainError>>;
 /// Its claims (role, organization) are a snapshot from issuance, so this is how long a role change can go unnoticed.
 pub const DOCKER_ACCESS_TOKEN_TTL_SECONDS: i64 = 120;
 
-/// Unfinished blob uploads one repository may have open at a time.
 pub const MAX_OPEN_UPLOADS_PER_REPOSITORY: usize = 32;
 
-/// Most tags one repository may hold, across all its images.
 pub const MAX_TAGS_PER_REPOSITORY: i64 = 10_000;
 
 /// What each tag counts for against a repository's quota, on top of the manifest bodies and blobs.
@@ -41,7 +39,7 @@ impl Digest {
         }
     }
 
-    /// The real digest of `bytes` — never trust a client-declared digest instead.
+    /// The real digest of `bytes`; never trust a client-declared one.
     pub fn of(bytes: &[u8]) -> Self {
         use sha2::{Digest as _, Sha256};
         let hash = Sha256::digest(bytes);
@@ -77,8 +75,7 @@ impl DockerImageName {
     }
 }
 
-/// Enforces the OCI distribution-spec tag grammar: `[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}`
-/// (starts with an alphanumeric or underscore, the rest is alphanumeric/./_/-, 128 chars max).
+/// OCI tag grammar: `[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}`.
 pub fn parse_docker_tag(raw: &str) -> Result<String, DomainError> {
     let len_ok = (1..=128).contains(&raw.len());
     let starts_ok = raw.chars().next().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
@@ -145,7 +142,7 @@ pub struct DockerManifest {
     pub image_name: DockerImageName,
     pub digest: Digest,
     pub media_type: DockerMediaType,
-    /// Exact bytes as received, never reparsed/reserialized — reserializing JSON can change the byte sequence a client re-verifies `digest` against.
+    /// Exact bytes as received, never reserialized: a client re-verifies `digest` against them.
     pub body: Vec<u8>,
     pub created_at: DateTime<Utc>,
 }
@@ -163,57 +160,43 @@ pub struct DockerTag {
 pub trait DockerBlobStorePort: Send + Sync {
     /// Idempotent. Does not touch `reference_count` — see `increment_ref`.
     async fn write(&self, digest: &Digest, bytes: &[u8]) -> Result<(), DomainError>;
-    /// Streams `body` to disk while hashing it and stores it under `digest`, returning its size. Nothing is kept if it hashes to
-    /// something else (`DigestMismatch`) or runs past `max_bytes` (`UploadTooLarge`). Like `write`, doesn't touch `reference_count`.
+    /// Streams `body` to disk while hashing and stores it under `digest`, returning its size. Nothing is kept on
+    /// `DigestMismatch` or past `max_bytes` (`UploadTooLarge`). Does not touch `reference_count`.
     async fn write_stream(&self, digest: &Digest, body: ByteStream, max_bytes: u64) -> Result<u64, DomainError>;
-    /// Adopts a file already on disk at `staging_path` via a rename, instead of the second full write `write` would do.
-    /// `size_bytes` is recorded alongside it since the caller already knows it from streaming the file to compute `digest`.
+    /// Adopts a file already staged at `staging_path` by renaming it, instead of writing it a second time.
     async fn adopt_staged_file(&self, digest: &Digest, staging_path: &str, size_bytes: u64) -> Result<(), DomainError>;
     async fn read(&self, digest: &Digest) -> Result<Vec<u8>, DomainError>;
-    /// Same content as `read`, chunked instead of buffered whole — otherwise a large layer would be forced fully into memory before the first byte goes out.
+    /// Same content as `read`, chunked so a large layer is not buffered whole.
     async fn read_stream(&self, digest: &Digest) -> Result<ByteStream, DomainError>;
     /// Records that `digest` was uploaded to `repository_id`, independent of any manifest referencing it yet.
     async fn link_to_repository(&self, repository_id: Uuid, digest: &Digest) -> Result<(), DomainError>;
-    /// One half of blob-read authorization (see `link_to_repository`); the other is `DockerManifestRepositoryPort::blob_is_reachable`.
     async fn is_uploaded_to_repository(&self, repository_id: Uuid, digest: &Digest) -> Result<bool, DomainError>;
-    /// Removes `digest`'s `link_to_repository` row for `repository_id`, once it's stale: callers must
-    /// only invoke this after confirming (e.g. via `DockerManifestRepositoryPort::blob_is_reachable`)
-    /// that no manifest in `repository_id` references `digest` anymore. The link row records "uploaded
-    /// to this repository" independent of any manifest — legitimately outliving a manifest delete when
-    /// the digest is still reachable through another manifest, or genuinely still mid-upload — but once
-    /// it's the LAST such reference and it's gone, the row becomes stale and, left in place, permanently
-    /// blocks `decrement_ref_and_delete_if_zero` from ever reclaiming the blob (that check treats the
-    /// row's mere existence as "still referenced" and rolls back its own decrement when it finds one).
-    /// A real implementation re-verifies the "no longer referenced" condition itself (e.g. in the same
-    /// SQL statement) as defense in depth against a concurrent push racing the caller's own check.
+    /// Removes the `link_to_repository` row once it is stale. Call it only after confirming (e.g. with
+    /// `blob_is_reachable`) that no manifest of `repository_id` references `digest`: left in place, the row stops
+    /// `decrement_ref_and_delete_if_zero` from reclaiming the blob. Implementations re-check that condition themselves,
+    /// against a concurrent push.
     async fn unlink_from_repository_if_unreferenced(&self, repository_id: Uuid, digest: &Digest) -> Result<(), DomainError>;
     async fn exists(&self, digest: &Digest) -> Result<bool, DomainError>;
     async fn size_if_exists(&self, digest: &Digest) -> Result<Option<u64>, DomainError>;
-    /// Batched form of `exists`: which of `digests` are present, in one query.
     async fn existing_digests(&self, digests: &[Digest]) -> Result<std::collections::HashSet<String>, DomainError>;
-    /// Batched form of `size_if_exists`: total size of whichever of `digests` exist (missing ones contribute 0).
     async fn sum_sizes(&self, digests: &[Digest]) -> Result<u64, DomainError>;
     async fn increment_ref(&self, digest: &Digest) -> Result<(), DomainError>;
     /// Batched form of `increment_ref` — callers must pass already-deduplicated digests.
     async fn increment_ref_all(&self, digests: &[Digest]) -> Result<(), DomainError>;
-    /// Deletes the blob's row and file if `reference_count` is zero and no manifest or repository link references it.
-    /// `Ok(true)` iff the row was deleted; a failure removing the file afterwards is logged, not returned, so callers
-    /// looping over several digests never skip one.
+    /// Deletes the blob's row and file if `reference_count` is zero and nothing links it. `Ok(true)` iff the row went;
+    /// a failure removing the file is logged, not returned.
     async fn delete_if_unreferenced(&self, digest: &Digest) -> Result<bool, DomainError>;
-    /// Best-effort: for each digest whose `docker_blobs` row the caller (the repository deletion
-    /// sweep) already deleted, re-acquires that digest's advisory lock, re-confirms the row is still
-    /// absent — a concurrent write racing into the gap since the sweep's commit would have recreated
-    /// it — and only then removes the file. Only lock/re-check errors are logged; a stray file for an
-    /// already-deleted blob is recoverable, unlike a ghost row.
+    /// Best effort: for each digest whose row the repository deletion sweep already deleted, re-takes the advisory
+    /// lock, re-checks the row is still absent, then removes the file. A stray file is recoverable, a ghost row is not.
     async fn remove_reclaimed_blob_files(&self, digests: &[Digest]);
-    /// Distinct blobs its manifests reference plus the ones uploaded to it and not yet referenced, the manifest bodies, and
-    /// `DOCKER_TAG_QUOTA_BYTES` per tag. Blobs are globally deduped by digest, so one blob can count toward more than one repository.
+    /// Distinct blobs its manifests reference plus uploaded ones not yet referenced, the manifest bodies, and
+    /// `DOCKER_TAG_QUOTA_BYTES` per tag. Blobs are deduped by digest, so one can count toward several repositories.
     async fn used_bytes_for_repository(&self, repository_id: Uuid) -> Result<u64, DomainError>;
     /// Batched `used_bytes_for_repository`. A repository with no blobs is absent, not zero.
     async fn used_bytes_for_repositories(&self, repository_ids: &[Uuid]) -> Result<std::collections::HashMap<Uuid, u64>, DomainError>;
-    /// Recomputes `reference_count` from the manifests for blobs older than `older_than`, drops link rows older than that which no
-    /// manifest of a hosted repository references, then deletes blobs nothing references or links anymore, files included.
-    /// Anything newer may still be waiting for its manifest. Also removes half-written files an interrupted write left in the store.
+    /// Recomputes `reference_count` from the manifests for blobs older than `older_than`, drops older link rows no
+    /// hosted manifest references, then deletes blobs nothing references, files included. Newer ones may still await
+    /// their manifest. Also removes half-written files.
     async fn sweep_unreferenced_blobs(&self, older_than: DateTime<Utc>) -> Result<BlobSweepReport, DomainError>;
 }
 
@@ -221,9 +204,7 @@ pub trait DockerBlobStorePort: Send + Sync {
 pub struct BlobSweepReport {
     pub links_removed: usize,
     pub blobs_removed: usize,
-    /// Blobs whose `reference_count` disagreed with the manifests actually referencing them.
     pub counts_corrected: usize,
-    /// Half-written files an interrupted write left behind.
     pub temp_files_removed: usize,
 }
 
@@ -239,16 +220,17 @@ pub struct DockerUploadSession {
 
 #[async_trait]
 pub trait DockerUploadSessionPort: Send + Sync {
-    /// An abandoned session is also cleaned up lazily, on the next `find` — but a truly abandoned
-    /// session (client crashes mid `docker push`) never gets a next `find`, so that alone isn't enough.
-    /// A session that sees no chunk for an hour expires. Fails with `TooManyUploads` once the repository has `MAX_OPEN_UPLOADS_PER_REPOSITORY` sessions open.
+    /// A session with no chunk for an hour expires. An abandoned one is also cleaned lazily on the next `find`, which
+    /// never comes if the client crashed, hence the sweep. `TooManyUploads` once the repository has
+    /// `MAX_OPEN_UPLOADS_PER_REPOSITORY` sessions open.
     async fn create(&self, package_repository_id: Uuid) -> Result<DockerUploadSession, DomainError>;
-    /// Returns `None` for an expired session even if its row still exists — callers can't distinguish "never existed" from "expired".
+    /// `None` for an expired session even if its row exists: callers cannot tell expired from never existed.
     async fn find(&self, id: Uuid) -> Result<Option<DockerUploadSession>, DomainError>;
     /// Checks `expected_start` and applies the chunk as one atomic step, if given.
     async fn append_chunk(&self, id: Uuid, chunk: &[u8], expected_start: Option<i64>) -> Result<i64, DomainError>;
-    /// `append_chunk` for a body written to the staging file as it arrives. Nothing is kept unless the whole stream lands:
-    /// an error or more than `max_bytes` (`UploadTooLarge`) leaves the session as it was. A sealed session fails with `UploadInProgress`.
+    /// `append_chunk` for a body staged to a file as it arrives. Nothing is kept unless the whole stream lands: an
+    /// error or more than `max_bytes` (`UploadTooLarge`) leaves the session as it was. A sealed session fails with
+    /// `UploadInProgress`.
     async fn append_stream(&self, id: Uuid, chunk: ByteStream, expected_start: Option<i64>, max_bytes: u64) -> Result<i64, DomainError>;
     /// Undoes a chunk that took the session from `to_bytes` to `from_bytes`. Does nothing if the session has moved on since.
     async fn rewind(&self, id: Uuid, from_bytes: i64, to_bytes: i64) -> Result<(), DomainError>;
@@ -257,10 +239,8 @@ pub trait DockerUploadSessionPort: Send + Sync {
     /// Streams the staged content from disk to hash it — a chunked upload can be gigabytes.
     async fn hash_staged_file(&self, id: Uuid) -> Result<(Digest, u64), DomainError>;
     async fn delete(&self, id: Uuid) -> Result<(), DomainError>;
-    /// Bytes staged across every open session of the repository.
     async fn staged_bytes_for_repository(&self, package_repository_id: Uuid) -> Result<u64, DomainError>;
-    /// Deletes every session past its `expires_at`, removing its staging file too. Returns the count
-    /// removed. Called periodically by a background sweep — see `SweepExpiredDockerUploadsUseCase` (M-13).
+    /// Deletes every session past `expires_at`, staging file included; returns the count. Called by a background sweep.
     async fn sweep_expired_uploads(&self) -> Result<usize, DomainError>;
 }
 
@@ -280,18 +260,12 @@ pub trait DockerManifestRepositoryPort: Send + Sync {
     ) -> Result<Option<DockerManifest>, DomainError>;
     /// Returns the row id and whether it was a real insert (false on an idempotent conflict).
     async fn insert_manifest(&self, manifest: &DockerManifest, blob_digests: &[Digest]) -> Result<(Uuid, bool), DomainError>;
-    /// Atomically, under one transaction holding an advisory lock scoped to `repository_id`
-    /// (serializing concurrent pushes to the SAME repository only — a push to a different
-    /// repository takes a different lock key and proceeds uncontended): re-verifies every blob in
-    /// `blob_digests` is reachable from this repository, re-verifies `quota_bytes` (the
-    /// repository's already-configured limit, read by the caller outside the lock — only the
-    /// "bytes already used" side of the check is re-summed here) against the repository's current
-    /// usage plus these blobs (each distinct blob once), inserts the manifest and its blob links, and — only on a real insert
-    /// — increments each blob's reference count, all before commit. This closes two races the
-    /// naive check-then-insert sequence had: two concurrent pushes to the same repository both
-    /// reading the quota as "not yet exceeded", and a manifest ending up inserted against a blob a
-    /// concurrent delete just removed (B-18). Returns `Err(DomainError::DockerBlobNotReachable)` or
-    /// `Err(DomainError::StorageQuotaExceeded)` instead of inserting when either check fails.
+    /// One transaction under an advisory lock scoped to `repository_id` (pushes to other repositories are not blocked):
+    /// re-verifies every blob in `blob_digests` is reachable from this repository and the repository's `quota_bytes`
+    /// against current usage plus these blobs, inserts the manifest and its blob links and, on a real insert,
+    /// increments each blob's reference count. This closes the races of a check-then-insert: two pushes both reading
+    /// "under quota", and a manifest inserted against a blob a concurrent delete removed. Fails with
+    /// `DockerBlobNotReachable` or `StorageQuotaExceeded` instead of inserting.
     async fn insert_manifest_with_checks(
         &self,
         repository_id: Uuid,
@@ -306,16 +280,15 @@ pub trait DockerManifestRepositoryPort: Send + Sync {
     /// Deletes the manifest and gives up its blob references in one transaction, so a failure leaves the counts as they were.
     async fn delete_manifest(&self, repository_id: Uuid, image_name: &DockerImageName, digest: &Digest) -> Result<(), DomainError>;
     async fn list_tags(&self, repository_id: Uuid, image_name: &DockerImageName) -> Result<Vec<String>, DomainError>;
-    /// Not deduplicated — callers must dedupe if needed.
     async fn list_repository_image_names(&self, repository_id: Uuid) -> Result<Vec<DockerImageName>, DomainError>;
-    /// Batched form of `list_repository_image_names` across several repositories in one query.
+    /// `list_repository_image_names` across several repositories in one query.
     async fn list_image_names_for_repositories(&self, repository_ids: &[Uuid]) -> Result<Vec<(Uuid, DockerImageName)>, DomainError>;
     /// Up to `limit` distinct image names in name order, starting after `after`.
     async fn list_image_names_page(&self, repository_id: Uuid, after: Option<&str>, limit: i64) -> Result<Vec<DockerImageName>, DomainError>;
-    /// The (image name, tag) pairs of the given images, at most the `per_image` most recently updated tags of each (cut in the query),
-    /// batching what would otherwise be one `list_tags` call per image. Ordered by image name, then most recently updated first.
+    /// The (image name, tag) pairs of the given images, at most the `per_image` most recently updated tags of each (cut
+    /// in the query), ordered by image name then most recent first.
     async fn list_recent_tags_for_images(&self, repository_id: Uuid, image_names: &[String], per_image: i64) -> Result<Vec<(DockerImageName, String)>, DomainError>;
-    /// The manifest behind each given image's most-recently-updated tag, one row per image name — used to resolve "the latest test" per image without an N+1 per-image lookup.
+    /// The manifest behind each image's most recently updated tag, one row per image name.
     async fn list_latest_manifest_id_per_image(&self, repository_id: Uuid, image_names: &[String]) -> Result<Vec<(DockerImageName, Uuid)>, DomainError>;
     /// Distinct digests tagged anywhere on this image, in one query.
     async fn list_distinct_digests_for_image(&self, repository_id: Uuid, image_name: &DockerImageName) -> Result<Vec<Digest>, DomainError>;
@@ -323,7 +296,7 @@ pub trait DockerManifestRepositoryPort: Send + Sync {
     async fn list_tag_manifest_summaries(&self, repository_id: Uuid, image_name: &DockerImageName, limit: i64) -> Result<Vec<(String, Digest, DockerMediaType, DateTime<Utc>)>, DomainError>;
     /// The body of each of these manifests of the image, one query. Bodies over `max_bytes` are left out.
     async fn list_tagged_manifest_bodies(&self, repository_id: Uuid, image_name: &DockerImageName, digests: &[String], max_bytes: i64) -> Result<Vec<(Digest, Vec<u8>)>, DomainError>;
-    /// Every image's tag/manifest summaries in one repository, batching what would otherwise be one `list_tag_manifest_summaries` call per image name.
+    /// Every image's tag/manifest summaries in one repository, in one query.
     async fn list_repository_tag_manifest_summaries(&self, repository_id: Uuid) -> Result<Vec<(DockerImageName, String, Digest, DockerMediaType, DateTime<Utc>)>, DomainError>;
     /// Every tag with when the tag itself was last set: retention's order, since re-tagging an old digest keeps its own timestamp.
     async fn list_repository_tag_updates(&self, repository_id: Uuid) -> Result<Vec<(DockerImageName, String, Digest, DateTime<Utc>)>, DomainError>;
@@ -356,7 +329,6 @@ impl DockerScopeRequest {
         Some(Self { resource_type, name, actions: actions_part.split(',').map(|s| s.to_string()).collect() })
     }
 
-    /// The repository is the first path segment; the rest is the image name.
     pub fn artiferris_repository_name(&self) -> &str {
         self.name.split('/').next().unwrap_or(&self.name)
     }
@@ -378,8 +350,8 @@ pub struct DockerAccessClaims {
     pub organization_id: Uuid,
     pub is_super_admin: bool,
     pub granted_scope: Option<DockerGrantedScope>,
-    /// When the token was minted. Second-granularity (it rides in the JWT's `iat`), so callers
-    /// comparing it against a user's `tokens_valid_after` must truncate that side too (M-17).
+    /// When the token was minted (second granularity, from the JWT `iat`): compare it against a user's
+    /// `tokens_valid_after` truncated the same way.
     pub issued_at: DateTime<Utc>,
     /// The API token this one was exchanged for; `None` for a token the server minted for itself.
     pub api_token_id: Option<Uuid>,
@@ -387,7 +359,6 @@ pub struct DockerAccessClaims {
 
 #[async_trait]
 pub trait DockerTokenIssuerPort: Send + Sync {
-    /// For a token the server mints for itself, not tied to any API token.
     fn issue(&self, user_id: Uuid, organization_id: Uuid, is_super_admin: bool, granted_scope: Option<DockerGrantedScope>) -> Result<String, DomainError>;
     /// Remembers the API token, so revoking it can end this one too.
     fn issue_for_api_token(&self, api_token_id: Uuid, user_id: Uuid, organization_id: Uuid, is_super_admin: bool, granted_scope: Option<DockerGrantedScope>) -> Result<String, DomainError>;

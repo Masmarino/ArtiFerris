@@ -180,12 +180,8 @@ impl StartPasskeyRegistrationUseCase {
         Self { webauthn, credentials, ceremonies, users, hasher }
     }
 
-    /// `current_password` is `Some(..)` and checked the same way as `EnrollTotpUseCase` for the
-    /// session-authenticated `/api/me/mfa/*` route — this is the step that actually creates a new
-    /// (still-unconfirmed, in-memory) registration ceremony; without this check a hijacked session
-    /// token alone could enroll an attacker-controlled passkey (M-7). It is `None` for the mandatory
-    /// first-time-MFA-setup flow (`/api/auth/mfa/setup/*`), gated by the short-lived `mfa_token`
-    /// instead — see `EnrollTotpUseCase::execute`'s doc comment for the full reasoning.
+    /// `current_password` is `Some` for `/api/me/mfa/*`, as for `EnrollTotpUseCase`: a hijacked session token alone
+    /// must not enroll a passkey. It is `None` for the first-time setup flow, gated by `mfa_token`.
     pub async fn execute(&self, user_id: Uuid, username: &str, current_password: Option<&str>) -> Result<(Uuid, CreationChallengeResponse), ApplicationError> {
         if let Some(current_password) = current_password {
             verify_current_password(self.users.as_ref(), self.hasher.as_ref(), user_id, current_password).await?;
@@ -363,8 +359,8 @@ impl DeletePasskeyUseCase {
     }
 }
 
-/// Built from `ARTIFERRIS_BASE_DOMAIN`, not `PUBLIC_URL` — `rp_id` needs the shared base domain for `allow_subdomains(true)` to validate every org's subdomain against one client instance.
-/// The port still has to come from somewhere, though, so a non-default one is taken from `public_url` instead of silently defaulting to 80/443.
+/// Built from `ARTIFERRIS_BASE_DOMAIN`, not `PUBLIC_URL`: `rp_id` needs the shared base domain for
+/// `allow_subdomains(true)`. A non-default port is taken from `public_url` rather than defaulting to 80/443.
 fn rp_origin_url(artiferris_base_domain: &str, public_url: &str) -> Result<Url, String> {
     let scheme = crate::base_domain::scheme_for_domain(artiferris_base_domain);
     let port_suffix = Url::parse(public_url).ok().and_then(|u| u.port()).map(|p| format!(":{p}")).unwrap_or_default();
@@ -591,8 +587,7 @@ mod tests {
         assert_eq!(ccr.public_key.user.name, "florian");
     }
 
-    /// A hijacked session token alone must not be enough to plant a new passkey — starting a
-    /// registration ceremony requires the caller's current password, same as `EnrollTotpUseCase` (M-7).
+    /// A hijacked session token alone must not start a passkey registration: the current password is required.
     #[tokio::test]
     async fn starting_registration_requires_the_current_password() {
         let credentials = Arc::new(FakeCredentials::new());
@@ -607,10 +602,7 @@ mod tests {
         use_case.execute(user.id, "florian", Some("s3cret!")).await.unwrap();
     }
 
-    /// `/api/auth/mfa/setup/passkey/start` (the mandatory first-time-MFA-setup flow, gated by the
-    /// short-lived `mfa_token` rather than a full session) passes `None` and must skip the password
-    /// check entirely — see `EnrollTotpUseCase`'s equivalent test for the full reasoning (Task 5 fix
-    /// round 1).
+    /// The first-time setup flow passes `None` and skips the password check.
     #[tokio::test]
     async fn starting_registration_with_no_password_supplied_skips_the_check() {
         let credentials = Arc::new(FakeCredentials::new());
@@ -715,9 +707,7 @@ mod tests {
         assert!(!err.is_empty());
     }
 
-    /// Guards a real bug: a bare `scheme://artiferris_base_domain` silently assumes the scheme's
-    /// default port, breaking every passkey ceremony served on a non-default one (this
-    /// project's own `docker-compose.yml` exposes 8080).
+    /// A bare `scheme://base_domain` assumes the default port and would break passkeys on a non-default one.
     #[test]
     fn rp_origin_includes_a_non_default_port_taken_from_public_url() {
         let origin = rp_origin_url("localhost", "http://localhost:8080").unwrap();
@@ -852,7 +842,6 @@ mod tests {
         let (challenge_id, _ccr) = start.execute(user_id, "florian", Some("s3cret!")).await.unwrap();
 
         let finish = FinishPasskeyRegistrationUseCase::new(webauthn, credentials, ceremonies, Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new()));
-        // Proves `take()` removes the entry: the second attempt must fail at ceremony lookup, not crypto.
         let _ = finish.execute(user_id, Uuid::new_v4(), challenge_id, &fake_register_response(), "My key").await;
         let err = finish.execute(user_id, Uuid::new_v4(), challenge_id, &fake_register_response(), "My key").await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidMfaCode));

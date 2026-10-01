@@ -11,7 +11,7 @@ export class HttpPersonalRepositoryAdapter implements PersonalRepositoryPort {
   checkReserved(): Observable<boolean> {
     return this.http.get<void>('/api/me/repository').pipe(
       map(() => true),
-      // A 404 is this endpoint's normal "no personal namespace yet" answer, not a failure.
+      // A 404 is the normal "no personal namespace yet" answer.
       catchError((err: unknown) => {
         if (err instanceof HttpErrorResponse && err.status === 404) {
           return of(false)

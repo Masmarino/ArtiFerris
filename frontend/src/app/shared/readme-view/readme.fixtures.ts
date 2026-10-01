@@ -24,7 +24,6 @@ const LONG_LINE =
 const PIXEL_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
-/** Content that tends to blow the layout out: unbreakable strings, wide code, tables and images. */
 export const OVERFLOW_README_HTML = `
 <p>https://example.com/a/very/long/url/that/has/no/spaces/and/keeps/going/and/going/and/going/and/going/and/going/forever</p>
 <p>${'Averylongunbrokenwordwithoutanyspaceatall'.repeat(6)}</p>

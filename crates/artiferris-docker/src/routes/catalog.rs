@@ -115,9 +115,8 @@ mod tests {
         assert!(!repositories.iter().any(|r| r.as_str().unwrap().starts_with(&unreadable_name)));
     }
 
-    /// Repository names are only unique per-organization (Task 7) — without organization
-    /// scoping, `_catalog` would leak another organization's repository existence and could
-    /// even collide two different organizations' same-named repositories into one entry.
+    /// Repository names are unique only per organization: without organization scoping `_catalog` would reveal another
+    /// organization's repositories and merge same-named ones.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn catalog_only_lists_the_resolved_organizations_own_repositories(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
@@ -157,8 +156,6 @@ mod tests {
         let acme_push_token = crate::route_test_support::issue_test_token_for_org(&state, acme_user_id, acme_id, false, acme_repo_id, &acme_repo_name, "myimage", &["push"]);
         let app = crate::router(state.clone());
 
-        // Inlined rather than the shared push helpers, which assume the public organization
-        // — this repository lives in "acme".
         let config_bytes: &[u8] = b"acme-config-bytes";
         let config_digest = artiferris_domain::docker_registry::Digest::of(config_bytes);
         let blob_response = app
@@ -199,8 +196,6 @@ mod tests {
             .unwrap();
         assert_eq!(manifest_response.status(), StatusCode::CREATED);
 
-        // Same super-admin scope query, but hitting the OTHER organization's own subdomain —
-        // must not see "acme"'s repository at all, regardless of read permissions.
         let other_user_id = seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await;
         seed_permission(&pool, other_user_id, acme_repo_id, "read").await;
         let catalog_token = state.token_issuer.issue(other_user_id, other_id, false, None).unwrap();
@@ -233,9 +228,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// `_catalog` takes a non-optional `DockerAuthUser` — an anonymous token (#73) must still be
-    /// rejected here exactly like a missing `Authorization` header, not silently accepted as "some
-    /// user with an empty catalog".
+    /// `_catalog` takes a non-optional `DockerAuthUser`: an anonymous token must be rejected like a missing
+    /// `Authorization` header, not accepted as a user with an empty catalog.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn catalog_rejects_an_anonymous_token(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();

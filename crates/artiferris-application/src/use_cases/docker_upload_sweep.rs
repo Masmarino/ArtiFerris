@@ -16,8 +16,7 @@ pub struct UploadSweepReport {
     pub temp_files_removed: usize,
 }
 
-/// Run periodically by a background timer: reclaims upload sessions abandoned mid `docker push` (M-13), which the lazy
-/// sweep in `find` never reaches, and blobs no manifest ever referenced.
+/// Run periodically: reclaims upload sessions abandoned mid `docker push` and blobs no manifest references.
 pub struct SweepExpiredDockerUploadsUseCase {
     sessions: Arc<dyn DockerUploadSessionPort>,
     blobs: Arc<dyn DockerBlobStorePort>,
@@ -46,7 +45,6 @@ mod tests {
     async fn sweeping_reports_the_count_removed_by_the_port() {
         let sessions = Arc::new(FakeUploadSessions::new());
         let start = StartBlobUploadUseCase::new(sessions.clone());
-        // Fresh sessions aren't expired, so the fake port's sweep removes none of them.
         start.execute(Uuid::new_v4()).await.unwrap();
         start.execute(Uuid::new_v4()).await.unwrap();
 

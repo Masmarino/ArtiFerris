@@ -27,7 +27,8 @@ pub struct RetentionSweepReport {
     pub docker_untagged_manifests_deleted: usize,
 }
 
-/// Run periodically by a background timer, not on any request path. Deletes via `UnpublishNpmPackageUseCase`/`DeleteManifestUseCase` to reuse their storage/audit side effects.
+/// Run periodically. Deletes through `UnpublishNpmPackageUseCase` and `DeleteManifestUseCase` to reuse their storage
+/// and audit side effects.
 pub struct SweepRetentionUseCase {
     repositories: Arc<dyn PackageRepositoryQueryPort>,
     npm_packages: Arc<dyn NpmPackageRepositoryPort>,
@@ -51,9 +52,7 @@ impl SweepRetentionUseCase {
         let mut report = RetentionSweepReport::default();
         for repo in self.repositories.list_all().await? {
             let Some(keep_n) = repo.retention_keep_last_n else { continue };
-            // Floor at 1 regardless of source (B-37): a `Some(0)` here — from a pre-existing bad
-            // event, or any future bug elsewhere — must never mean "keep nothing, delete everything
-            // not dist-tagged." This is independent of the domain-layer `apply` sanitization.
+            // Floor at 1: a `Some(0)` must never mean delete everything not dist-tagged.
             let keep_n = keep_n.max(1) as usize;
             let swept = match repo.format {
                 RepositoryFormat::Npm => self.sweep_npm(repo.id, keep_n, &mut report).await,
@@ -67,13 +66,9 @@ impl SweepRetentionUseCase {
         Ok(report)
     }
 
-    /// Newest-first, keeps everything within `keep_n` plus any version a dist-tag still points at — a sweep must never silently break `npm install @latest`.
-    ///
-    /// Dist-tags are deliberately NOT pre-fetched once for the whole sweep (B-41): this loop can
-    /// take seconds to minutes across a large repository, and `unpublish_npm.execute_version` on
-    /// one version can run concurrently with an `npm dist-tag add` landing on another. A snapshot
-    /// taken before the loop started would be blind to that race. Instead, each candidate's
-    /// protection is re-checked immediately before its own deletion call, against current state.
+    /// Keeps everything within `keep_n` plus any version a dist-tag points at. Dist-tags are not pre-fetched: a
+    /// snapshot would miss an `npm dist-tag add` landing during the sweep, so each candidate is re-checked just before
+    /// its deletion.
     async fn sweep_npm(&self, repository_id: Uuid, keep_n: usize, report: &mut RetentionSweepReport) -> Result<(), ApplicationError> {
         let packages = self.npm_packages.search(repository_id, "", i64::MAX).await?;
         let package_ids: Vec<Uuid> = packages.iter().map(|p| p.id).collect();
@@ -92,7 +87,6 @@ impl SweepRetentionUseCase {
                 if rank < keep_n {
                     continue;
                 }
-                // Fresh, per-version query right before the delete decision — see method doc.
                 let protected: HashSet<String> = self
                     .npm_packages
                     .list_dist_tags_for_packages(&[package.id])
@@ -103,7 +97,7 @@ impl SweepRetentionUseCase {
                 if protected.contains(&version.version.as_str()) {
                     continue;
                 }
-                // Errors are swallowed: one package's stale state must not abort the whole sweep.
+                // One package's stale state must not abort the sweep.
                 if self.unpublish_npm.execute_version(repository_id, &package.name, &version.version, RETENTION_SWEEP_ACTOR).await.is_ok() {
                     report.npm_versions_deleted += 1;
                 }
@@ -329,7 +323,7 @@ mod tests {
         let now = Utc::now();
         seed_npm_version(&packages, &storage, repository_id, package.id, "1.0.0", now - Duration::days(2)).await;
         seed_npm_version(&packages, &storage, repository_id, package.id, "2.0.0", now).await;
-        // An old version deliberately still tagged (e.g. a maintained LTS line) must survive even though rank alone would prune it.
+        // An old version still tagged (an LTS line) survives.
         packages.set_dist_tag(package.id, "lts", &NpmVersion::parse("1.0.0").unwrap()).await.unwrap();
 
         let use_case = use_case_with(repositories, packages.clone(), storage, Arc::new(FakeDockerManifestRepository::new()), Arc::new(FakeDockerBlobStore::new()));
@@ -340,14 +334,8 @@ mod tests {
         assert!(remaining.contains(&"1.0.0".to_string()));
     }
 
-    /// B-41: `sweep_npm` must not decide a version's fate from a dist-tag snapshot taken before
-    /// the deletion loop started. Simulated deterministically via `FakePackages`'s one-shot hook
-    /// (see its doc comment) instead of real concurrency: the hook adds a NEW dist-tag pointing at
-    /// an old version right after the sweep's first `list_dist_tags_for_packages` call returns,
-    /// whichever version that call happens to be for. A snapshot-once implementation queries
-    /// exactly once (before any package's versions are examined) and never observes the addition.
-    /// A fixed implementation that re-checks before each individual deletion queries again later
-    /// (for the next candidate version) and does observe it.
+    /// `sweep_npm` must not decide from a dist-tag snapshot taken before the loop. A one-shot hook in `FakePackages`
+    /// adds a dist-tag on an older version after the first query; only a per-deletion re-check sees it.
     #[tokio::test]
     async fn a_dist_tag_added_during_the_sweep_still_protects_its_version_from_deletion() {
         let repositories = Arc::new(FakeNpmRepositories::new());
@@ -367,14 +355,10 @@ mod tests {
         };
         packages.create_package(&package).await.unwrap();
         let now = Utc::now();
-        // Newest-first candidates for deletion beyond keep_n=1: 1.1.0 is checked before 1.0.0.
         seed_npm_version(&packages, &storage, repository_id, package.id, "1.0.0", now - Duration::days(2)).await;
         seed_npm_version(&packages, &storage, repository_id, package.id, "1.1.0", now - Duration::days(1)).await;
         seed_npm_version(&packages, &storage, repository_id, package.id, "2.0.0", now).await;
 
-        // No dist-tag exists when the sweep starts. As soon as the sweep's first dist-tag query
-        // returns (for 1.1.0, the first deletion candidate), simulate a concurrent
-        // `npm dist-tag add` landing on the OLDER 1.0.0 — the next candidate in line.
         let package_id = package.id;
         let packages_for_hook = packages.clone();
         *packages.after_first_list_dist_tags_for_packages.lock().unwrap() = Some(Box::new(move || {
@@ -452,7 +436,6 @@ mod tests {
         manifests.insert_manifest(&latest, &[]).await.unwrap();
         manifests.set_tag_at(repository_id, &image_name, "1.0.0", v1.id, now - Duration::days(2)).await;
         manifests.set_tag_at(repository_id, &image_name, "1.1.0", v2.id, now - Duration::days(1)).await;
-        // Oldest, but protected by name.
         manifests.set_tag_at(repository_id, &image_name, "latest", latest.id, now - Duration::days(3)).await;
 
         let use_case = use_case_with(
@@ -480,7 +463,6 @@ mod tests {
         let image_name = artiferris_domain::docker_registry::DockerImageName::parse("my-app").unwrap();
         let now = Utc::now();
 
-        // "v3" and "stable" share a digest (common in CI/CD); "v2" is separate and older.
         let shared_build = docker_manifest(repository_id, &image_name, b"shared-build", now);
         let v2 = docker_manifest(repository_id, &image_name, b"v2", now - Duration::days(1));
         manifests.insert_manifest(&shared_build, &[]).await.unwrap();
@@ -530,11 +512,8 @@ mod tests {
         assert_eq!(manifests.list_tags(repository_id, &image_name).await.unwrap(), vec!["1.0.0".to_string()]);
     }
 
-    /// B-37 belt-and-suspenders: even if a repository's projection somehow reports
-    /// `retention_keep_last_n = Some(0)` (e.g. a gap the domain-layer `apply` fix doesn't fully
-    /// close, or a future bug elsewhere), the sweep's own floor must prevent wholesale deletion.
-    /// Seeded directly into the fake projection, bypassing the domain layer entirely, so this
-    /// proves the sweep's defense doesn't depend on the domain-layer fix.
+    /// Even if the projection reports `retention_keep_last_n = Some(0)`, the sweep's own floor prevents wholesale
+    /// deletion.
     #[tokio::test]
     async fn the_sweep_never_treats_a_zero_keep_count_as_delete_everything() {
         let repositories = Arc::new(FakeNpmRepositories::new());
@@ -574,7 +553,6 @@ mod tests {
         manifest
     }
 
-    /// Re-tagging `prod` on a six-month-old digest is a rollback, and must survive.
     #[tokio::test]
     async fn a_tag_moved_back_onto_an_old_digest_survives_the_sweep() {
         let repositories = Arc::new(FakeDockerRepositories::new());

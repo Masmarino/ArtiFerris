@@ -20,7 +20,7 @@ import {
   setActiveLanguage,
 } from './app/shared/i18n/translator'
 
-/** Serves the real French dictionary synchronously, so specs render the same text as the app. */
+/** Serves the real French dictionary synchronously, so specs render the app's text. */
 @Injectable()
 class InlineTranslocoLoader implements TranslocoLoader {
   getTranslation(): Observable<Translation> {
@@ -28,7 +28,10 @@ class InlineTranslocoLoader implements TranslocoLoader {
   }
 }
 
-/** Just enough of Transloco's lookup + `{{ param }}` interpolation for specs that never build a TestBed. */
+/**
+ * Just enough of Transloco's lookup + `{{ param }}` interpolation for specs that never build a
+ * TestBed.
+ */
 function lookup(key: string, params: Record<string, unknown> = {}): string {
   const value = key
     .split('.')
@@ -39,8 +42,7 @@ function lookup(key: string, params: Record<string, unknown> = {}): string {
   return value.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, name: string) => String(params[name] ?? ''))
 }
 
-// Every spec gets Transloco with the French dictionary already loaded; a spec that needs a
-// different configuration can still provide its own, which takes precedence.
+// Every spec gets Transloco with the French dictionary; a spec can still provide its own.
 const i18nProviders: (Provider | EnvironmentProviders)[] = [
   provideTransloco({
     config: { availableLangs: ['fr'], defaultLang: 'fr', prodMode: false },
@@ -52,8 +54,7 @@ const i18nProviders: (Provider | EnvironmentProviders)[] = [
   }),
 ]
 
-// A spec that calls resetTestingModule() mid-test drops every provider configured so far, so
-// they are re-applied right after each reset.
+// resetTestingModule() drops these providers, so they are re-applied after each reset.
 const resetTestingModule = TestBed.resetTestingModule.bind(TestBed)
 TestBed.resetTestingModule = () => {
   const testBed = resetTestingModule()
@@ -62,8 +63,7 @@ TestBed.resetTestingModule = () => {
 }
 
 beforeEach(() => {
-  // Specs that call a translating helper directly, without any TestBed, still get French text;
-  // those that do build a TestBed replace this with the real Transloco service.
+  // Specs with no TestBed still get French text; those with one use the real service.
   registerTranslator(lookup)
   setActiveLanguage('fr')
   TestBed.configureTestingModule({ providers: i18nProviders })

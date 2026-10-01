@@ -25,7 +25,7 @@ function withOrgs(orgs: Partial<OrganizationsService>) {
 }
 
 async function fillForm(canvas: ReturnType<typeof within>) {
-  // Required-field labels get a trailing " *" appended by GbtInput — match by prefix.
+  // GbtInput appends " *" to required-field labels: match by prefix.
   await userEvent.type(await canvas.findByLabelText(/^Sous-domaine/), 'acme')
   await userEvent.type(canvas.getByLabelText(/^Nom/), 'Acme Corp')
 }
@@ -51,7 +51,6 @@ export default meta
 
 type Story = StoryObj<CreateOrganizationModal>
 
-/** Untouched form: "Créer" stays disabled until both required fields are filled. */
 export const Empty: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -83,7 +82,6 @@ export const CreatingAnOrganization: Story = {
 }
 
 const createInFlight = fakeOrgs({ create: fn(() => NEVER) })
-/** While the request is pending the button is busy, so a second click can't create a duplicate. */
 export const Creating: Story = {
   decorators: [withOrgs(createInFlight)],
   play: async ({ canvasElement, args }) => {
@@ -107,7 +105,6 @@ const createRejected = fakeOrgs({
     ),
   ),
 })
-/** The server's own reason is shown to the user when it provides one. */
 export const CreationRejectedByTheServer: Story = {
   decorators: [withOrgs(createRejected)],
   play: async ({ canvasElement, args }) => {

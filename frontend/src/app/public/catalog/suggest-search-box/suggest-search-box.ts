@@ -28,7 +28,10 @@ const MAX_SUGGESTIONS = 8
 
 let nextId = 0
 
-/** A search input that suggests package names as you type, as an ARIA combobox. Enter without a highlighted suggestion emits `search`. */
+/**
+ * A search input that suggests names as you type (ARIA combobox). Enter with nothing highlighted
+ * emits `search`.
+ */
 @Component({
   imports: [TranslocoPipe],
   selector: 'app-suggest-search-box',
@@ -42,7 +45,7 @@ export class SuggestSearchBox {
   private readonly router = inject(Router)
   private readonly typed = new Subject<string>()
   private dismissed = false
-  // Set while the answer to the latest keystroke is pending: what is on screen no longer matches.
+  // Pending: what is on screen no longer matches the latest keystroke.
   private stale = false
 
   readonly label = input.required<string>()
@@ -50,9 +53,7 @@ export class SuggestSearchBox {
   readonly placeholder = input('')
   readonly compact = input(false, { transform: booleanAttribute })
   readonly maxLength = input<number | null>(null)
-  /** Only suggestions of this format are asked for. */
   readonly format = input<CatalogFormat | null>(null)
-  /** Only suggestions of this owner are asked for. */
   readonly owner = input<OwnerRef | null>(null)
   readonly value = model('')
   // eslint-disable-next-line @angular-eslint/no-output-native
@@ -62,7 +63,7 @@ export class SuggestSearchBox {
   readonly listboxId = `${this.inputId}-listbox`
 
   private readonly results = signal<CatalogSuggestion[] | null>(null)
-  /** Set when the server limited or shed the last request, so an empty list isn't read as "no match". */
+  /** The server limited the last request, so an empty list is not "no match". */
   readonly notice = signal<string | null>(null)
   readonly open = signal(false)
   readonly activeIndex = signal(-1)

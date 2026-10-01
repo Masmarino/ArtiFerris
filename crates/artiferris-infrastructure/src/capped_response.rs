@@ -1,5 +1,5 @@
-//! Reads an HTTP response body with an explicit byte ceiling, instead of `reqwest`'s own `.bytes()`/`.json()`, which buffer the entire body regardless of size. Used for every remote
-//! registry response — a malicious or compromised upstream must not be able to exhaust memory by returning an arbitrarily large body.
+//! Reads an HTTP response body with a byte ceiling, unlike `reqwest`'s `.bytes()`/`.json()`, which buffer everything.
+//! Used for every remote registry response so an upstream cannot exhaust memory.
 
 use futures_util::StreamExt;
 use artiferris_domain::error::DomainError;

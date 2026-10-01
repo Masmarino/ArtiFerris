@@ -28,7 +28,6 @@ fn build_blob_client(refuse_private_addresses: bool) -> reqwest::Client {
     let builder = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(std::time::Duration::from_secs(5))
-        // A blob can take a long time, so only silence is limited here; the caller bounds the whole transfer.
         .read_timeout(std::time::Duration::from_secs(30));
     let builder = if refuse_private_addresses { builder.dns_resolver(std::sync::Arc::new(PublicOnlyResolver)) } else { builder };
     builder.build().expect("reqwest client config is static and always valid")
@@ -36,7 +35,6 @@ fn build_blob_client(refuse_private_addresses: bool) -> reqwest::Client {
 
 impl HttpRemoteDockerRegistry {
     pub fn new() -> Self {
-        // No redirect-following, or a malicious upstream could 302 past the SSRF guard.
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(std::time::Duration::from_secs(5))
@@ -86,7 +84,7 @@ impl HttpRemoteDockerRegistry {
         ensure_public_host(target.as_str()).await
     }
 
-    /// On a 401 with a Bearer challenge, fetches a token and retries once. `Ok(None)` for a genuine 404 (either response) — not an error.
+    /// On a 401 with a Bearer challenge, fetches a token and retries once. `Ok(None)` for a 404.
     #[allow(clippy::too_many_arguments)]
     async fn get_with_bearer_challenge(
         &self,
@@ -107,14 +105,12 @@ impl HttpRemoteDockerRegistry {
         }
 
         let challenge = extract_challenge_or_error(&first, url)?;
-        // The realm comes from the remote's own response, not admin config — validate it too.
         self.ensure_reachable(&challenge.realm).await?;
 
         let mut token_request = client.get(&challenge.realm).query(&[("service", challenge.service.as_str())]);
         if let Some(scope) = &challenge.scope {
             token_request = token_request.query(&[("scope", scope.as_str())]);
         }
-        // Basic-auths the token request itself, not the registry request that follows. A realm on another host gets none.
         token_request = apply_credentials_if_allowed(token_request, base_url, &challenge.realm, username, password);
         let token_response = token_request
             .send()
@@ -151,8 +147,8 @@ impl HttpRemoteDockerRegistry {
         Self::require_success(response, url).await.map(Some)
     }
 
-    /// Follows up to `MAX_BLOB_REDIRECTS` hops. Each target must be https and pass the public-host check, and it is asked for
-    /// with no credentials, except that the registry's own token goes along to a target on the registry's own origin.
+    /// Follows up to `MAX_BLOB_REDIRECTS` hops. Each target must be https and pass the public-host check, and is asked
+    /// for without credentials, except that the registry's own token goes to a target on the registry's origin.
     async fn follow_redirects(&self, mut response: reqwest::Response, url: &str, accept: &str, bearer: Option<&str>, client: &reqwest::Client) -> Result<Option<reqwest::Response>, DomainError> {
         let registry = reqwest::Url::parse(url).map_err(|e| DomainError::Infrastructure(format!("invalid remote URL {url}: {e}")))?;
         let mut current = registry.clone();
@@ -386,7 +382,6 @@ mod tests {
         assert!(parse_bearer_challenge(r#"Basic realm="registry""#).is_none());
     }
 
-    // Ground truth against real Docker Hub, which requires the anonymous Bearer challenge flow.
     #[tokio::test]
     #[ignore = "requires network access to registry-1.docker.io"]
     async fn fetches_a_real_manifest_from_docker_hub_via_the_bearer_challenge_flow() {
@@ -425,15 +420,11 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {
             let (_socket, _) = listener.accept().await.unwrap();
-            // Accept the connection but never write a response — simulates a hung upstream.
             std::future::pending::<()>().await;
         });
 
-        // fetch_manifest -> get_with_bearer_challenge calls ensure_public_host(url) first, which
-        // would reject this loopback address before reqwest ever opens a socket — that would make
-        // this test pass even with no timeout configured at all. Bypass it the same way
-        // `the_configured_client_does_not_follow_a_redirect` does below: drive the raw `client`
-        // (used for manifest/token calls) directly against the local listener.
+        // Drives the raw `client` against a local listener: `ensure_public_host` would reject the loopback address
+        // before any socket opens, and the test would then pass without any timeout configured.
         let client = HttpRemoteDockerRegistry::new().client;
         let started = std::time::Instant::now();
         let result = tokio::time::timeout(std::time::Duration::from_secs(40), client.get(format!("http://{addr}/")).send()).await;
@@ -456,11 +447,10 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {
             let (_socket, _) = listener.accept().await.unwrap();
-            // Accepts the connection but never answers.
             std::future::pending::<()>().await;
         });
 
-        // Same SSRF-guard bypass as above, but against `blob_client` (used by fetch_blob).
+        // Same SSRF-guard bypass, against `blob_client`.
         let client = HttpRemoteDockerRegistry::new().blob_client;
         let started = std::time::Instant::now();
         let result = tokio::time::timeout(std::time::Duration::from_secs(60), client.get(format!("http://{addr}/")).send()).await;
@@ -469,7 +459,6 @@ mod tests {
         assert!(started.elapsed() >= std::time::Duration::from_secs(25), "resolved too early: {:?}", started.elapsed());
     }
 
-    // These tests bypass ensure_public_host to fetch directly from a local wiremock server (which is loopback).
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -617,14 +606,8 @@ mod tests {
         assert_eq!(chunks.concat(), vec![1, 2, 3]);
     }
 
-    // apply_credentials is what get_with_bearer_challenge calls to attach credentials to the
-    // token request. It's exercised directly (rather than through get_with_bearer_challenge's
-    // full WWW-Authenticate -> token-fetch -> retry flow) because that flow starts with
-    // ensure_public_host(url), which unconditionally rejects loopback addresses — a local
-    // wiremock server would never even get a request. Sending the built request to a mock that
-    // only responds to the exact expected auth header proves the credential was actually
-    // attached, the same way parse_token_response's tests above prove behavior by sending a real
-    // request and inspecting what came back.
+    // `apply_credentials` is tested directly: the full challenge flow starts with `ensure_public_host`, which rejects a
+    // local wiremock. The mock only answers the exact expected auth header.
     #[tokio::test]
     async fn a_password_with_no_username_is_sent_as_a_bearer_token_to_the_token_endpoint() {
         let server = MockServer::start().await;
@@ -649,7 +632,6 @@ mod tests {
     #[tokio::test]
     async fn a_username_and_password_are_still_sent_as_basic_auth() {
         let server = MockServer::start().await;
-        // "dXNlcjpwYXNz" is base64("user:pass").
         Mock::given(method("GET"))
             .and(path("/token"))
             .and(header("authorization", "Basic dXNlcjpwYXNz"))

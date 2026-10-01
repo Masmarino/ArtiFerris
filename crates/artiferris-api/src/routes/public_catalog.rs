@@ -499,6 +499,27 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn suggestions_narrow_to_an_owner_and_a_format_and_never_show_private_names(pool: sqlx::PgPool) {
+        let app = seeded_app(pool).await;
+        let names = |json: &serde_json::Value| json.as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+
+        let (status, headers, everyone) = get(app.clone(), "/api/public/suggest?q=pad").await;
+        let (_, _, acme) = get(app.clone(), "/api/public/suggest?q=pad&owner=organization:acme").await;
+        let (_, _, alice) = get(app.clone(), "/api/public/suggest?q=pad&owner=personal:alice").await;
+        let (_, _, docker) = get(app.clone(), "/api/public/suggest?q=pad&format=docker").await;
+        let (_, _, npm) = get(app.clone(), "/api/public/suggest?q=pad&format=npm&limit=1").await;
+        let (bad_owner, _, _) = get(app, "/api/public/suggest?q=pad&owner=nobody").await;
+
+        assert_eq!((status, headers[header::CACHE_CONTROL].to_str().unwrap()), (StatusCode::OK, "no-store"));
+        assert_eq!(names(&everyone), vec!["pad-lib", "left-pad"], "secret-pad sits in a private repository");
+        assert_eq!(names(&acme), vec!["left-pad"]);
+        assert_eq!(names(&alice), vec!["pad-lib"]);
+        assert!(names(&docker).is_empty());
+        assert_eq!(names(&npm).len(), 1, "limit caps the list");
+        assert_eq!(bad_owner, StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn listing_the_catalogs_names_every_format_with_its_public_count(pool: sqlx::PgPool) {
         let app = seeded_app(pool).await;
 

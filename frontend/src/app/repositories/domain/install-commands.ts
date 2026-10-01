@@ -1,6 +1,6 @@
 import { shellQuote, singleQuote } from '../../shared/shell-quote'
 
-/** A name starting with `-` would read as an option, so it goes after `--`, quoted. */
+/** A name starting with `-` would read as an option: it goes after `--`, quoted. */
 function positional(value: string): string {
   return value.startsWith('-') ? `-- ${singleQuote(value)}` : shellQuote(value)
 }
@@ -16,7 +16,6 @@ export function dockerPullCommand(imageReference: string, tag: string | null): s
   return `docker pull ${positional(`${imageReference}${tag ? ':' + tag : ''}`)}`
 }
 
-/** `latest` when present, otherwise the first tag of the list. */
 export function preferredTag(tags: { tag: string }[]): string | null {
   return tags.find((entry) => entry.tag === 'latest')?.tag ?? tags[0]?.tag ?? null
 }

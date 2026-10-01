@@ -6,13 +6,9 @@ import { MfaEnrollmentPage } from './mfa-enrollment'
 import { AuthService } from '../application/auth.service'
 import type { TotpSetupComplete, TotpSetupEnrollment } from '../domain/auth.types'
 
-/**
- * MfaEnrollmentPage is a fragment — every real usage (LoginPage, RegisterPage) always embeds it
- * inside the shared auth-layout card, never renders it bare. This wrapper reproduces that exact
- * context, including the real stylesheet: Angular scopes component styles to the component that
- * declares them, so a plain HTML wrapper in a Storybook `render` template would not pick up
- * login-page.scss's `.auth-layout`/`.auth-layout__card` rules at all.
- */
+// A fragment, always embedded in the shared auth-layout card: this wrapper reproduces that, with
+// the real
+// stylesheet (component styles are scoped, so a plain HTML wrapper would miss login-page.scss).
 @Component({
   selector: 'app-mfa-enrollment-story-wrapper',
   standalone: true,
@@ -57,7 +53,6 @@ export default meta
 
 type Story = StoryObj<MfaEnrollmentStoryWrapper>
 
-/** The mandatory first-time enrollment screen — choice between TOTP and a passkey. */
 export const Choice: Story = {}
 
 export const TotpQrCode: Story = {
@@ -106,13 +101,12 @@ export const InvalidTotpCode: Story = {
   },
 }
 
-/** Only reachable when the browser supports WebAuthn — see `passkeysSupported()`. */
 export const PasskeySetup: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     const passkeyButton = canvas.queryByRole('button', { name: "Clé d'accès (passkey)" })
     if (!passkeyButton) {
-      // This story's browser (or CI's headless one) doesn't support WebAuthn — nothing to click.
+      // This browser (or headless CI) has no WebAuthn: nothing to click.
       return
     }
     await userEvent.click(passkeyButton)

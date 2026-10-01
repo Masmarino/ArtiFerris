@@ -102,8 +102,7 @@ describe('authInterceptor', () => {
       .expectOne('/api/auth/login')
       .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' })
 
-    // LoginPage handles this 401 locally ("Identifiants invalides"); a global
-    // logout-and-redirect here would interfere or loop onto /login.
+    // LoginPage handles this 401 itself: a global logout and redirect would loop onto /login.
     expect(auth.token()).toBe('a-jwt-token')
     expect(router.navigateByUrl).not.toHaveBeenCalled()
     expect(failed).toBe(true)
@@ -127,8 +126,7 @@ describe('authInterceptor', () => {
       .expectOne('/api/auth/mfa/verify')
       .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' })
 
-    // MfaVerifyPage handles this 401 locally (wrong code); a global
-    // logout-and-redirect here would interfere or loop onto /login.
+    // MfaVerifyPage handles this 401 itself: a global logout and redirect would loop onto /login.
     expect(auth.token()).toBe('a-jwt-token')
     expect(router.navigateByUrl).not.toHaveBeenCalled()
     expect(failed).toBe(true)
@@ -152,8 +150,8 @@ describe('authInterceptor', () => {
       .expectOne('/api/auth/sso/ldap')
       .flush('Unauthorized', { status: 401, statusText: 'Unauthorized' })
 
-    // LoginPage handles this 401 locally (failed LDAP bind); a global
-    // logout-and-redirect here would interfere or loop onto /login.
+    // LoginPage handles this 401 itself (failed LDAP bind): a global logout and redirect would loop
+    // onto /login.
     expect(auth.token()).toBe('a-jwt-token')
     expect(router.navigateByUrl).not.toHaveBeenCalled()
     expect(failed).toBe(true)
@@ -258,8 +256,7 @@ describe('authInterceptor', () => {
       .expectOne('/api/repositories/repo-1/packages/npm/left-pad/audit')
       .flush('sign in to run an audit', { status: 401, statusText: 'Unauthorized' })
 
-    // A visitor who was never signed in has no session to lose — this 401 just means
-    // this particular read has nothing cached, a business outcome the caller handles locally.
+    // An anonymous visitor has no session to lose: this 401 only means nothing is cached.
     expect(auth.token()).toBeNull()
     expect(router.navigateByUrl).not.toHaveBeenCalled()
     expect(failed).toBe(true)

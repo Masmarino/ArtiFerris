@@ -89,8 +89,9 @@ pub trait LdapAuthPort: Send + Sync {
 
 #[async_trait]
 pub trait OidcAuthPort: Send + Sync {
-    /// Returns the redirect URL. The nonce and PKCE verifier are embedded in a signed, self-contained `state` token (no server-side session store) — `handle_callback` decodes
-    /// and verifies it. `binding_secret` is a fresh value also handed to the browser as a cookie (login-CSRF defense, RFC 6749 §10.12) — otherwise a captured callback URL would work in any browser.
+    /// Returns the redirect URL. The nonce and PKCE verifier live in a signed, self-contained `state` token (no server
+    /// session), which `handle_callback` verifies. `binding_secret` is a fresh value also given to the browser as a
+    /// cookie (login-CSRF defense, RFC 6749 §10.12): without it a captured callback URL would work in any browser.
     async fn build_redirect(&self, config: &OidcConfig, organization_id: Uuid, callback_url: &str, binding_secret: &str) -> Result<String, DomainError>;
 
     /// Whether `raw_state` is a state this server minted for `expected_organization_id` and this browser, and still unexpired. Needs no network, so a callback that fails it costs nothing.

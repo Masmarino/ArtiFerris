@@ -19,8 +19,9 @@ const OIDC_STATE_TOKEN_TYPE: &str = "oidc-state";
 /// Generous enough for a slow identity-provider login screen, short enough that a captured but unused redirect URL stops being useful quickly.
 const STATE_TOKEN_TTL_MINUTES: i64 = 10;
 
-/// The exact typestate combo `CoreClient::from_provider_metadata` produces: set for what discovery always returns, maybe-set for what it usually returns, not-set for what this
-/// flow never uses. Has to be named explicitly — the bare `CoreClient` alias defaults every parameter to `EndpointNotSet`.
+/// The typestate `CoreClient::from_provider_metadata` produces: set for what discovery always returns, maybe-set for
+/// what it usually returns, not-set for the rest. It must be named, since the bare `CoreClient` alias defaults
+/// everything to `EndpointNotSet`.
 type OidcCoreClient = CoreClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointMaybeSet, EndpointMaybeSet>;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,9 +72,8 @@ impl OpenidConnectAuthAdapter {
         hex::encode(Sha256::digest(binding_secret.as_bytes()))
     }
 
-    /// Derived from the browser's binding secret and the server key instead of being carried in the
-    /// `state` (which travels through the IdP, browser history and logs): nobody who sees the
-    /// authorization URL can compute it, and nothing has to be stored server-side.
+    /// Derived from the browser's binding secret and the server key, not carried in `state` (which travels through the
+    /// IdP, history and logs): nobody who sees the authorization URL can compute it, and nothing is stored server-side.
     fn pkce_verifier(&self, binding_secret: &str) -> PkceCodeVerifier {
         let mut verifier = [0u8; 32];
         hkdf::Hkdf::<Sha256>::new(Some(&self.state_key), binding_secret.as_bytes())
@@ -184,7 +184,6 @@ impl OidcAuthPort for OpenidConnectAuthAdapter {
             .await
             .map_err(|e| describe(&e))?;
 
-        // id_token_verifier() checks the signature and client_id; claims() also checks the nonce.
         let expected_nonce = Nonce::new(claims.nonce);
         let id_token = token_response.id_token().ok_or_else(|| DomainError::Infrastructure("oidc token response had no id_token".to_string()))?;
         let id_token_verifier = client.id_token_verifier();
@@ -350,7 +349,6 @@ mod tests {
     #[tokio::test]
     async fn an_issuer_url_pointing_at_a_private_address_is_rejected_before_discovery() {
         let adapter = OpenidConnectAuthAdapter::new("jwt-secret".to_string());
-        // Port 1 on loopback: nothing listens there, so without the guard this would fail with a connection error instead of the SSRF rejection asserted below.
         let config = OidcConfig { issuer_url: "https://127.0.0.1:1".to_string(), client_id: "artiferris".to_string(), client_secret: "s3cret!".to_string() };
 
         let err = adapter

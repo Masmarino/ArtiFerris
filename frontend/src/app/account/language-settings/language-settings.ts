@@ -14,7 +14,6 @@ import {
 import { t } from '../../shared/i18n/translator'
 import { ToastService } from '../../shared/toast.service'
 
-/** Lets the user pick the language of the interface; the choice is applied at once and saved on their account. */
 @Component({
   selector: 'app-language-settings',
   standalone: true,
@@ -45,7 +44,7 @@ export class LanguageSettings {
       await firstValueFrom(this.me.setLanguage(value))
       this.toastService.success(t('account.language.saved'))
     } catch {
-      // Not saved: keep what the account says, so the next visit does not surprise the user.
+      // Not saved: keep the account's language.
       await this.languageService.use(previous)
       this.toastService.error(t('account.language.errors.saveFailed'))
     } finally {

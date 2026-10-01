@@ -54,7 +54,7 @@ describe('OrganizationsPage', () => {
     const fixture = TestBed.createComponent(OrganizationsPage)
     const httpMock = TestBed.inject(HttpTestingController)
     fixture.detectChanges()
-    // gbt-tabs renders every tab eagerly, so all their data fetches fire — not under test here.
+    // gbt-tabs renders every tab eagerly, so all their fetches fire; not under test here.
     for (const req of httpMock.match(() => true)) {
       if (req.request.url === '/api/audit/events') {
         req.flush({ entries: [], next_cursor: null })

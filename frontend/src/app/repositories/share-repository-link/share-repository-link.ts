@@ -22,7 +22,7 @@ export class ShareRepositoryLink {
   private readonly document = inject(DOCUMENT)
 
   readonly repository = input.required<RepositorySummary>()
-  /** Whether the viewer can reach the Paramètres tab to change visibility — an admin only. */
+  /** The viewer can reach the Settings tab: an admin only. */
   readonly canManageVisibility = input(false)
 
   readonly publicLink = computed<PublicLink | null>(() => {

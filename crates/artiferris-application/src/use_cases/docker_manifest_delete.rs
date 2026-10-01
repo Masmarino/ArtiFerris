@@ -151,7 +151,6 @@ mod tests {
         let repository_id = Uuid::new_v4();
         let name = DockerImageName::parse("myimage").unwrap();
         let (blob_digest, manifest_a) = seed_manifest_with_one_blob(&manifests, &blobs, repository_id, &name).await;
-        // A second manifest referencing the SAME blob (as real images sharing a base layer would).
         blobs.increment_ref(&blob_digest).await.unwrap();
         let manifest_b = DockerManifest {
             id: Uuid::new_v4(), package_repository_id: repository_id, image_name: name.clone(),
@@ -196,15 +195,8 @@ mod tests {
         assert!(manifests.find_manifest_by_digest(repository_id, &name, &manifest_b.digest).await.unwrap().is_none());
     }
 
-    /// End-to-end regression coverage over a REAL Postgres database, using the actual
-    /// `PostgresDockerManifestRepository` and `FilesystemDockerBlobStore` adapters instead of the fakes
-    /// above (the fakes don't model `docker_repository_blobs`'s foreign key at all, so they can't
-    /// reproduce this bug). Mirrors the real push/delete flow: a monolithic blob upload creates the
-    /// blob's `docker_repository_blobs` link row independent of any manifest (exactly like a real
-    /// `docker push`'s layer upload, which always lands before the manifest PUT that references it),
-    /// then a manifest push references it. Before this fix, deleting that manifest would decrement the
-    /// blob to zero real references and then immediately roll that decrement back — forever — the
-    /// instant the reclaim saw the leftover, by-then-stale link row.
+    /// Runs against a real Postgres with the real manifest repository and blob store: the fakes do not model the
+    /// `docker_repository_blobs` foreign key.
     mod real_postgres_blob_reclamation {
         use super::*;
         use crate::use_cases::docker_manifest_put::PutManifestUseCase;
@@ -250,15 +242,13 @@ mod tests {
                 "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
                 "config": { "digest": config_digest, "size": 5 },
                 "layers": [],
-                // Makes two manifests referencing the same config blob hash to different digests.
                 "x-test-salt": salt,
             }))
             .unwrap()
         }
 
-        /// The exact scenario in the bug report: a blob's last real (manifest) reference is removed,
-        /// and it must now be genuinely reclaimed — row AND on-disk file gone — not left pinned forever
-        /// by its own stale upload-time link row.
+        /// When a blob's last manifest reference goes, the row and the file are reclaimed, not pinned by the
+        /// upload-time link row.
         #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
         async fn deleting_a_manifest_reclaims_a_blob_whose_stale_repository_link_would_otherwise_block_it_forever(pool: sqlx::PgPool) {
             let dir = tempfile::tempdir().unwrap();
@@ -279,7 +269,6 @@ mod tests {
             let manifest_digest =
                 put_manifest.execute(repository_id, &name, "v1", DockerMediaType::DockerV2Manifest, &manifest_body(config_digest.as_str(), "a"), Uuid::new_v4()).await.unwrap();
 
-            // Sanity: the upload-time link row exists, and the blob is genuinely referenced once.
             assert!(blobs.is_uploaded_to_repository(repository_id, &config_digest).await.unwrap());
 
             let delete_manifest = DeleteManifestUseCase::new(manifests, blobs.clone(), events);
@@ -290,16 +279,12 @@ mod tests {
                 !blobs.is_uploaded_to_repository(repository_id, &config_digest).await.unwrap(),
                 "the stale docker_repository_blobs link row must be cleaned up along with the blob"
             );
-            // Mirrors `FilesystemDockerBlobStore::storage_key`'s two-level sharding (private to that
-            // crate, so recomputed here rather than reused) — sha256/<first 2 hex>/<next 2 hex>/<full hex>.
             let hex = config_digest.as_str().strip_prefix("sha256:").unwrap();
             let file_still_present = dir.path().join(format!("sha256/{}/{}/{}", &hex[0..2], &hex[2..4], hex)).exists();
             assert!(!file_still_present, "the on-disk blob file must be removed too, not just the row");
         }
 
-        /// The "don't reintroduce premature deletion" half: a blob still genuinely referenced by
-        /// another live manifest in the SAME repository must survive deleting a different manifest that
-        /// happens to also (still) reference it.
+        /// A blob still referenced by another manifest of the same repository survives.
         #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
         async fn deleting_one_of_two_manifests_sharing_a_blob_in_the_same_repository_leaves_it_intact(pool: sqlx::PgPool) {
             let dir = tempfile::tempdir().unwrap();
@@ -328,12 +313,7 @@ mod tests {
             assert!(blobs.is_uploaded_to_repository(repository_id, &config_digest).await.unwrap(), "the link row backing a live reference must survive too");
         }
 
-        /// A stronger "don't reintroduce premature deletion" case: the blob is uploaded directly to a
-        /// SECOND, unrelated repository (independent of any manifest there — exactly the scenario
-        /// `docker_repository_blobs`'s own schema comment and the hard-delete sweep's tests document),
-        /// while the first repository's manifest — its only real (manifest) reference anywhere — is
-        /// deleted. The fix must decrement the now-zero global reference count but must NOT delete the
-        /// row or file, since the second repository's link still legitimately needs it reachable.
+        /// A blob also uploaded to a second repository keeps its row and file; only the count drops to zero.
         #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
         async fn deleting_a_manifest_does_not_delete_a_blob_still_directly_linked_to_another_repository(pool: sqlx::PgPool) {
             let dir = tempfile::tempdir().unwrap();
@@ -350,7 +330,6 @@ mod tests {
             let config_digest = Digest::of(config_bytes);
             blobs.write(&config_digest, config_bytes).await.unwrap();
             blobs.link_to_repository(repository_id, &config_digest).await.unwrap();
-            // Directly uploaded to the OTHER repository too, with no manifest there ever referencing it.
             blobs.link_to_repository(other_repository_id, &config_digest).await.unwrap();
 
             let put_manifest = PutManifestUseCase::new(manifests.clone(), repositories, events.clone());
@@ -363,17 +342,12 @@ mod tests {
             assert!(blobs.exists(&config_digest).await.unwrap(), "still linked to the other repository — must not be deleted");
             assert!(!blobs.is_uploaded_to_repository(repository_id, &config_digest).await.unwrap(), "this repository's OWN stale link must still be cleaned up");
             assert!(blobs.is_uploaded_to_repository(other_repository_id, &config_digest).await.unwrap(), "the other repository's link must be untouched");
-            // Fix round 1 (Finding 1): the row surviving is not enough on its own to prove the fix —
-            // the pre-fix code ALSO left the row in place, but only because it rolled the whole
-            // transaction back (including the decrement) the instant it hit `other_repository_id`'s
-            // link row's FK. `reference_count` must actually reach 0 here, not silently stay at 1.
             let row = sqlx::query!("SELECT reference_count FROM docker_blobs WHERE digest = $1", config_digest.as_str()).fetch_one(&pool).await.unwrap();
             assert_eq!(row.reference_count, 0, "the decrement must commit even though the row itself can't be deleted yet");
         }
     }
 
-    /// A failure removing one digest's file (a starved connection pool here, which a fake can't reproduce) must not
-    /// abort the loop and leave the digests after it unreclaimed.
+    /// A failure removing one digest's file must not leave the following digests unreclaimed.
     mod phase_2_failure_does_not_abort_the_loop {
         use super::*;
         use artiferris_infrastructure::filesystem_docker_blob_store::FilesystemDockerBlobStore;
@@ -405,14 +379,9 @@ mod tests {
                 digest: Digest::of(b"phase-2-loop-manifest"), media_type: DockerMediaType::DockerV2Manifest,
                 body: b"{}".to_vec(), created_at: chrono::Utc::now(),
             };
-            // Insertion order pins iteration order: A is reclaimed before B.
             manifests.insert_manifest(&manifest, &[digest_a.clone(), digest_b.clone()]).await.unwrap();
-            // The Postgres manifest repository takes these references back when it deletes the manifest; the fake doesn't.
             sqlx::query!("UPDATE docker_blobs SET reference_count = 0 WHERE digest = ANY($1)", &[digest_a.as_str().to_string(), digest_b.as_str().to_string()] as &[String]).execute(&pool).await.unwrap();
 
-            // Holds digest A's advisory lock, so its phase 1 — once it grabs the starved pool's
-            // one connection — blocks there without releasing it, the same setup as the
-            // infrastructure-level test this one builds on.
             let mut blocker_tx = pool.begin().await.unwrap();
             sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", digest_a.as_str()).execute(&mut *blocker_tx).await.unwrap();
 
@@ -448,10 +417,6 @@ mod tests {
                     rt_handle.block_on(async move {
                         let _ = queued_tx.send(());
                         let conn = starved_pool.acquire().await.unwrap();
-                        // Held well past the starved pool's own 300ms acquire timeout, so digest
-                        // A's phase 2 genuinely times out while this connection is still checked
-                        // out — but released before digest B's own queries would need to wait
-                        // long enough to matter.
                         tokio::time::sleep(std::time::Duration::from_millis(400)).await;
                         drop(conn);
                     })

@@ -9,7 +9,7 @@ import {
 } from '@angular/router'
 import { BehaviorSubject, Observable, of } from 'rxjs'
 
-/** Stands in for the URL: the query string is read here and written back through `navigateFake`, the path params stay fixed. */
+/** Stands in for the URL: the query string is read and written here, path params stay fixed. */
 export class FakeActivatedRoute {
   private readonly params$: BehaviorSubject<ParamMap>
 
@@ -38,7 +38,6 @@ export class FakeActivatedRoute {
   }
 }
 
-/** What `router.navigate([], { queryParamsHandling: 'merge' })` does to the URL, null or undefined removing a parameter. */
 export function navigateFake(
   route: FakeActivatedRoute,
   extras?: NavigationExtras,
@@ -55,7 +54,6 @@ export function navigateFake(
   return Promise.resolve(true)
 }
 
-/** For stories: a fresh fake URL per injector, wired into the real router's `navigate`. */
 export function fakeUrlProviders(
   initial: Record<string, string> = {},
   routeData: Data = {},

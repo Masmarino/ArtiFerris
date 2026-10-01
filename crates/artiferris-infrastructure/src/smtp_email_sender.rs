@@ -35,13 +35,13 @@ impl SmtpEmailSender {
     }
 }
 
-/// Whether the HTML actually references the logo's CID — gates both the branding fetch and the attachment decision from one check.
+/// Whether the HTML references the logo's CID; gates both the branding fetch and the attachment.
 fn html_references_logo(html_body: &str) -> bool {
     html_body.contains(&format!("cid:{LOGO_CID}"))
 }
 
-/// Builds the outgoing MIME message from already-resolved, synchronous values — the seam extracted for direct unit testing.
-/// `logo` is `Some((bytes, content_type))` when `html_references_logo` said the HTML needs it and the caller resolved it.
+/// Builds the MIME message from resolved values, so it can be unit tested. `logo` is `Some((bytes, content_type))` when
+/// the HTML needs it.
 fn build_message(from_address: &str, from_name: &str, to: &str, subject: &str, text_body: &str, html_body: &str, logo: Option<(Vec<u8>, String)>) -> Result<Message, DomainError> {
     let from_address: Address = from_address.parse().map_err(|_| DomainError::Infrastructure("configured SMTP from-address is not a valid mailbox".to_string()))?;
     let from = Mailbox::new(Some(from_name.to_string()), from_address);
@@ -65,7 +65,6 @@ impl EmailPort for SmtpEmailSender {
         let Some(preferences) = &self.preferences else {
             return Language::FALLBACK;
         };
-        // A notification must go out even when the preference cannot be read.
         match preferences.language(user_id).await {
             Ok(language) => language.unwrap_or(Language::FALLBACK),
             Err(e) => {

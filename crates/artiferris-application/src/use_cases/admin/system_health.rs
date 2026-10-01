@@ -34,7 +34,6 @@ impl GetHealthStatusUseCase {
         let database = self.database.check().await;
 
         let storage_up = self.storage.is_healthy().await;
-        // Disk space is informational; failing to read it degrades to zeroes, not down.
         let space = self.storage.volume_space().await.unwrap_or(artiferris_domain::storage::VolumeSpace { total_bytes: 0, free_bytes: 0 });
         let storage = StorageHealth {
             status: if storage_up { ComponentHealth::Up } else { ComponentHealth::Down("storage backend unreachable".to_string()) },

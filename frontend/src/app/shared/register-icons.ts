@@ -2,14 +2,9 @@ import { inject, provideAppInitializer } from '@angular/core'
 import { IconRegistry } from '@masmarino/gabarit'
 
 /**
- * Icons specific to ArtiFerris — Gabarit's own components provide their own set already.
- *
- * Every value in this table MUST be a compile-time string literal, never built from a variable,
- * a template-string interpolation, or (especially) API/server response data. `Icon` in
- * @masmarino/gabarit renders whatever it's given via bypassSecurityTrustHtml — safe only because
- * this table is, and stays, fully static (B-32). If a future branding/customization feature ever
- * needs to register a dynamic icon, that markup must be sanitized (not bypassed) before it
- * reaches IconRegistry.
+ * Icons specific to ArtiFerris. Every value must be a compile-time string literal, never built
+ * from a variable or API data: Gabarit's Icon renders it with bypassSecurityTrustHtml. A dynamic
+ * icon would have to be sanitized before it reaches IconRegistry.
  */
 export const ARTIFERRIS_ICONS: Record<string, string> = {
   package: `<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />

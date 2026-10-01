@@ -26,7 +26,6 @@ export interface OidcIdentityProvider {
 
 export interface NoIdentityProvider {
   type: null
-  /** The stored secret can no longer be decrypted by this server: the provider must be configured again. */
   secret_unreadable?: boolean
   error?: string
 }
@@ -37,7 +36,7 @@ export type IdentityProviderSummary =
 export interface LdapIdentityProviderInput {
   server_url: string
   bind_dn: string
-  /** Omit (or empty string) to keep the existing password when updating. */
+  /** Empty or omitted keeps the stored password. */
   bind_password?: string
   user_search_base: string
   user_search_filter: string
@@ -47,6 +46,6 @@ export interface LdapIdentityProviderInput {
 export interface OidcIdentityProviderInput {
   issuer_url: string
   client_id: string
-  /** Omit (or empty string) to keep the existing secret when updating. */
+  /** Empty or omitted keeps the stored secret. */
   client_secret?: string
 }

@@ -71,7 +71,6 @@ async function typeIn(canvasElement: HTMLElement, text: string) {
   return input
 }
 
-/** Nothing typed yet: the popup is closed. */
 export const Idle: Story = {
   decorators: [suggesting(() => of(SUGGESTIONS))],
   play: async ({ canvasElement }) => {
@@ -83,7 +82,6 @@ export const Idle: Story = {
   },
 }
 
-/** The compact form used in the page header, with the label kept for screen readers only. */
 export const Compact: Story = {
   args: { compact: true, labelHidden: true, placeholder: 'Rechercher un paquet…' },
   decorators: [suggesting(() => of(SUGGESTIONS))],
@@ -94,7 +92,6 @@ export const Compact: Story = {
   },
 }
 
-/** Typing from 2 characters shows format, name and owner of each suggestion. */
 export const SuggestionsOpen: Story = {
   decorators: [suggesting(() => of(SUGGESTIONS))],
   play: async ({ canvasElement }) => {
@@ -111,7 +108,6 @@ export const SuggestionsOpen: Story = {
   },
 }
 
-/** Arrow keys move the highlight, which the input points at through aria-activedescendant. */
 export const KeyboardHighlight: Story = {
   decorators: [suggesting(() => of(SUGGESTIONS))],
   play: async ({ canvasElement }) => {
@@ -127,7 +123,6 @@ export const KeyboardHighlight: Story = {
   },
 }
 
-/** Nothing matches: a short message instead of a list. */
 export const NoSuggestion: Story = {
   decorators: [suggesting(() => of([]))],
   play: async ({ canvasElement }) => {
@@ -143,7 +138,6 @@ export const NoSuggestion: Story = {
   },
 }
 
-/** A slow answer never blocks typing: the popup simply opens once it arrives. */
 export const LoadingSlow: Story = {
   decorators: [suggesting(() => timer(1200).pipe(map(() => SUGGESTIONS)))],
   play: async ({ canvasElement }) => {
@@ -159,7 +153,6 @@ export const LoadingSlow: Story = {
   },
 }
 
-/** A pending request that never answers leaves the popup closed and the input usable. */
 export const NeverAnswers: Story = {
   decorators: [suggesting(() => NEVER)],
   play: async ({ canvasElement }) => {
@@ -171,7 +164,6 @@ export const NeverAnswers: Story = {
   },
 }
 
-/** A failed request closes the popup without any message, and typing goes on. */
 export const RequestFailed: Story = {
   decorators: [suggesting(() => throwError(() => new HttpErrorResponse({ status: 500 })))],
   play: async ({ canvasElement }) => {
@@ -190,7 +182,6 @@ export const RequestFailed: Story = {
   },
 }
 
-/** A 503 says the catalog is busy instead of looking like "no match". */
 export const CatalogBusy: Story = {
   decorators: [suggesting(() => throwError(() => new HttpErrorResponse({ status: 503 })))],
   play: async ({ canvasElement }) => {
@@ -207,7 +198,6 @@ export const CatalogBusy: Story = {
   },
 }
 
-/** Down, up and wrap-around, then Enter opens the highlighted package. */
 export const ArrowKeysThenEnter: Story = {
   decorators: [suggesting(() => of(SUGGESTIONS))],
   play: async ({ canvasElement }) => {
@@ -230,7 +220,6 @@ export const ArrowKeysThenEnter: Story = {
   },
 }
 
-/** Enter without a highlighted suggestion hands the text to the host for a full search. */
 export const EnterSearches: Story = {
   decorators: [suggesting(() => of(SUGGESTIONS))],
   play: async ({ canvasElement }) => {
@@ -248,7 +237,6 @@ export const EnterSearches: Story = {
   },
 }
 
-/** Escape closes the popup and keeps the text. */
 export const EscapeCloses: Story = {
   decorators: [suggesting(() => of(SUGGESTIONS))],
   play: async ({ canvasElement }) => {
@@ -268,7 +256,6 @@ export const EscapeCloses: Story = {
   },
 }
 
-/** Clicking a suggestion opens its package page. */
 export const ClickOpensPackage: Story = {
   decorators: [suggesting(() => of(SUGGESTIONS))],
   play: async ({ canvasElement }) => {
@@ -285,7 +272,6 @@ export const ClickOpensPackage: Story = {
   },
 }
 
-/** Moving focus away closes the popup. */
 export const BlurCloses: Story = {
   decorators: [suggesting(() => of(SUGGESTIONS))],
   play: async ({ canvasElement }) => {
@@ -299,7 +285,6 @@ export const BlurCloses: Story = {
   },
 }
 
-/** Stands in for the server, which applies the format and owner filters itself. */
 function filteringServer() {
   return fn((_text: string, options?: SuggestOptions) =>
     of(
@@ -315,7 +300,6 @@ function filteringServer() {
 
 const lockedFormatServer = filteringServer()
 
-/** On a catalog page the format is sent to the server, which only answers with that format. */
 export const LockedFormat: Story = {
   args: { format: 'docker' },
   decorators: [suggesting(lockedFormatServer)],
@@ -335,7 +319,6 @@ export const LockedFormat: Story = {
 
 const lockedOwnerServer = filteringServer()
 
-/** On an owner page the owner is sent to the server, which only answers with that owner's packages. */
 export const LockedOwner: Story = {
   args: { owner: { kind: 'organization', slug: 'acme' } },
   decorators: [suggesting(lockedOwnerServer)],

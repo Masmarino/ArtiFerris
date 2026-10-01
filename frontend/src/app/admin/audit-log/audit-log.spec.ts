@@ -38,7 +38,7 @@ describe('AuditLog', () => {
     const req = httpMock.expectOne((r) => r.url === '/api/audit/events')
     expect(req.request.method).toBe('GET')
     expect(req.request.params.get('exclude_aggregate_type')).toBe('Security')
-    // The whole point of the server-side filter: the client must not have to drop rows itself.
+    // The server filters: the client must not drop rows itself.
     expect(req.request.urlWithParams).toContain('exclude_aggregate_type=Security')
 
     req.flush(
@@ -60,7 +60,6 @@ describe('AuditLog', () => {
   })
 
   it('does not filter the response client-side, even if a Security event were present', () => {
-    // Exclusion is entirely the server's job — guards against a client-side filter creeping in.
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting(), ...adminProviders],
     })
@@ -191,7 +190,7 @@ describe('AuditLog', () => {
     expect(createObjectURL).toHaveBeenCalled()
     const blob = createObjectURL.mock.calls[0][0] as Blob
     expect(blob.type).toContain('text/csv')
-    // Revoked a moment later: some browsers only start reading the blob after click() returns.
+    // Revoked a moment later: some browsers read the blob after click() returns.
     expect(revokeObjectURL).not.toHaveBeenCalled()
     vi.advanceTimersByTime(1000)
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock')
@@ -306,9 +305,7 @@ describe('AuditLog', () => {
     fixture.detectChanges()
     const org2Req = httpMock.expectOne((r) => r.params.get('organization_id') === 'org-2')
 
-    // Resolve the current org-2 request first, then the stale org-1 request second —
-    // this is the racy order the guard exists to handle: a slow first request that
-    // finally resolves after a faster second request has already applied its result.
+    // Resolve org-2 first, then the stale org-1: the racy order the guard handles.
     org2Req.flush(
       page([
         {

@@ -10,7 +10,6 @@ export interface SmtpSettings {
   password_set: boolean
 }
 
-/** What the server answers when the stored SMTP password can no longer be decrypted. */
 export interface UnreadableSmtpSettings {
   secret_unreadable: true
   error: string
@@ -28,7 +27,7 @@ export interface UpdateSmtpSettings {
   host: string
   port: number
   username: string
-  /** Omit (or leave `undefined`) to keep the currently stored password. */
+  /** Omitted keeps the stored password. */
   password?: string
   from_name: string
   from_address: string

@@ -65,21 +65,17 @@ pub enum DomainError {
     TooManyUploads,
     #[error("this repository holds as many tags as it may")]
     TooManyTags,
-    /// A manifest-referenced blob digest is not reachable from the pushing repository — re-verified
-    /// transactionally at manifest-insert time, not just at the use case's pre-check (B-18).
+    /// A manifest-referenced blob is not reachable from the pushing repository, re-verified in the manifest insert
+    /// transaction.
     #[error("blob not reachable: {0}")]
     DockerBlobNotReachable(String),
-    /// The repository's storage quota would be exceeded — re-verified transactionally at
-    /// manifest-insert time so two concurrent pushes can't both read "under quota" (B-18).
+    /// The repository's storage quota would be exceeded, re-verified in the manifest insert transaction so two
+    /// concurrent pushes cannot both pass.
     #[error("storage quota exceeded")]
     StorageQuotaExceeded,
-    /// `insert_version`'s unique `(npm_package_id, version)` constraint was violated — the losing
-    /// side of two concurrent publishes racing for the same not-yet-existing version (Bug 4b, fix
-    /// rounds 1 and 2). The storage key includes a fresh random component generated on every publish
-    /// attempt, so it is unique per attempt regardless of tarball content — no two attempts, whether
-    /// their bytes are identical or different, ever share a key — and this is the ONLY place the
-    /// race resolves; the application layer maps this to the same `ApplicationError::PackageVersionExists`
-    /// the early existence check already returns.
+    /// `insert_version`'s unique `(npm_package_id, version)` constraint was violated: the losing side of two concurrent
+    /// publishes of the same new version. The storage key is unique per attempt, so this is the only place the race
+    /// resolves; the application layer maps it to `PackageVersionExists`.
     #[error("this package version already exists")]
     NpmVersionAlreadyExists,
     #[error("this package version was not found")]

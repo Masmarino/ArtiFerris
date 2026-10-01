@@ -63,8 +63,7 @@ export class LoginPage implements OnInit {
   readonly errorMessage = signal<string | null>(null)
   readonly submitting = signal(false)
   readonly ssoType = signal<'ldap' | 'oidc' | null>(null)
-  // Defaults to visible on a failed/pending check — never hide a legitimate way to sign up
-  // just because this one best-effort request didn't come back in time.
+  // Visible by default: a slow check must not hide the sign-up link.
   readonly registrationEnabled = signal(true)
   readonly ssoLinkInvalid = signal(false)
 
@@ -72,7 +71,7 @@ export class LoginPage implements OnInit {
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
     const token = hashParams.get('token')
     if (token !== null) {
-      // Clear the fragment so the token never lingers in browser history/bookmarks.
+      // Clear the fragment so the token does not stay in history.
       history.replaceState(null, '', window.location.pathname + window.location.search)
       const completed = token ? this.auth.completeExternalLogin(token) : null
       if (completed) {
@@ -89,7 +88,7 @@ export class LoginPage implements OnInit {
         this.ssoType.set(config.type)
         this.registrationEnabled.set(config.registration_enabled)
       },
-      // Local login is always a safe fallback — never block the form on this check failing.
+      // Local login stays available if this check fails.
       error: () => this.ssoType.set(null),
     })
   }
@@ -98,12 +97,8 @@ export class LoginPage implements OnInit {
     this.auth.beginSsoLogin(this.returnUrl)
   }
 
-  // null until a login response requires a second factor — the template swaps to the MFA
-  // form the moment it's set.
   readonly mfaToken = signal<string | null>(null)
   readonly mfaSetupRequired = signal(false)
-  // Which factor(s) the account actually has — the verify form only shows what applies,
-  // instead of always defaulting to a TOTP/backup-code field even for a passkey-only account.
   readonly mfaHasTotp = signal(false)
   readonly mfaHasPasskey = signal(false)
   readonly useBackupCode = signal(false)

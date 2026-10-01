@@ -59,7 +59,6 @@ export class AuditLog {
   private readonly auditService = inject(AuditService)
   private exportRun: Subscription | null = null
 
-  /** Set only when embedded in an organization's own admin page — scopes the query to it. */
   readonly organizationId = input<string | undefined>(undefined)
 
   readonly entries = signal<AuditEntry[]>([])
@@ -121,7 +120,7 @@ export class AuditLog {
       .sort((a, b) => b.value - a.value)
   })
 
-  // effect(), not ngOnInit — this component is reused across organizations on the same route.
+  // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
     inject(DestroyRef).onDestroy(() => this.exportRun?.unsubscribe())
     effect(() => {
@@ -136,7 +135,7 @@ export class AuditLog {
       this.loadingMore.set(false)
       this.loadMoreFailed.set(false)
       const stillCurrent = () => this.organizationId() === organizationId
-      // Security events have their own screen, excluded server-side.
+      // Security events have their own screen.
       this.auditService
         .query({ exclude_aggregate_type: 'Security', organization_id: organizationId })
         .subscribe({
@@ -188,7 +187,6 @@ export class AuditLog {
       })
   }
 
-  /** Fetches the pages not loaded yet (up to the row bound), then saves the CSV. */
   downloadCsv(): void {
     if (this.exporting()) {
       return

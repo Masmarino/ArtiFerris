@@ -5,10 +5,8 @@ use crate::error::EventStoreError;
 use crate::package_repository::PackageRepositoryEvent;
 use crate::permission::PermissionEvent;
 
-/// Creates a brand-new personal-namespace repository and grants its owner Admin in one
-/// transaction, so a failure partway through can never leave a repository with no owner grant —
-/// which used to be unrecoverable, since the name stays taken and the orphan is invisible to
-/// `list_my_projects`.
+/// Creates a personal-namespace repository and grants its owner Admin in one transaction, so a failure never leaves a
+/// repository with no owner grant (the name stays taken and the orphan is invisible).
 #[async_trait]
 pub trait PersonalProjectProvisioningPort: Send + Sync {
     /// `repository_event` and `permission_event` must each be the first event of a brand-new

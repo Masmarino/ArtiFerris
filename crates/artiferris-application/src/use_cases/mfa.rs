@@ -43,10 +43,7 @@ fn generate_backup_code() -> String {
     hex::encode(bytes)
 }
 
-/// Stored as `<32-hex-char-salt>:<64-hex-char-sha256>` — salted so two identical plaintext codes
-/// (across different enrollments, or a coincidental collision) never produce the same stored value,
-/// and a stolen `backup_codes` table can't be attacked with one shared rainbow table (M-5).
-/// `pub` so tests elsewhere can seed a known backup code by its hash.
+/// Stored as `<salt>:<sha256>`, salted so equal codes never share a stored value. `pub` so tests can seed a known code.
 pub fn hash_backup_code(plaintext: &str) -> String {
     let mut salt = [0u8; 16];
     rand::rng().fill_bytes(&mut salt);
@@ -55,16 +52,8 @@ pub fn hash_backup_code(plaintext: &str) -> String {
     format!("{salt_hex}:{}", hex::encode(digest))
 }
 
-/// Recomputes the hash using the stored salt and compares — the counterpart to `hash_backup_code`.
-/// Because the hash is salted, a stored value can no longer be found by exact-match DB lookup on a
-/// freshly-hashed plaintext; callers must fetch candidate stored hashes for the user and verify each.
-///
-/// A stored value with no `:` is a LEGACY code: issued before M-5 as a bare, unsalted
-/// `Sha256::digest(plaintext)` hex string. Users who enrolled before that fix may still hold unused
-/// legacy codes, and backup codes are precisely the recovery path for when the primary second
-/// factor is unavailable — rejecting them outright would be a permanent, unrecoverable account
-/// lockout. So a colon-less stored value falls back to the old unsalted comparison instead of
-/// failing closed (Task 4 fix round 1, Critical finding).
+/// Recomputes the hash with the stored salt. A value without `:` is a legacy unsalted hash and is compared the old way,
+/// or codes issued before salting would be unusable.
 pub fn verify_backup_code(plaintext: &str, stored: &str) -> bool {
     let Some((salt_hex, expected_digest_hex)) = stored.split_once(':') else {
         return hex::encode(Sha256::digest(plaintext.as_bytes())) == stored;
@@ -141,15 +130,9 @@ impl EnrollTotpUseCase {
         Self { totp, users, hasher }
     }
 
-    /// Refused while already confirmed (disable first); replaces a still-unconfirmed attempt freely.
-    ///
-    /// `current_password` is `Some(..)` and checked for the session-authenticated `/api/me/mfa/*`
-    /// route — an enrolled TOTP credential is a persistent second factor and must not be plantable
-    /// via a hijacked session token alone (M-7). It is `None` for the mandatory first-time-MFA-setup
-    /// flow (`/api/auth/mfa/setup/*`), which is gated by the short-lived `mfa_token` instead of a
-    /// full session — that token itself already proves the password was verified moments earlier
-    /// during login, so re-checking it here would just break that flow's wire contract for no
-    /// security benefit.
+    /// Refused once confirmed; replaces an unconfirmed attempt. `current_password` is `Some` for `/api/me/mfa/*`: a
+    /// hijacked session token alone must not plant a second factor. It is `None` for the first-time setup flow, gated
+    /// by `mfa_token`, which already proves the password.
     pub async fn execute(&self, user_id: Uuid, username: &str, current_password: Option<&str>) -> Result<TotpEnrollment, ApplicationError> {
         if let Some(current_password) = current_password {
             verify_current_password(self.users.as_ref(), self.hasher.as_ref(), user_id, current_password).await?;
@@ -197,8 +180,6 @@ impl ConfirmTotpUseCase {
     /// Returns the plaintext backup codes — the only time they are ever visible; only their hashes are persisted.
     pub async fn execute(&self, user_id: Uuid, username: &str, code: &str) -> Result<Vec<String>, ApplicationError> {
         let credential = self.totp.get(user_id).await?.ok_or(ApplicationError::MfaNotEnrolled)?;
-        // Without this guard, any still-valid code for an already-confirmed credential lets a
-        // caller re-trigger backup-code regeneration — destroying the victim's existing set (C-4).
         if credential.confirmed {
             return Err(ApplicationError::MfaAlreadyEnabled);
         }
@@ -242,7 +223,6 @@ impl VerifyTotpUseCase {
         let credential = self.totp.get(user_id).await?.filter(|c| c.confirmed).ok_or(ApplicationError::MfaNotEnrolled)?;
         let totp = build_totp(&credential.secret, "")?;
         let step = totp.check_current(code).ok_or(ApplicationError::InvalidMfaCode)?;
-        // Reject an already-accepted step. Not enough alone under concurrency — set_last_used_step below is the real compare-and-swap.
         if credential.last_used_step.is_some_and(|last| step as i64 <= last) {
             return Err(ApplicationError::InvalidMfaCode);
         }
@@ -263,9 +243,6 @@ impl VerifyBackupCodeUseCase {
     }
 
     pub async fn execute(&self, user_id: Uuid, code: &str) -> Result<(), ApplicationError> {
-        // `try_consume` takes the plaintext code, not a pre-hashed value: each stored hash carries
-        // its own salt (M-5), so there is no exact stored value to hash toward — the port itself
-        // must fetch this user's candidate hashes and verify each via `verify_backup_code`.
         if self.backup_codes.try_consume(user_id, code).await? {
             Ok(())
         } else {
@@ -421,8 +398,6 @@ mod tests {
         async fn try_consume(&self, user_id: Uuid, plaintext_code: &str) -> Result<bool, DomainError> {
             let mut by_user = self.by_user.lock().unwrap();
             let Some(codes) = by_user.get_mut(&user_id) else { return Ok(false) };
-            // Salted hashes can't be looked up by exact value: check the plaintext against every
-            // still-unused stored hash for this user, same as the real Postgres implementation.
             let Some(matching_hash) = codes.iter().find(|(hash, used)| !**used && verify_backup_code(plaintext_code, hash)).map(|(hash, _)| hash.clone()) else {
                 return Ok(false);
             };
@@ -576,9 +551,7 @@ mod tests {
         assert!(enrollment.otpauth_url.starts_with("otpauth://totp/"));
     }
 
-    /// A hijacked session token alone must not be enough to plant a new MFA factor — enrolling a
-    /// new TOTP credential requires the caller's current password, same as `disable_totp` and
-    /// `regenerate_backup_codes` already do (M-7).
+    /// A hijacked session token alone must not enroll a TOTP credential: the current password is required.
     #[tokio::test]
     async fn enrolling_totp_requires_the_current_password() {
         let totp_port = Arc::new(FakeTotp::new());
@@ -594,10 +567,7 @@ mod tests {
         assert!(!enrollment.secret_base32.is_empty());
     }
 
-    /// `/api/auth/mfa/setup/totp/enroll` (the mandatory first-time-MFA-setup flow, gated by the
-    /// short-lived `mfa_token` rather than a full session) passes `None` and must skip the password
-    /// check entirely — that route is intentionally password-less, since the `mfa_token` itself
-    /// already proves the password was verified moments earlier during login (Task 5 fix round 1).
+    /// The first-time setup flow passes `None` and skips the password check.
     #[tokio::test]
     async fn enrolling_totp_with_no_password_supplied_skips_the_check() {
         let totp_port = Arc::new(FakeTotp::new());
@@ -802,10 +772,7 @@ mod tests {
         assert!(matches!(err, ApplicationError::InvalidMfaCode));
     }
 
-    /// `ConfirmTotpUseCase` has no guard against being called again once the credential is already
-    /// confirmed — repeated confirm calls each regenerate (and thereby invalidate) the backup codes,
-    /// which is a denial-of-service against the victim's MFA recovery path given nothing more than
-    /// one currently-valid code (C-4).
+    /// Confirming an already confirmed credential must not regenerate (and invalidate) the backup codes.
     #[tokio::test]
     async fn confirming_again_after_already_confirmed_is_refused_and_does_not_touch_backup_codes() {
         let totp_port = Arc::new(FakeTotp::new());
@@ -818,8 +785,6 @@ mod tests {
         let original_codes =
             ConfirmTotpUseCase::new(totp_port.clone(), backup_codes.clone(), Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user_id, "florian", &code).await.unwrap();
 
-        // The same code is still within its valid window (skew=1) — a second confirm call must not
-        // silently regenerate the backup codes it already issued.
         let err = ConfirmTotpUseCase::new(totp_port, backup_codes.clone(), Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user_id, "florian", &code).await.unwrap_err();
 
         assert!(matches!(err, ApplicationError::MfaAlreadyEnabled));
@@ -853,13 +818,11 @@ mod tests {
         let code = code_for(&enrollment.secret_base32, "florian");
         ConfirmTotpUseCase::new(totp_port.clone(), backup_codes, Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user_id, "florian", &code).await.unwrap();
 
-        // The confirm step already consumed this code; login must reject it as a replay too.
         let verify = VerifyTotpUseCase::new(totp_port);
         let err = verify.execute(user_id, &code).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidMfaCode));
     }
 
-    /// The in-memory pre-check alone can't see a concurrent winner — only the CAS result can.
     #[tokio::test]
     async fn verify_totp_rejects_the_code_when_the_atomic_advance_loses_the_race() {
         struct AlwaysLosesTheRace(Arc<FakeTotp>);
@@ -996,8 +959,6 @@ mod tests {
 
     #[test]
     fn two_backup_codes_with_the_same_plaintext_hash_differently_due_to_salt() {
-        // Simulates two different users/enrollments generating the identical plaintext code by
-        // coincidence — their stored hashes must differ because each has its own random salt.
         let hash_a = hash_backup_code("abc123");
         let hash_b = hash_backup_code("abc123");
         assert_ne!(hash_a, hash_b, "identical plaintext must still produce different stored hashes across calls, via a random salt");
@@ -1010,23 +971,17 @@ mod tests {
         assert!(!verify_backup_code("wrong-code", &hash));
     }
 
-    /// Pre-M-5 backup codes were stored as a bare `Sha256::digest(plaintext)` hex string with no
-    /// `<salt>:` prefix. `verify_backup_code` must recognize the colon-less shape as a legacy
-    /// unsalted hash and fall back to the old comparison, or every backup code issued before this
-    /// fix becomes permanently unusable the moment a user needs it (Critical finding, Task 4 fix
-    /// round 1).
+    /// Backup codes stored as a bare sha256 hex (no `<salt>:`) must still verify.
     #[test]
     fn verify_backup_code_falls_back_to_the_legacy_unsalted_comparison_for_a_colon_less_stored_value() {
         let legacy_hash = hex::encode(Sha256::digest(b"abc123"));
         assert!(!legacy_hash.contains(':'), "sanity check: a legacy hash has no salt separator");
 
-        assert!(verify_backup_code("abc123", &legacy_hash), "a still-unused legacy backup code must keep verifying after the M-5 salting fix");
+        assert!(verify_backup_code("abc123", &legacy_hash), "a still-unused legacy backup code must keep verifying after salting was introduced");
         assert!(!verify_backup_code("wrong-code", &legacy_hash));
     }
 
-    /// End-to-end through the same port/use-case a real login uses: a user who enrolled before the
-    /// M-5 fix and still holds an unused legacy code must be able to log in with it, not be locked
-    /// out of their own account's recovery path.
+    /// A user holding an unused legacy code can log in with it.
     #[tokio::test]
     async fn a_legacy_pre_fix_backup_code_still_verifies_and_consumes_through_the_use_case() {
         let backup_codes = Arc::new(FakeBackupCodes::new());
@@ -1035,9 +990,8 @@ mod tests {
         backup_codes.replace_all(user_id, &[legacy_hash], None).await.unwrap();
 
         let verify = VerifyBackupCodeUseCase::new(backup_codes.clone());
-        verify.execute(user_id, "legacy-code").await.expect("a still-unused legacy backup code must keep working after the M-5 salting fix");
+        verify.execute(user_id, "legacy-code").await.expect("a still-unused legacy backup code must keep working after salting was introduced");
 
-        // Single-use, same as a salted code.
         let err = verify.execute(user_id, "legacy-code").await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidMfaCode));
     }

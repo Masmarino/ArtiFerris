@@ -43,7 +43,6 @@ function fakeMembers(
 
 const toast = { success: fn(), error: fn() }
 
-/** Stands in for the confirmation dialog the component opens before changing a role. */
 function fakeConfirm(answer = true) {
   return { ask: fn(() => Promise.resolve(answer)) }
 }
@@ -90,7 +89,6 @@ export default meta
 type Story = StoryObj<OrganizationMembers>
 
 const listedMembers = fakeMembers()
-/** An admin, a regular member and a pending invitation, each with the matching role action. */
 export const Populated: Story = {
   decorators: [withMembers(listedMembers)],
   play: async ({ canvasElement }) => {
@@ -135,7 +133,6 @@ export const LoadFailed: Story = {
   },
 }
 
-/** "Inviter" stays disabled until both a username and an e-mail are typed. */
 export const InviteFormNeedsBothFields: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

@@ -42,7 +42,6 @@ export const appConfig: ApplicationConfig = {
     provideArtiferrisIcons(),
     provideRouter(routes),
     provideHttpClient(withInterceptors([authInterceptor])),
-    // The browser's language, English when it is not translated (see pickLanguage).
     { provide: LOCALE_ID, useFactory: () => LANGUAGE_LOCALES[detectBrowserLanguage()] },
     provideTransloco({
       config: {
@@ -54,12 +53,9 @@ export const appConfig: ApplicationConfig = {
       loader: TranslocoHttpLoader,
     }),
     provideTranslator(),
-    // Templates read translations through the pipe, but TypeScript code (error messages, labels
-    // computed in components) calls translate() synchronously, so the active language must be
-    // loaded before the first component is created.
+    // TypeScript code calls translate() synchronously, so the language must be loaded before the
+    // first component.
     provideAppInitializer(() => inject(LanguageService).use(detectBrowserLanguage())),
-    // Feature port -> adapter bindings (hexagonal architecture) — each
-    // feature owns its own providers array; this just spreads them in.
     ...apiTokenProviders,
     ...authProviders,
     ...mfaProviders,

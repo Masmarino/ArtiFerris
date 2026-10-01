@@ -14,16 +14,14 @@ pub const SITE_NAME: &str = "ArtiFerris";
 /// What the app's `index.html` already carries, kept for every page that is not a public catalog page.
 pub const DEFAULT_TITLE: &str = "ArtiFerris · Artifact Repository";
 const MAX_DESCRIPTION_CHARS: usize = 160;
-/// The longest a URL segment can be and still name something that exists. Longer or garbled ones get the generic head
-/// without a lookup, since the URL is the only thing bounding them.
+/// The longest a URL segment can be and still name something. Longer ones get the generic head without a lookup.
 const MAX_OWNER_BYTES: usize = 128;
 const MAX_REPOSITORY_BYTES: usize = 64;
 const MAX_NPM_NAME_BYTES: usize = 214;
 const MAX_DOCKER_NAME_BYTES: usize = 128;
 
-/// The public catalog pages, recognised from the URL the SPA serves them on. `App` is a signed-in page of the app
-/// itself (its last segment can be free text, like a package called `chart.js`). Anything else is `Other`, including
-/// `/<user>/<repo>` without the `@` (which the app treats as a personal repository but which is ambiguous with app routes).
+/// The public catalog pages, recognised from the SPA URL. `App` is a signed-in page (its last segment can be free
+/// text). Anything else is `Other`, including `/<user>/<repo>` without the `@`, which is ambiguous with app routes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SeoRoute {
     Home,

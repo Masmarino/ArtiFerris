@@ -11,8 +11,6 @@ describe('RegisterPage', () => {
   let authServiceSpy: { register: ReturnType<typeof vi.fn> }
 
   beforeEach(() => {
-    // This project's test runner (Angular's vitest-based unit-test builder) has no
-    // `jasmine` global to provide `createSpyObj` — a hand-rolled `vi.fn()` spy stands in.
     authServiceSpy = {
       register: vi.fn(),
     }

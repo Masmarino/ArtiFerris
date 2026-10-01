@@ -36,7 +36,6 @@ const DOCKER_A: RepositorySummary = {
 
 type Canvas = ReturnType<typeof within>
 
-/** Fresh spies per story so call counts never leak from one story into another. */
 function scenario(
   options: { repositories?: Partial<RepositoriesService>; isSuperAdmin?: boolean } = {},
 ) {
@@ -90,7 +89,6 @@ export default meta
 
 type Story = StoryObj<CreateRepositoryModal>
 
-/** A fresh form: hosted npm with no name yet, so it can't be submitted. */
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -136,7 +134,6 @@ export const InvalidRetention: Story = {
 }
 
 const hosted = scenario()
-/** The quota is typed in MB and sent in bytes. */
 export const CreatingAHostedRepository: Story = {
   decorators: [hosted.decorator],
   play: async ({ canvasElement, args }) => {
@@ -178,7 +175,6 @@ export const CreatingADockerRepository: Story = {
 }
 
 const proxy = scenario()
-/** A proxy asks for its upstream URL and optional credentials, and sends them along. */
 export const CreatingAProxyRepository: Story = {
   decorators: [proxy.decorator],
   play: async ({ canvasElement, args }) => {
@@ -222,7 +218,6 @@ export const GroupWithoutCandidateMembers: Story = {
 }
 
 const group = scenario()
-/** Members are picked from same-format repositories and can be reordered or removed before creating. */
 export const CreatingAGroupRepository: Story = {
   decorators: [group.decorator],
   play: async ({ canvasElement, args }) => {
@@ -274,7 +269,6 @@ export const RemovingAGroupMember: Story = {
   },
 }
 
-/** A group only aggregates same-format repositories, so switching format clears the picks. */
 export const ChangingFormatClearsGroupMembers: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -289,7 +283,6 @@ export const ChangingFormatClearsGroupMembers: Story = {
   },
 }
 
-/** Only a super-admin can publish a repository, and only a hosted one. */
 export const AsSuperAdmin: Story = {
   decorators: [scenario({ isSuperAdmin: true }).decorator],
   play: async ({ canvasElement }) => {
@@ -304,7 +297,6 @@ export const AsSuperAdmin: Story = {
   },
 }
 
-/** A ticked "Rendre public" doesn't survive a switch to a type that can't be public. */
 export const PublicTickIsDroppedForProxy: Story = {
   decorators: [scenario({ isSuperAdmin: true }).decorator],
   play: async ({ canvasElement }) => {
@@ -318,7 +310,6 @@ export const PublicTickIsDroppedForProxy: Story = {
 }
 
 const publicRepo = scenario({ isSuperAdmin: true })
-/** Creation has no visibility field, so going public is a second call after the repository exists. */
 export const CreatingAPublicRepository: Story = {
   decorators: [publicRepo.decorator],
   play: async ({ canvasElement, args }) => {
@@ -337,7 +328,6 @@ const visibilityFails = scenario({
   isSuperAdmin: true,
   repositories: { setVisibility: fn(() => throwError(() => ({ error: {} }))) },
 })
-/** The repository exists even if the follow-up fails, so the modal still reports it as created. */
 export const MakingItPublicFailed: Story = {
   decorators: [visibilityFails.decorator],
   play: async ({ canvasElement, args }) => {
@@ -366,7 +356,6 @@ const failing = scenario({
     ),
   },
 })
-/** The server's own message is shown, the modal stays open and the form can be resubmitted. */
 export const CreationFailed: Story = {
   decorators: [failing.decorator],
   play: async ({ canvasElement, args }) => {
@@ -399,7 +388,6 @@ export const CreationFailedWithoutServerMessage: Story = {
 }
 
 const inFlight = scenario({ repositories: { create: fn(() => NEVER) } })
-/** While the request is pending the button is busy and a second click can't submit again. */
 export const Creating: Story = {
   decorators: [inFlight.decorator],
   play: async ({ canvasElement }) => {
