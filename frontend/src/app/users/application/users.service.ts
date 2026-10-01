@@ -20,8 +20,8 @@ export class UsersService {
     return this.port.get(id)
   }
 
-  create(username: string, email: string, isSuperAdmin: boolean): Observable<UserSummary> {
-    return this.port.create(username, email, isSuperAdmin).pipe(tap(() => this.listCache.clear()))
+  create(email: string, isSuperAdmin: boolean): Observable<UserSummary> {
+    return this.port.create(email, isSuperAdmin).pipe(tap(() => this.listCache.clear()))
   }
 
   delete(id: string): Observable<void> {

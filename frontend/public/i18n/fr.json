@@ -274,12 +274,16 @@
       "impossibleHeading": "Activation impossible",
       "tokenMissing": "Lien d'activation invalide : aucun jeton fourni.",
       "heading": "Activer votre compte",
+      "username": "Nom d'utilisateur",
+      "usernameHint": "3 à 32 caractères, commence par une lettre : lettres, chiffres, « _ » et « - ».",
       "newPassword": "Nouveau mot de passe",
       "confirmPassword": "Confirmer le mot de passe",
       "mismatch": "Les mots de passe ne correspondent pas.",
       "submit": "Activer mon compte",
       "errors": {
-        "invalidLink": "Ce lien d'activation est invalide ou a expiré. Demandez à un administrateur de vous renvoyer une invitation."
+        "invalidLink": "Ce lien d'activation est invalide ou a expiré. Demandez à un administrateur de vous renvoyer une invitation.",
+        "usernameTaken": "Ce nom d'utilisateur est déjà pris.",
+        "invalidUsername": "Nom d'utilisateur invalide : 3 à 32 caractères, doit commencer par une lettre."
       }
     }
   },
@@ -539,12 +543,12 @@
       "resent": "Invitation renvoyée."
     },
     "create": {
-      "created": "Utilisateur « {{ username }} » créé.",
+      "created": "Invitation envoyée à {{ email }}.",
       "heading": "Nouvel utilisateur",
       "username": "Nom d'utilisateur",
       "email": "Adresse e-mail",
       "superAdmin": "Super-administrateur",
-      "inviteNote": "Un e-mail sera envoyé à cette adresse pour que l'utilisateur active son compte et choisisse son mot de passe, sous 24 heures.",
+      "inviteNote": "Un e-mail sera envoyé à cette adresse pour que l'utilisateur active son compte, choisisse son nom d'utilisateur et son mot de passe, sous 24 heures.",
       "invite": "Inviter",
       "errors": {
         "createFailed": "Échec de la création de l'utilisateur."
@@ -1209,7 +1213,7 @@
       "demote": "Rétrograder",
       "promoted": "{{ username }} est désormais administrateur·rice de l'organisation.",
       "demoted": "{{ username }} n'est plus administrateur·rice de l'organisation.",
-      "invited": "{{ username }} a été invité·e.",
+      "invited": "Invitation envoyée à {{ email }}.",
       "demoteHint": "Retire les droits d'administration de cette organisation.",
       "promoteHint": "Donne les droits d'administration complets sur cette organisation.",
       "caption": "Membres de l'organisation",

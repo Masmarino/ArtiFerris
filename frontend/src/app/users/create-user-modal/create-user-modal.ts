@@ -22,7 +22,6 @@ export class CreateUserModal {
   readonly cancelled = output<void>()
 
   readonly form = new FormGroup({
-    username: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     email: new FormControl('', {
       nonNullable: true,
       validators: [Validators.required, Validators.email],
@@ -37,12 +36,12 @@ export class CreateUserModal {
       return
     }
     this.creating.set(true)
-    const { username, email, isSuperAdmin } = this.form.getRawValue()
-    this.usersService.create(username, email, isSuperAdmin).subscribe({
+    const { email, isSuperAdmin } = this.form.getRawValue()
+    this.usersService.create(email, isSuperAdmin).subscribe({
       next: () => {
         this.creating.set(false)
         this.created.emit()
-        this.toastService.success(t('users.create.created', { username }))
+        this.toastService.success(t('users.create.created', { email }))
       },
       error: (err) => {
         this.creating.set(false)

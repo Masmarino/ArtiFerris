@@ -133,14 +133,11 @@ export const LoadFailed: Story = {
   },
 }
 
-export const InviteFormNeedsBothFields: Story = {
+export const InviteFormNeedsAnEmail: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await openInviteForm(canvas)
     expect(canvas.queryByRole('button', { name: 'Inviter un membre' })).not.toBeInTheDocument()
-    expect(canvas.getByRole('button', { name: 'Inviter' })).toBeDisabled()
-
-    await userEvent.type(canvas.getByLabelText("Nom d'utilisateur"), 'dave')
     expect(canvas.getByRole('button', { name: 'Inviter' })).toBeDisabled()
 
     await userEvent.type(canvas.getByLabelText('Adresse e-mail'), 'dave@acme.test')
@@ -152,11 +149,11 @@ export const CancellingTheInvite: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await openInviteForm(canvas)
-    await userEvent.type(canvas.getByLabelText("Nom d'utilisateur"), 'dave')
+    await userEvent.type(canvas.getByLabelText('Adresse e-mail'), 'dave@acme.test')
     await userEvent.click(canvas.getByRole('button', { name: 'Annuler' }))
 
     expect(canvas.getByRole('button', { name: 'Inviter un membre' })).toBeInTheDocument()
-    expect(canvas.queryByLabelText("Nom d'utilisateur")).not.toBeInTheDocument()
+    expect(canvas.queryByLabelText('Adresse e-mail')).not.toBeInTheDocument()
   },
 }
 
@@ -167,15 +164,14 @@ export const InvitingAMember: Story = {
     const canvas = within(canvasElement)
     await waitFor(() => expect(canvas.getByText('alice')).toBeInTheDocument())
     await openInviteForm(canvas)
-    await userEvent.type(canvas.getByLabelText("Nom d'utilisateur"), 'dave')
     await userEvent.type(canvas.getByLabelText('Adresse e-mail'), 'dave@acme.test')
     await userEvent.click(canvas.getByLabelText('Administrateur de cette organisation'))
     await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
 
     await waitFor(() =>
-      expect(inviting.invite).toHaveBeenCalledWith('org-acme', 'dave', 'dave@acme.test', true),
+      expect(inviting.invite).toHaveBeenCalledWith('org-acme', 'dave@acme.test', true),
     )
-    expect(toast.success).toHaveBeenCalledWith('dave a été invité·e.')
+    expect(toast.success).toHaveBeenCalledWith('Invitation envoyée à dave@acme.test.')
     // The form closes and the member list is fetched again.
     await waitFor(() =>
       expect(canvas.getByRole('button', { name: 'Inviter un membre' })).toBeInTheDocument(),
@@ -190,7 +186,6 @@ export const InviteInFlight: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await openInviteForm(canvas)
-    await userEvent.type(canvas.getByLabelText("Nom d'utilisateur"), 'dave')
     await userEvent.type(canvas.getByLabelText('Adresse e-mail'), 'dave@acme.test')
     await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
 
@@ -206,14 +201,13 @@ export const InviteFailed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await openInviteForm(canvas)
-    await userEvent.type(canvas.getByLabelText("Nom d'utilisateur"), 'dave')
     await userEvent.type(canvas.getByLabelText('Adresse e-mail'), 'dave@acme.test')
     await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Échec de l'invitation."))
     expect(toast.success).not.toHaveBeenCalled()
     // The form stays open with what was typed, so the invite can be retried.
-    expect(canvas.getByLabelText("Nom d'utilisateur")).toHaveValue('dave')
+    expect(canvas.getByLabelText('Adresse e-mail')).toHaveValue('dave@acme.test')
     expect(canvas.getByRole('button', { name: 'Inviter' })).toBeEnabled()
   },
 }

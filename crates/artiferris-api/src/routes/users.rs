@@ -25,7 +25,6 @@ pub fn router() -> Router<AppState> {
 
 #[derive(Deserialize)]
 struct CreateUserRequest {
-    username: String,
     email: String,
     is_super_admin: bool,
     #[serde(default)]
@@ -104,14 +103,15 @@ async fn create_user(
     require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let id = state
         .invite_user
-        .execute(resolved_org.0.id, body.is_organization_admin, &body.username, &body.email, body.is_super_admin, user.id)
+        .execute(resolved_org.0.id, body.is_organization_admin, &body.email, body.is_super_admin, user.id)
         .await
         .map_err(|e| application_error_response("failed to invite user", e))?;
+    let invited = state.users.find_by_id(id).await.ok().flatten().ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     Ok((
         StatusCode::CREATED,
         Json(UserResponse {
             id,
-            username: body.username,
+            username: invited.username.as_str().to_string(),
             is_super_admin: body.is_super_admin,
             organization_id: resolved_org.0.id,
             email: Some(body.email),
@@ -335,7 +335,7 @@ mod tests {
                     .uri("/api/users")
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {admin_token}"))
-                    .body(Body::from(r#"{"username":"newuser","email":"newuser@example.com","is_super_admin":false}"#))
+                    .body(Body::from(r#"{"email":"newuser@example.com","is_super_admin":false}"#))
                     .unwrap(),
             )
             .await
@@ -362,7 +362,7 @@ mod tests {
                     .uri("/api/users")
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {admin_token}"))
-                    .body(Body::from(r#"{"username":"invitee","email":"invitee@example.com","is_super_admin":false}"#))
+                    .body(Body::from(r#"{"email":"invitee@example.com","is_super_admin":false}"#))
                     .unwrap(),
             )
             .await
@@ -374,7 +374,8 @@ mod tests {
             .unwrap();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        let invitee = json.as_array().unwrap().iter().find(|u| u["username"] == "invitee").unwrap();
+        let invitee = json.as_array().unwrap().iter().find(|u| u["email"] == "invitee@example.com").unwrap();
+        assert!(invitee["username"].as_str().unwrap().starts_with("invite-"));
         assert_eq!(invitee["invitation_pending"], true);
         let admin = json.as_array().unwrap().iter().find(|u| u["username"] == "admin").unwrap();
         assert_eq!(admin["invitation_pending"], false, "a user created outside the invitation flow must not show as pending");
@@ -396,7 +397,7 @@ mod tests {
                     .uri("/api/users")
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {admin_token}"))
-                    .body(Body::from(r#"{"username":"invitee","email":"invitee@example.com","is_super_admin":false}"#))
+                    .body(Body::from(r#"{"email":"invitee@example.com","is_super_admin":false}"#))
                     .unwrap(),
             )
             .await
@@ -479,7 +480,7 @@ mod tests {
                     .uri("/api/users")
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {token}"))
-                    .body(Body::from(r#"{"username":"newuser","email":"newuser@example.com","is_super_admin":false}"#))
+                    .body(Body::from(r#"{"email":"newuser@example.com","is_super_admin":false}"#))
                     .unwrap(),
             )
             .await
@@ -503,7 +504,7 @@ mod tests {
                     .uri("/api/users")
                     .header("content-type", "application/json")
                     .header("authorization", format!("Bearer {admin_token}"))
-                    .body(Body::from(r#"{"username":"doomed","email":"doomed@example.com","is_super_admin":false}"#))
+                    .body(Body::from(r#"{"email":"doomed@example.com","is_super_admin":false}"#))
                     .unwrap(),
             )
             .await
@@ -640,59 +641,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
-    }
-
-    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
-    async fn a_duplicate_username_keeps_its_specific_error_message(pool: sqlx::PgPool) {
-        let state = AppState::build(pool, &test_config());
-        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
-        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
-        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
-        let app = build_router(state);
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/users")
-                    .header("content-type", "application/json")
-                    .header("authorization", format!("Bearer {admin_token}"))
-                    .body(Body::from(r#"{"username":"florian","email":"florian2@example.com","is_super_admin":false}"#))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
-        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["error"], "username already taken");
-    }
-
-    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
-    async fn an_invalid_username_keeps_its_specific_error_message(pool: sqlx::PgPool) {
-        let state = AppState::build(pool, &test_config());
-        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
-        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
-        let app = build_router(state);
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/users")
-                    .header("content-type", "application/json")
-                    .header("authorization", format!("Bearer {admin_token}"))
-                    .body(Body::from(r#"{"username":"x","email":"x@example.com","is_super_admin":false}"#))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
-        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert!(json["error"].as_str().unwrap().starts_with("invalid username"), "got {}", json["error"]);
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -1263,7 +1211,7 @@ mod tests {
                     .header("content-type", "application/json")
                     .header("host", "acme.artiferris.localhost")
                     .header("authorization", format!("Bearer {admin_token}"))
-                    .body(Body::from(r#"{"username":"acme-admin","email":"acme-admin@example.com","is_super_admin":false,"is_organization_admin":true}"#))
+                    .body(Body::from(r#"{"email":"acme-admin@example.com","is_super_admin":false,"is_organization_admin":true}"#))
                     .unwrap(),
             )
             .await

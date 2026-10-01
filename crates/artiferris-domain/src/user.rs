@@ -130,6 +130,10 @@ pub trait UserSecurityPort: Send + Sync {
     /// `EmailTaken` if the organization already has a verified holder of the address, `UsernameTaken` if the username is gone.
     async fn insert_with_verified_email(&self, user: &User) -> Result<(), DomainError>;
 
+    /// Sets the username the invited user chose and the password they set, and bumps `tokens_valid_after`, in one
+    /// transaction with `audit`. `UsernameTaken` if another account has the name, in which case nothing changes.
+    async fn activate_invited(&self, id: Uuid, username: &Username, new_password_hash: String, audit: Option<&AuditRecord>) -> Result<(), DomainError>;
+
     /// `false` when nothing changed, including when another account of the organization already holds the address as verified.
     async fn mark_email_verified(&self, id: Uuid) -> Result<bool, DomainError>;
 }

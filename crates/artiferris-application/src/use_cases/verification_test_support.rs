@@ -31,6 +31,9 @@ impl UserSecurityPort for FakeVerification {
     async fn insert_with_verified_email(&self, _user: &User) -> Result<(), DomainError> {
         unreachable!("not exercised by these tests")
     }
+    async fn activate_invited(&self, _id: Uuid, _username: &artiferris_domain::user::Username, _new_password_hash: String, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
+        unreachable!("not exercised by these tests")
+    }
     async fn mark_email_verified(&self, _id: Uuid) -> Result<bool, DomainError> {
         unreachable!("not exercised by these tests")
     }

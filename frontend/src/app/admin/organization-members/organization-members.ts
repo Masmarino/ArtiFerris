@@ -28,7 +28,6 @@ export class OrganizationMembers {
   readonly errorMessage = signal<string | null>(null)
 
   readonly addingMember = signal(false)
-  readonly newUsername = signal('')
   readonly newEmail = signal('')
   readonly newIsOrganizationAdmin = signal(false)
   readonly inviting = signal(false)
@@ -39,7 +38,6 @@ export class OrganizationMembers {
       this.organizationId()
       this.members.set([])
       this.addingMember.set(false)
-      this.newUsername.set('')
       this.newEmail.set('')
       this.newIsOrganizationAdmin.set(false)
       this.inviting.set(false)
@@ -70,7 +68,6 @@ export class OrganizationMembers {
 
   startAdding(): void {
     this.addingMember.set(true)
-    this.newUsername.set('')
     this.newEmail.set('')
     this.newIsOrganizationAdmin.set(false)
   }
@@ -80,15 +77,15 @@ export class OrganizationMembers {
   }
 
   invite(): void {
-    if (this.newUsername().trim() === '' || this.newEmail().trim() === '' || this.inviting()) {
+    if (this.newEmail().trim() === '' || this.inviting()) {
       return
     }
     this.inviting.set(true)
     const organizationId = this.organizationId()
     const stillCurrent = () => this.organizationId() === organizationId
-    const username = this.newUsername()
+    const email = this.newEmail()
     this.organizationMembersService
-      .invite(organizationId, username, this.newEmail(), this.newIsOrganizationAdmin())
+      .invite(organizationId, email, this.newIsOrganizationAdmin())
       .subscribe({
         next: () => {
           if (stillCurrent()) {
@@ -96,7 +93,7 @@ export class OrganizationMembers {
             this.addingMember.set(false)
             this.reload()
           }
-          this.toastService.success(t('admin.members.invited', { username }))
+          this.toastService.success(t('admin.members.invited', { email }))
         },
         error: () => {
           if (stillCurrent()) {

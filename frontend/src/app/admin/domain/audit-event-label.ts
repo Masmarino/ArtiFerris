@@ -108,7 +108,9 @@ export function auditEventDetails(entry: AuditEntry): string {
     case 'ApiTokenCreated':
       return t('admin.audit.details.label', { label: text(payload['label']) })
     case 'UserInvited': {
-      if (typeof payload['username'] !== 'string') {
+      // Events recorded before the invitee chose their own username carry `username`, not `email`.
+      const invitee = payload['email'] ?? payload['username']
+      if (typeof invitee !== 'string') {
         return ''
       }
       const roles = [
@@ -117,9 +119,7 @@ export function auditEventDetails(entry: AuditEntry): string {
           ? t('admin.audit.details.organizationAdmin')
           : null,
       ].filter((role) => role !== null)
-      return roles.length > 0
-        ? `${text(payload['username'])} (${roles.join(', ')})`
-        : text(payload['username'])
+      return roles.length > 0 ? `${text(invitee)} (${roles.join(', ')})` : text(invitee)
     }
     case 'UserDeleted':
       return text(payload['username'], '')

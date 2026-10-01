@@ -75,7 +75,11 @@ export class UsersList implements OnInit {
 
   readonly columns = computed<TableColumn<UserSummary>[]>(() => {
     const columns: TableColumn<UserSummary>[] = [
-      { key: 'username', label: t('users.list.columns.username') },
+      {
+        key: 'username',
+        label: t('users.list.columns.username'),
+        format: (u) => (u.invitation_pending ? '—' : u.username),
+      },
       { key: 'email', label: t('users.list.columns.email') },
     ]
     if (this.isSuperAdmin()) {

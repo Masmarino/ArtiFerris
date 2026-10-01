@@ -51,8 +51,7 @@ export const Default: Story = {
 export const InvalidEmail: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Nom d'utilisateur/), 'alice')
-    await userEvent.type(canvas.getByLabelText(/Adresse e-mail/), 'not-an-email')
+    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'not-an-email')
     await userEvent.tab()
     expect(canvas.getByRole('button', { name: 'Inviter' })).toBeDisabled()
 
@@ -69,8 +68,7 @@ export const InvitingAUser: Story = {
   decorators: [withServices(successUsers, successToasts)],
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Nom d'utilisateur/), 'alice')
-    await userEvent.type(canvas.getByLabelText(/Adresse e-mail/), 'alice@example.com')
+    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'alice@example.com')
     await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
 
     await waitFor(() => expect(args.created).toHaveBeenCalledTimes(1))
@@ -88,8 +86,7 @@ export const InvitingASuperAdmin: Story = {
   decorators: [withServices(adminUsers)],
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Nom d'utilisateur/), 'root')
-    await userEvent.type(canvas.getByLabelText(/Adresse e-mail/), 'root@example.com')
+    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'root@example.com')
     await userEvent.click(canvas.getByRole('checkbox', { name: 'Super-administrateur' }))
     await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
 
@@ -102,8 +99,7 @@ export const Submitting: Story = {
   decorators: [withServices(fakeUsers({ create: () => NEVER }))],
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Nom d'utilisateur/), 'alice')
-    await userEvent.type(canvas.getByLabelText(/Adresse e-mail/), 'alice@example.com')
+    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'alice@example.com')
     await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
 
     const submit = await canvas.findByRole('button', { name: /Inviter/ })
@@ -124,7 +120,7 @@ export const ServerRejectsTheUser: Story = {
             () =>
               new HttpErrorResponse({
                 status: 400,
-                error: { error: "Ce nom d'utilisateur existe déjà." },
+                error: { error: 'Cette adresse e-mail est déjà utilisée.' },
               }),
           ),
       }),
@@ -133,21 +129,20 @@ export const ServerRejectsTheUser: Story = {
   ],
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Nom d'utilisateur/), 'alice')
-    await userEvent.type(canvas.getByLabelText(/Adresse e-mail/), 'alice@example.com')
+    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'alice@example.com')
     await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
 
     await waitFor(() =>
       expect(conflictToasts.toasts()).toEqual([
         expect.objectContaining({
           variant: 'error',
-          message: "Ce nom d'utilisateur existe déjà.",
+          message: 'Cette adresse e-mail est déjà utilisée.',
         }),
       ]),
     )
     expect(args.created).not.toHaveBeenCalled()
     expect(canvas.getByRole('button', { name: 'Inviter' })).toBeEnabled()
-    expect(canvas.getByLabelText(/Nom d'utilisateur/)).toHaveValue('alice')
+    expect(canvas.getByLabelText(/Adresse e-mail/)).toHaveValue('alice@example.com')
   },
 }
 
@@ -162,8 +157,7 @@ export const CreationFailsWithoutDetails: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Nom d'utilisateur/), 'alice')
-    await userEvent.type(canvas.getByLabelText(/Adresse e-mail/), 'alice@example.com')
+    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'alice@example.com')
     await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
 
     await waitFor(() =>

@@ -47,12 +47,11 @@ describe('HttpOrganizationMembersAdapter', () => {
   })
 
   it('invites a new member into an organization', () => {
-    adapter.invite('org-1', 'florian', 'florian@example.com', true).subscribe()
+    adapter.invite('org-1', 'florian@example.com', true).subscribe()
 
     const request = httpMock.expectOne('/api/organizations/org-1/users')
     expect(request.request.method).toBe('POST')
     expect(request.request.body).toEqual({
-      username: 'florian',
       email: 'florian@example.com',
       is_organization_admin: true,
     })

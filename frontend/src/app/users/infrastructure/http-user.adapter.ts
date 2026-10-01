@@ -17,9 +17,8 @@ export class HttpUserAdapter implements UserPort {
     return this.http.get<UserSummary>(apiPath`/api/users/${id}`)
   }
 
-  create(username: string, email: string, isSuperAdmin: boolean): Observable<UserSummary> {
+  create(email: string, isSuperAdmin: boolean): Observable<UserSummary> {
     return this.http.post<UserSummary>('/api/users', {
-      username,
       email,
       is_super_admin: isSuperAdmin,
     })

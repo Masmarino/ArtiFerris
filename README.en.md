@@ -47,7 +47,7 @@ A hexagonal Rust backend, with an Angular 22 frontend served by the same binary.
 - Local accounts (Argon2), LDAP/Active Directory and OIDC. SAML is not supported.
 - Mandatory second factor (TOTP or passkey) with backup codes.
 - Personal API tokens; admins can list and revoke everyone's.
-- Per-repository permissions (`read`, `write`, `admin`), e-mail invitations, throttling of failed sign-ins.
+- Per-repository permissions (`read`, `write`, `admin`), e-mail invitations (the admin enters only the address, the invitee picks their username on activation), throttling of failed sign-ins.
 
 **Administration**
 - Usage metrics and history, health status, audit log and security log.

@@ -45,7 +45,7 @@ describe('CreateUserModal', () => {
     const fixture = TestBed.createComponent(CreateUserModal)
     fixture.detectChanges()
 
-    fixture.componentInstance.form.patchValue({ username: 'florian', email: 'florian@example.com' })
+    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
     const checkbox: HTMLInputElement = fixture.nativeElement.querySelector('input[type="checkbox"]')
     checkbox.checked = true
     checkbox.dispatchEvent(new Event('change'))
@@ -55,7 +55,6 @@ describe('CreateUserModal', () => {
 
     const request = httpMock.expectOne('/api/users')
     expect(request.request.body).toEqual({
-      username: 'florian',
       email: 'florian@example.com',
       is_super_admin: true,
     })
@@ -72,12 +71,11 @@ describe('CreateUserModal', () => {
     const fixture = TestBed.createComponent(CreateUserModal)
     fixture.detectChanges()
 
-    fixture.componentInstance.form.patchValue({ username: 'florian', email: 'florian@example.com' })
+    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
     fixture.componentInstance.submit()
 
     const request = httpMock.expectOne('/api/users')
     expect(request.request.body).toEqual({
-      username: 'florian',
       email: 'florian@example.com',
       is_super_admin: false,
     })
@@ -94,7 +92,7 @@ describe('CreateUserModal', () => {
     const fixture = TestBed.createComponent(CreateUserModal)
     fixture.detectChanges()
 
-    fixture.componentInstance.form.patchValue({ username: 'florian', email: 'florian@example.com' })
+    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
     fixture.componentInstance.submit()
 
     httpMock.expectOne('/api/users').flush({
@@ -107,7 +105,7 @@ describe('CreateUserModal', () => {
 
     expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
       variant: 'success',
-      message: 'Utilisateur « florian » créé.',
+      message: 'Invitation envoyée à florian@example.com.',
     })
   })
 
@@ -115,7 +113,7 @@ describe('CreateUserModal', () => {
     const fixture = TestBed.createComponent(CreateUserModal)
     fixture.detectChanges()
 
-    fixture.componentInstance.form.patchValue({ username: 'florian', email: 'florian@example.com' })
+    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
     fixture.componentInstance.submit()
 
     httpMock
@@ -136,7 +134,7 @@ describe('CreateUserModal', () => {
     const fixture = TestBed.createComponent(CreateUserModal)
     fixture.detectChanges()
 
-    fixture.componentInstance.form.patchValue({ username: 'florian', email: 'florian@example.com' })
+    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
     fixture.componentInstance.submit()
 
     httpMock
@@ -153,7 +151,7 @@ describe('CreateUserModal', () => {
     const fixture = TestBed.createComponent(CreateUserModal)
     fixture.detectChanges()
 
-    fixture.componentInstance.form.patchValue({ username: 'florian', email: 'florian@example.com' })
+    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
     fixture.componentInstance.submit()
 
     httpMock

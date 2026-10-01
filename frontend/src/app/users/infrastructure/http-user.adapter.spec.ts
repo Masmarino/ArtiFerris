@@ -26,10 +26,9 @@ describe('HttpUserAdapter', () => {
   it('creates a user via POST /api/users', () => {
     const { adapter, httpMock } = setup()
 
-    adapter.create('newuser', 'newuser@example.com', false).subscribe()
+    adapter.create('newuser@example.com', false).subscribe()
     const req = httpMock.expectOne('/api/users')
     expect(req.request.body).toEqual({
-      username: 'newuser',
       email: 'newuser@example.com',
       is_super_admin: false,
     })

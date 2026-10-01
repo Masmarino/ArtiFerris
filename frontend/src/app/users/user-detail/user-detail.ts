@@ -18,7 +18,7 @@ import { RepositoriesService } from '../../repositories/application/repositories
 import { RepositorySummary } from '../../repositories/domain/repository.entity'
 import { PageTitleService } from '../../shell/page-title.service'
 import { UsersService } from '../application/users.service'
-import { UserSummary } from '../domain/user.entity'
+import { UserSummary, displayName } from '../domain/user.entity'
 import { formatSelectedCount } from '../../shared/format'
 import { MeService } from '../../shell/application/me.service'
 import { ToastService } from '../../shared/toast.service'
@@ -54,7 +54,11 @@ export class UserDetail {
   readonly user = signal<UserSummary | null>(null)
   readonly loadError = signal(false)
   readonly selectedCountLabel = formatSelectedCount
-  readonly username = computed(() => this.user()?.username ?? '')
+  // An invited account has no username until it is activated: its address names it.
+  readonly username = computed(() => {
+    const user = this.user()
+    return user ? displayName(user) : ''
+  })
 
   // Super-admin status is not an organization-scoped right.
   readonly isSuperAdminViewer = computed(() => this.me.isSuperAdmin())
@@ -231,8 +235,8 @@ export class UserDetail {
     }
     const next = !user.is_super_admin
     const message = next
-      ? t('users.detail.promoteConfirm', { username: user.username })
-      : t('users.detail.demoteConfirm', { username: user.username })
+      ? t('users.detail.promoteConfirm', { username: displayName(user) })
+      : t('users.detail.demoteConfirm', { username: displayName(user) })
     const confirmed = await this.confirmService.ask({
       heading: next ? t('users.detail.promoteHeading') : t('users.detail.demoteHeading'),
       message,
@@ -249,8 +253,8 @@ export class UserDetail {
         this.reload()
         this.toastService.success(
           next
-            ? t('users.detail.promoted', { username: user.username })
-            : t('users.detail.demoted', { username: user.username }),
+            ? t('users.detail.promoted', { username: displayName(user) })
+            : t('users.detail.demoted', { username: displayName(user) }),
         )
       },
       error: (err: HttpErrorResponse) => {
@@ -289,10 +293,10 @@ export class UserDetail {
     }
     const confirmed = await this.confirmService.ask({
       heading: t('users.detail.delete'),
-      message: t('users.detail.deleteConfirm', { username: user.username }),
+      message: t('users.detail.deleteConfirm', { username: displayName(user) }),
       confirmLabel: t('common.delete'),
       danger: true,
-      typeToConfirm: user.username,
+      typeToConfirm: displayName(user),
     })
     if (!confirmed) {
       return
@@ -300,7 +304,7 @@ export class UserDetail {
     this.usersService.delete(user.id).subscribe({
       next: () => {
         this.router.navigate(['/users'])
-        this.toastService.success(t('users.detail.deleted', { username: user.username }))
+        this.toastService.success(t('users.detail.deleted', { username: displayName(user) }))
       },
       error: () => this.toastService.error(t('users.detail.errors.deleteFailed')),
     })

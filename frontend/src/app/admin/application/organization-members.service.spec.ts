@@ -45,9 +45,9 @@ describe('OrganizationMembersService', () => {
     )
     const service = setup({ list, invite })
 
-    service.invite('org-1', 'florian', 'florian@example.com', false).subscribe()
+    service.invite('org-1', 'florian@example.com', false).subscribe()
 
-    expect(invite).toHaveBeenCalledWith('org-1', 'florian', 'florian@example.com', false)
+    expect(invite).toHaveBeenCalledWith('org-1', 'florian@example.com', false)
   })
 
   it('delegates setOrganizationAdmin to the port', () => {

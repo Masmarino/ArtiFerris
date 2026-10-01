@@ -96,6 +96,15 @@ describe('audit event labels', () => {
     expect(auditEventDetails(entry('LoginThrottleCleared', null))).toBe('')
   })
 
+  it('names the invited address, or the username on events recorded before invitees chose their own', () => {
+    expect(
+      auditEventDetails(
+        entry('UserInvited', { email: 'alice@example.com', is_organization_admin: false }),
+      ),
+    ).toBe('alice@example.com')
+    expect(auditEventDetails(entry('UserInvited', { username: 'alice' }))).toBe('alice')
+  })
+
   it('never resolves a type to an inherited object member', () => {
     expect(auditEventLabel('constructor')).toBe('constructor')
     expect(auditEventLabel('toString')).toBe('toString')

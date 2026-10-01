@@ -47,6 +47,8 @@ pub(crate) async fn unusable_password_hash(hasher: &dyn PasswordHasherPort) -> R
     Ok(hasher.hash(&hex::encode(bytes)).await?)
 }
 
+const PLACEHOLDER_USERNAME_PREFIX: &str = "invite-";
+
 /// RFC 5321's limit on a whole address.
 const MAX_EMAIL_LEN: usize = 254;
 
@@ -89,20 +91,17 @@ impl InviteUserUseCase {
     }
 
     /// `organization_id` is normally the acting admin's own org, but a super-admin inviting an org's first local admin can pass any organization.
+    /// The invitee chooses their username when activating, so the pending account holds a placeholder until then.
     /// The `UserInvited` audit entry is written with the invitation; if that fails, the account is removed again.
-    pub async fn execute(&self, organization_id: Uuid, is_organization_admin: bool, username: &str, email: &str, is_super_admin: bool, actor_id: Uuid) -> Result<Uuid, ApplicationError> {
-        let username = Username::parse_new(username)?;
+    pub async fn execute(&self, organization_id: Uuid, is_organization_admin: bool, email: &str, is_super_admin: bool, actor_id: Uuid) -> Result<Uuid, ApplicationError> {
         validate_email(email)?;
-        if self.users.find_by_username(&username).await?.is_some() {
-            return Err(ApplicationError::UsernameTaken);
-        }
         if self.security.find_by_verified_email(organization_id, email).await?.is_some() {
             return Err(DomainError::EmailTaken.into());
         }
 
         let user = User {
             id: Uuid::new_v4(),
-            username,
+            username: self.placeholder_username().await?,
             password_hash: unusable_password_hash(self.hasher.as_ref()).await?,
             is_super_admin,
             is_organization_admin,
@@ -116,7 +115,7 @@ impl InviteUserUseCase {
 
         let token = generate_invitation_token();
         let audit = AdminAuditRecord {
-            event: AdminAuditEvent::UserInvited { user_id: user.id, organization_id, username: user.username.as_str().to_string(), is_organization_admin, is_super_admin },
+            event: AdminAuditEvent::UserInvited { user_id: user.id, organization_id, email: email.to_string(), is_organization_admin, is_super_admin },
             actor_id: Some(actor_id),
         };
         let invitation = UserInvitation { user_id: user.id, token_hash: hash_invitation_token(&token), expires_at: Utc::now() + Duration::hours(INVITATION_TTL_HOURS) };
@@ -136,12 +135,25 @@ impl InviteUserUseCase {
         let activation_url = format!("{origin}/activate?token={token}");
         // The invitee cannot have chosen a language yet: write in the one of the admin who invites them.
         let language = self.email.language_for(actor_id).await;
-        let content = crate::email_templates::account_created(language, user.username.as_str(), &activation_url);
+        let content = crate::email_templates::account_created(language, &activation_url);
         if let Err(e) = self.email.send(organization_id, email, &content.subject, &content.text, &content.html).await {
             tracing::warn!("failed to send account-activation email to {email}: {e}");
         }
 
         Ok(user.id)
+    }
+
+    /// A free `invite-<12 hex>` name, valid as a username and never shown once the invitee has chosen their own.
+    async fn placeholder_username(&self) -> Result<Username, ApplicationError> {
+        for _ in 0..5 {
+            let mut bytes = [0u8; 6];
+            rand::rng().fill_bytes(&mut bytes);
+            let candidate = Username::parse(&format!("{PLACEHOLDER_USERNAME_PREFIX}{}", hex::encode(bytes)))?;
+            if self.users.find_by_username(&candidate).await?.is_none() {
+                return Ok(candidate);
+            }
+        }
+        Err(ApplicationError::Domain(DomainError::Infrastructure("no free placeholder username".to_string())))
     }
 }
 
@@ -184,7 +196,7 @@ impl ResendInvitationUseCase {
         let origin = organization_origin(&self.artiferris_base_domain, &organization);
         let activation_url = format!("{origin}/activate?token={token}");
         let language = self.email.language_for(actor_id).await;
-        let content = crate::email_templates::account_created(language, user.username.as_str(), &activation_url);
+        let content = crate::email_templates::account_created(language, &activation_url);
         self.email.send(user.organization_id, email, &content.subject, &content.text, &content.html).await?;
         Ok(())
     }
@@ -202,19 +214,26 @@ impl ActivateAccountUseCase {
         Self { users, security, invitations, hasher }
     }
 
-    /// The id of the account that was activated.
-    pub async fn execute(&self, token: &str, new_password: &str) -> Result<Uuid, ApplicationError> {
+    /// `username` is the name the invitee chose. It is checked before the invitation is redeemed, and again by the
+    /// database at write time, so a name taken in between still ends in `UsernameTaken`. Returns the id of the account
+    /// that was activated.
+    pub async fn execute(&self, token: &str, username: &str, new_password: &str) -> Result<Uuid, ApplicationError> {
         let invitation = self.invitations.find_by_token_hash(&hash_invitation_token(token)).await?.ok_or(ApplicationError::InvitationNotFound)?;
         if invitation.expires_at < Utc::now() {
             return Err(ApplicationError::InvitationExpired);
         }
+        let username = Username::parse_new(username)?;
         let password = Password::parse(new_password)?;
+        let user = self.users.find_by_id(invitation.user_id).await?.ok_or(ApplicationError::InvitationNotFound)?;
+        if user.username != username && self.users.find_by_username(&username).await?.is_some() {
+            return Err(ApplicationError::UsernameTaken);
+        }
         let hash = self.hasher.hash(password.as_str()).await?;
 
         // Of several parallel activations only one gets the invitation.
         let redeemed = self.invitations.redeem(&invitation.token_hash).await?.ok_or(ApplicationError::InvitationNotFound)?;
         // Put the invitation back on failure so the mailed link still works.
-        if let Err(e) = self.set_password_and_verify_email(redeemed.user_id, hash).await {
+        if let Err(e) = self.set_username_password_and_verify_email(redeemed.user_id, &username, hash).await {
             if let Err(restore_error) = self.invitations.upsert(&redeemed, None).await {
                 tracing::error!("failed to restore invitation of user {} after a failed activation: {restore_error}", redeemed.user_id);
             }
@@ -224,11 +243,11 @@ impl ActivateAccountUseCase {
     }
 
     /// Redeeming the invitation is what proves the address, so it's verified here and not at invite time.
-    /// The `UserActivated` audit entry is written with the password.
-    async fn set_password_and_verify_email(&self, user_id: Uuid, password_hash: String) -> Result<(), ApplicationError> {
+    /// The `UserActivated` audit entry is written with the username and the password.
+    async fn set_username_password_and_verify_email(&self, user_id: Uuid, username: &Username, password_hash: String) -> Result<(), ApplicationError> {
         let user = self.users.find_by_id(user_id).await?.ok_or(ApplicationError::InvitationNotFound)?;
         let audit = AuditRecord::Admin(AdminAuditRecord { event: AdminAuditEvent::UserActivated { user_id, organization_id: user.organization_id }, actor_id: Some(user_id) });
-        self.users.update_password(user_id, password_hash, Some(&audit)).await?;
+        self.security.activate_invited(user_id, username, password_hash, Some(&audit)).await?;
         self.security.mark_email_verified(user_id).await?;
         Ok(())
     }
@@ -271,6 +290,20 @@ mod tests {
         async fn insert_with_verified_email(&self, user: &User) -> Result<(), DomainError> {
             self.users.lock().unwrap().insert(user.id, user.clone());
             self.verified.lock().unwrap().insert(user.id);
+            Ok(())
+        }
+        async fn activate_invited(&self, id: Uuid, username: &Username, new_password_hash: String, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
+            if self.fail_update_password.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(DomainError::Infrastructure("update failed".to_string()));
+            }
+            let mut users = self.users.lock().unwrap();
+            if users.values().any(|u| u.id != id && &u.username == username) {
+                return Err(DomainError::UsernameTaken);
+            }
+            if let Some(user) = users.get_mut(&id) {
+                user.username = username.clone();
+                user.password_hash = new_password_hash;
+            }
             Ok(())
         }
         async fn mark_email_verified(&self, id: Uuid) -> Result<bool, DomainError> {
@@ -476,7 +509,7 @@ mod tests {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher, email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
 
-        let id = use_case.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let user = users.find_by_id(id).await.unwrap().unwrap();
         assert_eq!(user.email.as_deref(), Some("florian@example.com"));
@@ -494,7 +527,7 @@ mod tests {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
 
-        use_case.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         assert!(users.find_by_verified_email(organization_id, "florian@example.com").await.unwrap().is_none());
     }
@@ -503,10 +536,10 @@ mod tests {
     async fn an_email_verified_in_the_organization_cannot_be_invited_again() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
-        let first = use_case.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let first = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         users.mark_email_verified(first).await.unwrap();
 
-        let err = use_case.execute(organization_id, false, "florian2", "florian@example.com", false, Uuid::new_v4()).await.unwrap_err();
+        let err = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap_err();
 
         assert!(matches!(err, ApplicationError::Domain(DomainError::EmailTaken)), "got {err:?}");
     }
@@ -517,10 +550,10 @@ mod tests {
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations.clone(), TEST_BASE_DOMAIN.to_string());
         let other_organization_id = Uuid::new_v4();
         organizations.create(&Organization { id: other_organization_id, slug: OrganizationSlug::parse("acme").unwrap(), display_name: "Acme".to_string(), is_public: false, is_personal: false, created_at: Utc::now() }).await.unwrap();
-        let first = use_case.execute(other_organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let first = use_case.execute(other_organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         users.mark_email_verified(first).await.unwrap();
 
-        use_case.execute(organization_id, false, "florian2", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
     }
 
     #[tokio::test]
@@ -533,7 +566,7 @@ mod tests {
             .unwrap();
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
 
-        let id = use_case.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let user = users.find_by_id(id).await.unwrap().unwrap();
         assert_eq!(user.organization_id, organization_id);
@@ -549,29 +582,24 @@ mod tests {
             .unwrap();
         let use_case = InviteUserUseCase::new(users.clone(), users, invitations, hasher, email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
 
-        use_case.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let sent = email.sent.lock().unwrap();
         assert!(sent[0].3.contains("https://acme.artiferris.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
     }
 
     #[tokio::test]
-    async fn rejects_a_duplicate_username() {
+    async fn an_invited_account_holds_a_placeholder_username_until_activation() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
-        let use_case = InviteUserUseCase::new(users.clone(), users, invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
-        use_case.execute(organization_id, false, "florian", "a@example.com", false, Uuid::new_v4()).await.unwrap();
+        let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
 
-        let err = use_case.execute(organization_id, false, "florian", "b@example.com", false, Uuid::new_v4()).await.unwrap_err();
-        assert!(matches!(err, ApplicationError::UsernameTaken));
-    }
+        let first = use_case.execute(organization_id, false, "a@example.com", false, Uuid::new_v4()).await.unwrap();
+        let second = use_case.execute(organization_id, false, "b@example.com", false, Uuid::new_v4()).await.unwrap();
 
-    #[tokio::test]
-    async fn rejects_a_username_using_the_reserved_prefix() {
-        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
-        let use_case = InviteUserUseCase::new(users.clone(), users, invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
-
-        let err = use_case.execute(organization_id, false, "ArtiFerris-docker", "a@example.com", false, Uuid::new_v4()).await.unwrap_err();
-        assert!(matches!(err, ApplicationError::Domain(DomainError::ReservedName(_))));
+        let first = users.find_by_id(first).await.unwrap().unwrap();
+        let second = users.find_by_id(second).await.unwrap().unwrap();
+        assert!(first.username.as_str().starts_with(PLACEHOLDER_USERNAME_PREFIX));
+        assert_ne!(first.username, second.username);
     }
 
     #[tokio::test]
@@ -579,7 +607,7 @@ mod tests {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let use_case = InviteUserUseCase::new(users.clone(), users, invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
 
-        let err = use_case.execute(organization_id, false, "florian", "not-an-email", false, Uuid::new_v4()).await.unwrap_err();
+        let err = use_case.execute(organization_id, false, "not-an-email", false, Uuid::new_v4()).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidEmail(_)));
     }
 
@@ -587,7 +615,7 @@ mod tests {
     async fn an_invited_user_cannot_log_in_before_activating() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher.clone(), email, organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let user = users.find_by_id(id).await.unwrap().unwrap();
         assert!(!hasher.verify("anything", &user.password_hash).await.unwrap(), "no plaintext should verify against the placeholder hash");
@@ -603,11 +631,11 @@ mod tests {
     async fn activates_an_account_with_a_valid_token() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         let token = extract_token_from_last_email(&email);
 
         let activate = ActivateAccountUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone());
-        let activated = activate.execute(&token, "new-s3cret!").await.unwrap();
+        let activated = activate.execute(&token, "florian", "new-s3cret!").await.unwrap();
 
         assert_eq!(activated, id);
         let user = users.find_by_id(id).await.unwrap().unwrap();
@@ -619,10 +647,10 @@ mod tests {
     async fn activation_verifies_the_invited_email() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         let token = extract_token_from_last_email(&email);
 
-        ActivateAccountUseCase::new(users.clone(), users.clone(), invitations, hasher).execute(&token, "new-s3cret!").await.unwrap();
+        ActivateAccountUseCase::new(users.clone(), users.clone(), invitations, hasher).execute(&token, "florian", "new-s3cret!").await.unwrap();
 
         assert_eq!(users.find_by_verified_email(organization_id, "florian@example.com").await.unwrap().map(|u| u.id), Some(id));
     }
@@ -631,13 +659,13 @@ mod tests {
     async fn two_parallel_activations_with_one_token_let_exactly_one_through() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         let token = extract_token_from_last_email(&email);
         let activate = Arc::new(ActivateAccountUseCase::new(users.clone(), users, invitations, hasher));
 
         let (first, second) = tokio::join!(
-            { let activate = activate.clone(); let token = token.clone(); tokio::spawn(async move { activate.execute(&token, "first-s3cret!").await }) },
-            { let activate = activate.clone(); let token = token.clone(); tokio::spawn(async move { activate.execute(&token, "second-s3cret!").await }) },
+            { let activate = activate.clone(); let token = token.clone(); tokio::spawn(async move { activate.execute(&token, "florian", "first-s3cret!").await }) },
+            { let activate = activate.clone(); let token = token.clone(); tokio::spawn(async move { activate.execute(&token, "florian", "second-s3cret!").await }) },
         );
         let results = [first.unwrap(), second.unwrap()];
 
@@ -649,16 +677,60 @@ mod tests {
     async fn a_failed_activation_leaves_the_link_usable() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         let token = extract_token_from_last_email(&email);
         let activate = ActivateAccountUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher);
 
         users.fail_update_password.store(true, std::sync::atomic::Ordering::SeqCst);
-        assert!(activate.execute(&token, "new-s3cret!").await.is_err());
+        assert!(activate.execute(&token, "florian", "new-s3cret!").await.is_err());
         assert!(invitations.find_by_user_id(id).await.unwrap().is_some(), "the invitation must survive a failure between redeeming and setting the password");
 
         users.fail_update_password.store(false, std::sync::atomic::Ordering::SeqCst);
-        activate.execute(&token, "new-s3cret!").await.unwrap();
+        activate.execute(&token, "florian", "new-s3cret!").await.unwrap();
+    }
+
+    async fn invite_and_token(users: &Arc<FakeUsers>, invitations: &Arc<FakeInvitations>, hasher: &Arc<FakeHasher>, email: &Arc<FakeEmail>, organizations: Arc<FakeOrganizations>, organization_id: Uuid, address: &str) -> (Uuid, String) {
+        let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
+        let id = invite.execute(organization_id, false, address, false, Uuid::new_v4()).await.unwrap();
+        (id, extract_token_from_last_email(email))
+    }
+
+    #[tokio::test]
+    async fn activation_sets_the_username_the_invitee_chose() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let (id, token) = invite_and_token(&users, &invitations, &hasher, &email, organizations, organization_id, "florian@example.com").await;
+
+        ActivateAccountUseCase::new(users.clone(), users.clone(), invitations, hasher).execute(&token, "Florian", "new-s3cret!").await.unwrap();
+
+        assert_eq!(users.find_by_id(id).await.unwrap().unwrap().username.as_str(), "florian");
+    }
+
+    #[tokio::test]
+    async fn activation_refuses_a_username_another_account_holds_and_keeps_the_link_usable() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let (_, first_token) = invite_and_token(&users, &invitations, &hasher, &email, organizations.clone(), organization_id, "a@example.com").await;
+        let activate = ActivateAccountUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone());
+        activate.execute(&first_token, "florian", "new-s3cret!").await.unwrap();
+        let (second_id, second_token) = invite_and_token(&users, &invitations, &hasher, &email, organizations, organization_id, "b@example.com").await;
+
+        let err = activate.execute(&second_token, "FLORIAN", "new-s3cret!").await.unwrap_err();
+
+        assert!(matches!(err, ApplicationError::UsernameTaken), "got {err:?}");
+        assert!(invitations.find_by_user_id(second_id).await.unwrap().is_some(), "the invitation must survive a refused username");
+        activate.execute(&second_token, "florian2", "new-s3cret!").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn activation_rejects_an_invalid_or_reserved_username() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let (_, token) = invite_and_token(&users, &invitations, &hasher, &email, organizations, organization_id, "a@example.com").await;
+        let activate = ActivateAccountUseCase::new(users.clone(), users, invitations, hasher);
+
+        let reserved = activate.execute(&token, "ArtiFerris-docker", "new-s3cret!").await.unwrap_err();
+        let short = activate.execute(&token, "ab", "new-s3cret!").await.unwrap_err();
+
+        assert!(matches!(reserved, ApplicationError::Domain(DomainError::ReservedName(_))), "got {reserved:?}");
+        assert!(matches!(short, ApplicationError::Domain(DomainError::InvalidUsername(_))), "got {short:?}");
     }
 
     #[tokio::test]
@@ -666,7 +738,7 @@ mod tests {
         let (users, invitations, hasher, _email, _organizations, _organization_id) = setup().await;
         let activate = ActivateAccountUseCase::new(users.clone(), users, invitations, hasher);
 
-        let err = activate.execute("not-a-real-token", "new-s3cret!").await.unwrap_err();
+        let err = activate.execute("not-a-real-token", "florian", "new-s3cret!").await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvitationNotFound));
     }
 
@@ -691,7 +763,7 @@ mod tests {
         invitations.upsert(&UserInvitation { user_id, token_hash: hash_invitation_token("raw-token"), expires_at: Utc::now() - Duration::hours(1) }, None).await.unwrap();
 
         let activate = ActivateAccountUseCase::new(users.clone(), users, invitations, hasher);
-        let err = activate.execute("raw-token", "new-s3cret!").await.unwrap_err();
+        let err = activate.execute("raw-token", "florian", "new-s3cret!").await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvitationExpired));
     }
 
@@ -699,7 +771,7 @@ mod tests {
     async fn resends_an_invitation_with_a_fresh_token() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         let first_token_hash = invitations.find_by_user_id(id).await.unwrap().unwrap().token_hash;
 
         let resend = ResendInvitationUseCase::new(users, invitations.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
@@ -723,7 +795,7 @@ mod tests {
     async fn resending_for_an_already_activated_user_fails() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
         invitations.delete(id).await.unwrap(); // simulates a completed activation
 
         let resend = ResendInvitationUseCase::new(users, invitations, email, organizations, TEST_BASE_DOMAIN.to_string());
@@ -740,7 +812,7 @@ mod tests {
             .await
             .unwrap();
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher, email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian", "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let resend = ResendInvitationUseCase::new(users, invitations, email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
         resend.execute(id, Uuid::new_v4()).await.unwrap();
@@ -768,7 +840,7 @@ mod tests {
         let (_, invitations, hasher, email, _fake_organizations, _fake_organization_id) = setup().await;
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, "localhost".to_string());
 
-        let user_id = use_case.execute(organization_id, true, "acme-admin", "admin@acme.example", false, Uuid::new_v4()).await.unwrap();
+        let user_id = use_case.execute(organization_id, true, "admin@acme.example", false, Uuid::new_v4()).await.unwrap();
 
         let created = users.find_by_id(user_id).await.unwrap().unwrap();
         assert_eq!(created.organization_id, organization_id);

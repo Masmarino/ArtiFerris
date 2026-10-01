@@ -128,7 +128,7 @@ async fn send_invitations(email: Arc<dyn artiferris_domain::email::EmailPort>, o
     let results = futures::stream::iter(invitations.into_iter().map(|invitation| {
         let email = email.clone();
         async move {
-            let content = crate::email_templates::account_created(language, &invitation.username, &invitation.activation_url);
+            let content = crate::email_templates::account_created(language, &invitation.activation_url);
             let sent = email.send(organization_id, &invitation.email, &content.subject, &content.text, &content.html).await;
             (invitation.username, sent)
         }

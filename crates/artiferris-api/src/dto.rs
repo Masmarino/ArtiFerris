@@ -83,6 +83,7 @@ pub struct ChangePasswordRequest {
 #[derive(Debug, Deserialize)]
 pub struct ActivateAccountRequest {
     pub token: String,
+    pub username: String,
     pub new_password: String,
 }
 

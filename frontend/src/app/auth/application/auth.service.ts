@@ -104,8 +104,8 @@ export class AuthService {
     )
   }
 
-  activate(token: string, newPassword: string): Observable<void> {
-    return this.port.activate(token, newPassword)
+  activate(token: string, username: string, newPassword: string): Observable<void> {
+    return this.port.activate(token, username, newPassword)
   }
 
   logoutEverywhere(): Observable<void> {

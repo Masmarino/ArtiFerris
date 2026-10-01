@@ -29,8 +29,12 @@ export class HttpAuthAdapter implements AuthPort {
     return this.http.post<LoginResponse>('/api/auth/sso/ldap', { username, password })
   }
 
-  activate(token: string, newPassword: string): Observable<void> {
-    return this.http.post<void>('/api/auth/activate', { token, new_password: newPassword })
+  activate(token: string, username: string, newPassword: string): Observable<void> {
+    return this.http.post<void>('/api/auth/activate', {
+      token,
+      username,
+      new_password: newPassword,
+    })
   }
 
   logoutAll(): Observable<void> {

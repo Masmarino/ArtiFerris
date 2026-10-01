@@ -100,14 +100,14 @@ async fn new_org_admin(state: &AppState, organization_id: Uuid, username: &str) 
 async fn inviting_and_deleting_a_user_are_recorded(pool: sqlx::PgPool) {
     let f = fixture(pool).await;
 
-    let (status, created) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "username": "invitee", "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": true }))).await;
+    let (status, created) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": true }))).await;
     assert_eq!(status, StatusCode::CREATED);
     let user_id = created["id"].as_str().unwrap().to_string();
     let invited = the_only(&f.state, "UserInvited").await;
     assert_eq!(invited.actor_id, Some(f.admin_id));
     assert_eq!(invited.organization_id, Some(public_org()));
     assert_eq!(invited.payload["user_id"], user_id);
-    assert_eq!(invited.payload["username"], "invitee");
+    assert_eq!(invited.payload["email"], "invitee@example.com");
     assert_eq!(invited.payload["is_organization_admin"], true);
 
     let (status, _) = send(&f.app, "DELETE", &format!("/api/users/{user_id}"), &f.admin_token, None).await;
@@ -115,7 +115,7 @@ async fn inviting_and_deleting_a_user_are_recorded(pool: sqlx::PgPool) {
     let deleted = the_only(&f.state, "UserDeleted").await;
     assert_eq!(deleted.actor_id, Some(f.admin_id));
     assert_eq!(deleted.payload["user_id"], user_id);
-    assert_eq!(deleted.payload["username"], "invitee");
+    assert!(deleted.payload["username"].as_str().unwrap().starts_with("invite-"), "a never-activated account holds its placeholder name");
 }
 
 #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -124,7 +124,7 @@ async fn an_organization_admin_inviting_a_member_is_recorded_under_their_organiz
     let acme = f.state.create_organization.execute("acme", "Acme").await.unwrap();
     let (org_admin_id, org_admin_token) = new_org_admin(&f.state, acme, "acme-admin").await;
 
-    let (status, _) = send(&f.app, "POST", &format!("/api/organizations/{acme}/users"), &org_admin_token, Some(serde_json::json!({ "username": "member", "email": "member@acme.example" }))).await;
+    let (status, _) = send(&f.app, "POST", &format!("/api/organizations/{acme}/users"), &org_admin_token, Some(serde_json::json!({ "email": "member@acme.example" }))).await;
 
     assert_eq!(status, StatusCode::CREATED);
     let invited = the_only(&f.state, "UserInvited").await;
@@ -436,8 +436,8 @@ async fn an_organization_admin_sees_their_admin_and_security_events_but_not_anot
     let globex = f.state.create_organization.execute("globex", "Globex").await.unwrap();
     let (_, acme_token) = new_org_admin(&f.state, acme, "acme-admin").await;
     let (globex_admin_id, _) = new_org_admin(&f.state, globex, "globex-admin").await;
-    send(&f.app, "POST", &format!("/api/organizations/{acme}/users"), &acme_token, Some(serde_json::json!({ "username": "acme-member", "email": "m@acme.example" }))).await;
-    send(&f.app, "POST", &format!("/api/organizations/{globex}/users"), &f.admin_token, Some(serde_json::json!({ "username": "globex-member", "email": "m@globex.example" }))).await;
+    send(&f.app, "POST", &format!("/api/organizations/{acme}/users"), &acme_token, Some(serde_json::json!({ "email": "m@acme.example" }))).await;
+    send(&f.app, "POST", &format!("/api/organizations/{globex}/users"), &f.admin_token, Some(serde_json::json!({ "email": "m@globex.example" }))).await;
     f.state.record_admin_event.execute(artiferris_domain::audit::AdminAuditEvent::ConfigurationExported { users: 1, repositories: 0, permissions: 0 }, Some(f.admin_id)).await.unwrap();
     f.state.record_security_event.execute(artiferris_domain::audit::SecurityEvent::LoginFailed { username: "nobody".to_string(), ip: "10.0.0.1".to_string() }, None).await.unwrap();
     f.state.record_security_event.execute(artiferris_domain::audit::SecurityEvent::PasswordChanged { user_id: globex_admin_id, organization_id: globex }, Some(globex_admin_id)).await.unwrap();
@@ -452,7 +452,7 @@ async fn an_organization_admin_sees_their_admin_and_security_events_but_not_anot
     assert!(!types.contains(&"PasswordChanged"), "another organization's security events stay out");
     let invited: Vec<_> = page["entries"].as_array().unwrap().iter().filter(|e| e["event_type"] == "UserInvited").collect();
     assert_eq!(invited.len(), 1);
-    assert_eq!(invited[0]["payload"]["username"], "acme-member");
+    assert_eq!(invited[0]["payload"]["email"], "m@acme.example");
 
     let (_, everything) = send(&f.app, "GET", "/api/audit/events", &f.admin_token, None).await;
     let all_types: Vec<&str> = everything["entries"].as_array().unwrap().iter().map(|e| e["event_type"].as_str().unwrap()).collect();
@@ -466,7 +466,7 @@ async fn a_quiet_organization_still_sees_its_events_behind_a_flood_from_others(p
     let f = fixture(pool.clone()).await;
     let acme = f.state.create_organization.execute("acme", "Acme").await.unwrap();
     let (_, acme_token) = new_org_admin(&f.state, acme, "acme-admin").await;
-    send(&f.app, "POST", &format!("/api/organizations/{acme}/users"), &acme_token, Some(serde_json::json!({ "username": "acme-member", "email": "m@acme.example" }))).await;
+    send(&f.app, "POST", &format!("/api/organizations/{acme}/users"), &acme_token, Some(serde_json::json!({ "email": "m@acme.example" }))).await;
     sqlx::query(
         "INSERT INTO domain_events (aggregate_type, aggregate_id, event_type, payload, version, organization_id) \
          SELECT 'Admin', gen_random_uuid()::text, 'UserInvited', '{}'::jsonb, 1, gen_random_uuid() FROM generate_series(1, 300)",
@@ -477,7 +477,7 @@ async fn a_quiet_organization_still_sees_its_events_behind_a_flood_from_others(p
 
     let (_, page) = send(&f.app, "GET", "/api/audit/events", &acme_token, None).await;
 
-    assert!(page["entries"].as_array().unwrap().iter().any(|e| e["event_type"] == "UserInvited" && e["payload"]["username"] == "acme-member"));
+    assert!(page["entries"].as_array().unwrap().iter().any(|e| e["event_type"] == "UserInvited" && e["payload"]["email"] == "m@acme.example"));
 }
 
 #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -575,7 +575,7 @@ async fn an_organization_admins_actions_leave_a_scoped_secret_free_trail_that_ag
 
     let idp = serde_json::json!({ "type": "oidc", "issuer_url": "https://attacker.example", "client_id": "evil", "client_secret": SECRET });
     assert_eq!(send(&app, "PUT", &format!("/api/organizations/{acme}/identity-provider"), &acme_admin, Some(idp)).await.0, StatusCode::NO_CONTENT);
-    let invite = serde_json::json!({ "username": "acme-member", "email": "member@acme.example" });
+    let invite = serde_json::json!({ "email": "member@acme.example" });
     assert_eq!(send(&app, "POST", &format!("/api/organizations/{acme}/users"), &acme_admin, Some(invite)).await.0, StatusCode::CREATED);
     let repository = serde_json::json!({ "name": "libs", "format": "npm", "repo_type": "hosted", "remote_url": null });
     assert_eq!(send(&app, "POST", "/api/repositories", &root, Some(repository)).await.0, StatusCode::CREATED);
@@ -747,7 +747,7 @@ async fn an_invitation_is_rolled_back_when_its_audit_row_cannot_be_written(pool:
     let f = fixture(pool.clone()).await;
     break_audit_writes(&pool).await;
 
-    let (status, _) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "username": "invitee", "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": false }))).await;
+    let (status, _) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": false }))).await;
 
     assert!(status.is_server_error(), "{status}");
     let username = artiferris_domain::user::Username::parse("invitee").unwrap();
@@ -757,7 +757,7 @@ async fn an_invitation_is_rolled_back_when_its_audit_row_cannot_be_written(pool:
 #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
 async fn a_resent_invitation_keeps_the_old_link_when_its_audit_row_cannot_be_written(pool: sqlx::PgPool) {
     let f = fixture(pool.clone()).await;
-    let (_, created) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "username": "invitee", "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": false }))).await;
+    let (_, created) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": false }))).await;
     let user_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
     let before = f.state.user_invitations.find_by_user_id(user_id).await.unwrap().unwrap();
     break_audit_writes(&pool).await;
@@ -771,7 +771,7 @@ async fn a_resent_invitation_keeps_the_old_link_when_its_audit_row_cannot_be_wri
 #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
 async fn an_activation_is_rolled_back_when_its_audit_row_cannot_be_written(pool: sqlx::PgPool) {
     let f = fixture(pool.clone()).await;
-    let (_, created) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "username": "invitee", "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": false }))).await;
+    let (_, created) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": false }))).await;
     let user_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
     let token = "known-activation-token";
     f.state
@@ -782,7 +782,7 @@ async fn an_activation_is_rolled_back_when_its_audit_row_cannot_be_written(pool:
     let hash_before = f.state.users.find_by_id(user_id).await.unwrap().unwrap().password_hash;
     break_audit_writes(&pool).await;
 
-    let (status, _) = send(&f.app, "POST", "/api/auth/activate", "", Some(serde_json::json!({ "token": token, "new_password": "an0ther-s3cret!" }))).await;
+    let (status, _) = send(&f.app, "POST", "/api/auth/activate", "", Some(serde_json::json!({ "token": token, "username": "chosen-name", "new_password": "an0ther-s3cret!" }))).await;
 
     assert!(status.is_server_error(), "{status}");
     assert_eq!(f.state.users.find_by_id(user_id).await.unwrap().unwrap().password_hash, hash_before, "the password did not change");
@@ -938,7 +938,7 @@ async fn regenerating_backup_codes_and_resending_an_invitation_are_recorded(pool
         assert!(!entry.payload.to_string().contains(backup_code.as_str().unwrap()));
     }
 
-    let (status, invited) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "username": "invitee", "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": false }))).await;
+    let (status, invited) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": false }))).await;
     assert_eq!(status, StatusCode::CREATED);
     let invitee = invited["id"].as_str().unwrap();
     assert_eq!(send(&f.app, "POST", &format!("/api/users/{invitee}/resend-invitation"), &f.admin_token, None).await.0, StatusCode::NO_CONTENT);

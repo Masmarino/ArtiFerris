@@ -274,12 +274,16 @@
       "impossibleHeading": "Activation impossible",
       "tokenMissing": "Invalid activation link: no token provided.",
       "heading": "Activate your account",
+      "username": "Username",
+      "usernameHint": "3 to 32 characters, starting with a letter: letters, digits, “_” and “-”.",
       "newPassword": "New password",
       "confirmPassword": "Confirm the password",
       "mismatch": "The passwords do not match.",
       "submit": "Activate my account",
       "errors": {
-        "invalidLink": "This activation link is invalid or has expired. Ask an administrator to send you a new invitation."
+        "invalidLink": "This activation link is invalid or has expired. Ask an administrator to send you a new invitation.",
+        "usernameTaken": "This username is already taken.",
+        "invalidUsername": "Invalid username: 3 to 32 characters, must start with a letter."
       }
     }
   },
@@ -539,12 +543,12 @@
       "resent": "Invitation resent."
     },
     "create": {
-      "created": "User “{{ username }}” created.",
+      "created": "Invitation sent to {{ email }}.",
       "heading": "New user",
       "username": "Username",
       "email": "Email address",
       "superAdmin": "Super administrator",
-      "inviteNote": "An email will be sent to this address so that the user can activate their account and choose their password, within 24 hours.",
+      "inviteNote": "An email will be sent to this address so that the user can activate their account and choose their username and password, within 24 hours.",
       "invite": "Invite",
       "errors": {
         "createFailed": "Failed to create the user."
@@ -1209,7 +1213,7 @@
       "demote": "Demote",
       "promoted": "{{ username }} is now an administrator of the organization.",
       "demoted": "{{ username }} is no longer an administrator of the organization.",
-      "invited": "{{ username }} has been invited.",
+      "invited": "Invitation sent to {{ email }}.",
       "demoteHint": "Removes the administration rights on this organization.",
       "promoteHint": "Gives full administration rights on this organization.",
       "caption": "Organization members",
