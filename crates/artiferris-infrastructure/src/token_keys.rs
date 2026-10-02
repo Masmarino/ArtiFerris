@@ -13,6 +13,11 @@ pub fn rate_limit_hash_key(jwt_secret: &str) -> [u8; 32] {
     derive_signing_key(jwt_secret, "rate-limit")
 }
 
+/// Keys the hash the login throttle stores in place of an address or a throttle key, the same on every instance.
+pub fn login_attempt_hash_key(jwt_secret: &str) -> [u8; 32] {
+    derive_signing_key(jwt_secret, "login-attempts")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

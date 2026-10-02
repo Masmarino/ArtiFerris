@@ -569,7 +569,7 @@ fn build_docker_state(
             token_issuer,
             resolve_personal_repository.clone(),
         )),
-        login_throttle: artiferris_application::login_throttle::LoginThrottle::new(),
+        login_throttle: state.login_throttle.clone(),
         guard,
         record_security_event: Arc::new(artiferris_application::use_cases::admin::RecordSecurityEventUseCase::new(state.events.clone())),
         start_upload: start_upload.clone(),

@@ -252,8 +252,8 @@ fn actor_event_budget(event: &artiferris_domain::audit::SecurityEvent) -> Option
 pub async fn record_security_event(state: &AppState, event: artiferris_domain::audit::SecurityEvent, actor_id: Option<uuid::Uuid>) {
     if let (Some(actor_id), Some((group, limit))) = (actor_id, actor_event_budget(&event)) {
         let key = format!("{group}:{actor_id}");
-        if !state.audit_throttle.reserve(&key, limit, ACTOR_EVENT_WINDOW) {
-            if state.audit_throttle.reserve(&format!("{key}:warned"), 1, ACTOR_EVENT_WARNING_WINDOW) {
+        if !state.audit_throttle.reserve(&key, limit, ACTOR_EVENT_WINDOW).await {
+            if state.audit_throttle.reserve(&format!("{key}:warned"), 1, ACTOR_EVENT_WARNING_WINDOW).await {
                 tracing::warn!("{actor_id} is over the audit budget for {group} events ({limit} per minute), further ones are not recorded");
             }
             return;
@@ -341,7 +341,7 @@ impl AppState {
             }
         });
         let passkey_ceremonies = Arc::new(PasskeyCeremonyStore::new());
-        let login_throttle = LoginThrottle::new();
+        let login_throttle = LoginThrottle::new(Arc::new(artiferris_infrastructure::postgres::login_attempt_store::PostgresLoginAttemptStore::new(pool.clone(), &artiferris_infrastructure::login_attempt_hash_key(&config.jwt_secret))));
         // A pending token lives 5 minutes; the extra minutes cover the JWT library's clock-skew leeway.
         let used_mfa_tokens = SingleUseTokens::new(std::time::Duration::from_secs(10 * 60), Arc::new(artiferris_infrastructure::postgres::single_use_token_store::PostgresSingleUseTokenStore::new(pool.clone())));
         let user_security: Arc<dyn UserSecurityPort> = users_repo.clone();
@@ -523,7 +523,7 @@ impl AppState {
             anonymous_limiter: Arc::new(artiferris_application::rate_limiter::RateLimiter::new(&artiferris_infrastructure::rate_limit_hash_key(&config.jwt_secret))),
             rate_limit_store: Arc::new(artiferris_infrastructure::postgres::rate_limit_store::PostgresRateLimitStore::new(pool.clone())),
             anonymous_registry_reads_per_minute: artiferris_application::rate_limiter::parse_anonymous_registry_reads_per_minute(std::env::var("ANONYMOUS_REGISTRY_READS_PER_MINUTE").ok().as_deref()).unwrap_or_else(|message| panic!("{message}")),
-            audit_throttle: LoginThrottle::new(),
+            audit_throttle: LoginThrottle::in_memory(),
             get_system_settings: Arc::new(GetSystemSettingsUseCase::new(system_settings.clone())),
             update_system_settings,
             get_smtp_settings: Arc::new(GetSmtpSettingsUseCase::new(smtp_settings.clone())),

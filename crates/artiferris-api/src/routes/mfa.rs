@@ -53,17 +53,17 @@ struct TotpEnrollmentResponse {
 async fn enroll_totp(State(state): State<AppState>, user: AuthUser, Json(body): Json<CurrentPasswordRequest>) -> Result<Json<TotpEnrollmentResponse>, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = manage_throttle_key(user.id);
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err(throttled_response());
     }
     match state.enroll_totp.execute(user.id, &user.username, Some(&body.current_password)).await {
         Ok(enrollment) => {
-            state.login_throttle.clear(&throttle_key);
+            state.login_throttle.clear(&throttle_key).await;
             Ok(Json(TotpEnrollmentResponse { secret: enrollment.secret_base32, otpauth_url: enrollment.otpauth_url }))
         }
         Err(e) => {
             if !matches!(e, ApplicationError::InvalidCredentials) {
-                state.login_throttle.release(&throttle_key);
+                state.login_throttle.release(&throttle_key).await;
             }
             Err(application_error_response("failed to enroll TOTP", e))
         }
@@ -83,18 +83,18 @@ struct BackupCodesResponse {
 async fn confirm_totp(State(state): State<AppState>, user: AuthUser, Json(body): Json<ConfirmTotpRequest>) -> Result<Json<BackupCodesResponse>, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = manage_throttle_key(user.id);
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err(throttled_response());
     }
     match state.confirm_totp.execute(user.id, &user.username, &body.code).await {
         Ok(codes) => {
-            state.login_throttle.clear(&throttle_key);
+            state.login_throttle.clear(&throttle_key).await;
             crate::state::record_security_event(&state, SecurityEvent::MfaEnabled { user_id: user.id, organization_id: user.organization_id, method: MfaMethod::Totp }, Some(user.id)).await;
             Ok(Json(BackupCodesResponse { backup_codes: codes }))
         }
         Err(e) => {
             if !matches!(e, ApplicationError::InvalidMfaCode) {
-                state.login_throttle.release(&throttle_key);
+                state.login_throttle.release(&throttle_key).await;
             }
             Err(application_error_response("failed to confirm TOTP", e))
         }
@@ -114,19 +114,19 @@ pub(crate) fn manage_throttle_key(user_id: uuid::Uuid) -> String {
 async fn disable_totp(State(state): State<AppState>, user: AuthUser, Json(body): Json<CurrentPasswordRequest>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = manage_throttle_key(user.id);
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err(throttled_response());
     }
     match state.disable_totp.execute(user.id, &body.current_password).await {
         Ok(()) => {
-            state.login_throttle.clear(&throttle_key);
+            state.login_throttle.clear(&throttle_key).await;
             revoke_sessions(&state, &user).await?;
             crate::state::record_security_event(&state, SecurityEvent::MfaDisabled { user_id: user.id, organization_id: user.organization_id, method: MfaMethod::Totp }, Some(user.id)).await;
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
             if !matches!(e, ApplicationError::InvalidCredentials) {
-                state.login_throttle.release(&throttle_key);
+                state.login_throttle.release(&throttle_key).await;
             }
             Err(application_error_response("failed to disable TOTP", e))
         }
@@ -140,19 +140,19 @@ async fn regenerate_backup_codes(
 ) -> Result<Json<BackupCodesResponse>, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = manage_throttle_key(user.id);
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err(throttled_response());
     }
     let audit = SecurityAuditRecord { event: SecurityEvent::BackupCodesRegenerated { user_id: user.id, organization_id: user.organization_id }, actor_id: Some(user.id) };
     match state.regenerate_backup_codes.execute(user.id, &body.current_password, Some(&audit)).await {
         Ok(codes) => {
-            state.login_throttle.clear(&throttle_key);
+            state.login_throttle.clear(&throttle_key).await;
             revoke_sessions(&state, &user).await?;
             Ok(Json(BackupCodesResponse { backup_codes: codes }))
         }
         Err(e) => {
             if !matches!(e, ApplicationError::InvalidCredentials) {
-                state.login_throttle.release(&throttle_key);
+                state.login_throttle.release(&throttle_key).await;
             }
             Err(application_error_response("failed to regenerate backup codes", e))
         }
@@ -183,17 +183,17 @@ struct PasskeyRegistrationStartResponse {
 async fn start_passkey_registration(State(state): State<AppState>, user: AuthUser, Json(body): Json<CurrentPasswordRequest>) -> Result<Json<PasskeyRegistrationStartResponse>, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = manage_throttle_key(user.id);
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err(throttled_response());
     }
     match state.start_passkey_registration.execute(user.id, &user.username, Some(&body.current_password)).await {
         Ok((challenge_id, public_key)) => {
-            state.login_throttle.clear(&throttle_key);
+            state.login_throttle.clear(&throttle_key).await;
             Ok(Json(PasskeyRegistrationStartResponse { challenge_id, public_key: public_key.public_key }))
         }
         Err(e) => {
             if !matches!(e, ApplicationError::InvalidCredentials) {
-                state.login_throttle.release(&throttle_key);
+                state.login_throttle.release(&throttle_key).await;
             }
             Err(application_error_response("failed to start passkey registration", e))
         }
@@ -228,19 +228,19 @@ async fn delete_passkey(
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = manage_throttle_key(user.id);
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err(throttled_response());
     }
     let audit = SecurityAuditRecord { event: SecurityEvent::PasskeyDeleted { user_id: user.id, organization_id: user.organization_id, passkey_id: id }, actor_id: Some(user.id) };
     match state.delete_passkey.execute(user.id, id, &body.current_password, Some(&audit)).await {
         Ok(()) => {
-            state.login_throttle.clear(&throttle_key);
+            state.login_throttle.clear(&throttle_key).await;
             revoke_sessions(&state, &user).await?;
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
             if !matches!(e, ApplicationError::InvalidCredentials) {
-                state.login_throttle.release(&throttle_key);
+                state.login_throttle.release(&throttle_key).await;
             }
             Err(application_error_response("failed to delete passkey", e))
         }

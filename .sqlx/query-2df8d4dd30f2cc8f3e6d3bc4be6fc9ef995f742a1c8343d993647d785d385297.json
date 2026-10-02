@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM login_attempts WHERE id = (SELECT id FROM login_attempts WHERE key_hash = $1 ORDER BY attempted_at DESC, id DESC LIMIT 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2df8d4dd30f2cc8f3e6d3bc4be6fc9ef995f742a1c8343d993647d785d385297"
+}

@@ -83,7 +83,7 @@ pub async fn test_state_with_cache_ttl(pool: PgPool, root: &Path, cache_ttl: std
             token_issuer,
             resolve_personal_repository.clone(),
         )),
-        login_throttle: LoginThrottle::new(),
+        login_throttle: LoginThrottle::in_memory(),
         record_security_event: Arc::new(RecordSecurityEventUseCase::new(events.clone())),
         guard: Arc::new(RequestGuard::default()),
         start_upload: start_upload.clone(),
