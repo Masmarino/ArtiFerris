@@ -26,7 +26,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 sqlx = { version = "0.9", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate"] }
 dotenvy = "0.15"
-webauthn-rs = "0.5.5"
+webauthn-rs = { version = "0.5.5", features = ["danger-allow-state-serialisation"] }
 webauthn-rs-proto = "0.5.5"
 base64 = "0.23.1"
 http-body-util = "0.1"

@@ -25,3 +25,23 @@ pub trait WebauthnCredentialPort: Send + Sync {
     async fn delete(&self, id: Uuid, user_id: Uuid, audit: Option<&SecurityAuditRecord>) -> Result<(), DomainError>;
     async fn count_for_user(&self, user_id: Uuid) -> Result<i64, DomainError>;
 }
+
+/// Which half of a passkey flow a stored ceremony belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CeremonyKind {
+    Registration,
+    Authentication,
+}
+
+/// Where the instances of a deployment keep a passkey ceremony between its `start` and its `finish`, which may be
+/// answered by different instances. The state is an opaque blob (the application layer's serialized webauthn state).
+#[async_trait]
+pub trait PasskeyCeremonyStorePort: Send + Sync {
+    /// Stores a ceremony for `ttl` and returns its challenge id. A user's oldest ceremonies beyond `max_per_user`, then the
+    /// oldest of anyone beyond `max_total`, are dropped to make room, so unauthenticated starts cannot grow the store
+    /// without bound.
+    async fn insert(&self, user_id: Uuid, kind: CeremonyKind, state: Vec<u8>, ttl: chrono::Duration, max_per_user: usize, max_total: usize) -> Result<Uuid, DomainError>;
+
+    /// Single use, like a nonce: the ceremony is removed, whoever asks, and handed back only to its own user.
+    async fn take(&self, challenge_id: Uuid, user_id: Uuid) -> Result<Option<(CeremonyKind, Vec<u8>)>, DomainError>;
+}

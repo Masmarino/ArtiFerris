@@ -340,7 +340,7 @@ impl AppState {
                 None
             }
         });
-        let passkey_ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let passkey_ceremonies = Arc::new(PasskeyCeremonyStore::new(Arc::new(artiferris_infrastructure::postgres::passkey_ceremony_store::PostgresPasskeyCeremonyStore::new(pool.clone()))));
         let login_throttle = LoginThrottle::new(Arc::new(artiferris_infrastructure::postgres::login_attempt_store::PostgresLoginAttemptStore::new(pool.clone(), &artiferris_infrastructure::login_attempt_hash_key(&config.jwt_secret))));
         // A pending token lives 5 minutes; the extra minutes cover the JWT library's clock-skew leeway.
         let used_mfa_tokens = SingleUseTokens::new(std::time::Duration::from_secs(10 * 60), Arc::new(artiferris_infrastructure::postgres::single_use_token_store::PostgresSingleUseTokenStore::new(pool.clone())));

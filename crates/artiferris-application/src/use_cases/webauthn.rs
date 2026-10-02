@@ -1,12 +1,14 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
+use async_trait::async_trait;
+
 use chrono::{DateTime, Duration, Utc};
 use artiferris_domain::audit::{SecurityAuditRecord, SecurityEvent};
 use artiferris_domain::email::EmailPort;
 use artiferris_domain::error::DomainError;
 use artiferris_domain::user::{PasswordHasherPort, UserRepositoryPort, UserSecurityPort};
-use artiferris_domain::webauthn::{WebauthnCredential, WebauthnCredentialPort};
+use artiferris_domain::webauthn::{CeremonyKind, PasskeyCeremonyStorePort, WebauthnCredential, WebauthnCredentialPort};
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
 
@@ -32,9 +34,27 @@ enum CeremonyState {
     Authentication(PasskeyAuthentication),
 }
 
+impl CeremonyState {
+    fn encode(&self) -> (CeremonyKind, Vec<u8>) {
+        match self {
+            Self::Registration(state) => (CeremonyKind::Registration, serde_json::to_vec(state).expect("webauthn state serialization is infallible")),
+            Self::Authentication(state) => (CeremonyKind::Authentication, serde_json::to_vec(state).expect("webauthn state serialization is infallible")),
+        }
+    }
+
+    /// `None` for a blob this version cannot read, which a client treats like an expired ceremony and retries.
+    fn decode(kind: CeremonyKind, bytes: &[u8]) -> Option<Self> {
+        match kind {
+            CeremonyKind::Registration => serde_json::from_slice(bytes).ok().map(Self::Registration),
+            CeremonyKind::Authentication => serde_json::from_slice(bytes).ok().map(Self::Authentication),
+        }
+    }
+}
+
 struct CeremonyEntry {
     user_id: Uuid,
-    state: CeremonyState,
+    kind: CeremonyKind,
+    state: Vec<u8>,
     expires_at: DateTime<Utc>,
     seq: u64,
 }
@@ -42,7 +62,7 @@ struct CeremonyEntry {
 #[derive(Default)]
 struct Ceremonies {
     entries: HashMap<Uuid, CeremonyEntry>,
-    /// Oldest first. Every entry lives the same time, so this is also the order they expire in.
+    /// Oldest first. Entries live different times only when the caller changes the ttl, so this is the order they were stored in.
     by_age: BTreeMap<u64, Uuid>,
     per_user: HashMap<Uuid, Vec<u64>>,
     next_seq: u64,
@@ -85,9 +105,56 @@ impl Ceremonies {
     }
 }
 
-/// Holds in-progress WebAuthn ceremonies between `start` and `finish`. Deliberately in-process, not persisted — a restart mid-ceremony just makes the client retry.
-pub struct PasskeyCeremonyStore {
+/// Holds ceremonies in this process only: for tests and tools that never run twice.
+#[derive(Default)]
+pub struct InMemoryPasskeyCeremonyStore {
     ceremonies: Mutex<Ceremonies>,
+}
+
+impl InMemoryPasskeyCeremonyStore {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Ceremonies> {
+        self.ceremonies.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.lock().entries.len()
+    }
+}
+
+#[async_trait]
+impl PasskeyCeremonyStorePort for InMemoryPasskeyCeremonyStore {
+    async fn insert(&self, user_id: Uuid, kind: CeremonyKind, state: Vec<u8>, ttl: Duration, max_per_user: usize, max_total: usize) -> Result<Uuid, DomainError> {
+        let mut ceremonies = self.lock();
+        let now = Utc::now();
+        ceremonies.drop_expired(now);
+        while ceremonies.per_user.get(&user_id).is_some_and(|seqs| seqs.len() >= max_per_user) {
+            ceremonies.drop_oldest_of(user_id);
+        }
+        while ceremonies.entries.len() >= max_total {
+            ceremonies.drop_oldest();
+        }
+        let challenge_id = Uuid::new_v4();
+        let seq = ceremonies.next_seq;
+        ceremonies.next_seq += 1;
+        ceremonies.entries.insert(challenge_id, CeremonyEntry { user_id, kind, state, expires_at: now + ttl, seq });
+        ceremonies.by_age.insert(seq, challenge_id);
+        ceremonies.per_user.entry(user_id).or_default().push(seq);
+        Ok(challenge_id)
+    }
+
+    async fn take(&self, challenge_id: Uuid, user_id: Uuid) -> Result<Option<(CeremonyKind, Vec<u8>)>, DomainError> {
+        let mut ceremonies = self.lock();
+        ceremonies.drop_expired(Utc::now());
+        let Some(entry) = ceremonies.remove(challenge_id) else { return Ok(None) };
+        Ok((entry.user_id == user_id).then_some((entry.kind, entry.state)))
+    }
+}
+
+/// Holds in-progress WebAuthn ceremonies between `start` and `finish`, which may be answered by different instances:
+/// the store behind it is the database in a deployment.
+pub struct PasskeyCeremonyStore {
+    store: Arc<dyn PasskeyCeremonyStorePort>,
     ttl: Duration,
     max_total: usize,
     max_per_user: usize,
@@ -95,56 +162,37 @@ pub struct PasskeyCeremonyStore {
 
 impl Default for PasskeyCeremonyStore {
     fn default() -> Self {
-        Self::new()
+        Self::in_memory()
     }
 }
 
 impl PasskeyCeremonyStore {
-    pub fn new() -> Self {
-        Self::with_limits(Duration::minutes(CEREMONY_TTL_MINUTES), MAX_CEREMONIES, MAX_CEREMONIES_PER_USER)
+    pub fn new(store: Arc<dyn PasskeyCeremonyStorePort>) -> Self {
+        Self::with_limits(store, Duration::minutes(CEREMONY_TTL_MINUTES), MAX_CEREMONIES, MAX_CEREMONIES_PER_USER)
     }
 
-    fn with_limits(ttl: Duration, max_total: usize, max_per_user: usize) -> Self {
-        Self { ceremonies: Mutex::new(Ceremonies::default()), ttl, max_total, max_per_user }
+    /// Per instance and forgotten on restart: for tests.
+    pub fn in_memory() -> Self {
+        Self::new(Arc::new(InMemoryPasskeyCeremonyStore::default()))
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Ceremonies> {
-        self.ceremonies.lock().unwrap_or_else(|p| p.into_inner())
+    fn with_limits(store: Arc<dyn PasskeyCeremonyStorePort>, ttl: Duration, max_total: usize, max_per_user: usize) -> Self {
+        Self { store, ttl, max_total, max_per_user }
     }
 
-    fn insert(&self, user_id: Uuid, state: CeremonyState) -> Uuid {
-        let mut ceremonies = self.lock();
-        let now = Utc::now();
-        ceremonies.drop_expired(now);
-        while ceremonies.per_user.get(&user_id).is_some_and(|seqs| seqs.len() >= self.max_per_user) {
-            ceremonies.drop_oldest_of(user_id);
-        }
-        while ceremonies.entries.len() >= self.max_total {
-            ceremonies.drop_oldest();
-        }
-        let challenge_id = Uuid::new_v4();
-        let seq = ceremonies.next_seq;
-        ceremonies.next_seq += 1;
-        ceremonies.entries.insert(challenge_id, CeremonyEntry { user_id, state, expires_at: now + self.ttl, seq });
-        ceremonies.by_age.insert(seq, challenge_id);
-        ceremonies.per_user.entry(user_id).or_default().push(seq);
-        challenge_id
+    async fn insert(&self, user_id: Uuid, state: CeremonyState) -> Result<Uuid, ApplicationError> {
+        let (kind, bytes) = state.encode();
+        Ok(self.store.insert(user_id, kind, bytes, self.ttl, self.max_per_user, self.max_total).await?)
     }
 
     /// Single use, like a nonce — removes the entry, not just reads it.
-    fn take(&self, challenge_id: Uuid, expected_user_id: Uuid) -> Option<CeremonyEntry> {
-        let mut ceremonies = self.lock();
-        ceremonies.drop_expired(Utc::now());
-        let entry = ceremonies.remove(challenge_id)?;
-        if entry.user_id != expected_user_id {
-            return None;
+    async fn take(&self, challenge_id: Uuid, expected_user_id: Uuid) -> Result<Option<CeremonyState>, ApplicationError> {
+        let Some((kind, bytes)) = self.store.take(challenge_id, expected_user_id).await? else { return Ok(None) };
+        let state = CeremonyState::decode(kind, &bytes);
+        if state.is_none() {
+            tracing::warn!("a stored passkey ceremony could not be read, the client will have to start again");
         }
-        Some(entry)
-    }
-
-    #[cfg(test)]
-    fn len(&self) -> usize {
-        self.lock().entries.len()
+        Ok(state)
     }
 }
 
@@ -195,7 +243,7 @@ impl StartPasskeyRegistrationUseCase {
             .start_passkey_registration(user_id, username, username, if exclude.is_empty() { None } else { Some(exclude) })
             .map_err(|e| ApplicationError::Domain(artiferris_domain::error::DomainError::Infrastructure(e.to_string())))?;
 
-        let challenge_id = self.ceremonies.insert(user_id, CeremonyState::Registration(registration));
+        let challenge_id = self.ceremonies.insert(user_id, CeremonyState::Registration(registration)).await?;
         Ok((challenge_id, ccr))
     }
 }
@@ -229,8 +277,8 @@ impl FinishPasskeyRegistrationUseCase {
         }
         ensure_room_for_another_passkey(self.credentials.count_for_user(user_id).await? as usize)?;
         let webauthn = require_webauthn(&self.webauthn)?;
-        let entry = self.ceremonies.take(challenge_id, user_id).ok_or(ApplicationError::InvalidMfaCode)?;
-        let CeremonyState::Registration(registration) = entry.state else {
+        let state = self.ceremonies.take(challenge_id, user_id).await?.ok_or(ApplicationError::InvalidMfaCode)?;
+        let CeremonyState::Registration(registration) = state else {
             return Err(ApplicationError::InvalidMfaCode);
         };
 
@@ -276,7 +324,7 @@ impl StartPasskeyAuthenticationUseCase {
         let (rcr, authentication) =
             webauthn.start_passkey_authentication(&passkeys).map_err(|e| ApplicationError::Domain(artiferris_domain::error::DomainError::Infrastructure(e.to_string())))?;
 
-        let challenge_id = self.ceremonies.insert(user_id, CeremonyState::Authentication(authentication));
+        let challenge_id = self.ceremonies.insert(user_id, CeremonyState::Authentication(authentication)).await?;
         Ok((challenge_id, rcr))
     }
 }
@@ -294,8 +342,8 @@ impl FinishPasskeyAuthenticationUseCase {
 
     pub async fn execute(&self, user_id: Uuid, challenge_id: Uuid, response: &PublicKeyCredential) -> Result<(), ApplicationError> {
         let webauthn = require_webauthn(&self.webauthn)?;
-        let entry = self.ceremonies.take(challenge_id, user_id).ok_or(ApplicationError::InvalidMfaCode)?;
-        let CeremonyState::Authentication(authentication) = entry.state else {
+        let state = self.ceremonies.take(challenge_id, user_id).await?.ok_or(ApplicationError::InvalidMfaCode)?;
+        let CeremonyState::Authentication(authentication) = state else {
             return Err(ApplicationError::InvalidMfaCode);
         };
 
@@ -576,7 +624,7 @@ mod tests {
     #[tokio::test]
     async fn starting_registration_returns_a_challenge_id_and_creation_options() {
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let user = sample_user();
         let users = Arc::new(FakeUsers::with_user(user.clone()));
         let use_case = StartPasskeyRegistrationUseCase::new(test_webauthn(), credentials, ceremonies, users, Arc::new(FakeHasher));
@@ -591,7 +639,7 @@ mod tests {
     #[tokio::test]
     async fn starting_registration_requires_the_current_password() {
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let user = sample_user();
         let users = Arc::new(FakeUsers::with_user(user.clone()));
         let use_case = StartPasskeyRegistrationUseCase::new(test_webauthn(), credentials, ceremonies, users, Arc::new(FakeHasher));
@@ -606,7 +654,7 @@ mod tests {
     #[tokio::test]
     async fn starting_registration_with_no_password_supplied_skips_the_check() {
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let user = sample_user();
         let users = Arc::new(FakeUsers::with_user(user.clone()));
         let use_case = StartPasskeyRegistrationUseCase::new(test_webauthn(), credentials, ceremonies, users, Arc::new(FakeHasher));
@@ -617,88 +665,110 @@ mod tests {
         assert_eq!(ccr.public_key.user.name, "florian");
     }
 
+    fn counted_store(ttl: Duration, max_total: usize, max_per_user: usize) -> (PasskeyCeremonyStore, Arc<InMemoryPasskeyCeremonyStore>) {
+        let memory = Arc::new(InMemoryPasskeyCeremonyStore::default());
+        (PasskeyCeremonyStore::with_limits(memory.clone(), ttl, max_total, max_per_user), memory)
+    }
+
     fn some_registration_state() -> CeremonyState {
         let webauthn = test_webauthn();
         let (_, registration) = require_webauthn(&webauthn).unwrap().start_passkey_registration(Uuid::new_v4(), "florian", "florian", None).unwrap();
         CeremonyState::Registration(registration)
     }
 
-    #[test]
-    fn the_oldest_ceremony_of_a_user_is_dropped_past_the_per_user_cap() {
-        let store = PasskeyCeremonyStore::with_limits(Duration::minutes(5), 100, 2);
+    #[tokio::test]
+    async fn the_oldest_ceremony_of_a_user_is_dropped_past_the_per_user_cap() {
+        let (store, memory) = counted_store(Duration::minutes(5), 100, 2);
         let user = Uuid::new_v4();
-        let first = store.insert(user, some_registration_state());
-        let second = store.insert(user, some_registration_state());
-        let third = store.insert(user, some_registration_state());
+        let first = store.insert(user, some_registration_state()).await.unwrap();
+        let second = store.insert(user, some_registration_state()).await.unwrap();
+        let third = store.insert(user, some_registration_state()).await.unwrap();
 
-        assert_eq!(store.len(), 2);
-        assert!(store.take(first, user).is_none(), "the oldest one made room");
-        assert!(store.take(second, user).is_some());
-        assert!(store.take(third, user).is_some());
+        assert_eq!(memory.len(), 2);
+        assert!(store.take(first, user).await.unwrap().is_none(), "the oldest one made room");
+        assert!(store.take(second, user).await.unwrap().is_some());
+        assert!(store.take(third, user).await.unwrap().is_some());
     }
 
-    #[test]
-    fn one_users_ceremonies_never_push_out_anothers() {
-        let store = PasskeyCeremonyStore::with_limits(Duration::minutes(5), 100, 2);
+    #[tokio::test]
+    async fn a_stored_state_this_version_cannot_read_is_a_missing_ceremony() {
+        let (store, _) = counted_store(Duration::minutes(5), 100, 5);
+        let user = Uuid::new_v4();
+        let id = store.store.insert(user, CeremonyKind::Authentication, b"not json".to_vec(), Duration::minutes(5), 5, 100).await.unwrap();
+
+        assert!(store.take(id, user).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn a_state_comes_back_as_the_kind_it_was_stored_as() {
+        let (store, _) = counted_store(Duration::minutes(5), 100, 5);
+        let user = Uuid::new_v4();
+        let id = store.insert(user, some_registration_state()).await.unwrap();
+
+        assert!(matches!(store.take(id, user).await.unwrap(), Some(CeremonyState::Registration(_))));
+    }
+
+    #[tokio::test]
+    async fn one_users_ceremonies_never_push_out_anothers() {
+        let (store, memory) = counted_store(Duration::minutes(5), 100, 2);
         let victim = Uuid::new_v4();
-        let victims = store.insert(victim, some_registration_state());
+        let victims = store.insert(victim, some_registration_state()).await.unwrap();
         let attacker = Uuid::new_v4();
         for _ in 0..10 {
-            store.insert(attacker, some_registration_state());
+            store.insert(attacker, some_registration_state()).await.unwrap();
         }
 
-        assert_eq!(store.len(), 3);
-        assert!(store.take(victims, victim).is_some());
+        assert_eq!(memory.len(), 3);
+        assert!(store.take(victims, victim).await.unwrap().is_some());
     }
 
-    #[test]
-    fn the_store_never_grows_past_the_global_cap() {
-        let store = PasskeyCeremonyStore::with_limits(Duration::minutes(5), 3, 5);
-        let ids: Vec<_> = (0..5)
-            .map(|_| {
-                let user = Uuid::new_v4();
-                (user, store.insert(user, some_registration_state()))
-            })
-            .collect();
+    #[tokio::test]
+    async fn the_store_never_grows_past_the_global_cap() {
+        let (store, memory) = counted_store(Duration::minutes(5), 3, 5);
+        let mut ids = Vec::new();
+        for _ in 0..5 {
+            let user = Uuid::new_v4();
+            ids.push((user, store.insert(user, some_registration_state()).await.unwrap()));
+        }
 
-        assert_eq!(store.len(), 3);
-        assert!(store.take(ids[0].1, ids[0].0).is_none());
-        assert!(store.take(ids[1].1, ids[1].0).is_none());
-        assert!(store.take(ids[4].1, ids[4].0).is_some(), "the newest survive");
+        assert_eq!(memory.len(), 3);
+        assert!(store.take(ids[0].1, ids[0].0).await.unwrap().is_none());
+        assert!(store.take(ids[1].1, ids[1].0).await.unwrap().is_none());
+        assert!(store.take(ids[4].1, ids[4].0).await.unwrap().is_some(), "the newest survive");
     }
 
-    #[test]
-    fn expired_ceremonies_are_dropped_on_the_next_insert() {
-        let store = PasskeyCeremonyStore::with_limits(Duration::milliseconds(-1), 100, 5);
+    #[tokio::test]
+    async fn expired_ceremonies_are_dropped_on_the_next_insert() {
+        let (store, memory) = counted_store(Duration::milliseconds(-1), 100, 5);
         for _ in 0..4 {
-            store.insert(Uuid::new_v4(), some_registration_state());
+            store.insert(Uuid::new_v4(), some_registration_state()).await.unwrap();
         }
 
-        assert_eq!(store.len(), 1, "only the entry just inserted is left");
+        assert_eq!(memory.len(), 1, "only the entry just inserted is left");
     }
 
-    #[test]
-    fn an_expired_ceremony_cannot_be_taken() {
-        let store = PasskeyCeremonyStore::with_limits(Duration::milliseconds(-1), 100, 5);
+    #[tokio::test]
+    async fn an_expired_ceremony_cannot_be_taken() {
+        let (store, memory) = counted_store(Duration::milliseconds(-1), 100, 5);
         let user = Uuid::new_v4();
-        let id = store.insert(user, some_registration_state());
+        let id = store.insert(user, some_registration_state()).await.unwrap();
 
-        assert!(store.take(id, user).is_none());
-        assert_eq!(store.len(), 0);
+        assert!(store.take(id, user).await.unwrap().is_none());
+        assert_eq!(memory.len(), 0);
     }
 
-    #[test]
-    fn taking_a_ceremony_frees_its_slot_in_the_per_user_count() {
-        let store = PasskeyCeremonyStore::with_limits(Duration::minutes(5), 100, 2);
+    #[tokio::test]
+    async fn taking_a_ceremony_frees_its_slot_in_the_per_user_count() {
+        let (store, _) = counted_store(Duration::minutes(5), 100, 2);
         let user = Uuid::new_v4();
-        let first = store.insert(user, some_registration_state());
-        let second = store.insert(user, some_registration_state());
-        store.take(first, user).unwrap();
+        let first = store.insert(user, some_registration_state()).await.unwrap();
+        let second = store.insert(user, some_registration_state()).await.unwrap();
+        store.take(first, user).await.unwrap().unwrap();
 
-        let third = store.insert(user, some_registration_state());
+        let third = store.insert(user, some_registration_state()).await.unwrap();
 
-        assert!(store.take(second, user).is_some(), "a slot was free, so nothing had to be evicted");
-        assert!(store.take(third, user).is_some());
+        assert!(store.take(second, user).await.unwrap().is_some(), "a slot was free, so nothing had to be evicted");
+        assert!(store.take(third, user).await.unwrap().is_some());
     }
 
     #[test]
@@ -738,7 +808,7 @@ mod tests {
     async fn passkey_registration_uses_the_shared_base_domain_as_the_relying_party_id() {
         let webauthn = test_webauthn();
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let user = sample_user();
         let users = Arc::new(FakeUsers::with_user(user.clone()));
         let use_case = StartPasskeyRegistrationUseCase::new(webauthn, credentials, ceremonies, users, Arc::new(FakeHasher));
@@ -752,7 +822,7 @@ mod tests {
     async fn starting_registration_fails_gracefully_when_webauthn_is_unavailable() {
         let webauthn: Arc<Option<Webauthn>> = Arc::new(None);
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let user = sample_user();
         let users = Arc::new(FakeUsers::with_user(user.clone()));
         let use_case = StartPasskeyRegistrationUseCase::new(webauthn, credentials, ceremonies, users, Arc::new(FakeHasher));
@@ -764,7 +834,7 @@ mod tests {
     #[tokio::test]
     async fn finishing_registration_with_an_unknown_challenge_id_fails() {
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let use_case = FinishPasskeyRegistrationUseCase::new(test_webauthn(), credentials, ceremonies, Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new()));
 
         let err = use_case.execute(Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), &fake_register_response(), "My key").await.unwrap_err();
@@ -775,7 +845,7 @@ mod tests {
     async fn finishing_registration_with_a_challenge_belonging_to_a_different_user_fails() {
         let webauthn = test_webauthn();
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let user = sample_user();
         let users = Arc::new(FakeUsers::with_user(user.clone()));
         let start = StartPasskeyRegistrationUseCase::new(webauthn.clone(), credentials.clone(), ceremonies.clone(), users, Arc::new(FakeHasher));
@@ -796,7 +866,7 @@ mod tests {
         let finish = FinishPasskeyRegistrationUseCase::new(
             test_webauthn(),
             Arc::new(FakeCredentials::new()),
-            Arc::new(PasskeyCeremonyStore::new()),
+            Arc::new(PasskeyCeremonyStore::in_memory()),
             Arc::new(FakeUsers::new()),
             Arc::new(FakeVerification::nobody()),
             Arc::new(FakeEmail::new()),
@@ -818,7 +888,7 @@ mod tests {
             credentials.insert(&credential_named(user.id, &format!("key {i}")).await, None).await.unwrap();
         }
         let users = Arc::new(FakeUsers::with_user(user.clone()));
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
 
         let start = StartPasskeyRegistrationUseCase::new(webauthn.clone(), credentials.clone(), ceremonies.clone(), users, Arc::new(FakeHasher));
         let err = start.execute(user.id, "florian", Some("s3cret!")).await.unwrap_err();
@@ -834,7 +904,7 @@ mod tests {
     async fn a_challenge_id_can_only_be_finished_once() {
         let webauthn = test_webauthn();
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let user = sample_user();
         let users = Arc::new(FakeUsers::with_user(user.clone()));
         let user_id = user.id;
@@ -851,7 +921,7 @@ mod tests {
     async fn finishing_registration_with_a_cryptographically_invalid_response_fails() {
         let webauthn = test_webauthn();
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let user = sample_user();
         let users = Arc::new(FakeUsers::with_user(user.clone()));
         let user_id = user.id;
@@ -868,7 +938,7 @@ mod tests {
     #[tokio::test]
     async fn starting_authentication_fails_when_no_passkeys_are_registered() {
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let use_case = StartPasskeyAuthenticationUseCase::new(test_webauthn(), credentials, ceremonies);
 
         let err = use_case.execute(Uuid::new_v4()).await.unwrap_err();
@@ -878,7 +948,7 @@ mod tests {
     #[tokio::test]
     async fn finishing_authentication_with_an_unknown_challenge_id_fails() {
         let credentials = Arc::new(FakeCredentials::new());
-        let ceremonies = Arc::new(PasskeyCeremonyStore::new());
+        let ceremonies = Arc::new(PasskeyCeremonyStore::in_memory());
         let use_case = FinishPasskeyAuthenticationUseCase::new(test_webauthn(), credentials, ceremonies);
 
         let err = use_case.execute(Uuid::new_v4(), Uuid::new_v4(), &fake_auth_response()).await.unwrap_err();

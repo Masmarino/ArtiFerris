@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM passkey_ceremonies WHERE expires_at < clock_timestamp()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "30ce4fa9559b1fe5d55f51c8bbfbbce1da000de6dab4aec0444524687fc398bf"
+}
