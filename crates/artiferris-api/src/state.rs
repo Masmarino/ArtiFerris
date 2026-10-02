@@ -343,7 +343,7 @@ impl AppState {
         let passkey_ceremonies = Arc::new(PasskeyCeremonyStore::new());
         let login_throttle = LoginThrottle::new();
         // A pending token lives 5 minutes; the extra minutes cover the JWT library's clock-skew leeway.
-        let used_mfa_tokens = SingleUseTokens::new(std::time::Duration::from_secs(10 * 60));
+        let used_mfa_tokens = SingleUseTokens::new(std::time::Duration::from_secs(10 * 60), Arc::new(artiferris_infrastructure::postgres::single_use_token_store::PostgresSingleUseTokenStore::new(pool.clone())));
         let user_security: Arc<dyn UserSecurityPort> = users_repo.clone();
         // Bound here so `sweep_retention` can reuse the same instances.
         let unpublish_npm_package = Arc::new(UnpublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), event_publisher.clone()));

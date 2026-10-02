@@ -542,8 +542,12 @@ async fn require_no_factor(state: &AppState, user_id: uuid::Uuid) -> Result<(), 
 }
 
 /// The final step of a login or of mandatory MFA setup: a token may complete one of them only once.
-fn consume_mfa_token(state: &AppState, user_id: uuid::Uuid, mfa_token: &str) -> Result<(), ApiError> {
-    if state.used_mfa_tokens.consume(user_id, mfa_token) { Ok(()) } else { Err(invalid_mfa_token()) }
+async fn consume_mfa_token(state: &AppState, user_id: uuid::Uuid, mfa_token: &str) -> Result<(), ApiError> {
+    match state.used_mfa_tokens.consume(user_id, mfa_token).await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(invalid_mfa_token()),
+        Err(e) => Err(application_error_response("failed to record a spent MFA token", e.into())),
+    }
 }
 
 async fn issue_session_token(state: &AppState, user: &User) -> Result<String, ApiError> {
@@ -594,7 +598,7 @@ async fn verify_mfa(State(state): State<AppState>, Json(body): Json<MfaVerifyReq
 
     match verified {
         Ok(()) => {
-            consume_mfa_token(&state, user_id, &body.mfa_token)?;
+            consume_mfa_token(&state, user_id, &body.mfa_token).await?;
             state.login_throttle.clear(&throttle_key);
             let token = issue_session_token(&state, &user).await?;
             record_login(&state, &user, if body.code.is_some() { MfaMethod::Totp } else { MfaMethod::BackupCode }).await;
@@ -657,7 +661,7 @@ async fn finish_mfa_passkey(
 
     match state.finish_passkey_authentication.execute(user_id, body.challenge_id, &body.credential).await {
         Ok(()) => {
-            consume_mfa_token(&state, user_id, &body.mfa_token)?;
+            consume_mfa_token(&state, user_id, &body.mfa_token).await?;
             state.login_throttle.clear(&throttle_key);
             state.login_throttle.release(&passkey_start_key(&state, &headers, connect_info));
             let token = issue_session_token(&state, &user).await?;
@@ -730,7 +734,7 @@ async fn setup_mfa_totp_confirm(State(state): State<AppState>, Json(body): Json<
     require_no_factor(&state, user.id).await?;
     match state.confirm_totp.execute(user.id, user.username.as_str(), &body.code).await {
         Ok(backup_codes) => {
-            consume_mfa_token(&state, user.id, &body.mfa_token)?;
+            consume_mfa_token(&state, user.id, &body.mfa_token).await?;
             state.login_throttle.clear(&throttle_key);
             let token = issue_session_token(&state, &user).await?;
             crate::state::record_security_event(&state, SecurityEvent::MfaEnabled { user_id: user.id, organization_id: user.organization_id, method: MfaMethod::Totp }, Some(user.id)).await;
@@ -787,7 +791,7 @@ async fn setup_mfa_passkey_finish(
     require_no_factor(&state, user.id).await?;
     match state.finish_passkey_registration.execute(user.id, user.organization_id, body.challenge_id, &body.credential, &body.name).await {
         Ok(_) => {
-            consume_mfa_token(&state, user.id, &body.mfa_token)?;
+            consume_mfa_token(&state, user.id, &body.mfa_token).await?;
             state.login_throttle.clear(&throttle_key);
             state.login_throttle.release(&passkey_start_key(&state, &headers, connect_info));
             let token = issue_session_token(&state, &user).await?;

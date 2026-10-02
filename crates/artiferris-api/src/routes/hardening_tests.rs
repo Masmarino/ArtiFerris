@@ -479,13 +479,13 @@ async fn an_enrolment_left_unconfirmed_for_too_long_is_expired(pool: sqlx::PgPoo
 }
 
 #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
-async fn a_table_full_of_spent_mfa_tokens_never_blocks_the_next_login(pool: sqlx::PgPool) {
+async fn a_user_who_spent_many_mfa_tokens_can_still_log_in(pool: sqlx::PgPool) {
     let state = AppState::build(pool, &test_config());
     let user_id = state.create_user.execute(public_org(), "florian", PASSWORD, false).await.unwrap();
     let enrollment = state.enroll_totp.execute(user_id, "florian", Some(PASSWORD)).await.unwrap();
     state.confirm_totp.execute(user_id, "florian", &artiferris_application::use_cases::mfa::generate_current_totp_code(&enrollment.secret_base32)).await.unwrap();
-    for _ in 0..10_050 {
-        assert!(state.used_mfa_tokens.consume(Uuid::new_v4(), &Uuid::new_v4().to_string()));
+    for _ in 0..50 {
+        assert!(state.used_mfa_tokens.consume(user_id, &Uuid::new_v4().to_string()).await.unwrap());
     }
     let mfa_token = state.mfa_pending_token_issuer.issue(user_id, chrono::Duration::minutes(5)).unwrap();
     let app = build_router(state.clone());
