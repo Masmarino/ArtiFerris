@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO periodic_job_runs (name, last_started_at) VALUES ($1, clock_timestamp())\n             ON CONFLICT (name) DO UPDATE SET last_started_at = clock_timestamp()\n             WHERE periodic_job_runs.last_started_at <= clock_timestamp() - make_interval(secs => $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "607a4c948670203e44e79193cc3bf89b4069fd195afa7211ca69c8327a4b0102"
+}

@@ -209,28 +209,28 @@ async fn bootstrap_super_admin(state: &AppState) {
     }
 }
 
-/// Snapshots immediately, then once an hour after that.
+/// Snapshots at startup, then once an hour: the instances take turns, so a deployment records one snapshot per hour
+/// however many replicas it runs.
 fn spawn_metrics_snapshot_timer(state: &AppState) {
     let record_metrics_snapshot = state.record_metrics_snapshot.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
-        loop {
-            interval.tick().await;
+    let interval = std::time::Duration::from_secs(60 * 60);
+    tokio::spawn(artiferris_application::periodic::run_claimed_forever(state.periodic_jobs.clone(), "metrics-snapshot", std::time::Duration::ZERO, interval, move || {
+        let record_metrics_snapshot = record_metrics_snapshot.clone();
+        async move {
             if let Err(e) = record_metrics_snapshot.execute().await {
                 tracing::warn!("failed to record metrics snapshot: {e}");
             }
         }
-    });
+    }));
 }
 
-/// Runs every 6 hours; no immediate run on startup, unlike the metrics timer.
+/// Runs every 6 hours, on one instance at a time; no immediate run on startup, unlike the metrics timer.
 fn spawn_retention_sweep_timer(state: &AppState) {
     let sweep_retention = state.sweep_retention.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(6 * 60 * 60));
-        interval.tick().await; // consume the immediate first tick — no run on startup
-        loop {
-            interval.tick().await;
+    let interval = std::time::Duration::from_secs(6 * 60 * 60);
+    tokio::spawn(artiferris_application::periodic::run_claimed_forever(state.periodic_jobs.clone(), "retention-sweep", interval, interval, move || {
+        let sweep_retention = sweep_retention.clone();
+        async move {
             match sweep_retention.execute().await {
                 Ok(report) => {
                     if report != Default::default() {
@@ -245,10 +245,11 @@ fn spawn_retention_sweep_timer(state: &AppState) {
                 Err(e) => tracing::warn!("retention sweep failed: {e}"),
             }
         }
-    });
+    }));
 }
 
-/// Runs hourly, not at startup. Reclaims abandoned Docker upload sessions that the lazy sweep in
+/// Runs hourly, not at startup, on every instance: it also removes the half-written upload files of this instance's own
+/// volume, which no other instance can reach. Its database work is a set of deletes that are safe to repeat. Reclaims abandoned Docker upload sessions that the lazy sweep in
 /// `DockerUploadSessionPort::find` never reaches (a truly abandoned session is never looked up again), and blobs no
 /// manifest ever referenced.
 fn spawn_upload_sweep_timer(state: &AppState) {
@@ -276,14 +277,13 @@ fn spawn_upload_sweep_timer(state: &AppState) {
     });
 }
 
-/// Runs daily, not at startup: enough for the 30-day grace period this sweep enforces.
+/// Runs daily, not at startup, on one instance at a time: enough for the 30-day grace period this sweep enforces.
 fn spawn_repository_deletion_sweep_timer(state: &AppState) {
     let sweep_repository_deletions = state.sweep_repository_deletions.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
-        interval.tick().await; // consume the immediate first tick — no run on startup
-        loop {
-            interval.tick().await;
+    let interval = std::time::Duration::from_secs(24 * 60 * 60);
+    tokio::spawn(artiferris_application::periodic::run_claimed_forever(state.periodic_jobs.clone(), "repository-deletion-sweep", interval, interval, move || {
+        let sweep_repository_deletions = sweep_repository_deletions.clone();
+        async move {
             match sweep_repository_deletions.execute().await {
                 Ok(removed) => {
                     if removed > 0 {
@@ -293,7 +293,7 @@ fn spawn_repository_deletion_sweep_timer(state: &AppState) {
                 Err(e) => tracing::warn!("repository deletion sweep failed: {e}"),
             }
         }
-    });
+    }));
 }
 
 /// Moves the in-memory download counts to the database every 30 seconds; a crash loses at most that much.
@@ -337,27 +337,41 @@ fn spawn_rate_limit_sync(state: &AppState) {
     });
 }
 
-/// Runs daily; no immediate run on startup, same as the other sweep timers.
+/// Runs daily on one instance at a time; no immediate run on startup, same as the other sweep timers.
 fn spawn_download_prune_timer(state: &AppState) {
     let prune_download_stats = state.prune_download_stats.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
-        interval.tick().await;
-        loop {
-            interval.tick().await;
+    let interval = std::time::Duration::from_secs(24 * 60 * 60);
+    tokio::spawn(artiferris_application::periodic::run_claimed_forever(state.periodic_jobs.clone(), "download-stats-sweep", interval, interval, move || {
+        let prune_download_stats = prune_download_stats.clone();
+        async move {
             match prune_download_stats.execute().await {
                 Ok(removed) if removed > 0 => tracing::info!(removed, "download stats sweep removed old daily counts"),
                 Ok(_) => {}
                 Err(e) => tracing::warn!("download stats sweep failed: {e}"),
             }
         }
-    });
+    }));
 }
 
-/// First sweep shortly after startup, then daily.
+/// First sweep shortly after startup, then daily, on one instance at a time.
 fn spawn_audit_prune_timer(state: &AppState) {
     let prune_audit_events = state.prune_audit_events.clone();
-    tokio::spawn(async move { prune_audit_events.run_forever(artiferris_application::audit_retention::first_sweep_delay(), artiferris_application::audit_retention::SWEEP_INTERVAL).await });
+    tokio::spawn(artiferris_application::periodic::run_claimed_forever(
+        state.periodic_jobs.clone(),
+        "audit-sweep",
+        artiferris_application::audit_retention::first_sweep_delay(),
+        artiferris_application::audit_retention::SWEEP_INTERVAL,
+        move || {
+            let prune_audit_events = prune_audit_events.clone();
+            async move {
+                match prune_audit_events.execute().await {
+                    Ok(removed) if removed > 0 => tracing::info!(removed, "audit sweep removed events past the retention window"),
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!("audit sweep failed: {e}"),
+                }
+            }
+        },
+    ));
 }
 
 /// Fully permissive CORS — the default that keeps a separately served Angular dev server working.

@@ -45,19 +45,6 @@ impl PruneAuditEventsUseCase {
         Self { store, retention_days }
     }
 
-    /// Sweeps after `first_delay`, then every `interval`.
-    pub async fn run_forever(&self, first_delay: StdDuration, interval: StdDuration) {
-        tokio::time::sleep(first_delay).await;
-        loop {
-            match self.execute().await {
-                Ok(removed) if removed > 0 => tracing::info!(removed, "audit sweep removed events past the retention window"),
-                Ok(_) => {}
-                Err(e) => tracing::warn!("audit sweep failed: {e}"),
-            }
-            tokio::time::sleep(interval).await;
-        }
-    }
-
     /// Deletes in batches so a first run over years of history never holds one long transaction.
     pub async fn execute(&self) -> Result<u64, ApplicationError> {
         let Some(days) = self.retention_days else {
@@ -131,27 +118,6 @@ mod tests {
             let delay = first_sweep_delay();
             assert!(delay >= StdDuration::from_secs(5 * 60) && delay <= StdDuration::from_secs(6 * 60), "{delay:?}");
         }
-    }
-
-    #[tokio::test]
-    async fn the_schedule_sweeps_once_after_the_first_delay_and_again_every_interval() {
-        let store = store(0);
-        let use_case = Arc::new(PruneAuditEventsUseCase::new(store.clone(), Some(365)));
-        let task = tokio::spawn({
-            let use_case = use_case.clone();
-            async move { use_case.run_forever(StdDuration::from_millis(20), StdDuration::from_millis(20)).await }
-        });
-
-        assert!(store.calls.lock().unwrap().is_empty(), "nothing before the first delay");
-        for _ in 0..200 {
-            if store.calls.lock().unwrap().len() >= 3 {
-                break;
-            }
-            tokio::time::sleep(StdDuration::from_millis(10)).await;
-        }
-        task.abort();
-
-        assert!(store.calls.lock().unwrap().len() >= 3, "a first sweep and then one per interval");
     }
 
     #[test]

@@ -21,6 +21,7 @@ pub mod public_catalog_repository;
 pub mod rate_limit_store;
 pub mod login_attempt_store;
 pub mod passkey_ceremony_store;
+pub mod periodic_job_store;
 pub mod single_use_token_store;
 pub mod reserved_name_audit;
 pub mod smtp_settings_repository;

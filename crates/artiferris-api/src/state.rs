@@ -196,6 +196,8 @@ pub struct AppState {
     /// as blocked users.
     pub anonymous_limiter: Arc<artiferris_application::rate_limiter::RateLimiter>,
     pub rate_limit_store: Arc<dyn artiferris_domain::rate_limit::RateLimitStorePort>,
+    /// Lets the instances take turns at the sweeps that must run once per interval, not once per instance.
+    pub periodic_jobs: Arc<dyn artiferris_domain::periodic_job::PeriodicJobPort>,
     /// `ANONYMOUS_REGISTRY_READS_PER_MINUTE`: requests per minute and client for anonymous npm and Docker reads.
     pub anonymous_registry_reads_per_minute: usize,
     /// Budgets for audit events an actor can repeat at will, kept apart from `login_throttle` so they never show up as blocked logins.
@@ -522,6 +524,7 @@ impl AppState {
             ),
             anonymous_limiter: Arc::new(artiferris_application::rate_limiter::RateLimiter::new(&artiferris_infrastructure::rate_limit_hash_key(&config.jwt_secret))),
             rate_limit_store: Arc::new(artiferris_infrastructure::postgres::rate_limit_store::PostgresRateLimitStore::new(pool.clone())),
+            periodic_jobs: Arc::new(artiferris_infrastructure::postgres::periodic_job_store::PostgresPeriodicJobStore::new(pool.clone())),
             anonymous_registry_reads_per_minute: artiferris_application::rate_limiter::parse_anonymous_registry_reads_per_minute(std::env::var("ANONYMOUS_REGISTRY_READS_PER_MINUTE").ok().as_deref()).unwrap_or_else(|message| panic!("{message}")),
             audit_throttle: LoginThrottle::in_memory(),
             get_system_settings: Arc::new(GetSystemSettingsUseCase::new(system_settings.clone())),
