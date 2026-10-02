@@ -462,8 +462,7 @@ async fn page(State(seo): State<SeoState>, uri: Uri, headers: HeaderMap, connect
         return StatusCode::NOT_FOUND.into_response();
     }
     let throttle_key = format!("public-page:{}", peer_ip_bucket(&seo.app, &headers, connect_info));
-    let over_budget = seo.app.public_throttle.is_throttled(&throttle_key, PAGE_HEADS_PER_MINUTE, Duration::from_secs(60));
-    seo.app.public_throttle.record_failure(&throttle_key, PAGE_HEADS_PER_MINUTE, Duration::from_secs(60));
+    let over_budget = !seo.app.anonymous_limiter.allow(&throttle_key, PAGE_HEADS_PER_MINUTE);
     // The URL is the same in every language: the head follows the reader's `Accept-Language`, English for a crawler that sends none.
     let language = headers.get(header::ACCEPT_LANGUAGE).and_then(|value| value.to_str().ok()).map_or(Language::FALLBACK, Language::from_accept_language);
     let head = if over_budget { SeoState::unresolved_head(seo.known_indexing()) } else { seo.head_inputs(&route, language).await };

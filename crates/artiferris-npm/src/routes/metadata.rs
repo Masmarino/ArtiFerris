@@ -1576,4 +1576,51 @@ mod tests {
             assert_eq!(base_url_for(state.clone(), hostile, None).await, Err(StatusCode::BAD_REQUEST), "{hostile}");
         }
     }
+
+    async fn limited_app(pool: PgPool, per_minute: usize) -> (axum::Router, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut state = test_state(pool, dir.path()).await;
+        state.guard = Arc::new(artiferris_application::request_guard::RequestGuard::default().with_anonymous_limit(Arc::new(artiferris_application::rate_limiter::RateLimiter::default()), per_minute));
+        (crate::router(state), dir)
+    }
+
+    async fn read(app: &axum::Router, uri: &str, authorization: Option<&str>) -> axum::response::Response {
+        let mut request = Request::builder().method("GET").uri(uri);
+        if let Some(authorization) = authorization {
+            request = request.header(axum::http::header::AUTHORIZATION, authorization);
+        }
+        app.clone().oneshot(request.body(Body::empty()).unwrap()).await.unwrap()
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_anonymous_client_is_refused_once_its_minute_is_used_up(pool: PgPool) {
+        let (app, _dir) = limited_app(pool, 3).await;
+
+        for _ in 0..3 {
+            assert_ne!(read(&app, "/u/nobody/repo/pkg", None).await.status(), StatusCode::TOO_MANY_REQUESTS);
+        }
+        let refused = read(&app, "/u/nobody/repo/pkg/-/pkg-1.0.0.tgz", None).await;
+
+        assert_eq!(refused.status(), StatusCode::TOO_MANY_REQUESTS, "metadata and tarballs share the client's budget");
+        assert!(refused.headers().contains_key(axum::http::header::RETRY_AFTER));
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_client_with_a_token_is_never_counted(pool: PgPool) {
+        let (app, _dir) = limited_app(pool, 1).await;
+        assert_ne!(read(&app, "/u/nobody/repo/pkg", None).await.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(read(&app, "/u/nobody/repo/pkg", None).await.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        for _ in 0..5 {
+            assert_ne!(read(&app, "/u/nobody/repo/pkg", Some("Bearer some-token")).await.status(), StatusCode::TOO_MANY_REQUESTS);
+        }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_limit_of_zero_turns_the_limit_off(pool: PgPool) {
+        let (app, _dir) = limited_app(pool, 0).await;
+        for _ in 0..50 {
+            assert_ne!(read(&app, "/u/nobody/repo/pkg", None).await.status(), StatusCode::TOO_MANY_REQUESTS);
+        }
+    }
 }

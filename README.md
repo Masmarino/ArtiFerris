@@ -156,6 +156,7 @@ Variables lues par `artiferris-api`. `docker-compose.yml` câble celles d'un dé
 | `ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD` | Il faut un premier admin | | Compte créé seulement si la table `users` est vide. Mot de passe de 8 caractères au moins, pas `change-me…`. |
 | `ARTIFERRIS_SSRF_ALLOWED_CIDRS` | Non | | Plages (`10.20.0.0/16,192.168.1.5`) que LDAP, SMTP, OIDC et les proxys peuvent joindre bien que privées. Sinon les adresses privées, loopback et link-local sont refusées. Le SMTP sans chiffrement n'est accepté que pour ces hôtes. Une plage `/0` ou une faute de frappe arrête le serveur. |
 | `TRUSTED_PROXY_IPS` | Non | | Reverse proxies dont le `X-Forwarded-For` est cru (plages CIDR). Une plage `/0` arrête le serveur. |
+| `ANONYMOUS_REGISTRY_READS_PER_MINUTE` | Non | `1200` | Lectures anonymes npm et Docker par minute et par client ; `0` supprime la limite. |
 | `DB_MAX_CONNECTIONS` | Non | `10` | Taille du pool. |
 | `ARTIFERRIS_AUDIT_BACKFILL_FORCE` | Non | `false` | La tâche de remplissage de l'organisation des anciens événements d'audit ne démarre pas sous 3 connexions ; `true` la force. |
 | `STORAGE_ROOT` | Non | `./data` | Tarballs npm et blobs Docker. Un volume persistant en production. |
@@ -225,6 +226,13 @@ une nouvelle saisie.
   tire anonymement.
 - Les téléchargements sont comptés par client (IPv4, /64 IPv6) une fois par paquet et par heure, en mémoire.
   Derrière un reverse proxy, définissez `TRUSTED_PROXY_IPS`.
+- Le trafic anonyme a un budget par client (IPv4, /64 IPv6) et par minute : pages et API publiques, lectures npm et Docker
+  (`ANONYMOUS_REGISTRY_READS_PER_MINUTE`, 1 200 par défaut, `0` pour supprimer la limite ; `429` avec `Retry-After`). Une
+  requête avec un jeton n'est jamais comptée. Les réplicas partagent ces compteurs par la base, toutes les deux secondes :
+  un client peut dépasser la limite d'au plus ce qui arrive entre deux synchronisations, et si la base ne répond pas chaque
+  réplica limite seul. Postgres ne reçoit que des empreintes (hachage à clé), jamais une adresse. Ce budget n'arrête pas une
+  inondation distribuée : mettez une limite à l'ingress ou un CDN devant. Les connexions échouées ont leur propre limite,
+  par processus.
 - Les fichiers de marque sont validés par leur signature, jamais par leur `Content-Type`.
 - Le jeton d'activation voyage dans l'URL (`/activate?token=…`) ; il est à usage unique côté serveur et expire. Au
   retour d'un SSO, le navigateur n'accepte le token de session que s'il a lancé la connexion dans les 10 dernières

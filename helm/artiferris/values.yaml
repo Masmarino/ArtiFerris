@@ -77,6 +77,9 @@ artiferris:
   trustedProxyIps: ""
   # Accept an empty trustedProxyIps behind the ingress (one shared throttle bucket for every visitor).
   allowSharedThrottleBucket: false
+  # Requests per minute and client for anonymous npm and Docker reads; "0" turns the limit off. A request with a token
+  # is never counted. Clients behind one address (a CI farm) share it.
+  anonymousRegistryReadsPerMinute: "1200"
   # Days audit events are kept (daily sweep); package, repository and permission events are never deleted. "0" keeps everything.
   auditRetentionDays: "365"
   # Rewrites stored secrets in the current format, and under a new secrets.secretsEncryptionKey after a rotation, at startup.

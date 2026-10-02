@@ -149,6 +149,7 @@ Variables read by `artiferris-api`. `docker-compose.yml` wires those of a single
 | `ARTIFERRIS_BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD` | A first admin is needed | | Account created only when the `users` table is empty. Password of at least 8 characters, not `change-me…`. |
 | `ARTIFERRIS_SSRF_ALLOWED_CIDRS` | No | | Ranges (`10.20.0.0/16,192.168.1.5`) that LDAP, SMTP, OIDC and proxies may reach although private. Otherwise private, loopback and link-local addresses are refused. Unencrypted SMTP is accepted only for these hosts. A `/0` range or a typo stops the server. |
 | `TRUSTED_PROXY_IPS` | No | | Reverse proxies whose `X-Forwarded-For` is believed (CIDR ranges). A `/0` range stops the server. |
+| `ANONYMOUS_REGISTRY_READS_PER_MINUTE` | No | `1200` | Anonymous npm and Docker reads per minute and client; `0` removes the limit. |
 | `DB_MAX_CONNECTIONS` | No | `10` | Pool size. |
 | `ARTIFERRIS_AUDIT_BACKFILL_FORCE` | No | `false` | The task that fills in the organization of old audit events does not start under 3 connections; `true` forces it. |
 | `STORAGE_ROOT` | No | `./data` | npm tarballs and Docker blobs. A persistent volume in production. |
@@ -215,6 +216,12 @@ is typed again.
   fetches anonymously.
 - Downloads are counted per client (IPv4, IPv6 /64) once per package per hour, in memory. Behind a reverse proxy, set
   `TRUSTED_PROXY_IPS`.
+- Anonymous traffic has a per-client (IPv4, IPv6 /64) budget per minute: public pages and API, npm and Docker reads
+  (`ANONYMOUS_REGISTRY_READS_PER_MINUTE`, 1,200 by default, `0` removes the limit; `429` with `Retry-After`). A request
+  carrying a token is never counted. Replicas share these counters through the database every two seconds: a client can
+  exceed the limit by at most what arrives between two syncs, and if the database does not answer each replica limits on
+  its own. Postgres only receives keyed hashes, never an address. This budget does not stop a distributed flood: put a
+  limit at the ingress or a CDN in front. Failed sign-ins have their own limit, per process.
 - Branding files are validated by their signature, never by their `Content-Type`.
 - The activation token travels in the URL (`/activate?token=…`); it is single-use on the server and expires. When an
   SSO sign-in comes back, the browser only accepts the session token if it started that sign-in in the last 10 minutes,

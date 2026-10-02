@@ -93,6 +93,8 @@ spec:
             - name: TRUSTED_PROXY_IPS
               value: {{ include "artiferris.trustedProxyIps" . | quote }}
             {{- end }}
+            - name: ANONYMOUS_REGISTRY_READS_PER_MINUTE
+              value: {{ .Values.artiferris.anonymousRegistryReadsPerMinute | quote }}
             - name: AUDIT_RETENTION_DAYS
               value: {{ .Values.artiferris.auditRetentionDays | quote }}
             - name: STORAGE_ROOT

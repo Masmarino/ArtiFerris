@@ -4,6 +4,23 @@ Toutes les évolutions notables d'ArtiFerris. Le format suit [Keep a Changelog](
 versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de texte à la release GitHub du même numéro : voir
 « Publier une version » plus bas.
 
+## [Non publié]
+
+### Ajouté
+
+- **Limite des lectures anonymes npm et Docker** (#38) : par client (IPv4, /64 IPv6) et par minute, 1 200 par défaut
+  (`ANONYMOUS_REGISTRY_READS_PER_MINUTE`, `0` pour supprimer la limite ; réponse `429` avec `Retry-After`, au format du
+  registre pour Docker). Une requête avec un jeton n'est jamais comptée.
+- **Compteurs partagés entre réplicas** pour tout le trafic anonyme (pages et API publiques, registres) : synchronisés
+  par Postgres toutes les deux secondes, sans adresse en base (hachage à clé). Si la base ne répond pas, chaque réplica
+  limite seul. Migration `0013_rate_limit_counters` (table non journalisée).
+
+### Modifié
+
+- La limite des pages et de l'API publiques passe d'une fenêtre glissante par horodatage à une fenêtre glissante par
+  compteurs : même débit moyen, sans conserver chaque requête en mémoire. Les connexions échouées gardent leur limite par
+  processus.
+
 ## [0.6.0] - 2026-10-01
 
 ### Changements incompatibles de l'API

@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT key_hash, window_start, SUM(count)::bigint AS \"total!\" FROM rate_limit_counters\n               WHERE instance_id <> $1 AND window_start = ANY($2) AND key_hash = ANY($3)\n               GROUP BY key_hash, window_start",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "rate_limit_counters",
+            "name": "key_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "window_start",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "rate_limit_counters",
+            "name": "window_start"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8Array",
+        "ByteaArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "344231fc8142ece240189d520ffe4cf1bd52645148e6daed0befd173f4bbd9b4"
+}

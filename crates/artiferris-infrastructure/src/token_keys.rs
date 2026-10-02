@@ -8,6 +8,11 @@ pub(crate) fn derive_signing_key(jwt_secret: &str, purpose: &str) -> [u8; 32] {
     okm
 }
 
+/// Keys the hash the anonymous-traffic limiter stores in place of a client address, the same on every instance of a deployment.
+pub fn rate_limit_hash_key(jwt_secret: &str) -> [u8; 32] {
+    derive_signing_key(jwt_secret, "rate-limit")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
