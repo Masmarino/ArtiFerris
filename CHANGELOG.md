@@ -14,12 +14,25 @@ versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de t
 - **Compteurs partagés entre réplicas** pour tout le trafic anonyme (pages et API publiques, registres) : synchronisés
   par Postgres toutes les deux secondes, sans adresse en base (hachage à clé). Si la base ne répond pas, chaque réplica
   limite seul. Migration `0013_rate_limit_counters` (table non journalisée).
+- **Plusieurs réplicas sans effets de bord** (#34, préparation) : les compteurs de connexions échouées (migration
+  `0015_login_attempts`, clés hachées), les jetons MFA déjà utilisés (`0014_single_use_tokens`) et les cérémonies passkey
+  en cours (`0016_passkey_ceremonies`) vivent dans Postgres, donc un plafond, un anti-rejeu ou un passkey vaut pour tout
+  le déploiement et plus pour un seul pod. La purge de rétention, la suppression des dépôts, la purge des statistiques de
+  téléchargement et d'audit et l'instantané de métriques ne tournent plus qu'une fois par intervalle, tous réplicas
+  confondus (`0017_periodic_job_runs`).
+- **Arrêt propre** (#34) : à l'arrêt, le pod échoue d'abord sa sonde de disponibilité et continue de servir
+  `ARTIFERRIS_SHUTDOWN_DRAIN_SECONDS` secondes (0 par défaut), puis laisse finir les requêtes en cours pendant au plus
+  `ARTIFERRIS_SHUTDOWN_TIMEOUT_SECONDS` secondes (25 par défaut) avant d'écrire les compteurs de téléchargement et de
+  sortir. Le chart expose `shutdown.drainSeconds` et `shutdown.timeoutSeconds`, en déduit le délai de grâce du pod, et
+  crée un `PodDisruptionBudget` dès que `replicaCount` dépasse 1.
 
 ### Modifié
 
 - La limite des pages et de l'API publiques passe d'une fenêtre glissante par horodatage à une fenêtre glissante par
-  compteurs : même débit moyen, sans conserver chaque requête en mémoire. Les connexions échouées gardent leur limite par
-  processus.
+  compteurs : même débit moyen, sans conserver chaque requête en mémoire.
+- Le point d'accès des jetons Docker partage désormais le compteur de connexions de l'API (il avait le sien).
+- La liste des clés bloquées de l'administration ne montre plus que celles liées à un nom d'utilisateur, plus les clés par
+  adresse.
 
 ## [0.6.0] - 2026-10-01
 

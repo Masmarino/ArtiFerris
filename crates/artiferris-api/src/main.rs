@@ -58,6 +58,7 @@ async fn main() {
     spawn_download_prune_timer(&state);
     spawn_audit_prune_timer(&state);
     let flush_downloads = state.flush_downloads.clone();
+    let shutting_down = state.shutting_down.clone();
     let seo_app_state = state.clone();
     let app = build_router_with_cors(
         state,
@@ -77,7 +78,8 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&config.bind_addr).await.expect("failed to bind");
     tracing::info!("artiferris-api listening on {}", config.bind_addr);
     spawn_audit_backfill(pool, config.db_max_connections);
-    serve::serve(listener, app, HEADER_READ_TIMEOUT, shutdown_signal()).await;
+    let (drain_delay, drain_timeout) = shutdown_timings();
+    serve::serve(listener, app, HEADER_READ_TIMEOUT, drain_timeout, shutdown_sequence(shutting_down, drain_delay)).await;
     // The last few seconds of downloads are still in memory; write them before the process goes.
     match flush_downloads.execute().await {
         Ok(written) if written > 0 => tracing::info!(written, "flushed download counts on shutdown"),
@@ -151,10 +153,38 @@ fn spawn_audit_backfill(pool: sqlx::PgPool, max_connections: u32) {
 
 /// Liveness (`/healthz`) says the process is up; readiness says it can reach its database.
 async fn readyz(axum::extract::State(state): axum::extract::State<AppState>) -> axum::http::StatusCode {
-    if state.readiness.is_ready().await {
+    if !state.shutting_down.load(std::sync::atomic::Ordering::Relaxed) && state.readiness.is_ready().await {
         axum::http::StatusCode::OK
     } else {
         axum::http::StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+/// How long to keep serving after a stop was asked for, so the load balancer notices the failing readiness probe and stops
+/// sending requests, and how long the requests in flight then get to finish.
+const DEFAULT_SHUTDOWN_DRAIN_SECONDS: u64 = 0;
+const DEFAULT_SHUTDOWN_TIMEOUT_SECONDS: u64 = 25;
+
+/// Unset or empty keeps `default`; anything that is not a whole number of seconds is an error rather than a silent default.
+fn parse_seconds(name: &str, raw: Option<&str>, default: u64) -> Result<std::time::Duration, String> {
+    match raw.map(str::trim).filter(|value| !value.is_empty()) {
+        None => Ok(std::time::Duration::from_secs(default)),
+        Some(value) => value.parse::<u64>().map(std::time::Duration::from_secs).map_err(|_| format!("{name} must be a whole number of seconds, got {value:?}")),
+    }
+}
+
+fn shutdown_timings() -> (std::time::Duration, std::time::Duration) {
+    let read = |name: &str, default: u64| parse_seconds(name, std::env::var(name).ok().as_deref(), default).unwrap_or_else(|message| panic!("{message}"));
+    (read("ARTIFERRIS_SHUTDOWN_DRAIN_SECONDS", DEFAULT_SHUTDOWN_DRAIN_SECONDS), read("ARTIFERRIS_SHUTDOWN_TIMEOUT_SECONDS", DEFAULT_SHUTDOWN_TIMEOUT_SECONDS))
+}
+
+/// Waits for the stop signal, fails readiness at once, and keeps serving for `drain_delay` before the listener closes.
+async fn shutdown_sequence(shutting_down: std::sync::Arc<std::sync::atomic::AtomicBool>, drain_delay: std::time::Duration) {
+    shutdown_signal().await;
+    shutting_down.store(true, std::sync::atomic::Ordering::Relaxed);
+    if !drain_delay.is_zero() {
+        tracing::info!(drain_seconds = drain_delay.as_secs(), "stop requested: failing readiness and serving until the load balancer has caught up");
+        tokio::time::sleep(drain_delay).await;
     }
 }
 
@@ -710,6 +740,29 @@ mod tests {
         let response = app.oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap()).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[sqlx::test]
+    async fn readyz_fails_as_soon_as_a_stop_is_requested_and_healthz_stays_ok(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let app = build_router(state.clone());
+        state.shutting_down.store(true, std::sync::atomic::Ordering::Relaxed);
+
+        let readyz = app.clone().oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap()).await.unwrap();
+        let healthz = app.oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap()).await.unwrap();
+
+        assert_eq!(readyz.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(healthz.status(), StatusCode::OK, "a pod that is stopping is not killed for it");
+    }
+
+    #[test]
+    fn the_shutdown_settings_default_when_unset_and_reject_a_typo() {
+        assert_eq!(parse_seconds("X", None, 25).unwrap(), std::time::Duration::from_secs(25));
+        assert_eq!(parse_seconds("X", Some("  "), 25).unwrap(), std::time::Duration::from_secs(25));
+        assert_eq!(parse_seconds("X", Some("0"), 25).unwrap(), std::time::Duration::ZERO);
+        assert_eq!(parse_seconds("X", Some("120"), 25).unwrap(), std::time::Duration::from_secs(120));
+        assert!(parse_seconds("X", Some("10s"), 25).is_err());
+        assert!(parse_seconds("X", Some("-1"), 25).is_err());
     }
 
     #[sqlx::test]

@@ -162,6 +162,8 @@ pub struct AppState {
     pub record_metrics_snapshot: Arc<RecordMetricsSnapshotUseCase>,
     pub get_health_status: Arc<GetHealthStatusUseCase>,
     pub readiness: Arc<PostgresReadiness>,
+    /// Set once a stop has been asked for: readiness then fails, so the load balancer sends no new request here while the ones in flight finish.
+    pub shutting_down: Arc<std::sync::atomic::AtomicBool>,
     pub get_admin_stats: Arc<GetAdminStatsUseCase>,
     pub export_configuration: Arc<ExportConfigurationUseCase>,
     pub import_configuration: Arc<ImportConfigurationUseCase>,
@@ -475,6 +477,7 @@ impl AppState {
             record_metrics_snapshot: Arc::new(RecordMetricsSnapshotUseCase::new(users_repo.clone(), get_usage_metrics, metrics_snapshots)),
             get_health_status: Arc::new(GetHealthStatusUseCase::new(health_check.clone(), storage.clone(), started_at)),
             readiness,
+            shutting_down: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             get_admin_stats: Arc::new(GetAdminStatsUseCase::new(users_repo.clone(), repository_store.clone(), permission_store.clone())),
             export_configuration: Arc::new(ExportConfigurationUseCase::new(users_repo.clone(), repository_store.clone(), permission_store.clone(), system_settings.clone(), organizations.clone())),
             import_configuration,

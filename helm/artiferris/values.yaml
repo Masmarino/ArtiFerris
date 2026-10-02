@@ -8,6 +8,20 @@ image:
 
 replicaCount: 1
 
+# What a pod does when it is asked to stop (a rolling update, a node drain). It first fails its readiness probe and
+# keeps serving for `drainSeconds`, so the ingress stops sending it requests; then it lets the requests in flight finish
+# for up to `timeoutSeconds` (a long `docker push` is one), writes what it still holds in memory, and exits. The pod's
+# termination grace period is the sum of the two plus a margin, so Kubernetes does not kill it first.
+shutdown:
+  drainSeconds: 10
+  timeoutSeconds: 120
+
+# Keeps voluntary disruptions (a node drain) from taking down every replica at once. Only rendered with replicaCount > 1:
+# on a single replica it would block every drain.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
 service:
   port: 8080
 

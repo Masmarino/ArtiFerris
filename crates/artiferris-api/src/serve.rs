@@ -18,8 +18,10 @@ use hyper_util::service::TowerToHyperService;
 use tokio::net::TcpListener;
 use tower::{Service, ServiceExt};
 
-/// Serves `app` until `shutdown` completes, then lets the requests in flight finish.
-pub async fn serve(listener: TcpListener, app: Router, header_read_timeout: Duration, shutdown: impl Future<Output = ()>) {
+/// Serves `app` until `shutdown` completes, then lets the requests in flight finish, for at most `drain_timeout`: past
+/// it the remaining connections are dropped, so that what the process still has to do on its way out (writing the
+/// buffered download counts) is not cut short by the platform killing it.
+pub async fn serve(listener: TcpListener, app: Router, header_read_timeout: Duration, drain_timeout: Duration, shutdown: impl Future<Output = ()>) {
     let mut make_service = app.into_make_service_with_connect_info::<SocketAddr>();
     let graceful = GracefulShutdown::new();
     let mut shutdown = pin!(shutdown);
@@ -47,7 +49,9 @@ pub async fn serve(listener: TcpListener, app: Router, header_read_timeout: Dura
             }
         });
     }
-    graceful.shutdown().await;
+    if tokio::time::timeout(drain_timeout, graceful.shutdown()).await.is_err() {
+        tracing::warn!(timeout_seconds = drain_timeout.as_secs(), "requests were still running when the shutdown timeout passed; dropping their connections");
+    }
 }
 
 #[cfg(test)]
@@ -62,7 +66,7 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
         let app = Router::new().route("/", get(|| async { "hello" }));
-        let server = tokio::spawn(serve(listener, app, header_read_timeout, async move {
+        let server = tokio::spawn(serve(listener, app, header_read_timeout, Duration::from_secs(5), async move {
             let _ = stopped.await;
         }));
         (addr, stop, server)
@@ -146,7 +150,7 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
         let app = Router::new().route("/", get(|ConnectInfo(peer): ConnectInfo<SocketAddr>| async move { peer.ip().to_string() }));
-        let server = tokio::spawn(serve(listener, app, Duration::from_secs(5), async move {
+        let server = tokio::spawn(serve(listener, app, Duration::from_secs(5), Duration::from_secs(5), async move {
             let _ = stopped.await;
         }));
         let mut client = TcpStream::connect(addr).await.unwrap();
@@ -156,6 +160,51 @@ mod tests {
 
         assert!(response.ends_with("127.0.0.1"), "{response}");
         let _ = stop.send(());
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_request_still_running_at_the_shutdown_timeout_does_not_hold_the_process_up() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let app = Router::new().route("/slow", get(|| async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            "late"
+        }));
+        let server = tokio::spawn(serve(listener, app, Duration::from_secs(5), Duration::from_millis(300), async move {
+            let _ = stopped.await;
+        }));
+        let mut client = TcpStream::connect(addr).await.unwrap();
+        client.write_all(b"GET /slow HTTP/1.1\r\nHost: x\r\n\r\n").await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let _ = stop.send(());
+
+        let finished = tokio::time::timeout(Duration::from_secs(5), server).await;
+        assert!(finished.is_ok(), "serve kept waiting for a request that outlasts the shutdown timeout");
+    }
+
+    #[tokio::test]
+    async fn a_request_that_finishes_within_the_shutdown_timeout_is_answered() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let app = Router::new().route("/slow", get(|| async {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            "done"
+        }));
+        let server = tokio::spawn(serve(listener, app, Duration::from_secs(5), Duration::from_secs(5), async move {
+            let _ = stopped.await;
+        }));
+        let mut client = TcpStream::connect(addr).await.unwrap();
+        client.write_all(b"GET /slow HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let _ = stop.send(());
+        let response = read_to_end(&mut client).await;
+
+        assert!(response.ends_with("done"), "{response}");
         server.await.unwrap();
     }
 }
