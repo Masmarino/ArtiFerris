@@ -120,27 +120,27 @@ impl UsernameThrottle {
     }
 
     /// Charges the address budget in the same step.
-    fn reserve_with(&self, throttle: &LoginThrottle, ip_key: &str) -> bool {
+    async fn reserve_with(&self, throttle: &LoginThrottle, ip_key: &str) -> bool {
         let mut budgets = vec![(self.shared_key.as_str(), MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW), (ip_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW)];
         if let Some((key, max_attempts, window)) = &self.organization {
             budgets.push((key.as_str(), *max_attempts, *window));
         }
-        throttle.reserve_all(&budgets)
+        throttle.reserve_all(&budgets).await
     }
 
     /// The account that just proved it owns the name starts over.
-    fn clear(&self, throttle: &LoginThrottle) {
-        throttle.clear(&self.shared_key);
+    async fn clear(&self, throttle: &LoginThrottle) {
+        throttle.clear(&self.shared_key).await;
         if let Some((key, ..)) = &self.organization {
-            throttle.clear(key);
+            throttle.clear(key).await;
         }
     }
 
     /// The attempt was fine but the name isn't proven to be this account's: it stops counting, nothing else is touched.
-    fn release(&self, throttle: &LoginThrottle) {
-        throttle.release(&self.shared_key);
+    async fn release(&self, throttle: &LoginThrottle) {
+        throttle.release(&self.shared_key).await;
         if let Some((key, ..)) = &self.organization {
-            throttle.release(key);
+            throttle.release(key).await;
         }
     }
 }
@@ -167,7 +167,7 @@ async fn login(
     let ip_key = format!("login-ip:{}", artiferris_application::client_ip::throttle_bucket(&ip));
     let username_throttle = UsernameThrottle::for_login(&state, resolved_org.0.id, &username).await;
 
-    if !username_throttle.reserve_with(&state.login_throttle, &ip_key) {
+    if !username_throttle.reserve_with(&state.login_throttle, &ip_key).await {
         return Err((
             StatusCode::TOO_MANY_REQUESTS,
             Json(ErrorResponse::message("too many failed login attempts, try again later".to_string())),
@@ -181,10 +181,10 @@ async fn login(
     };
     match outcome {
         Ok(token) => {
-            username_throttle.clear(&state.login_throttle);
+            username_throttle.clear(&state.login_throttle).await;
             // Only handed back, not wiped — a shared IP (NAT/office) must not have its
             // failures reset by one unrelated account's successful login.
-            state.login_throttle.release(&ip_key);
+            state.login_throttle.release(&ip_key).await;
             let user_id = state.token_issuer.verify(&token).map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?.user_id;
             // mfa_setup_required tells the client whether to go to /mfa/setup/* or /mfa/verify.
             let factors = mfa_factors(&state, user_id).await.map_err(|e| application_error_response("failed to check MFA status", e))?;
@@ -203,8 +203,8 @@ async fn login(
         }
         // Turned away before any password was checked: not the client's failed attempt.
         Err(e @ ApplicationError::Domain(DomainError::Busy(_))) => {
-            username_throttle.release(&state.login_throttle);
-            state.login_throttle.release(&ip_key);
+            username_throttle.release(&state.login_throttle).await;
+            state.login_throttle.release(&ip_key).await;
             Err(application_error_response("failed to check credentials", e))
         }
         Err(_) => {
@@ -224,7 +224,7 @@ async fn register(
 ) -> Result<Json<LoginResponse>, (StatusCode, Json<ErrorResponse>)> {
     // Every attempt counts, whatever its outcome — a registration flood costs server work regardless.
     let throttle_key = format!("register:{}", peer_ip_bucket(&state, &headers, connect_info));
-    if !state.login_throttle.reserve(&throttle_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW) {
+    if !state.login_throttle.reserve(&throttle_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW).await {
         return Err((
             StatusCode::TOO_MANY_REQUESTS,
             Json(ErrorResponse::message("too many registration attempts, try again later".to_string())),
@@ -322,7 +322,7 @@ async fn sso_oidc_login(
     jar: axum_extra::extract::cookie::CookieJar,
 ) -> Result<(axum_extra::extract::cookie::CookieJar, axum::response::Redirect), (StatusCode, Json<ErrorResponse>)> {
     // Every start is a discovery round-trip to the identity provider. A callback that signs the person in hands it back.
-    if !state.login_throttle.reserve(&oidc_start_key(&state, &headers, connect_info), OIDC_START_MAX_ATTEMPTS, LOGIN_ATTEMPT_WINDOW) {
+    if !state.login_throttle.reserve(&oidc_start_key(&state, &headers, connect_info), OIDC_START_MAX_ATTEMPTS, LOGIN_ATTEMPT_WINDOW).await {
         return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many login attempts, try again later".to_string()))));
     }
     let config = state
@@ -369,7 +369,7 @@ async fn sso_oidc_callback(
     // Reserved before anything is looked up or recorded, handed back on success.
     let bucket = peer_ip_bucket(&state, &headers, connect_info);
     let budget_key = format!("oidc-callback:{bucket}");
-    if !state.login_throttle.reserve(&budget_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW) {
+    if !state.login_throttle.reserve(&budget_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW).await {
         return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many failed login attempts, try again later".to_string()))));
     }
 
@@ -411,8 +411,8 @@ async fn sso_oidc_callback(
         Err(e) => return Err(application_error_response("failed to provision sso user", e)),
     };
 
-    state.login_throttle.release(&budget_key);
-    state.login_throttle.release(&format!("oidc-start:{bucket}"));
+    state.login_throttle.release(&budget_key).await;
+    state.login_throttle.release(&format!("oidc-start:{bucket}")).await;
     record_sso_login(&state, &token, resolved_org.0.id, LoginMethod::Oidc).await;
 
     // One binding secret, one use — clear it so a replayed callback has nothing to match.
@@ -453,7 +453,7 @@ async fn sso_ldap_login(
     let ip_key = format!("login-ip:{}", artiferris_application::client_ip::throttle_bucket(&ip));
     let username_throttle = UsernameThrottle::for_login(&state, resolved_org.0.id, &username).await;
 
-    if !username_throttle.reserve_with(&state.login_throttle, &ip_key) {
+    if !username_throttle.reserve_with(&state.login_throttle, &ip_key).await {
         return Err((
             StatusCode::TOO_MANY_REQUESTS,
             Json(ErrorResponse::message("too many failed login attempts, try again later".to_string())),
@@ -474,17 +474,17 @@ async fn sso_ldap_login(
         Ok(token) => {
             // Typed into a directory the organization controls: only an account that really has this name gets its failures forgotten.
             if account_username(&state, &token).await.as_deref() == Some(username.as_str()) {
-                username_throttle.clear(&state.login_throttle);
+                username_throttle.clear(&state.login_throttle).await;
             } else {
-                username_throttle.release(&state.login_throttle);
+                username_throttle.release(&state.login_throttle).await;
             }
-            state.login_throttle.release(&ip_key);
+            state.login_throttle.release(&ip_key).await;
             record_sso_login(&state, &token, resolved_org.0.id, LoginMethod::Ldap).await;
             Ok(Json(LoginResponse { token: Some(token), mfa_token: None, mfa_setup_required: false, mfa_has_totp: false, mfa_has_passkey: false }))
         }
         Err(e @ ApplicationError::Domain(DomainError::Busy(_))) => {
-            username_throttle.release(&state.login_throttle);
-            state.login_throttle.release(&ip_key);
+            username_throttle.release(&state.login_throttle).await;
+            state.login_throttle.release(&ip_key).await;
             Err(application_error_response("failed to provision sso user", e))
         }
         Err(e) => {
@@ -515,8 +515,8 @@ fn passkey_start_key(state: &AppState, headers: &HeaderMap, connect_info: Result
     format!("passkey-start:{}", peer_ip_bucket(state, headers, connect_info))
 }
 
-fn reserve_passkey_start(state: &AppState, headers: &HeaderMap, connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>) -> Result<(), ApiError> {
-    if state.login_throttle.reserve(&passkey_start_key(state, headers, connect_info), PASSKEY_START_ATTEMPTS, LOGIN_ATTEMPT_WINDOW) { Ok(()) } else { Err(too_many_attempts()) }
+async fn reserve_passkey_start(state: &AppState, headers: &HeaderMap, connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>) -> Result<(), ApiError> {
+    if state.login_throttle.reserve(&passkey_start_key(state, headers, connect_info), PASSKEY_START_ATTEMPTS, LOGIN_ATTEMPT_WINDOW).await { Ok(()) } else { Err(too_many_attempts()) }
 }
 
 fn too_many_attempts() -> ApiError {
@@ -542,8 +542,12 @@ async fn require_no_factor(state: &AppState, user_id: uuid::Uuid) -> Result<(), 
 }
 
 /// The final step of a login or of mandatory MFA setup: a token may complete one of them only once.
-fn consume_mfa_token(state: &AppState, user_id: uuid::Uuid, mfa_token: &str) -> Result<(), ApiError> {
-    if state.used_mfa_tokens.consume(user_id, mfa_token) { Ok(()) } else { Err(invalid_mfa_token()) }
+async fn consume_mfa_token(state: &AppState, user_id: uuid::Uuid, mfa_token: &str) -> Result<(), ApiError> {
+    match state.used_mfa_tokens.consume(user_id, mfa_token).await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(invalid_mfa_token()),
+        Err(e) => Err(application_error_response("failed to record a spent MFA token", e.into())),
+    }
 }
 
 async fn issue_session_token(state: &AppState, user: &User) -> Result<String, ApiError> {
@@ -582,7 +586,7 @@ async fn verify_mfa(State(state): State<AppState>, Json(body): Json<MfaVerifyReq
     let (max_attempts, window) = throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = mfa_verify_throttle_key(user_id);
     // Reserved before the code is checked, so a burst of parallel guesses can't all pass the limit first.
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err(too_many_attempts());
     }
 
@@ -594,8 +598,8 @@ async fn verify_mfa(State(state): State<AppState>, Json(body): Json<MfaVerifyReq
 
     match verified {
         Ok(()) => {
-            consume_mfa_token(&state, user_id, &body.mfa_token)?;
-            state.login_throttle.clear(&throttle_key);
+            consume_mfa_token(&state, user_id, &body.mfa_token).await?;
+            state.login_throttle.clear(&throttle_key).await;
             let token = issue_session_token(&state, &user).await?;
             record_login(&state, &user, if body.code.is_some() { MfaMethod::Totp } else { MfaMethod::BackupCode }).await;
             Ok(Json(session_login_response(token)))
@@ -626,7 +630,7 @@ async fn start_mfa_passkey(
     connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>,
     Json(body): Json<MfaPasskeyStartRequest>,
 ) -> Result<Json<MfaPasskeyStartResponse>, ApiError> {
-    reserve_passkey_start(&state, &headers, connect_info)?;
+    reserve_passkey_start(&state, &headers, connect_info).await?;
     let user = user_for_mfa_token(&state, &body.mfa_token).await?;
 
     let (challenge_id, public_key) = state.start_passkey_authentication.execute(user.id).await.map_err(|e| application_error_response("failed to start passkey authentication", e))?;
@@ -651,15 +655,15 @@ async fn finish_mfa_passkey(
 
     let (max_attempts, window) = throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = mfa_verify_throttle_key(user_id);
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err(too_many_attempts());
     }
 
     match state.finish_passkey_authentication.execute(user_id, body.challenge_id, &body.credential).await {
         Ok(()) => {
-            consume_mfa_token(&state, user_id, &body.mfa_token)?;
-            state.login_throttle.clear(&throttle_key);
-            state.login_throttle.release(&passkey_start_key(&state, &headers, connect_info));
+            consume_mfa_token(&state, user_id, &body.mfa_token).await?;
+            state.login_throttle.clear(&throttle_key).await;
+            state.login_throttle.release(&passkey_start_key(&state, &headers, connect_info)).await;
             let token = issue_session_token(&state, &user).await?;
             record_login(&state, &user, MfaMethod::Passkey).await;
             Ok(Json(session_login_response(token)))
@@ -723,15 +727,15 @@ async fn setup_mfa_totp_confirm(State(state): State<AppState>, Json(body): Json<
 
     let (max_attempts, window) = throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = mfa_setup_throttle_key(user.id);
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err(too_many_attempts());
     }
 
     require_no_factor(&state, user.id).await?;
     match state.confirm_totp.execute(user.id, user.username.as_str(), &body.code).await {
         Ok(backup_codes) => {
-            consume_mfa_token(&state, user.id, &body.mfa_token)?;
-            state.login_throttle.clear(&throttle_key);
+            consume_mfa_token(&state, user.id, &body.mfa_token).await?;
+            state.login_throttle.clear(&throttle_key).await;
             let token = issue_session_token(&state, &user).await?;
             crate::state::record_security_event(&state, SecurityEvent::MfaEnabled { user_id: user.id, organization_id: user.organization_id, method: MfaMethod::Totp }, Some(user.id)).await;
             record_login(&state, &user, MfaMethod::Totp).await;
@@ -754,7 +758,7 @@ async fn setup_mfa_passkey_start(
     connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>,
     Json(body): Json<MfaSetupTokenOnlyRequest>,
 ) -> Result<Json<MfaSetupPasskeyStartResponse>, ApiError> {
-    reserve_passkey_start(&state, &headers, connect_info)?;
+    reserve_passkey_start(&state, &headers, connect_info).await?;
     let user = user_for_mfa_token(&state, &body.mfa_token).await?;
     require_no_factor(&state, user.id).await?;
     let (challenge_id, public_key) =
@@ -780,16 +784,16 @@ async fn setup_mfa_passkey_finish(
 
     let (max_attempts, window) = throttle_limits_for_organization(&state, user.organization_id).await;
     let throttle_key = mfa_setup_throttle_key(user.id);
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err(too_many_attempts());
     }
 
     require_no_factor(&state, user.id).await?;
     match state.finish_passkey_registration.execute(user.id, user.organization_id, body.challenge_id, &body.credential, &body.name).await {
         Ok(_) => {
-            consume_mfa_token(&state, user.id, &body.mfa_token)?;
-            state.login_throttle.clear(&throttle_key);
-            state.login_throttle.release(&passkey_start_key(&state, &headers, connect_info));
+            consume_mfa_token(&state, user.id, &body.mfa_token).await?;
+            state.login_throttle.clear(&throttle_key).await;
+            state.login_throttle.release(&passkey_start_key(&state, &headers, connect_info)).await;
             let token = issue_session_token(&state, &user).await?;
             record_login(&state, &user, MfaMethod::Passkey).await;
             Ok(Json(session_login_response(token)))
@@ -844,14 +848,14 @@ async fn change_password(
     Json(body): Json<ChangePasswordRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = throttle_limits_for_organization(&state, user.organization_id).await;
-    if !state.login_throttle.reserve(&user.username, max_attempts, window) {
+    if !state.login_throttle.reserve(&user.username, max_attempts, window).await {
         return Err(too_many_attempts());
     }
 
     let audit = AuditRecord::Security(SecurityAuditRecord { event: SecurityEvent::PasswordChanged { user_id: user.id, organization_id: user.organization_id }, actor_id: Some(user.id) });
     match state.change_password.execute(user.id, &body.current_password, &body.new_password, Some(&audit)).await {
         Ok(()) => {
-            state.login_throttle.clear(&user.username);
+            state.login_throttle.clear(&user.username).await;
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {
@@ -864,7 +868,7 @@ async fn change_password(
                 .await;
             } else {
                 // A rejected weak new password is not a credential-guessing signal.
-                state.login_throttle.release(&user.username);
+                state.login_throttle.release(&user.username).await;
             }
             Err(application_error_response("failed to change password", e))
         }

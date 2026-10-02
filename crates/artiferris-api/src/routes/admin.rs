@@ -312,7 +312,7 @@ struct BlockedUsernameResponse {
 
 async fn list_blocked_usernames(State(state): State<AppState>, user: AuthUser) -> Result<Json<Vec<BlockedUsernameResponse>>, (StatusCode, Json<ErrorResponse>)> {
     require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
-    let blocked = state.login_throttle.blocked_usernames(artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW);
+    let blocked = state.login_throttle.blocked_usernames(artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW).await;
     Ok(Json(blocked.into_iter().map(|b| BlockedUsernameResponse { username: b.username, remaining_seconds: b.remaining_seconds }).collect()))
 }
 
@@ -333,10 +333,10 @@ async fn clear_login_throttle(State(state): State<AppState>, user: AuthUser, Pat
             return Err(forbidden());
         }
     }
-    state.login_throttle.clear_username(&username);
+    state.login_throttle.clear_username(&username).await;
     if let Some(target) = &target {
         for key in [crate::routes::auth::mfa_verify_throttle_key(target.id), crate::routes::auth::mfa_setup_throttle_key(target.id), crate::routes::mfa::manage_throttle_key(target.id)] {
-            state.login_throttle.clear(&key);
+            state.login_throttle.clear(&key).await;
         }
     }
     let event = AdminAuditEvent::LoginThrottleCleared { organization_id: target.map(|target| target.organization_id), username: artiferris_domain::audit::recorded_username(&username) };
@@ -1345,7 +1345,7 @@ mod tests {
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
         let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
         for _ in 0..artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS {
-            state.login_throttle.record_failure("victim", artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW);
+            state.login_throttle.record_failure(&artiferris_application::login_throttle::shared_username_key("victim"), artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW).await;
         }
         let app = build_router(state);
 
@@ -1363,7 +1363,7 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json[0]["username"], "victim");
+        assert_eq!(json[0]["username"], artiferris_application::login_throttle::shared_username_key("victim"));
         assert!(json[0]["remaining_seconds"].as_u64().unwrap() > 0);
     }
 
@@ -1372,7 +1372,7 @@ mod tests {
         let state = AppState::build(pool, &test_config());
         state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
         let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
-        state.login_throttle.record_failure("almost", artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW);
+        state.login_throttle.record_failure(&artiferris_application::login_throttle::shared_username_key("almost"), artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW).await;
         let app = build_router(state);
 
         let response = app

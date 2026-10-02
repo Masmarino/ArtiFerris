@@ -96,20 +96,20 @@ async fn issue_token(
     let forwarded: Vec<&str> = headers.get_all("x-forwarded-for").iter().filter_map(|value| value.to_str().ok()).collect();
     let ip = state.guard.client_address(connect_info.ok().map(|ConnectInfo(addr)| addr.ip()), &forwarded);
     let throttle_key = format!("docker-token:{}", throttle_bucket(&ip));
-    if !state.login_throttle.reserve(&throttle_key, artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW) {
+    if !state.login_throttle.reserve(&throttle_key, artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW).await {
         return docker_error(StatusCode::TOO_MANY_REQUESTS, "TOOMANYREQUESTS", "too many failed token requests, try again later").into_response();
     }
 
     match state.issue_access_token.execute(resolved_org.0.id, basic.password(), merged_scope.as_deref()).await {
         Ok(token) => {
-            state.login_throttle.release(&throttle_key);
+            state.login_throttle.release(&throttle_key).await;
             Json(token_body(&token)).into_response()
         }
         Err(ApplicationError::InactiveApiToken) => {
             // A real but stale token: retrying it isn't guessing, so it costs the token's own budget (which also caps its audit rows), not the address's.
-            state.login_throttle.release(&throttle_key);
+            state.login_throttle.release(&throttle_key).await;
             let stale_token_key = format!("docker-token-stale:{}", artiferris_application::use_cases::api_token::hash_api_token(basic.password()));
-            if state.login_throttle.reserve(&stale_token_key, artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW) {
+            if state.login_throttle.reserve(&stale_token_key, artiferris_application::login_throttle::MAX_LOGIN_ATTEMPTS, artiferris_application::login_throttle::LOGIN_ATTEMPT_WINDOW).await {
                 if let Err(e) = state.record_security_event.execute(artiferris_domain::audit::SecurityEvent::DockerTokenFailed { ip }, None).await {
                     tracing::warn!("failed to record security event: {e}");
                 }
@@ -125,7 +125,7 @@ async fn issue_token(
             docker_error(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "invalid credentials").into_response()
         }
         Err(e) => {
-            state.login_throttle.release(&throttle_key);
+            state.login_throttle.release(&throttle_key).await;
             docker_error_response(e).into_response()
         }
     }

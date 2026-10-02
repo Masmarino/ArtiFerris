@@ -163,6 +163,8 @@ Variables lues par `artiferris-api`. `docker-compose.yml` câble celles d'un dé
 | `BIND_ADDR` | Non | `0.0.0.0:8080` | Adresse d'écoute. |
 | `STATIC_DIR` | Non | `./static` | Frontend compilé (hors image fournie). |
 | `RUST_LOG` | Non | aucun log | Filtre `tracing`, par exemple `info`. |
+| `ARTIFERRIS_SHUTDOWN_DRAIN_SECONDS` | Non | `0` | À l'arrêt, durée pendant laquelle le serveur échoue sa sonde `/readyz` mais continue de servir, le temps que le répartiteur de charge cesse de lui envoyer des requêtes. Le chart Helm la règle à 10. |
+| `ARTIFERRIS_SHUTDOWN_TIMEOUT_SECONDS` | Non | `25` | Temps laissé ensuite aux requêtes en cours (un `docker push` par exemple) avant que leurs connexions soient coupées. Un nombre entier ; une valeur invalide empêche le démarrage. |
 | `CORS_ALLOWED_ORIGIN` | Non | toute origine | Restreint le CORS à une origine. À laisser vide quand le frontend est servi par l'API. |
 | `ARTIFERRIS_DOCKER_TOKEN_REALM` | Non | dérivé de la requête | Realm des tokens Docker, normalement calculé par requête. À fixer seulement derrière un intermédiaire qui ne transmet pas fidèlement `Host` et le schéma ; il fige alors tous les clients sur ce realm. En `https://` hors localhost. |
 

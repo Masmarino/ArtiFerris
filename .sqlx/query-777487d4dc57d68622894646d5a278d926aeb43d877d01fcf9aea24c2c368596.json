@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM passkey_ceremonies WHERE id NOT IN (SELECT id FROM passkey_ceremonies ORDER BY created_at DESC, id LIMIT $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "777487d4dc57d68622894646d5a278d926aeb43d877d01fcf9aea24c2c368596"
+}

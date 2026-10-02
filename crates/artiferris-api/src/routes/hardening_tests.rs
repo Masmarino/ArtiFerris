@@ -126,7 +126,7 @@ async fn a_tenants_long_window_cannot_stretch_a_lock_on_the_shared_username_key(
         login_from(&app, "hostile.artiferris.localhost", "victim", "wrong", address).await;
     }
 
-    let blocked = state.login_throttle.blocked_usernames(MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW);
+    let blocked = state.login_throttle.blocked_usernames(MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW).await;
     let shared = blocked.iter().find(|b| b.username == shared_username_key("victim")).expect("the shared key is at its limit");
     assert!(shared.remaining_seconds <= LOGIN_ATTEMPT_WINDOW.as_secs(), "the lock lasts the default window, not the hostile tenant's 24 hours: {}", shared.remaining_seconds);
 }
@@ -280,15 +280,15 @@ async fn unlocking_also_lifts_the_organizations_own_key_and_the_second_factor_bu
     assert_eq!(login_from(&app, "strict.artiferris.localhost", "member", PASSWORD, 3).await, StatusCode::TOO_MANY_REQUESTS);
     let mfa_key = crate::routes::auth::mfa_verify_throttle_key(member_id);
     for _ in 0..MAX_LOGIN_ATTEMPTS {
-        state.login_throttle.record_failure(&mfa_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW);
+        state.login_throttle.record_failure(&mfa_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW).await;
     }
-    assert!(state.login_throttle.is_throttled(&mfa_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW));
+    assert!(state.login_throttle.is_throttled(&mfa_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW).await);
 
     let (status, _) = send(&app, "DELETE", "/api/admin/login-throttle/member", &admin_token, None).await;
 
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(login_from(&app, "strict.artiferris.localhost", "member", PASSWORD, 4).await, StatusCode::OK);
-    assert!(!state.login_throttle.is_throttled(&mfa_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW));
+    assert!(!state.login_throttle.is_throttled(&mfa_key, MAX_LOGIN_ATTEMPTS, LOGIN_ATTEMPT_WINDOW).await);
 }
 
 #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -479,13 +479,13 @@ async fn an_enrolment_left_unconfirmed_for_too_long_is_expired(pool: sqlx::PgPoo
 }
 
 #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
-async fn a_table_full_of_spent_mfa_tokens_never_blocks_the_next_login(pool: sqlx::PgPool) {
+async fn a_user_who_spent_many_mfa_tokens_can_still_log_in(pool: sqlx::PgPool) {
     let state = AppState::build(pool, &test_config());
     let user_id = state.create_user.execute(public_org(), "florian", PASSWORD, false).await.unwrap();
     let enrollment = state.enroll_totp.execute(user_id, "florian", Some(PASSWORD)).await.unwrap();
     state.confirm_totp.execute(user_id, "florian", &artiferris_application::use_cases::mfa::generate_current_totp_code(&enrollment.secret_base32)).await.unwrap();
-    for _ in 0..10_050 {
-        assert!(state.used_mfa_tokens.consume(Uuid::new_v4(), &Uuid::new_v4().to_string()));
+    for _ in 0..50 {
+        assert!(state.used_mfa_tokens.consume(user_id, &Uuid::new_v4().to_string()).await.unwrap());
     }
     let mfa_token = state.mfa_pending_token_issuer.issue(user_id, chrono::Duration::minutes(5)).unwrap();
     let app = build_router(state.clone());

@@ -11,6 +11,7 @@ pub mod email_templates;
 pub mod error;
 pub mod keyed_locks;
 pub mod login_throttle;
+pub mod periodic;
 pub mod rate_limiter;
 pub mod request_guard;
 pub mod single_use_tokens;

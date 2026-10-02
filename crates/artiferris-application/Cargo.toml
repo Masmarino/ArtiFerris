@@ -21,7 +21,7 @@ serde_json = "1.0.151"
 rand = "0.10.2"
 semver = "1"
 totp-rs = { version = "6.0.0", default-features = false, features = ["otpauth", "std"] }
-webauthn-rs = "0.5.5"
+webauthn-rs = { version = "0.5.5", features = ["danger-allow-state-serialisation"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 bytes = "1"
 tracing = "0.1"

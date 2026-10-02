@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT display_key AS \"display_key!\",\n                      GREATEST(0, EXTRACT(EPOCH FROM (MIN(attempted_at + make_interval(secs => GREATEST(window_seconds::float8, $2))) - now())))::float8 AS \"remaining!\"\n               FROM login_attempts\n               WHERE display_key IS NOT NULL AND attempted_at > now() - make_interval(secs => GREATEST(window_seconds::float8, $2))\n               GROUP BY key_hash, display_key\n               HAVING COUNT(*) >= $1\n               ORDER BY 2 DESC\n               LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "display_key!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "login_attempts",
+            "name": "display_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "remaining!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Float8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "a41fa8cf6992fc72ad44251bd565ddce65c79dbdcb8bb3be31272c0b9e29b473"
+}

@@ -23,5 +23,5 @@ pub mod ssrf_allowlist;
 pub mod ssrf_guard;
 pub mod smtp_email_sender;
 mod token_keys;
-pub use token_keys::rate_limit_hash_key;
+pub use token_keys::{login_attempt_hash_key, rate_limit_hash_key};
 pub mod trivy_docker_image_scanner;

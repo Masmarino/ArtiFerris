@@ -156,6 +156,8 @@ Variables read by `artiferris-api`. `docker-compose.yml` wires those of a single
 | `BIND_ADDR` | No | `0.0.0.0:8080` | Listen address. |
 | `STATIC_DIR` | No | `./static` | Built frontend (outside the provided image). |
 | `RUST_LOG` | No | no logs | `tracing` filter, for example `info`. |
+| `ARTIFERRIS_SHUTDOWN_DRAIN_SECONDS` | No | `0` | On shutdown, how long the server fails its `/readyz` probe but keeps serving, so the load balancer stops sending it requests. The Helm chart sets it to 10. |
+| `ARTIFERRIS_SHUTDOWN_TIMEOUT_SECONDS` | No | `25` | How long the requests in flight (a `docker push`, for one) then get before their connections are cut. A whole number; an invalid value stops startup. |
 | `CORS_ALLOWED_ORIGIN` | No | any origin | Restricts CORS to one origin. Leave empty when the API serves the frontend. |
 | `ARTIFERRIS_DOCKER_TOKEN_REALM` | No | derived from the request | Docker token realm, normally computed per request. Set it only behind an intermediary that does not forward `Host` and the scheme faithfully; every client is then pinned to that realm. `https://` outside localhost. |
 

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COUNT(*) AS \"count!\" FROM login_attempts WHERE key_hash = $1 AND attempted_at > now() - make_interval(secs => GREATEST(window_seconds::float8, $2))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "97b44222c75e37e06ee2a18c13e833130efcb2452ef7e5df707587f641f4775f"
+}

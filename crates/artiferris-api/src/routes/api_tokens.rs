@@ -77,12 +77,12 @@ async fn create_token(
 async fn confirm_password(state: &AppState, user: &AuthUser, password: &str) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = crate::routes::auth::throttle_limits_for_organization(state, user.organization_id).await;
     let throttle_key = crate::routes::mfa::manage_throttle_key(user.id);
-    if !state.login_throttle.reserve(&throttle_key, max_attempts, window) {
+    if !state.login_throttle.reserve(&throttle_key, max_attempts, window).await {
         return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse::message("too many failed attempts, try again later".to_string()))));
     }
     match state.confirm_password.execute(user.id, password).await {
         Ok(()) => {
-            state.login_throttle.clear(&throttle_key);
+            state.login_throttle.clear(&throttle_key).await;
             Ok(())
         }
         Err(e) => Err(application_error_response("failed to confirm password", e)),

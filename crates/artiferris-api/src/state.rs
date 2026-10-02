@@ -162,6 +162,8 @@ pub struct AppState {
     pub record_metrics_snapshot: Arc<RecordMetricsSnapshotUseCase>,
     pub get_health_status: Arc<GetHealthStatusUseCase>,
     pub readiness: Arc<PostgresReadiness>,
+    /// Set once a stop has been asked for: readiness then fails, so the load balancer sends no new request here while the ones in flight finish.
+    pub shutting_down: Arc<std::sync::atomic::AtomicBool>,
     pub get_admin_stats: Arc<GetAdminStatsUseCase>,
     pub export_configuration: Arc<ExportConfigurationUseCase>,
     pub import_configuration: Arc<ImportConfigurationUseCase>,
@@ -196,6 +198,8 @@ pub struct AppState {
     /// as blocked users.
     pub anonymous_limiter: Arc<artiferris_application::rate_limiter::RateLimiter>,
     pub rate_limit_store: Arc<dyn artiferris_domain::rate_limit::RateLimitStorePort>,
+    /// Lets the instances take turns at the sweeps that must run once per interval, not once per instance.
+    pub periodic_jobs: Arc<dyn artiferris_domain::periodic_job::PeriodicJobPort>,
     /// `ANONYMOUS_REGISTRY_READS_PER_MINUTE`: requests per minute and client for anonymous npm and Docker reads.
     pub anonymous_registry_reads_per_minute: usize,
     /// Budgets for audit events an actor can repeat at will, kept apart from `login_throttle` so they never show up as blocked logins.
@@ -252,8 +256,8 @@ fn actor_event_budget(event: &artiferris_domain::audit::SecurityEvent) -> Option
 pub async fn record_security_event(state: &AppState, event: artiferris_domain::audit::SecurityEvent, actor_id: Option<uuid::Uuid>) {
     if let (Some(actor_id), Some((group, limit))) = (actor_id, actor_event_budget(&event)) {
         let key = format!("{group}:{actor_id}");
-        if !state.audit_throttle.reserve(&key, limit, ACTOR_EVENT_WINDOW) {
-            if state.audit_throttle.reserve(&format!("{key}:warned"), 1, ACTOR_EVENT_WARNING_WINDOW) {
+        if !state.audit_throttle.reserve(&key, limit, ACTOR_EVENT_WINDOW).await {
+            if state.audit_throttle.reserve(&format!("{key}:warned"), 1, ACTOR_EVENT_WARNING_WINDOW).await {
                 tracing::warn!("{actor_id} is over the audit budget for {group} events ({limit} per minute), further ones are not recorded");
             }
             return;
@@ -340,10 +344,10 @@ impl AppState {
                 None
             }
         });
-        let passkey_ceremonies = Arc::new(PasskeyCeremonyStore::new());
-        let login_throttle = LoginThrottle::new();
+        let passkey_ceremonies = Arc::new(PasskeyCeremonyStore::new(Arc::new(artiferris_infrastructure::postgres::passkey_ceremony_store::PostgresPasskeyCeremonyStore::new(pool.clone()))));
+        let login_throttle = LoginThrottle::new(Arc::new(artiferris_infrastructure::postgres::login_attempt_store::PostgresLoginAttemptStore::new(pool.clone(), &artiferris_infrastructure::login_attempt_hash_key(&config.jwt_secret))));
         // A pending token lives 5 minutes; the extra minutes cover the JWT library's clock-skew leeway.
-        let used_mfa_tokens = SingleUseTokens::new(std::time::Duration::from_secs(10 * 60));
+        let used_mfa_tokens = SingleUseTokens::new(std::time::Duration::from_secs(10 * 60), Arc::new(artiferris_infrastructure::postgres::single_use_token_store::PostgresSingleUseTokenStore::new(pool.clone())));
         let user_security: Arc<dyn UserSecurityPort> = users_repo.clone();
         // Bound here so `sweep_retention` can reuse the same instances.
         let unpublish_npm_package = Arc::new(UnpublishNpmPackageUseCase::new(npm_packages.clone(), storage.clone(), event_publisher.clone()));
@@ -473,6 +477,7 @@ impl AppState {
             record_metrics_snapshot: Arc::new(RecordMetricsSnapshotUseCase::new(users_repo.clone(), get_usage_metrics, metrics_snapshots)),
             get_health_status: Arc::new(GetHealthStatusUseCase::new(health_check.clone(), storage.clone(), started_at)),
             readiness,
+            shutting_down: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             get_admin_stats: Arc::new(GetAdminStatsUseCase::new(users_repo.clone(), repository_store.clone(), permission_store.clone())),
             export_configuration: Arc::new(ExportConfigurationUseCase::new(users_repo.clone(), repository_store.clone(), permission_store.clone(), system_settings.clone(), organizations.clone())),
             import_configuration,
@@ -522,8 +527,9 @@ impl AppState {
             ),
             anonymous_limiter: Arc::new(artiferris_application::rate_limiter::RateLimiter::new(&artiferris_infrastructure::rate_limit_hash_key(&config.jwt_secret))),
             rate_limit_store: Arc::new(artiferris_infrastructure::postgres::rate_limit_store::PostgresRateLimitStore::new(pool.clone())),
+            periodic_jobs: Arc::new(artiferris_infrastructure::postgres::periodic_job_store::PostgresPeriodicJobStore::new(pool.clone())),
             anonymous_registry_reads_per_minute: artiferris_application::rate_limiter::parse_anonymous_registry_reads_per_minute(std::env::var("ANONYMOUS_REGISTRY_READS_PER_MINUTE").ok().as_deref()).unwrap_or_else(|message| panic!("{message}")),
-            audit_throttle: LoginThrottle::new(),
+            audit_throttle: LoginThrottle::in_memory(),
             get_system_settings: Arc::new(GetSystemSettingsUseCase::new(system_settings.clone())),
             update_system_settings,
             get_smtp_settings: Arc::new(GetSmtpSettingsUseCase::new(smtp_settings.clone())),

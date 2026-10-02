@@ -58,6 +58,7 @@ async fn main() {
     spawn_download_prune_timer(&state);
     spawn_audit_prune_timer(&state);
     let flush_downloads = state.flush_downloads.clone();
+    let shutting_down = state.shutting_down.clone();
     let seo_app_state = state.clone();
     let app = build_router_with_cors(
         state,
@@ -77,7 +78,8 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&config.bind_addr).await.expect("failed to bind");
     tracing::info!("artiferris-api listening on {}", config.bind_addr);
     spawn_audit_backfill(pool, config.db_max_connections);
-    serve::serve(listener, app, HEADER_READ_TIMEOUT, shutdown_signal()).await;
+    let (drain_delay, drain_timeout) = shutdown_timings();
+    serve::serve(listener, app, HEADER_READ_TIMEOUT, drain_timeout, shutdown_sequence(shutting_down, drain_delay)).await;
     // The last few seconds of downloads are still in memory; write them before the process goes.
     match flush_downloads.execute().await {
         Ok(written) if written > 0 => tracing::info!(written, "flushed download counts on shutdown"),
@@ -151,10 +153,38 @@ fn spawn_audit_backfill(pool: sqlx::PgPool, max_connections: u32) {
 
 /// Liveness (`/healthz`) says the process is up; readiness says it can reach its database.
 async fn readyz(axum::extract::State(state): axum::extract::State<AppState>) -> axum::http::StatusCode {
-    if state.readiness.is_ready().await {
+    if !state.shutting_down.load(std::sync::atomic::Ordering::Relaxed) && state.readiness.is_ready().await {
         axum::http::StatusCode::OK
     } else {
         axum::http::StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+/// How long to keep serving after a stop was asked for, so the load balancer notices the failing readiness probe and stops
+/// sending requests, and how long the requests in flight then get to finish.
+const DEFAULT_SHUTDOWN_DRAIN_SECONDS: u64 = 0;
+const DEFAULT_SHUTDOWN_TIMEOUT_SECONDS: u64 = 25;
+
+/// Unset or empty keeps `default`; anything that is not a whole number of seconds is an error rather than a silent default.
+fn parse_seconds(name: &str, raw: Option<&str>, default: u64) -> Result<std::time::Duration, String> {
+    match raw.map(str::trim).filter(|value| !value.is_empty()) {
+        None => Ok(std::time::Duration::from_secs(default)),
+        Some(value) => value.parse::<u64>().map(std::time::Duration::from_secs).map_err(|_| format!("{name} must be a whole number of seconds, got {value:?}")),
+    }
+}
+
+fn shutdown_timings() -> (std::time::Duration, std::time::Duration) {
+    let read = |name: &str, default: u64| parse_seconds(name, std::env::var(name).ok().as_deref(), default).unwrap_or_else(|message| panic!("{message}"));
+    (read("ARTIFERRIS_SHUTDOWN_DRAIN_SECONDS", DEFAULT_SHUTDOWN_DRAIN_SECONDS), read("ARTIFERRIS_SHUTDOWN_TIMEOUT_SECONDS", DEFAULT_SHUTDOWN_TIMEOUT_SECONDS))
+}
+
+/// Waits for the stop signal, fails readiness at once, and keeps serving for `drain_delay` before the listener closes.
+async fn shutdown_sequence(shutting_down: std::sync::Arc<std::sync::atomic::AtomicBool>, drain_delay: std::time::Duration) {
+    shutdown_signal().await;
+    shutting_down.store(true, std::sync::atomic::Ordering::Relaxed);
+    if !drain_delay.is_zero() {
+        tracing::info!(drain_seconds = drain_delay.as_secs(), "stop requested: failing readiness and serving until the load balancer has caught up");
+        tokio::time::sleep(drain_delay).await;
     }
 }
 
@@ -209,28 +239,28 @@ async fn bootstrap_super_admin(state: &AppState) {
     }
 }
 
-/// Snapshots immediately, then once an hour after that.
+/// Snapshots at startup, then once an hour: the instances take turns, so a deployment records one snapshot per hour
+/// however many replicas it runs.
 fn spawn_metrics_snapshot_timer(state: &AppState) {
     let record_metrics_snapshot = state.record_metrics_snapshot.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
-        loop {
-            interval.tick().await;
+    let interval = std::time::Duration::from_secs(60 * 60);
+    tokio::spawn(artiferris_application::periodic::run_claimed_forever(state.periodic_jobs.clone(), "metrics-snapshot", std::time::Duration::ZERO, interval, move || {
+        let record_metrics_snapshot = record_metrics_snapshot.clone();
+        async move {
             if let Err(e) = record_metrics_snapshot.execute().await {
                 tracing::warn!("failed to record metrics snapshot: {e}");
             }
         }
-    });
+    }));
 }
 
-/// Runs every 6 hours; no immediate run on startup, unlike the metrics timer.
+/// Runs every 6 hours, on one instance at a time; no immediate run on startup, unlike the metrics timer.
 fn spawn_retention_sweep_timer(state: &AppState) {
     let sweep_retention = state.sweep_retention.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(6 * 60 * 60));
-        interval.tick().await; // consume the immediate first tick — no run on startup
-        loop {
-            interval.tick().await;
+    let interval = std::time::Duration::from_secs(6 * 60 * 60);
+    tokio::spawn(artiferris_application::periodic::run_claimed_forever(state.periodic_jobs.clone(), "retention-sweep", interval, interval, move || {
+        let sweep_retention = sweep_retention.clone();
+        async move {
             match sweep_retention.execute().await {
                 Ok(report) => {
                     if report != Default::default() {
@@ -245,10 +275,11 @@ fn spawn_retention_sweep_timer(state: &AppState) {
                 Err(e) => tracing::warn!("retention sweep failed: {e}"),
             }
         }
-    });
+    }));
 }
 
-/// Runs hourly, not at startup. Reclaims abandoned Docker upload sessions that the lazy sweep in
+/// Runs hourly, not at startup, on every instance: it also removes the half-written upload files of this instance's own
+/// volume, which no other instance can reach. Its database work is a set of deletes that are safe to repeat. Reclaims abandoned Docker upload sessions that the lazy sweep in
 /// `DockerUploadSessionPort::find` never reaches (a truly abandoned session is never looked up again), and blobs no
 /// manifest ever referenced.
 fn spawn_upload_sweep_timer(state: &AppState) {
@@ -276,14 +307,13 @@ fn spawn_upload_sweep_timer(state: &AppState) {
     });
 }
 
-/// Runs daily, not at startup: enough for the 30-day grace period this sweep enforces.
+/// Runs daily, not at startup, on one instance at a time: enough for the 30-day grace period this sweep enforces.
 fn spawn_repository_deletion_sweep_timer(state: &AppState) {
     let sweep_repository_deletions = state.sweep_repository_deletions.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
-        interval.tick().await; // consume the immediate first tick — no run on startup
-        loop {
-            interval.tick().await;
+    let interval = std::time::Duration::from_secs(24 * 60 * 60);
+    tokio::spawn(artiferris_application::periodic::run_claimed_forever(state.periodic_jobs.clone(), "repository-deletion-sweep", interval, interval, move || {
+        let sweep_repository_deletions = sweep_repository_deletions.clone();
+        async move {
             match sweep_repository_deletions.execute().await {
                 Ok(removed) => {
                     if removed > 0 {
@@ -293,7 +323,7 @@ fn spawn_repository_deletion_sweep_timer(state: &AppState) {
                 Err(e) => tracing::warn!("repository deletion sweep failed: {e}"),
             }
         }
-    });
+    }));
 }
 
 /// Moves the in-memory download counts to the database every 30 seconds; a crash loses at most that much.
@@ -337,27 +367,41 @@ fn spawn_rate_limit_sync(state: &AppState) {
     });
 }
 
-/// Runs daily; no immediate run on startup, same as the other sweep timers.
+/// Runs daily on one instance at a time; no immediate run on startup, same as the other sweep timers.
 fn spawn_download_prune_timer(state: &AppState) {
     let prune_download_stats = state.prune_download_stats.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
-        interval.tick().await;
-        loop {
-            interval.tick().await;
+    let interval = std::time::Duration::from_secs(24 * 60 * 60);
+    tokio::spawn(artiferris_application::periodic::run_claimed_forever(state.periodic_jobs.clone(), "download-stats-sweep", interval, interval, move || {
+        let prune_download_stats = prune_download_stats.clone();
+        async move {
             match prune_download_stats.execute().await {
                 Ok(removed) if removed > 0 => tracing::info!(removed, "download stats sweep removed old daily counts"),
                 Ok(_) => {}
                 Err(e) => tracing::warn!("download stats sweep failed: {e}"),
             }
         }
-    });
+    }));
 }
 
-/// First sweep shortly after startup, then daily.
+/// First sweep shortly after startup, then daily, on one instance at a time.
 fn spawn_audit_prune_timer(state: &AppState) {
     let prune_audit_events = state.prune_audit_events.clone();
-    tokio::spawn(async move { prune_audit_events.run_forever(artiferris_application::audit_retention::first_sweep_delay(), artiferris_application::audit_retention::SWEEP_INTERVAL).await });
+    tokio::spawn(artiferris_application::periodic::run_claimed_forever(
+        state.periodic_jobs.clone(),
+        "audit-sweep",
+        artiferris_application::audit_retention::first_sweep_delay(),
+        artiferris_application::audit_retention::SWEEP_INTERVAL,
+        move || {
+            let prune_audit_events = prune_audit_events.clone();
+            async move {
+                match prune_audit_events.execute().await {
+                    Ok(removed) if removed > 0 => tracing::info!(removed, "audit sweep removed events past the retention window"),
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!("audit sweep failed: {e}"),
+                }
+            }
+        },
+    ));
 }
 
 /// Fully permissive CORS — the default that keeps a separately served Angular dev server working.
@@ -569,7 +613,7 @@ fn build_docker_state(
             token_issuer,
             resolve_personal_repository.clone(),
         )),
-        login_throttle: artiferris_application::login_throttle::LoginThrottle::new(),
+        login_throttle: state.login_throttle.clone(),
         guard,
         record_security_event: Arc::new(artiferris_application::use_cases::admin::RecordSecurityEventUseCase::new(state.events.clone())),
         start_upload: start_upload.clone(),
@@ -696,6 +740,29 @@ mod tests {
         let response = app.oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap()).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[sqlx::test]
+    async fn readyz_fails_as_soon_as_a_stop_is_requested_and_healthz_stays_ok(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let app = build_router(state.clone());
+        state.shutting_down.store(true, std::sync::atomic::Ordering::Relaxed);
+
+        let readyz = app.clone().oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap()).await.unwrap();
+        let healthz = app.oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap()).await.unwrap();
+
+        assert_eq!(readyz.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(healthz.status(), StatusCode::OK, "a pod that is stopping is not killed for it");
+    }
+
+    #[test]
+    fn the_shutdown_settings_default_when_unset_and_reject_a_typo() {
+        assert_eq!(parse_seconds("X", None, 25).unwrap(), std::time::Duration::from_secs(25));
+        assert_eq!(parse_seconds("X", Some("  "), 25).unwrap(), std::time::Duration::from_secs(25));
+        assert_eq!(parse_seconds("X", Some("0"), 25).unwrap(), std::time::Duration::ZERO);
+        assert_eq!(parse_seconds("X", Some("120"), 25).unwrap(), std::time::Duration::from_secs(120));
+        assert!(parse_seconds("X", Some("10s"), 25).is_err());
+        assert!(parse_seconds("X", Some("-1"), 25).is_err());
     }
 
     #[sqlx::test]

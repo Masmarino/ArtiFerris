@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO spent_single_use_tokens (digest, user_id, expires_at) VALUES ($1, $2, now() + make_interval(secs => $3)) ON CONFLICT (digest) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0f1ee92a0e4012992171f599f16af3575237b7a7b52d7341b0dfb2c5fe9c3347"
+}
