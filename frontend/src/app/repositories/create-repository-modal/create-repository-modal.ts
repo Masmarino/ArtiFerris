@@ -18,7 +18,11 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms'
-import { Button, Checkbox, GbtInput, Modal, Select, type SelectOption } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Checkbox } from '@masmarino/gabarit/checkbox'
+import { GbtInput } from '@masmarino/gabarit/input'
+import { Modal } from '@masmarino/gabarit/modal'
+import { Select, type SelectOption } from '@masmarino/gabarit/select'
 import { RepositoriesService } from '../application/repositories.service'
 import { RepositoryFormat, RepositorySummary, RepositoryType } from '../domain/repository.entity'
 import { ToastService } from '../../shared/toast.service'

@@ -70,7 +70,7 @@ describe('UsageMetrics', () => {
   it('formats the chart values as bytes', async () => {
     const fixture = await render([{ repository_id: '1', name: 'repo', used_bytes: 2048 }])
 
-    expect(fixture.nativeElement.textContent).toContain('2.0 Ko')
+    expect(fixture.nativeElement.textContent).toContain('2,0 Ko')
   })
 
   it('shows an empty-state message when there are no repositories', async () => {

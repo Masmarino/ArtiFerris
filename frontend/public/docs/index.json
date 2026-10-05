@@ -1,0 +1,93 @@
+{
+  "sections": [
+    {
+      "slug": "demarrer",
+      "title": "Démarrer",
+      "pages": [
+        {
+          "slug": "presentation",
+          "title": "Présentation",
+          "description": "Ce qu'est ArtiFerris et ce qu'il sait faire."
+        },
+        {
+          "slug": "prise-en-main",
+          "title": "Prise en main",
+          "description": "Activer son compte, protéger sa connexion et publier un premier paquet."
+        }
+      ]
+    },
+    {
+      "slug": "utilisation",
+      "title": "Utilisation",
+      "pages": [
+        {
+          "slug": "depots",
+          "title": "Dépôts",
+          "description": "Dépôts hébergés, proxys et groupes : droits, quotas et rétention."
+        },
+        {
+          "slug": "npm",
+          "title": "Registre npm",
+          "description": "Configurer npm, publier, installer et auditer des paquets."
+        },
+        {
+          "slug": "docker",
+          "title": "Registre Docker",
+          "description": "Se connecter, pousser et tirer des images, lire leurs scans."
+        },
+        {
+          "slug": "compte-et-jetons",
+          "title": "Compte et jetons",
+          "description": "Double authentification, codes de secours, jetons API et sessions."
+        },
+        {
+          "slug": "catalogue-public",
+          "title": "Catalogue public",
+          "description": "Ce que voient les visiteurs sans compte, et comment le régler."
+        }
+      ]
+    },
+    {
+      "slug": "administration",
+      "title": "Administration",
+      "pages": [
+        {
+          "slug": "installation",
+          "title": "Installation",
+          "description": "Déployer ArtiFerris avec Docker Compose ou Helm."
+        },
+        {
+          "slug": "configuration",
+          "title": "Configuration",
+          "description": "Les variables d'environnement du serveur."
+        },
+        {
+          "slug": "organisations-et-utilisateurs",
+          "title": "Organisations et utilisateurs",
+          "description": "Organisations, invitations, annuaires LDAP et OIDC, e-mails et marque."
+        },
+        {
+          "slug": "mises-a-jour",
+          "title": "Mises à jour",
+          "description": "Mettre à jour, revenir en arrière et changer la clé de chiffrement."
+        },
+        {
+          "slug": "referencement",
+          "title": "Référencement",
+          "description": "Ouvrir ou fermer le catalogue aux moteurs de recherche."
+        }
+      ]
+    },
+    {
+      "slug": "api",
+      "title": "API",
+      "pages": [
+        {
+          "slug": "api-publique",
+          "title": "API publique",
+          "description": "Les routes du catalogue, des paquets et des images."
+        }
+      ]
+    }
+  ]
+}

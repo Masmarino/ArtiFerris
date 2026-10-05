@@ -1,0 +1,18 @@
+<gbt-command-palette
+  [ariaLabel]="'shell.search.label' | transloco"
+  [placeholder]="'shell.search.placeholder' | transloco"
+  [loadingLabel]="'shell.search.loading' | transloco"
+  [emptyMessage]="(searchFailed() ? 'shell.search.failed' : 'shell.search.noResults') | transloco"
+  [navigateHint]="'shell.search.navigate' | transloco"
+  [selectHint]="'shell.search.open' | transloco"
+  [closeHint]="'common.close' | transloco"
+  [closeLabel]="'shell.search.close' | transloco"
+  [shortcuts]="shortcuts"
+  [groups]="groups()"
+  [loading]="searching()"
+  [resultsAnnouncement]="resultsAnnouncement"
+  [open]="open()"
+  (openChange)="onOpenChange($event)"
+  (queryChange)="onQueryChange($event)"
+  (itemSelected)="onSelect($event)"
+/>

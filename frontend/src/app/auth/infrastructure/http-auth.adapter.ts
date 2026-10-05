@@ -29,6 +29,10 @@ export class HttpAuthAdapter implements AuthPort {
     return this.http.post<LoginResponse>('/api/auth/sso/ldap', { username, password })
   }
 
+  resetPassword(token: string, newPassword: string): Observable<void> {
+    return this.http.post<void>('/api/auth/reset-password', { token, new_password: newPassword })
+  }
+
   activate(token: string, username: string, newPassword: string): Observable<void> {
     return this.http.post<void>('/api/auth/activate', {
       token,
@@ -97,8 +101,8 @@ export class HttpAuthAdapter implements AuthPort {
     challengeId: string,
     credential: unknown,
     name: string,
-  ): Observable<LoginResponse> {
-    return this.http.post<LoginResponse>('/api/auth/mfa/setup/passkey/finish', {
+  ): Observable<TotpSetupComplete> {
+    return this.http.post<TotpSetupComplete>('/api/auth/mfa/setup/passkey/finish', {
       mfa_token: mfaToken,
       challenge_id: challengeId,
       credential,

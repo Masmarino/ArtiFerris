@@ -40,6 +40,58 @@ pub fn hash_invitation_token(plaintext: &str) -> String {
     hex::encode(Sha256::digest(plaintext.as_bytes()))
 }
 
+/// Why an activation mail did not go out, for the administrator to fix.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MailFailure {
+    /// The organization has no mail server.
+    NotConfigured,
+    /// The mail server refused it or could not be reached.
+    SendFailed,
+    /// The account has no address the mail could go to.
+    NoAddress,
+}
+
+impl MailFailure {
+    /// A stable name for clients to translate, like `DomainError::code`.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::NotConfigured => "email_not_configured",
+            Self::SendFailed => "email_send_failed",
+            Self::NoAddress => "email_no_address",
+        }
+    }
+}
+
+/// An invitation whose mail did not go out: the activation link it carried, for the administrator to pass on. It is
+/// the only copy (the server keeps a hash), so it is handed over once, to the administrator who issued it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndeliveredInvitation {
+    pub activation_url: String,
+    pub reason: MailFailure,
+}
+
+/// The account an invitation is for, and the link when its mail could not be sent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvitationDelivery {
+    pub user_id: Uuid,
+    pub undelivered: Option<UndeliveredInvitation>,
+}
+
+/// Sends the activation mail. A failure is not an error of the invitation: the link is handed back instead.
+async fn deliver_activation(email: &dyn EmailPort, organization_id: Uuid, to: &str, actor_id: Uuid, activation_url: String) -> Option<UndeliveredInvitation> {
+    // The invitee cannot have chosen a language yet: write in the one of the admin who invites them.
+    let language = email.language_for(actor_id).await;
+    let content = crate::email_templates::account_created(language, &activation_url);
+    match email.send(organization_id, to, &content.subject, &content.text, &content.html).await {
+        Ok(()) => None,
+        Err(e) => {
+            tracing::warn!("failed to send account-activation email to {to}: {e}");
+            let reason = if matches!(e, DomainError::EmailNotConfigured) { MailFailure::NotConfigured } else { MailFailure::SendFailed };
+            Some(UndeliveredInvitation { activation_url, reason })
+        }
+    }
+}
+
 /// Hashes fresh random bytes so `AuthenticateUserUseCase` needs no special case for a pending account — a normal failed `verify` already rejects it.
 pub(crate) async fn unusable_password_hash(hasher: &dyn PasswordHasherPort) -> Result<String, ApplicationError> {
     let mut bytes = [0u8; 32];
@@ -93,7 +145,7 @@ impl InviteUserUseCase {
     /// `organization_id` is normally the acting admin's own org, but a super-admin inviting an org's first local admin can pass any organization.
     /// The invitee chooses their username when activating, so the pending account holds a placeholder until then.
     /// The `UserInvited` audit entry is written with the invitation; if that fails, the account is removed again.
-    pub async fn execute(&self, organization_id: Uuid, is_organization_admin: bool, email: &str, is_super_admin: bool, actor_id: Uuid) -> Result<Uuid, ApplicationError> {
+    pub async fn execute(&self, organization_id: Uuid, is_organization_admin: bool, email: &str, is_super_admin: bool, actor_id: Uuid) -> Result<InvitationDelivery, ApplicationError> {
         validate_email(email)?;
         if self.security.find_by_verified_email(organization_id, email).await?.is_some() {
             return Err(DomainError::EmailTaken.into());
@@ -131,16 +183,11 @@ impl InviteUserUseCase {
         let organization = require_organization(self.organizations.as_ref(), organization_id).await?;
         let origin = organization_origin(&self.artiferris_base_domain, &organization);
 
-        // A delivery failure does not fail account creation.
-        let activation_url = format!("{origin}/activate?token={token}");
-        // The invitee cannot have chosen a language yet: write in the one of the admin who invites them.
-        let language = self.email.language_for(actor_id).await;
-        let content = crate::email_templates::account_created(language, &activation_url);
-        if let Err(e) = self.email.send(organization_id, email, &content.subject, &content.text, &content.html).await {
-            tracing::warn!("failed to send account-activation email to {email}: {e}");
-        }
+        // A delivery failure does not fail account creation: the link goes back to the administrator instead.
+        let activation_url = format!("{origin}/activate#token={token}");
+        let undelivered = deliver_activation(self.email.as_ref(), organization_id, email, actor_id, activation_url).await;
 
-        Ok(user.id)
+        Ok(InvitationDelivery { user_id: user.id, undelivered })
     }
 
     /// A free `invite-<12 hex>` name, valid as a username and never shown once the invitee has chosen their own.
@@ -177,8 +224,9 @@ impl ResendInvitationUseCase {
     }
 
     /// An already-activated account has no invitation row left, so this also returns `InvitationNotFound` for it, same as for an unknown user id.
-    /// The `InvitationResent` audit entry is written with the new invitation.
-    pub async fn execute(&self, user_id: Uuid, actor_id: Uuid) -> Result<(), ApplicationError> {
+    /// The `InvitationResent` audit entry is written with the new invitation. The new token replaces the old one, so
+    /// when its mail cannot go out the link is handed back rather than lost.
+    pub async fn execute(&self, user_id: Uuid, actor_id: Uuid) -> Result<InvitationDelivery, ApplicationError> {
         let user = self.users.find_by_id(user_id).await?.ok_or(ApplicationError::InvitationNotFound)?;
         if self.invitations.find_by_user_id(user_id).await?.is_none() {
             return Err(ApplicationError::InvitationNotFound);
@@ -194,11 +242,9 @@ impl ResendInvitationUseCase {
         // The user's own organization, not whatever the acting admin resolved against.
         let organization = require_organization(self.organizations.as_ref(), user.organization_id).await?;
         let origin = organization_origin(&self.artiferris_base_domain, &organization);
-        let activation_url = format!("{origin}/activate?token={token}");
-        let language = self.email.language_for(actor_id).await;
-        let content = crate::email_templates::account_created(language, &activation_url);
-        self.email.send(user.organization_id, email, &content.subject, &content.text, &content.html).await?;
-        Ok(())
+        let activation_url = format!("{origin}/activate#token={token}");
+        let undelivered = deliver_activation(self.email.as_ref(), user.organization_id, email, actor_id, activation_url).await;
+        Ok(InvitationDelivery { user_id, undelivered })
     }
 }
 
@@ -280,7 +326,7 @@ mod tests {
 
     #[async_trait]
     impl UserSecurityPort for FakeUsers {
-        async fn revoke_sessions(&self, _id: Uuid, _audit: Option<&artiferris_domain::audit::SecurityAuditRecord>) -> Result<(), DomainError> {
+        async fn revoke_sessions(&self, _id: Uuid, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
             Ok(())
         }
         async fn find_by_verified_email(&self, organization_id: Uuid, email: &str) -> Result<Option<User>, DomainError> {
@@ -463,6 +509,16 @@ mod tests {
         }
     }
 
+    /// A mail server that refuses everything, or none at all.
+    struct FailingEmail(fn() -> DomainError);
+
+    #[async_trait]
+    impl EmailPort for FailingEmail {
+        async fn send(&self, _organization_id: Uuid, _to: &str, _subject: &str, _text_body: &str, _html_body: &str) -> Result<(), DomainError> {
+            Err((self.0)())
+        }
+    }
+
     struct FakeOrganizations {
         by_id: Mutex<HashMap<Uuid, Organization>>,
     }
@@ -509,7 +565,7 @@ mod tests {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher, email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
 
-        let id = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
 
         let user = users.find_by_id(id).await.unwrap().unwrap();
         assert_eq!(user.email.as_deref(), Some("florian@example.com"));
@@ -519,7 +575,43 @@ mod tests {
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].0, organization_id);
         assert_eq!(sent[0].1, "florian@example.com");
-        assert!(sent[0].3.contains("https://app.artiferris.example.com/activate?token="));
+        assert!(sent[0].3.contains("https://app.artiferris.example.com/activate#token="));
+    }
+
+    #[tokio::test]
+    async fn an_invitation_whose_mail_went_out_hands_back_no_link() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let use_case = InviteUserUseCase::new(users.clone(), users, invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
+
+        let delivery = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+
+        assert_eq!(delivery.undelivered, None);
+    }
+
+    #[tokio::test]
+    async fn an_invitation_whose_mail_failed_still_creates_the_account_and_hands_back_its_link() {
+        let (users, invitations, hasher, _email, organizations, organization_id) = setup().await;
+        let failing = Arc::new(FailingEmail(|| DomainError::Infrastructure("connection refused".to_string())));
+        let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher, failing, organizations, TEST_BASE_DOMAIN.to_string());
+
+        let delivery = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+
+        let undelivered = delivery.undelivered.expect("the link is handed back");
+        assert_eq!(undelivered.reason, MailFailure::SendFailed);
+        let token = undelivered.activation_url.split("#token=").nth(1).unwrap();
+        let stored = invitations.find_by_user_id(delivery.user_id).await.unwrap().unwrap();
+        assert_eq!(stored.token_hash, hash_invitation_token(token));
+        assert!(users.find_by_id(delivery.user_id).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn an_organization_without_a_mail_server_is_named_as_the_reason() {
+        let (users, invitations, hasher, _email, organizations, organization_id) = setup().await;
+        let use_case = InviteUserUseCase::new(users.clone(), users, invitations, hasher, Arc::new(FailingEmail(|| DomainError::EmailNotConfigured)), organizations, TEST_BASE_DOMAIN.to_string());
+
+        let delivery = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+
+        assert_eq!(delivery.undelivered.unwrap().reason, MailFailure::NotConfigured);
     }
 
     #[tokio::test]
@@ -536,7 +628,7 @@ mod tests {
     async fn an_email_verified_in_the_organization_cannot_be_invited_again() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
-        let first = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let first = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
         users.mark_email_verified(first).await.unwrap();
 
         let err = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap_err();
@@ -550,7 +642,7 @@ mod tests {
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations.clone(), TEST_BASE_DOMAIN.to_string());
         let other_organization_id = Uuid::new_v4();
         organizations.create(&Organization { id: other_organization_id, slug: OrganizationSlug::parse("acme").unwrap(), display_name: "Acme".to_string(), is_public: false, is_personal: false, created_at: Utc::now() }).await.unwrap();
-        let first = use_case.execute(other_organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let first = use_case.execute(other_organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
         users.mark_email_verified(first).await.unwrap();
 
         use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
@@ -566,7 +658,7 @@ mod tests {
             .unwrap();
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
 
-        let id = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
 
         let user = users.find_by_id(id).await.unwrap().unwrap();
         assert_eq!(user.organization_id, organization_id);
@@ -585,7 +677,7 @@ mod tests {
         use_case.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
 
         let sent = email.sent.lock().unwrap();
-        assert!(sent[0].3.contains("https://acme.artiferris.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[0].3);
+        assert!(sent[0].3.contains("https://acme.artiferris.example.com/activate#token="), "expected the acme subdomain, got: {}", sent[0].3);
     }
 
     #[tokio::test]
@@ -593,8 +685,8 @@ mod tests {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, TEST_BASE_DOMAIN.to_string());
 
-        let first = use_case.execute(organization_id, false, "a@example.com", false, Uuid::new_v4()).await.unwrap();
-        let second = use_case.execute(organization_id, false, "b@example.com", false, Uuid::new_v4()).await.unwrap();
+        let first = use_case.execute(organization_id, false, "a@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
+        let second = use_case.execute(organization_id, false, "b@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
 
         let first = users.find_by_id(first).await.unwrap().unwrap();
         let second = users.find_by_id(second).await.unwrap().unwrap();
@@ -615,7 +707,7 @@ mod tests {
     async fn an_invited_user_cannot_log_in_before_activating() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher.clone(), email, organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
 
         let user = users.find_by_id(id).await.unwrap().unwrap();
         assert!(!hasher.verify("anything", &user.password_hash).await.unwrap(), "no plaintext should verify against the placeholder hash");
@@ -631,7 +723,7 @@ mod tests {
     async fn activates_an_account_with_a_valid_token() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
         let token = extract_token_from_last_email(&email);
 
         let activate = ActivateAccountUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone());
@@ -647,7 +739,7 @@ mod tests {
     async fn activation_verifies_the_invited_email() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
         let token = extract_token_from_last_email(&email);
 
         ActivateAccountUseCase::new(users.clone(), users.clone(), invitations, hasher).execute(&token, "florian", "new-s3cret!").await.unwrap();
@@ -677,7 +769,7 @@ mod tests {
     async fn a_failed_activation_leaves_the_link_usable() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
         let token = extract_token_from_last_email(&email);
         let activate = ActivateAccountUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher);
 
@@ -691,7 +783,7 @@ mod tests {
 
     async fn invite_and_token(users: &Arc<FakeUsers>, invitations: &Arc<FakeInvitations>, hasher: &Arc<FakeHasher>, email: &Arc<FakeEmail>, organizations: Arc<FakeOrganizations>, organization_id: Uuid, address: &str) -> (Uuid, String) {
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, address, false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, address, false, Uuid::new_v4()).await.unwrap().user_id;
         (id, extract_token_from_last_email(email))
     }
 
@@ -771,7 +863,7 @@ mod tests {
     async fn resends_an_invitation_with_a_fresh_token() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
         let first_token_hash = invitations.find_by_user_id(id).await.unwrap().unwrap().token_hash;
 
         let resend = ResendInvitationUseCase::new(users, invitations.clone(), email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
@@ -780,6 +872,21 @@ mod tests {
         let second_token_hash = invitations.find_by_user_id(id).await.unwrap().unwrap().token_hash;
         assert_ne!(first_token_hash, second_token_hash);
         assert_eq!(email.sent.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_resent_invitation_whose_mail_failed_hands_back_the_new_link() {
+        let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
+        let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher, email, organizations.clone(), TEST_BASE_DOMAIN.to_string());
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
+
+        let resend = ResendInvitationUseCase::new(users, invitations.clone(), Arc::new(FailingEmail(|| DomainError::Infrastructure("timeout".to_string()))), organizations, TEST_BASE_DOMAIN.to_string());
+        let delivery = resend.execute(id, Uuid::new_v4()).await.unwrap();
+
+        // The old link no longer works, so the new one must reach the administrator.
+        let undelivered = delivery.undelivered.expect("the new link is handed back");
+        let token = undelivered.activation_url.split("#token=").nth(1).unwrap();
+        assert_eq!(invitations.find_by_user_id(id).await.unwrap().unwrap().token_hash, hash_invitation_token(token));
     }
 
     #[tokio::test]
@@ -795,7 +902,7 @@ mod tests {
     async fn resending_for_an_already_activated_user_fails() {
         let (users, invitations, hasher, email, organizations, organization_id) = setup().await;
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher.clone(), email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
         invitations.delete(id).await.unwrap(); // simulates a completed activation
 
         let resend = ResendInvitationUseCase::new(users, invitations, email, organizations, TEST_BASE_DOMAIN.to_string());
@@ -812,13 +919,13 @@ mod tests {
             .await
             .unwrap();
         let invite = InviteUserUseCase::new(users.clone(), users.clone(), invitations.clone(), hasher, email.clone(), organizations.clone(), TEST_BASE_DOMAIN.to_string());
-        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap();
+        let id = invite.execute(organization_id, false, "florian@example.com", false, Uuid::new_v4()).await.unwrap().user_id;
 
         let resend = ResendInvitationUseCase::new(users, invitations, email.clone(), organizations, TEST_BASE_DOMAIN.to_string());
         resend.execute(id, Uuid::new_v4()).await.unwrap();
 
         let sent = email.sent.lock().unwrap();
-        assert!(sent[1].3.contains("https://acme.artiferris.example.com/activate?token="), "expected the acme subdomain, got: {}", sent[1].3);
+        assert!(sent[1].3.contains("https://acme.artiferris.example.com/activate#token="), "expected the acme subdomain, got: {}", sent[1].3);
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -840,7 +947,7 @@ mod tests {
         let (_, invitations, hasher, email, _fake_organizations, _fake_organization_id) = setup().await;
         let use_case = InviteUserUseCase::new(users.clone(), users.clone(), invitations, hasher, email, organizations, "localhost".to_string());
 
-        let user_id = use_case.execute(organization_id, true, "admin@acme.example", false, Uuid::new_v4()).await.unwrap();
+        let user_id = use_case.execute(organization_id, true, "admin@acme.example", false, Uuid::new_v4()).await.unwrap().user_id;
 
         let created = users.find_by_id(user_id).await.unwrap().unwrap();
         assert_eq!(created.organization_id, organization_id);

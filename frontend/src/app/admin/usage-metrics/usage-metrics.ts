@@ -2,15 +2,11 @@ import { activeLocale, t } from '../../shared/i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core'
 import { rxResource } from '@angular/core/rxjs-interop'
-import {
-  Button,
-  Card,
-  DimensionCard,
-  DimensionRow,
-  GaugeBar,
-  Table,
-  TableColumn,
-} from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Card } from '@masmarino/gabarit/card'
+import { DimensionCard, DimensionRow } from '@masmarino/gabarit/dimension-card'
+import { GaugeBar } from '@masmarino/gabarit/gauge-bar'
+import { Table, TableColumn } from '@masmarino/gabarit/table'
 import { AdminMetricsService } from '../application/metrics.service'
 import { RepositoryUsage } from '../domain/metrics.entity'
 import { formatBytes } from '../../shared/format'

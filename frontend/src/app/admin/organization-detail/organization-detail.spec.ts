@@ -9,7 +9,7 @@ import { OrganizationMembers } from '../organization-members/organization-member
 import { PageTitleService } from '../../shell/page-title.service'
 import { ConfirmService } from '../../shared/confirm.service'
 import { ToastService } from '../../shared/toast.service'
-import { Tooltip } from '@masmarino/gabarit'
+import { Tooltip } from '@masmarino/gabarit/tooltip'
 
 describe('OrganizationDetail', () => {
   let fixture: ComponentFixture<OrganizationDetail>

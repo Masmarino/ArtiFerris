@@ -1,23 +1,18 @@
-<div class="suggest" [class.suggest--compact]="compact()">
-  <label class="suggest__label" [class.sr-only]="labelHidden()" [for]="inputId">{{
-    label()
-  }}</label>
-  <input
-    class="suggest__input"
-    type="text"
-    role="combobox"
-    autocomplete="off"
-    aria-autocomplete="list"
+<div class="suggest">
+  <gbt-input
+    type="search"
+    leadingIcon="search"
+    enterkeyhint="search"
     [id]="inputId"
+    [size]="compact() ? 'sm' : 'md'"
+    [label]="label()"
+    [hideLabel]="labelHidden()"
     [placeholder]="placeholder()"
-    [attr.maxlength]="maxLength()"
-    [value]="value()"
-    [attr.aria-expanded]="expanded()"
-    [attr.aria-controls]="listboxId"
-    [attr.aria-activedescendant]="activeDescendant()"
-    (input)="onInput($event)"
+    [maxlength]="maxLength()"
+    [combobox]="combobox()"
+    [formControl]="field"
     (keydown)="onKeydown($event)"
-    (blur)="dismiss()"
+    (committed)="dismiss()"
   />
   <div class="suggest__popup" [hidden]="!open()" (mousedown)="$event.preventDefault()">
     <ul

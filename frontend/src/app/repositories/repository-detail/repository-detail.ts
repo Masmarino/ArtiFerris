@@ -6,19 +6,15 @@ import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { FormsModule } from '@angular/forms'
 import { catchError, map, of } from 'rxjs'
-import {
-  Autocomplete,
-  Button,
-  Card,
-  Divider,
-  EmptyState,
-  GbtInput,
-  Select,
-  Tab,
-  Table,
-  TableColumn,
-  Tabs,
-} from '@masmarino/gabarit'
+import { Autocomplete } from '@masmarino/gabarit/autocomplete'
+import { Button } from '@masmarino/gabarit/button'
+import { Card } from '@masmarino/gabarit/card'
+import { Divider } from '@masmarino/gabarit/divider'
+import { EmptyState } from '@masmarino/gabarit/empty-state'
+import { GbtInput } from '@masmarino/gabarit/input'
+import { Select } from '@masmarino/gabarit/select'
+import { Table, TableColumn } from '@masmarino/gabarit/table'
+import { Tab, Tabs } from '@masmarino/gabarit/tabs'
 import { RepositoriesService } from '../application/repositories.service'
 import { RepositorySummary } from '../domain/repository.entity'
 import { PermissionsService } from '../application/permissions.service'
@@ -33,6 +29,7 @@ import { formatResultsAnnouncement } from '../../shared/format'
 import { ConfirmService } from '../../shared/confirm.service'
 import { MeService } from '../../shell/application/me.service'
 import { ToastService } from '../../shared/toast.service'
+import { PageHeading } from '../../shared/page-heading/page-heading'
 
 const BYTES_PER_MB = 1024 * 1024
 
@@ -40,6 +37,7 @@ const BYTES_PER_MB = 1024 * 1024
   selector: 'app-repository-detail',
   standalone: true,
   imports: [
+    PageHeading,
     TranslocoPipe,
     Table,
     Button,

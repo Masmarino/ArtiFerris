@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use artiferris_domain::audit::SecurityAuditRecord;
+use artiferris_domain::audit::{AdminAuditEvent, AdminAuditRecord, AuditRecord, SecurityAuditRecord};
 use artiferris_domain::email::EmailPort;
 use artiferris_domain::error::DomainError;
 use artiferris_domain::mfa::{BackupCodePort, TotpCredentialPort};
 use artiferris_domain::user::{PasswordHasherPort, User, UserRepositoryPort, UserSecurityPort};
+use artiferris_domain::webauthn::WebauthnCredentialPort;
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use totp_rs::{Algorithm, Builder, Secret, Totp};
@@ -107,9 +108,40 @@ impl GetMfaStatusUseCase {
 
     pub async fn execute(&self, user_id: Uuid) -> Result<MfaStatus, ApplicationError> {
         let totp_enabled = self.totp.get(user_id).await?.is_some_and(|c| c.confirmed);
-        let backup_codes_remaining = if totp_enabled { self.backup_codes.count_unused(user_id).await? } else { 0 };
         let passkey_count = self.passkeys.count_for_user(user_id).await?;
+        // The codes back up whichever factor the account has; with none, leftovers are not worth a count.
+        let backup_codes_remaining = if totp_enabled || passkey_count > 0 { self.backup_codes.count_unused(user_id).await? } else { 0 };
         Ok(MfaStatus { totp_enabled, backup_codes_remaining, passkey_count })
+    }
+}
+
+/// Whether the account has a second factor: a confirmed authenticator app or a passkey. The backup codes live exactly
+/// as long as one does.
+pub(crate) async fn has_any_factor(totp: &dyn TotpCredentialPort, passkeys: &dyn WebauthnCredentialPort, user_id: Uuid) -> Result<bool, ApplicationError> {
+    Ok(totp.get(user_id).await?.is_some_and(|c| c.confirmed) || passkeys.count_for_user(user_id).await? > 0)
+}
+
+/// The backup codes of a first passkey, set up at the mandatory enrolment: like a confirmed authenticator app, it comes
+/// with a fresh set. Refused, and leftover codes dropped, when the account has no factor after all.
+pub struct IssueBackupCodesUseCase {
+    totp: Arc<dyn TotpCredentialPort>,
+    backup_codes: Arc<dyn BackupCodePort>,
+    passkeys: Arc<dyn WebauthnCredentialPort>,
+}
+
+impl IssueBackupCodesUseCase {
+    pub fn new(totp: Arc<dyn TotpCredentialPort>, backup_codes: Arc<dyn BackupCodePort>, passkeys: Arc<dyn WebauthnCredentialPort>) -> Self {
+        Self { totp, backup_codes, passkeys }
+    }
+
+    pub async fn execute(&self, user_id: Uuid) -> Result<Vec<String>, ApplicationError> {
+        if !has_any_factor(self.totp.as_ref(), self.passkeys.as_ref(), user_id).await? {
+            self.backup_codes.delete_all(user_id).await?;
+            return Err(ApplicationError::MfaNotEnrolled);
+        }
+        let (plaintext, hashes) = generate_backup_codes();
+        self.backup_codes.replace_all(user_id, &hashes, None).await?;
+        Ok(plaintext)
     }
 }
 
@@ -256,17 +288,27 @@ pub struct DisableTotpUseCase {
     hasher: Arc<dyn PasswordHasherPort>,
     totp: Arc<dyn TotpCredentialPort>,
     backup_codes: Arc<dyn BackupCodePort>,
+    passkeys: Arc<dyn WebauthnCredentialPort>,
 }
 
 impl DisableTotpUseCase {
-    pub fn new(users: Arc<dyn UserRepositoryPort>, hasher: Arc<dyn PasswordHasherPort>, totp: Arc<dyn TotpCredentialPort>, backup_codes: Arc<dyn BackupCodePort>) -> Self {
-        Self { users, hasher, totp, backup_codes }
+    pub fn new(users: Arc<dyn UserRepositoryPort>, hasher: Arc<dyn PasswordHasherPort>, totp: Arc<dyn TotpCredentialPort>, backup_codes: Arc<dyn BackupCodePort>, passkeys: Arc<dyn WebauthnCredentialPort>) -> Self {
+        Self { users, hasher, totp, backup_codes, passkeys }
     }
 
+    /// The backup codes stay while a passkey remains. When none does they go first, so a failure halfway leaves an app
+    /// without codes rather than live codes without a factor; the count is checked again afterwards in case a passkey
+    /// was removed at the same time.
     pub async fn execute(&self, user_id: Uuid, current_password: &str) -> Result<(), ApplicationError> {
         verify_current_password(self.users.as_ref(), self.hasher.as_ref(), user_id, current_password).await?;
+        let passkey_remains = self.passkeys.count_for_user(user_id).await? > 0;
+        if !passkey_remains {
+            self.backup_codes.delete_all(user_id).await?;
+        }
         self.totp.delete(user_id).await?;
-        self.backup_codes.delete_all(user_id).await?;
+        if passkey_remains && self.passkeys.count_for_user(user_id).await? == 0 {
+            self.backup_codes.delete_all(user_id).await?;
+        }
         Ok(())
     }
 }
@@ -276,22 +318,56 @@ pub struct RegenerateBackupCodesUseCase {
     hasher: Arc<dyn PasswordHasherPort>,
     totp: Arc<dyn TotpCredentialPort>,
     backup_codes: Arc<dyn BackupCodePort>,
+    passkeys: Arc<dyn WebauthnCredentialPort>,
 }
 
 impl RegenerateBackupCodesUseCase {
-    pub fn new(users: Arc<dyn UserRepositoryPort>, hasher: Arc<dyn PasswordHasherPort>, totp: Arc<dyn TotpCredentialPort>, backup_codes: Arc<dyn BackupCodePort>) -> Self {
-        Self { users, hasher, totp, backup_codes }
+    pub fn new(users: Arc<dyn UserRepositoryPort>, hasher: Arc<dyn PasswordHasherPort>, totp: Arc<dyn TotpCredentialPort>, backup_codes: Arc<dyn BackupCodePort>, passkeys: Arc<dyn WebauthnCredentialPort>) -> Self {
+        Self { users, hasher, totp, backup_codes, passkeys }
     }
 
-    /// `audit` is written in the same transaction as the new set.
+    /// With either factor, an app or a passkey. `audit` is written in the same transaction as the new set.
     pub async fn execute(&self, user_id: Uuid, current_password: &str, audit: Option<&SecurityAuditRecord>) -> Result<Vec<String>, ApplicationError> {
         verify_current_password(self.users.as_ref(), self.hasher.as_ref(), user_id, current_password).await?;
-        if !self.totp.get(user_id).await?.is_some_and(|c| c.confirmed) {
+        if !has_any_factor(self.totp.as_ref(), self.passkeys.as_ref(), user_id).await? {
+            // Leftovers of a removed factor must not come back to life.
+            self.backup_codes.delete_all(user_id).await?;
             return Err(ApplicationError::MfaNotEnrolled);
         }
         let (plaintext, hashes) = generate_backup_codes();
         self.backup_codes.replace_all(user_id, &hashes, audit).await?;
         Ok(plaintext)
+    }
+}
+
+/// An administrator's way back in for someone who lost every factor: removes the authenticator app, the backup codes
+/// and the passkeys, then signs the account out everywhere, with the `MfaReset` audit entry in that last step's
+/// transaction. The backup codes go first, so a failure halfway never leaves live codes without a factor.
+pub struct ResetMfaUseCase {
+    security: Arc<dyn UserSecurityPort>,
+    totp: Arc<dyn TotpCredentialPort>,
+    backup_codes: Arc<dyn BackupCodePort>,
+    passkeys: Arc<dyn WebauthnCredentialPort>,
+}
+
+impl ResetMfaUseCase {
+    pub fn new(security: Arc<dyn UserSecurityPort>, totp: Arc<dyn TotpCredentialPort>, backup_codes: Arc<dyn BackupCodePort>, passkeys: Arc<dyn WebauthnCredentialPort>) -> Self {
+        Self { security, totp, backup_codes, passkeys }
+    }
+
+    /// `MfaNotEnrolled` when the account has no factor to reset. The app is looked up without reading its secret: a
+    /// reset must work even when this server can no longer decrypt it.
+    pub async fn execute(&self, user_id: Uuid, organization_id: Uuid, actor_id: Uuid) -> Result<(), ApplicationError> {
+        let has_app = self.totp.confirmed_among(&[user_id]).await?.contains(&user_id);
+        if !has_app && self.passkeys.count_for_user(user_id).await? == 0 {
+            return Err(ApplicationError::MfaNotEnrolled);
+        }
+        self.backup_codes.delete_all(user_id).await?;
+        self.totp.delete(user_id).await?;
+        self.passkeys.delete_all_for_user(user_id).await?;
+        let audit = AuditRecord::Admin(AdminAuditRecord { event: AdminAuditEvent::MfaReset { user_id, organization_id }, actor_id: Some(actor_id) });
+        self.security.revoke_sessions(user_id, Some(&audit)).await?;
+        Ok(())
     }
 }
 
@@ -308,8 +384,17 @@ mod tests {
     use super::*;
     use crate::use_cases::verification_test_support::FakeVerification;
 
-    /// Always empty: passkey coverage lives in `use_cases::webauthn`'s own tests.
-    struct FakeWebauthnCredentials;
+    /// Only a count of passkeys: the ceremonies are covered by `use_cases::webauthn`'s own tests.
+    #[derive(Default)]
+    struct FakeWebauthnCredentials {
+        count: Mutex<i64>,
+    }
+
+    impl FakeWebauthnCredentials {
+        fn with(count: i64) -> Arc<Self> {
+            Arc::new(Self { count: Mutex::new(count) })
+        }
+    }
 
     #[async_trait]
     impl WebauthnCredentialPort for FakeWebauthnCredentials {
@@ -322,11 +407,50 @@ mod tests {
         async fn update_passkey_data(&self, _id: Uuid, _passkey_data: Vec<u8>) -> Result<(), DomainError> {
             Ok(())
         }
+        async fn mark_used(&self, _id: Uuid, _at: chrono::DateTime<Utc>) -> Result<(), DomainError> {
+            Ok(())
+        }
         async fn delete(&self, _id: Uuid, _user_id: Uuid, _audit: Option<&artiferris_domain::audit::SecurityAuditRecord>) -> Result<(), DomainError> {
+            let mut count = self.count.lock().unwrap();
+            *count = (*count - 1).max(0);
             Ok(())
         }
         async fn count_for_user(&self, _user_id: Uuid) -> Result<i64, DomainError> {
-            Ok(0)
+            Ok(*self.count.lock().unwrap())
+        }
+        async fn delete_all_for_user(&self, _user_id: Uuid) -> Result<(), DomainError> {
+            *self.count.lock().unwrap() = 0;
+            Ok(())
+        }
+    }
+
+    /// Records the sessions revoked and the audit entry written with them.
+    #[derive(Default)]
+    struct RecordingSecurity {
+        revoked: Mutex<Vec<(Uuid, Option<String>)>>,
+    }
+
+    #[async_trait]
+    impl UserSecurityPort for RecordingSecurity {
+        async fn revoke_sessions(&self, id: Uuid, audit: Option<&AuditRecord>) -> Result<(), DomainError> {
+            let event = audit.map(|record| match record {
+                AuditRecord::Admin(admin) => admin.event.event_type().to_string(),
+                AuditRecord::Security(security) => security.event.event_type().to_string(),
+            });
+            self.revoked.lock().unwrap().push((id, event));
+            Ok(())
+        }
+        async fn find_by_verified_email(&self, _organization_id: Uuid, _email: &str) -> Result<Option<User>, DomainError> {
+            Ok(None)
+        }
+        async fn insert_with_verified_email(&self, _user: &User) -> Result<(), DomainError> {
+            unreachable!("not exercised by these tests")
+        }
+        async fn activate_invited(&self, _id: Uuid, _username: &Username, _new_password_hash: String, _audit: Option<&AuditRecord>) -> Result<(), DomainError> {
+            unreachable!("not exercised by these tests")
+        }
+        async fn mark_email_verified(&self, _id: Uuid) -> Result<bool, DomainError> {
+            unreachable!("not exercised by these tests")
         }
     }
 
@@ -902,7 +1026,7 @@ mod tests {
         let code = code_for(&enrollment.secret_base32, "florian");
         ConfirmTotpUseCase::new(totp_port.clone(), backup_codes.clone(), Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user.id, "florian", &code).await.unwrap();
 
-        let disable = DisableTotpUseCase::new(users, Arc::new(FakeHasher), totp_port.clone(), backup_codes.clone());
+        let disable = DisableTotpUseCase::new(users, Arc::new(FakeHasher), totp_port.clone(), backup_codes.clone(), FakeWebauthnCredentials::with(0));
         let err = disable.execute(user.id, "wrong-password").await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidCredentials));
         assert!(totp_port.get(user.id).await.unwrap().is_some(), "a failed disable must not remove the credential");
@@ -922,7 +1046,7 @@ mod tests {
         let code = code_for(&enrollment.secret_base32, "florian");
         let original_codes = ConfirmTotpUseCase::new(totp_port.clone(), backup_codes.clone(), Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user.id, "florian", &code).await.unwrap();
 
-        let regenerate = RegenerateBackupCodesUseCase::new(users, Arc::new(FakeHasher), totp_port, backup_codes.clone());
+        let regenerate = RegenerateBackupCodesUseCase::new(users, Arc::new(FakeHasher), totp_port, backup_codes.clone(), FakeWebauthnCredentials::with(0));
         let new_codes = regenerate.execute(user.id, "s3cret!", None).await.unwrap();
 
         assert_ne!(original_codes, new_codes);
@@ -938,16 +1062,98 @@ mod tests {
         let user = sample_user();
         let users = Arc::new(FakeUsers::with_user(user.clone()));
 
-        let regenerate = RegenerateBackupCodesUseCase::new(users, Arc::new(FakeHasher), totp_port, backup_codes);
+        let regenerate = RegenerateBackupCodesUseCase::new(users, Arc::new(FakeHasher), totp_port, backup_codes, FakeWebauthnCredentials::with(0));
         let err = regenerate.execute(user.id, "s3cret!", None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::MfaNotEnrolled));
+    }
+
+    #[tokio::test]
+    async fn a_passkey_alone_has_backup_codes_that_can_be_regenerated_and_are_counted() {
+        let totp_port = Arc::new(FakeTotp::new());
+        let backup_codes = Arc::new(FakeBackupCodes::new());
+        let passkeys = FakeWebauthnCredentials::with(1);
+        let user = sample_user();
+        let users = Arc::new(FakeUsers::with_user(user.clone()));
+
+        let first = IssueBackupCodesUseCase::new(totp_port.clone(), backup_codes.clone(), passkeys.clone()).execute(user.id).await.unwrap();
+        let again = RegenerateBackupCodesUseCase::new(users, Arc::new(FakeHasher), totp_port.clone(), backup_codes.clone(), passkeys.clone())
+            .execute(user.id, "s3cret!", None)
+            .await
+            .unwrap();
+
+        assert_eq!(first.len(), 10);
+        assert_ne!(first, again);
+        let status = GetMfaStatusUseCase::new(totp_port, backup_codes, passkeys).execute(user.id).await.unwrap();
+        assert_eq!(status, MfaStatus { totp_enabled: false, backup_codes_remaining: 10, passkey_count: 1 });
+    }
+
+    #[tokio::test]
+    async fn no_backup_codes_are_issued_without_a_factor_and_leftovers_are_dropped() {
+        let backup_codes = Arc::new(FakeBackupCodes::new());
+        let user_id = Uuid::new_v4();
+        backup_codes.replace_all(user_id, &[hash_backup_code("abc123")], None).await.unwrap();
+
+        let err = IssueBackupCodesUseCase::new(Arc::new(FakeTotp::new()), backup_codes.clone(), FakeWebauthnCredentials::with(0)).execute(user_id).await.unwrap_err();
+
+        assert!(matches!(err, ApplicationError::MfaNotEnrolled));
+        assert_eq!(backup_codes.count_unused(user_id).await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn disabling_the_app_keeps_the_backup_codes_while_a_passkey_remains() {
+        let totp_port = Arc::new(FakeTotp::new());
+        let backup_codes = Arc::new(FakeBackupCodes::new());
+        let user = sample_user();
+        let users = Arc::new(FakeUsers::with_user(user.clone()));
+        let enrollment = EnrollTotpUseCase::new(totp_port.clone(), users.clone(), Arc::new(FakeHasher)).execute(user.id, "florian", Some("s3cret!")).await.unwrap();
+        let code = code_for(&enrollment.secret_base32, "florian");
+        ConfirmTotpUseCase::new(totp_port.clone(), backup_codes.clone(), Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user.id, "florian", &code).await.unwrap();
+
+        DisableTotpUseCase::new(users, Arc::new(FakeHasher), totp_port.clone(), backup_codes.clone(), FakeWebauthnCredentials::with(1))
+            .execute(user.id, "s3cret!")
+            .await
+            .unwrap();
+
+        assert!(totp_port.get(user.id).await.unwrap().is_none());
+        assert_eq!(backup_codes.count_unused(user.id).await.unwrap(), 10);
+    }
+
+    #[tokio::test]
+    async fn an_administrator_resets_every_factor_and_signs_the_account_out() {
+        let totp_port = Arc::new(FakeTotp::new());
+        let backup_codes = Arc::new(FakeBackupCodes::new());
+        let user = sample_user();
+        let users = Arc::new(FakeUsers::with_user(user.clone()));
+        let enrollment = EnrollTotpUseCase::new(totp_port.clone(), users.clone(), Arc::new(FakeHasher)).execute(user.id, "florian", Some("s3cret!")).await.unwrap();
+        let code = code_for(&enrollment.secret_base32, "florian");
+        ConfirmTotpUseCase::new(totp_port.clone(), backup_codes.clone(), Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user.id, "florian", &code).await.unwrap();
+        let passkeys = FakeWebauthnCredentials::with(2);
+        let security = Arc::new(RecordingSecurity::default());
+
+        ResetMfaUseCase::new(security.clone(), totp_port.clone(), backup_codes.clone(), passkeys.clone()).execute(user.id, user.organization_id, Uuid::new_v4()).await.unwrap();
+
+        assert!(totp_port.get(user.id).await.unwrap().is_none());
+        assert_eq!(backup_codes.count_unused(user.id).await.unwrap(), 0);
+        assert_eq!(passkeys.count_for_user(user.id).await.unwrap(), 0);
+        assert_eq!(*security.revoked.lock().unwrap(), vec![(user.id, Some("MfaReset".to_string()))]);
+    }
+
+    #[tokio::test]
+    async fn resetting_an_account_without_a_second_factor_is_refused() {
+        let security = Arc::new(RecordingSecurity::default());
+        let use_case = ResetMfaUseCase::new(security.clone(), Arc::new(FakeTotp::new()), Arc::new(FakeBackupCodes::new()), FakeWebauthnCredentials::with(0));
+
+        let err = use_case.execute(Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()).await.unwrap_err();
+
+        assert!(matches!(err, ApplicationError::MfaNotEnrolled), "got {err:?}");
+        assert!(security.revoked.lock().unwrap().is_empty(), "nothing to reset, nobody signed out");
     }
 
     #[tokio::test]
     async fn mfa_status_reports_disabled_when_never_enrolled() {
         let totp_port = Arc::new(FakeTotp::new());
         let backup_codes = Arc::new(FakeBackupCodes::new());
-        let status = GetMfaStatusUseCase::new(totp_port, backup_codes, Arc::new(FakeWebauthnCredentials)).execute(Uuid::new_v4()).await.unwrap();
+        let status = GetMfaStatusUseCase::new(totp_port, backup_codes, FakeWebauthnCredentials::with(0)).execute(Uuid::new_v4()).await.unwrap();
         assert_eq!(status, MfaStatus { totp_enabled: false, backup_codes_remaining: 0, passkey_count: 0 });
     }
 
@@ -1007,7 +1213,7 @@ mod tests {
         let code = code_for(&enrollment.secret_base32, "florian");
         ConfirmTotpUseCase::new(totp_port.clone(), backup_codes.clone(), Arc::new(FakeUsers::new()), Arc::new(FakeVerification::nobody()), Arc::new(FakeEmail::new())).execute(user_id, "florian", &code).await.unwrap();
 
-        let status = GetMfaStatusUseCase::new(totp_port, backup_codes, Arc::new(FakeWebauthnCredentials)).execute(user_id).await.unwrap();
+        let status = GetMfaStatusUseCase::new(totp_port, backup_codes, FakeWebauthnCredentials::with(0)).execute(user_id).await.unwrap();
         assert_eq!(status, MfaStatus { totp_enabled: true, backup_codes_remaining: 10, passkey_count: 0 });
     }
 }

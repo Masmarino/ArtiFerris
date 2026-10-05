@@ -3,6 +3,8 @@
     'package.backToRepository' | transloco
   }}</a>
 
+  <app-page-heading />
+
   @if (loading()) {
     <gbt-spinner [label]="'common.loading' | transloco" />
   } @else if (format === 'npm' && npmDetails(); as details) {

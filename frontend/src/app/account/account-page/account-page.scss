@@ -1,0 +1,184 @@
+@use '../../../styles/settings';
+
+// Header and layout share the 1440px frame so the title lines up with the section menu's left edge.
+:host {
+  display: block;
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+.account-page__intro {
+  margin: 0;
+}
+
+.account-page__section {
+  @include settings.section;
+}
+
+.account-page__field {
+  @include settings.field;
+}
+
+.account-page__hint {
+  @include settings.hint;
+}
+
+.account-page__profile {
+  @include settings.form;
+}
+
+.account-page__identity {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-width: 0;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--gbt-hairline);
+}
+
+.account-page__avatar {
+  flex: none;
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.account-page__identity-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.account-page__name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.625rem;
+  min-width: 0;
+}
+
+.account-page__username {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.account-page__identity-meta {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.account-page__role {
+  flex: none;
+}
+
+.account-page__identity-loading {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.account-page__email {
+  max-width: 32rem;
+  margin: 0;
+
+  dd {
+    margin: 0;
+  }
+}
+
+// The field's label and its value, read-only: the label as Gabarit's inputs draw theirs.
+.account-page__label {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.account-page__value {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  overflow-wrap: anywhere;
+
+  &--none {
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+}
+
+.account-page__language {
+  display: block;
+  max-width: 32rem;
+}
+
+.account-page__session {
+  @include settings.form-actions;
+  justify-content: space-between;
+}
+
+.account-page__session-text {
+  @include settings.form-summary;
+}
+
+.account-page__password-form {
+  @include settings.form;
+
+  .gbt-form-required-note {
+    margin: 0;
+  }
+}
+
+.account-page__current {
+  max-width: calc(50% - 0.5rem); // one column of the row below
+}
+
+.account-page__password-row {
+  @include settings.field-row(minmax(0, 1fr) minmax(0, 1fr));
+}
+
+.account-page__length-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  transition: color var(--site-transition-fast);
+
+  gbt-icon {
+    flex: none;
+    font-size: 0.75rem;
+  }
+
+  &[data-state='met'] {
+    color: var(--color-success-text);
+  }
+}
+
+.account-page__password-actions {
+  @include settings.form-actions;
+}
+
+.account-page__password-status {
+  flex: 1 1 auto;
+}
+
+@container settings-card (max-width: 519px) {
+  .account-page__current {
+    max-width: none;
+  }
+
+  .account-page__password-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

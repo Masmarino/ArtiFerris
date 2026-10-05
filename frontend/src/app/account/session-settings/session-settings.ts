@@ -1,7 +1,8 @@
 import { t } from '../../shared/i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
-import { Button, Card } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Card } from '@masmarino/gabarit/card'
 import { AuthService } from '../../auth/application/auth.service'
 import { SessionRevocationService } from '../../auth/application/session-revocation.service'
 import { ConfirmService } from '../../shared/confirm.service'
@@ -12,6 +13,7 @@ import { ToastService } from '../../shared/toast.service'
   standalone: true,
   imports: [TranslocoPipe, Button, Card],
   templateUrl: './session-settings.html',
+  styleUrl: './session-settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SessionSettings {

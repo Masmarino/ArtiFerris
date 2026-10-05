@@ -15,7 +15,11 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router'
 import { LocalizedDatePipe } from '../../shared/i18n/localized-date'
 import { FormsModule } from '@angular/forms'
 import { map } from 'rxjs'
-import { Button, Card, EmptyState, Select, Spinner } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Card } from '@masmarino/gabarit/card'
+import { EmptyState } from '@masmarino/gabarit/empty-state'
+import { Select } from '@masmarino/gabarit/select'
+import { Spinner } from '@masmarino/gabarit/spinner'
 import { RepositoriesService } from '../application/repositories.service'
 import {
   DockerImageDetails,
@@ -41,6 +45,7 @@ import { overloadMessage } from '../../shared/api-error'
 import { CopyableCommand } from '../../shared/copyable-command/copyable-command'
 import { ReadmeView } from '../../shared/readme-view/readme-view'
 import { dockerPullCommand, npmInstallCommand, preferredTag } from '../domain/install-commands'
+import { PageHeading } from '../../shared/page-heading/page-heading'
 
 const PAGE_SIZE = 20
 
@@ -56,6 +61,7 @@ class ShortDigestPipe implements PipeTransform {
   selector: 'app-package-detail-page',
   standalone: true,
   imports: [
+    PageHeading,
     TranslocoPipe,
     Button,
     LocalizedDatePipe,

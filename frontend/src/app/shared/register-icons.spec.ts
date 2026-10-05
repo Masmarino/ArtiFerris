@@ -1,6 +1,6 @@
 import { ApplicationInitStatus } from '@angular/core'
 import { TestBed } from '@angular/core/testing'
-import { IconRegistry } from '@masmarino/gabarit'
+import { IconRegistry } from '@masmarino/gabarit/icon'
 import { ARTIFERRIS_ICONS, provideArtiferrisIcons } from './register-icons'
 
 describe('provideArtiferrisIcons', () => {

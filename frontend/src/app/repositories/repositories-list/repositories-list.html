@@ -1,3 +1,7 @@
+<!-- Under "Mon dépôt" the list is a part of that page, which has its own heading. -->
+@if (mode() !== 'personal') {
+  <app-page-heading />
+}
 <div class="toolbar">
   <gbt-button
     [text]="

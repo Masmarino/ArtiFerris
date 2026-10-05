@@ -46,6 +46,8 @@ const EVENT_TYPES = new Set([
   'ConfigurationImported',
   'BackupCodesRegenerated',
   'InvitationResent',
+  'MfaReset',
+  'PasswordReset',
   'QuotaSet',
   'RetentionPolicySet',
   'LoginThrottleCleared',

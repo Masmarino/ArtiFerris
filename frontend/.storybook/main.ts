@@ -42,8 +42,11 @@ const config: StorybookConfig = {
     '@storybook/addon-docs',
   ],
   framework: '@storybook/angular-vite',
-  // The app's public/ folder, at the paths the app uses.
-  staticDirs: ['../public'],
+  // The app's public/ folder, and Gabarit's fonts, at the paths the app uses.
+  staticDirs: [
+    '../public',
+    { from: '../node_modules/@masmarino/gabarit/fonts', to: '/fonts/ibm-plex' },
+  ],
   async viteFinal(viteConfig) {
     viteConfig.plugins ??= []
     viteConfig.plugins.push(mockBrandingApi())

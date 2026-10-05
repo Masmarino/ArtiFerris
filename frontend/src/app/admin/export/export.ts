@@ -2,18 +2,21 @@ import { t } from '../../shared/i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { Button, Card, FileUpload } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Card } from '@masmarino/gabarit/card'
+import { FileUpload } from '@masmarino/gabarit/file-upload'
 import { ExportService } from '../application/export.service'
 import { ImportReport } from '../domain/export.entity'
 import { ConfirmService } from '../../shared/confirm.service'
 import { badRequestBlobMessage } from '../../shared/api-error'
 import { downloadBlob } from '../../shared/download'
 import { badRequestMessage } from '../../shared/api-error'
+import { PageHeading } from '../../shared/page-heading/page-heading'
 
 @Component({
   selector: 'app-export',
   standalone: true,
-  imports: [TranslocoPipe, Button, Card, FileUpload, FormsModule],
+  imports: [PageHeading, TranslocoPipe, Button, Card, FileUpload, FormsModule],
   templateUrl: './export.html',
   styleUrl: './export.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

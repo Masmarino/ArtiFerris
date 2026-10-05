@@ -1,0 +1,12 @@
+@use '../../../styles/settings';
+
+:host {
+  display: block;
+
+  @include settings.card-container;
+}
+
+.session-settings__actions {
+  display: flex;
+  justify-content: flex-end;
+}

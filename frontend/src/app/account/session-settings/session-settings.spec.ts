@@ -73,7 +73,7 @@ describe('SessionSettings', () => {
     expect(fixture.componentInstance.signingOut()).toBe(false)
     expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
       variant: 'error',
-      message: 'Échec de la déconnexion des sessions. Réessayez.',
+      message: 'Impossible de fermer les sessions. Réessayez.',
     })
   })
 

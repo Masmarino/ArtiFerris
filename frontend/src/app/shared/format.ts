@@ -25,8 +25,14 @@ export function formatBytes(bytes: number): string {
     return `0 ${t('format.bytes.b')}`
   }
   const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNIT_KEYS.length - 1)
-  const value = bytes / 1024 ** exponent
-  return `${value.toFixed(exponent === 0 ? 0 : 1)} ${t(`format.bytes.${BYTE_UNIT_KEYS[exponent]}`)}`
+  const digits = exponent === 0 ? 0 : 1
+  // The language's decimal separator: "38,2 Go" in French, as FerrisGit writes it.
+  const value = new Intl.NumberFormat(t('meta.locale'), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    useGrouping: false,
+  }).format(bytes / 1024 ** exponent)
+  return `${value} ${t(`format.bytes.${BYTE_UNIT_KEYS[exponent]}`)}`
 }
 
 const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [

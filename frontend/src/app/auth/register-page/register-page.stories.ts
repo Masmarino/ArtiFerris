@@ -1,114 +1,75 @@
-import { HttpErrorResponse } from '@angular/common/http'
-import {
-  applicationConfig,
-  moduleMetadata,
-  type Meta,
-  type StoryObj,
-} from '@storybook/angular-vite'
+import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular-vite'
 import { provideRouter } from '@angular/router'
 import { expect, userEvent, waitFor, within } from 'storybook/test'
-import { of, throwError } from 'rxjs'
+import { of } from 'rxjs'
 import { RegisterPage } from './register-page'
-import { AuthService } from '../application/auth.service'
-import type { LoginOutcome } from '../domain/auth.types'
+import { AuthPort } from '../application/auth.port'
+import { fakeAuthPort, refused, withAuthPort } from '../kit/auth-story-helpers'
 
-function fakeAuth(overrides: Partial<AuthService> = {}): Partial<AuthService> {
-  return {
-    register: () =>
-      of<LoginOutcome>({ mfaRequired: true, mfaToken: 'story-mfa-token', mfaSetupRequired: true }),
-    ...overrides,
-  }
-}
+const page = (port: AuthPort) =>
+  applicationConfig({ providers: [provideRouter([]), withAuthPort(port)] })
 
-async function fillRegisterForm(canvasElement: HTMLElement) {
+async function register(canvasElement: HTMLElement) {
   const canvas = within(canvasElement)
-  // GbtInput appends " *" to required-field labels: match by prefix.
-  await userEvent.type(await canvas.findByLabelText(/^Nom d'utilisateur/), 'florian')
-  await userEvent.type(canvas.getByLabelText(/^Adresse e-mail/), 'florian@example.com')
-  await userEvent.type(canvas.getByLabelText(/^Mot de passe/), 'hunter2222')
+  await userEvent.type(await canvas.findByLabelText("Nom d'utilisateur"), 'marie')
+  await userEvent.type(canvas.getByLabelText('Adresse e-mail'), 'marie@example.com')
+  await userEvent.type(canvas.getByLabelText('Mot de passe'), 'sup3r-s3cret!')
+  await userEvent.click(canvas.getByRole('button', { name: 'Créer mon compte' }))
+  return canvas
 }
 
+/** Open registration: the new account is signed in, then sets up its second factor. */
 const meta: Meta<RegisterPage> = {
   title: 'Auth/RegisterPage',
   component: RegisterPage,
-  decorators: [
-    applicationConfig({ providers: [provideRouter([])] }),
-    moduleMetadata({ providers: [{ provide: AuthService, useValue: fakeAuth() }] }),
-  ],
+  parameters: { layout: 'fullscreen' },
+  decorators: [page(fakeAuthPort())],
 }
 export default meta
 
 type Story = StoryObj<RegisterPage>
 
-export const Default: Story = {}
+export const Default: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await waitFor(() => expect(canvas.getByLabelText("Nom d'utilisateur")).toHaveFocus())
+  },
+}
 
 export const AfterSubmitEntersMfaSetup: Story = {
   play: async ({ canvasElement }) => {
-    await fillRegisterForm(canvasElement)
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Créer mon compte' }))
-    await waitFor(() =>
-      expect(
-        within(canvasElement).getByText('Choisissez une méthode pour continuer :'),
-      ).toBeInTheDocument(),
-    )
+    const canvas = await register(canvasElement)
+    await expect(
+      await canvas.findByRole('heading', { name: 'Protégez votre compte' }),
+    ).toBeVisible()
   },
 }
 
 export const UsernameAlreadyTaken: Story = {
   decorators: [
-    moduleMetadata({
-      providers: [
-        {
-          provide: AuthService,
-          useValue: fakeAuth({
-            register: () =>
-              throwError(
-                () =>
-                  new HttpErrorResponse({
-                    status: 400,
-                    error: { error: 'username already taken' },
-                  }),
-              ),
-          }),
-        },
-      ],
-    }),
+    page(
+      fakeAuthPort({
+        register: () => refused(400, 'username already taken', 'username_taken'),
+      }),
+    ),
   ],
   play: async ({ canvasElement }) => {
-    await fillRegisterForm(canvasElement)
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Créer mon compte' }))
-    await waitFor(() =>
-      expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
-        'Ce nom d’utilisateur est déjà pris.',
-      ),
-    )
+    const canvas = await register(canvasElement)
+    await expect(
+      await canvas.findByText("Ce nom d'utilisateur ou cette adresse e-mail est déjà utilisé"),
+    ).toBeVisible()
+    await waitFor(() => expect(canvas.getByLabelText("Nom d'utilisateur")).toHaveFocus())
   },
 }
 
-export const RegistrationDisabled: Story = {
+export const RegistrationClosed: Story = {
   decorators: [
-    moduleMetadata({
-      providers: [
-        {
-          provide: AuthService,
-          useValue: fakeAuth({
-            register: () =>
-              throwError(
-                () =>
-                  new HttpErrorResponse({ status: 400, error: { error: 'currently disabled' } }),
-              ),
-          }),
-        },
-      ],
-    }),
+    page(fakeAuthPort({ getSsoConfig: () => of({ type: null, registration_enabled: false }) })),
   ],
   play: async ({ canvasElement }) => {
-    await fillRegisterForm(canvasElement)
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Créer mon compte' }))
-    await waitFor(() =>
-      expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
-        "La création de compte est actuellement désactivée par l'administrateur.",
-      ),
-    )
+    const canvas = within(canvasElement)
+    await expect(
+      await canvas.findByRole('heading', { name: 'Les inscriptions sont fermées' }),
+    ).toBeVisible()
   },
 }

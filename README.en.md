@@ -223,9 +223,10 @@ is typed again.
   its own. Postgres only receives keyed hashes, never an address. This budget does not stop a distributed flood: put a
   limit at the ingress or a CDN in front. Failed sign-ins have their own limit, per process.
 - Branding files are validated by their signature, never by their `Content-Type`.
-- The activation token travels in the URL (`/activate?token=…`); it is single-use on the server and expires. When an
-  SSO sign-in comes back, the browser only accepts the session token if it started that sign-in in the last 10 minutes,
-  on top of the cookie and `state` the server checks.
+- The activation token travels in the link's fragment (`/activate#token=…`), which no server or access log sees; the
+  page then drops it from the address bar. It is single-use on the server and expires. When an SSO sign-in comes back,
+  the browser only accepts the session token if it started that sign-in in the last 10 minutes, on top of the cookie and
+  `state` the server checks.
 
 Package READMEs are sanitized on the server, but their images may come from any `https` host: on public pages each
 visitor therefore reveals their IP and User-Agent to that host. This is an accepted risk; to reduce it, restrict

@@ -1,0 +1,56 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+// Gabarit centres the icon on the alert; with several lines it belongs next to the title.
+:host ::ng-deep gbt-alert .gbt-alert {
+  align-items: flex-start;
+}
+
+.link-mail-failed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+
+  &:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 4px;
+    border-radius: var(--site-border-radius-sm);
+  }
+}
+
+.link-mail-failed__title {
+  margin: 0;
+  font-weight: 600;
+}
+
+// Why the mail did not go out.
+.link-mail-failed__reason {
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.9;
+  overflow-wrap: anywhere;
+}
+
+.link-mail-failed__help {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+// On a phone, 44px targets for the copy button and Gabarit's 26px dismiss button.
+@media (max-width: 599px) {
+  :host ::ng-deep gbt-copy-field .gbt-copy-field__copy .gbt-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  :host ::ng-deep gbt-alert .gbt-alert__close {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin: -0.625rem -0.625rem -0.625rem 0;
+  }
+}

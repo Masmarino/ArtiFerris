@@ -5,6 +5,7 @@ import {
   Component,
   OnInit,
   computed,
+  Injector,
   inject,
   input,
   signal,
@@ -12,15 +13,11 @@ import {
 import { Router } from '@angular/router'
 import { FormsModule } from '@angular/forms'
 import { forkJoin } from 'rxjs'
-import {
-  Button,
-  EmptyState,
-  Select,
-  SelectOption,
-  Spinner,
-  Table,
-  TableColumn,
-} from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { EmptyState } from '@masmarino/gabarit/empty-state'
+import { Select, SelectOption } from '@masmarino/gabarit/select'
+import { Spinner } from '@masmarino/gabarit/spinner'
+import { Table, TableColumn } from '@masmarino/gabarit/table'
 import { CreateRepositoryModal } from '../create-repository-modal/create-repository-modal'
 import { CreateUserProjectModal } from '../create-user-project-modal/create-user-project-modal'
 import { RepositoriesService } from '../application/repositories.service'
@@ -29,6 +26,8 @@ import { RepositorySummary } from '../domain/repository.entity'
 import { OrganizationsService } from '../../admin/application/organizations.service'
 import { OrganizationSummary } from '../../admin/domain/organization.entity'
 import { MeService } from '../../shell/application/me.service'
+import { PageHeading } from '../../shared/page-heading/page-heading'
+import { openWhenAsked } from '../../shared/open-when-asked'
 
 /** Not a real organization id: selects the unfiltered view across organizations. */
 const ALL_ORGANIZATIONS = 'ALL'
@@ -37,6 +36,7 @@ const ALL_ORGANIZATIONS = 'ALL'
   selector: 'app-repositories-list',
   standalone: true,
   imports: [
+    PageHeading,
     TranslocoPipe,
     Table,
     Button,
@@ -57,6 +57,7 @@ export class RepositoriesList implements OnInit {
   private readonly organizationsService = inject(OrganizationsService)
   private readonly me = inject(MeService)
   private readonly router = inject(Router)
+  private readonly injector = inject(Injector)
 
   // 'personal' is the caller's own namespace: a single organization, so organization controls are
   // meaningless.
@@ -126,6 +127,12 @@ export class RepositoriesList implements OnInit {
 
   ngOnInit(): void {
     this.reload()
+    // The quick search's "Nouveau dépôt" / "Nouveau projet": which one depends on the mode, an input.
+    openWhenAsked(
+      this.mode() === 'personal' ? 'project' : 'repository',
+      () => this.showCreateModal.set(true),
+      this.injector,
+    )
   }
 
   reload(): void {

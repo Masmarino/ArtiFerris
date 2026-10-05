@@ -6,7 +6,7 @@ import {
   provideTransloco,
 } from '@jsverse/transloco'
 import { Observable, firstValueFrom, of } from 'rxjs'
-import { provideTranslator } from '../src/app/shared/i18n/translator'
+import { provideTranslator, setActiveLanguage } from '../src/app/shared/i18n/translator'
 import fr from '../public/i18n/fr.json'
 
 /** Storybook has no server for the dictionary, so it is bundled. */
@@ -25,6 +25,7 @@ export function provideStorybookTransloco() {
     }),
     provideTranslator(),
     provideAppInitializer(() => {
+      setActiveLanguage('fr')
       const transloco = inject(TranslocoService)
       return firstValueFrom(transloco.load('fr'))
     }),

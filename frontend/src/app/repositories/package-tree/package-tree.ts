@@ -10,7 +10,10 @@ import {
   signal,
 } from '@angular/core'
 import { RouterLink } from '@angular/router'
-import { Button, EmptyState, Icon, Spinner } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { EmptyState } from '@masmarino/gabarit/empty-state'
+import { Icon } from '@masmarino/gabarit/icon'
+import { Spinner } from '@masmarino/gabarit/spinner'
 import { RepositoriesService } from '../application/repositories.service'
 import { RepositoryPackages } from '../domain/repository.entity'
 import { VulnerabilitySummaryBadge } from '../vulnerability-summary/vulnerability-summary'

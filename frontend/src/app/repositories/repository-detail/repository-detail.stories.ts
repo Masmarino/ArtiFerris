@@ -358,7 +358,15 @@ export const VisibilityOfAPublicPersonalProject: Story = {
   },
 }
 
-export const NoVisibilityControlForAnOrganizationRepository: Story = {
+/** Only a hosted repository has a visibility of its own: a proxy shows none, even to its administrator. */
+export const NoVisibilityControlForAProxyRepository: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        { provide: RepositoriesService, useValue: fakeRepositories({ get: () => of(PROXY_REPO) }) },
+      ],
+    }),
+  ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await userEvent.click(await canvas.findByRole('tab', { name: 'Paramètres' }))

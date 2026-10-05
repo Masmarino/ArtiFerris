@@ -11,12 +11,6 @@ import { AuthService } from '../auth/application/auth.service'
 import { meProviders } from './infrastructure/me.providers'
 import { versionProviders } from './infrastructure/version.providers'
 import { readableCatalogProviders } from './infrastructure/readable-catalog.providers'
-import {
-  proxiedEntry,
-  readableDockerEntry,
-  readableEntry,
-  readableSearchResult,
-} from './testing/readable-catalog.fixtures'
 import { authProviders } from '../auth/infrastructure/auth.providers'
 import { userProviders } from '../users/infrastructure/user.providers'
 import { repositoryProviders } from '../repositories/infrastructure/repository.providers'
@@ -60,12 +54,6 @@ describe('AppShell', () => {
     httpMock
       .expectOne('/api/me')
       .flush({ is_organization_admin: false, organization_id: 'org-1', ...me })
-    httpMock.expectOne('/api/repositories').flush([])
-    // Super-admins and organization admins both see the Utilisateurs category, so
-    // refreshSearchData() fires /api/users.
-    if (me.is_super_admin || me.is_organization_admin) {
-      httpMock.expectOne('/api/users').flush([])
-    }
   }
 
   it('renders a skip-link (from gbt-app-shell) targeting the actual main content element', () => {
@@ -125,13 +113,16 @@ describe('AppShell', () => {
     fixture.detectChanges()
 
     const actions = fixture.componentInstance.navItems().map((item) => item.action)
-    expect(actions).toEqual(['explorer', 'repositories', 'my-repository', 'users', 'admin'])
+    expect(actions).toEqual(['explorer', 'repositories', 'my-repository', 'admin'])
 
+    // As in FerrisGit: the dashboard first, the instance's configuration last.
     const adminItem = fixture.componentInstance.navItems().find((item) => item.action === 'admin')!
     expect(adminItem.children?.map((child) => child.action)).toEqual([
+      'dashboard',
+      'users',
       'organizations',
-      'export',
       'health',
+      'export',
     ])
   })
 
@@ -197,16 +188,16 @@ describe('AppShell', () => {
     fixture.detectChanges()
 
     const links: HTMLAnchorElement[] = Array.from(
-      fixture.nativeElement.querySelectorAll('a.app-shell__nav-link'),
+      fixture.nativeElement.querySelectorAll('a.gbt-app-shell__link'),
     )
     const explorerLink = links.find((el) => el.textContent?.includes('Explorer'))!
     const repositoriesLink = links.find((el) => el.textContent?.includes('Dépôts'))!
 
-    expect(explorerLink.classList.contains('app-shell__nav-link--active')).toBe(false)
-    expect(repositoriesLink.classList.contains('app-shell__nav-link--active')).toBe(true)
+    expect(explorerLink.getAttribute('aria-current')).toBeNull()
+    expect(repositoriesLink.getAttribute('aria-current')).toBe('page')
   })
 
-  it('shows the Utilisateurs item for an organization admin, even though they are not a super-admin', () => {
+  it('puts Utilisateurs under Administration for an organization admin, even though they are not a super-admin', () => {
     const fixture = TestBed.createComponent(AppShell)
     fixture.detectChanges()
 
@@ -219,11 +210,11 @@ describe('AppShell', () => {
     })
     fixture.detectChanges()
 
-    const actions = fixture.componentInstance.navItems().map((item) => item.action)
-    expect(actions).toContain('users')
+    const admin = fixture.componentInstance.navItems().find((item) => item.action === 'admin')
+    expect(admin?.children?.map((child) => child.action)).toContain('users')
   })
 
-  it('shows an Administration link for an org-admin who is not a super-admin, linking to their own organization', () => {
+  it("gives an org-admin who is not a super-admin an Administration group: its users, then its own organization's settings", () => {
     const fixture = TestBed.createComponent(AppShell)
     fixture.detectChanges()
     flushMe({
@@ -236,13 +227,13 @@ describe('AppShell', () => {
     fixture.detectChanges()
 
     const actions = fixture.componentInstance.navItems().map((item) => item.action)
-    expect(actions).toEqual(['explorer', 'repositories', 'my-repository', 'users', 'organization'])
-    const orgItem = fixture.componentInstance
-      .navItems()
-      .find((item) => item.action === 'organization')!
-    expect(orgItem.text).toBe('Administration')
-    expect(orgItem.link).toBe('/admin/organizations/org-1')
-    expect(orgItem.children).toBeUndefined()
+    expect(actions).toEqual(['explorer', 'repositories', 'my-repository', 'admin'])
+    const admin = fixture.componentInstance.navItems().find((item) => item.action === 'admin')!
+    expect(admin.text).toBe('Administration')
+    expect(admin.children?.map((child) => [child.text, child.link])).toEqual([
+      ['Utilisateurs', '/users'],
+      ['Réglages', '/admin/organizations/org-1'],
+    ])
   })
 
   it('does not show the Administration submenu for a super-admin, who already reaches every organization', () => {
@@ -288,6 +279,7 @@ describe('AppShell', () => {
           provideRouter([
             { path: 'admin', component: DummyRoutedComponent },
             { path: 'admin/export', component: DummyRoutedComponent },
+            { path: 'users', component: DummyRoutedComponent },
           ]),
         ],
       })
@@ -299,6 +291,10 @@ describe('AppShell', () => {
       return fixture.componentInstance.navItems().find((item) => item.action === 'admin')!
     }
 
+    function panel(fixture: ReturnType<typeof TestBed.createComponent<AppShell>>): HTMLElement {
+      return fixture.nativeElement.querySelector('.gbt-app-shell-nav-group__panel')
+    }
+
     it('is collapsed by default and does not render its children', () => {
       const fixture = TestBed.createComponent(AppShell)
       fixture.detectChanges()
@@ -306,7 +302,19 @@ describe('AppShell', () => {
       fixture.detectChanges()
 
       expect(fixture.componentInstance.isMenuOpen(adminItem(fixture))).toBe(false)
-      expect(fixture.nativeElement.querySelector('.app-shell__nav-submenu')).toBeFalsy()
+      expect(panel(fixture).hidden).toBe(true)
+    })
+
+    it('opens on the users page too, which lives outside /admin', async () => {
+      const fixture = setupOnAdminRoutes()
+      fixture.detectChanges()
+      flushMe({ id: 'user-1', username: 'florian', is_super_admin: true })
+      fixture.detectChanges()
+
+      await TestBed.inject(Router).navigateByUrl('/users')
+      fixture.detectChanges()
+
+      expect(fixture.componentInstance.isMenuOpen(adminItem(fixture))).toBe(true)
     })
 
     it('opens automatically, marks the child active (not the parent), when landing on a sub-page', async () => {
@@ -323,39 +331,45 @@ describe('AppShell', () => {
 
       expect(fixture.componentInstance.isMenuOpen(adminItem(fixture))).toBe(true)
 
-      const adminLink: HTMLAnchorElement = fixture.nativeElement.querySelector(
-        '.app-shell__nav-group a.app-shell__nav-link',
-      )
-      const links: HTMLAnchorElement[] = Array.from(
-        fixture.nativeElement.querySelectorAll('a.app-shell__nav-link--sub'),
-      )
+      const links: HTMLAnchorElement[] = Array.from(panel(fixture).querySelectorAll('a'))
+      const dashboardLink = links.find((el) => el.textContent?.includes('Tableau de bord'))!
       const exportLink = links.find((el) => el.textContent?.includes('Export'))!
 
-      expect(adminLink.classList.contains('app-shell__nav-link--active')).toBe(false)
-      expect(exportLink).toBeTruthy()
-      expect(exportLink.classList.contains('app-shell__nav-link--active')).toBe(true)
-      expect(adminLink.getAttribute('aria-current')).toBeNull()
+      expect(panel(fixture).hidden).toBe(false)
+      expect(dashboardLink.getAttribute('aria-current')).toBeNull()
       expect(exportLink.getAttribute('aria-current')).toBe('page')
     })
 
-    it('toggles open and closed via the chevron button, independent of route', () => {
+    it('toggles open and closed with the group button, independent of route', () => {
       const fixture = TestBed.createComponent(AppShell)
       fixture.detectChanges()
       flushMe({ id: 'user-1', username: 'florian', is_super_admin: true })
       fixture.detectChanges()
 
       const toggle: HTMLButtonElement = fixture.nativeElement.querySelector(
-        '.app-shell__nav-group-toggle',
+        '.gbt-app-shell-nav-group__toggle',
       )
+      expect(toggle.textContent).toContain('Administration')
       toggle.click()
       fixture.detectChanges()
       expect(fixture.componentInstance.isMenuOpen(adminItem(fixture))).toBe(true)
-      expect(fixture.nativeElement.querySelector('.app-shell__nav-submenu')).toBeTruthy()
+      expect(panel(fixture).hidden).toBe(false)
 
       toggle.click()
       fixture.detectChanges()
       expect(fixture.componentInstance.isMenuOpen(adminItem(fixture))).toBe(false)
-      expect(fixture.nativeElement.querySelector('.app-shell__nav-submenu')).toBeFalsy()
+      expect(panel(fixture).hidden).toBe(true)
+    })
+
+    it('opens on the dashboard first, as the group button no longer links to it', () => {
+      const fixture = TestBed.createComponent(AppShell)
+      fixture.detectChanges()
+      flushMe({ id: 'user-1', username: 'florian', is_super_admin: true })
+      fixture.detectChanges()
+
+      const first = panel(fixture).querySelector('a')!
+      expect(first.textContent).toContain('Tableau de bord')
+      expect(first.getAttribute('href')).toBe('/admin')
     })
 
     it('can be manually collapsed even while on one of its own sub-pages', async () => {
@@ -368,7 +382,7 @@ describe('AppShell', () => {
       fixture.detectChanges()
       expect(fixture.componentInstance.isMenuOpen(adminItem(fixture))).toBe(true)
 
-      fixture.nativeElement.querySelector('.app-shell__nav-group-toggle').click()
+      fixture.nativeElement.querySelector('.gbt-app-shell-nav-group__toggle').click()
       fixture.detectChanges()
 
       expect(fixture.componentInstance.isMenuOpen(adminItem(fixture))).toBe(false)
@@ -398,7 +412,15 @@ describe('AppShell', () => {
             {
               path: 'admin',
               component: DummyRoutedComponent,
-              data: { titleKey: 'nav.administration' },
+              data: { titleKey: 'nav.dashboard', trail: [{ labelKey: 'nav.administration' }] },
+            },
+            {
+              path: 'admin/export',
+              component: DummyRoutedComponent,
+              data: {
+                titleKey: 'nav.export',
+                trail: [{ labelKey: 'nav.administration', link: '/admin' }],
+              },
             },
           ]),
         ],
@@ -416,9 +438,12 @@ describe('AppShell', () => {
       fixture.detectChanges()
 
       expect(fixture.componentInstance.pageTitle.title()).toBe('Dépôts')
-      expect(fixture.nativeElement.querySelector('.app-shell__page-title').textContent).toContain(
-        'Dépôts',
-      )
+      // The bar's breadcrumb ends on the page, for assistive technology; the page shows its own h1.
+      expect(
+        fixture.nativeElement.querySelector('.app-shell__breadcrumb [aria-current="page"]')
+          .textContent,
+      ).toContain('Dépôts')
+      expect(fixture.nativeElement.querySelector('.app-shell__header h1')).toBeNull()
     })
 
     it('translates the title again and re-creates the routed view on a language change', async () => {
@@ -438,6 +463,41 @@ describe('AppShell', () => {
       expect(fixture.componentInstance.viewGeneration()).toBe(generation + 1)
     })
 
+    it("shows what sits above the page in the bar's breadcrumb, from the route's trail", async () => {
+      const fixture = setupWithTitledRoutes()
+      const router = TestBed.inject(Router)
+      await router.navigateByUrl('/admin/export')
+      fixture.detectChanges()
+      flushMe({ id: 'user-1', username: 'florian', is_super_admin: true })
+      fixture.detectChanges()
+
+      const steps = Array.from(
+        fixture.nativeElement.querySelectorAll('.app-shell__breadcrumb a'),
+      ) as HTMLAnchorElement[]
+      expect(steps.map((a) => a.textContent?.trim())).toEqual(['Administration'])
+      expect(steps[0].getAttribute('href')).toBe('/admin')
+
+      await router.navigateByUrl('/repositories')
+      fixture.detectChanges()
+      expect(fixture.nativeElement.querySelector('.app-shell__breadcrumb a')).toBeNull()
+    })
+
+    it('names a section with no page of its own without making it a link', async () => {
+      const fixture = setupWithTitledRoutes()
+      const router = TestBed.inject(Router)
+      await router.navigateByUrl('/admin')
+      fixture.detectChanges()
+      flushMe({ id: 'user-1', username: 'florian', is_super_admin: true })
+      fixture.detectChanges()
+
+      const breadcrumb = fixture.nativeElement.querySelector('.app-shell__breadcrumb')
+      expect(breadcrumb.querySelector('a')).toBeNull()
+      expect(breadcrumb.querySelector('.app-shell__crumb')?.textContent?.trim()).toBe(
+        'Administration',
+      )
+      expect(fixture.componentInstance.pageTitle.title()).toBe('Tableau de bord')
+    })
+
     it("updates to the new route's title on navigation", async () => {
       const fixture = setupWithTitledRoutes()
       const router = TestBed.inject(Router)
@@ -450,7 +510,7 @@ describe('AppShell', () => {
       await router.navigateByUrl('/admin')
       fixture.detectChanges()
 
-      expect(fixture.componentInstance.pageTitle.title()).toBe('Administration')
+      expect(fixture.componentInstance.pageTitle.title()).toBe('Tableau de bord')
     })
   })
 
@@ -517,7 +577,6 @@ describe('AppShell', () => {
         is_super_admin: false,
         is_organization_admin: false,
       })
-      httpMock.expectOne('/api/repositories').flush([])
       fixture.detectChanges()
 
       expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull()
@@ -539,49 +598,34 @@ describe('AppShell', () => {
     })
   })
 
-  it('toggles the user menu open and closed when the username is clicked', () => {
-    const fixture = TestBed.createComponent(AppShell)
-    fixture.detectChanges()
-    flushMe({ id: 'user-1', username: 'florian', is_super_admin: false })
-    fixture.detectChanges()
-
-    const trigger: HTMLButtonElement = fixture.nativeElement.querySelector(
-      '.app-shell__user-trigger',
-    )
+  /** Opens Gabarit's menu, labelled with the username, as a click does. */
+  function openUserMenu(fixture: { nativeElement: HTMLElement; detectChanges(): void }) {
+    const trigger = fixture.nativeElement.querySelector<HTMLButtonElement>(
+      '.app-shell__header-end .gbt-menu__trigger',
+    )!
     trigger.click()
     fixture.detectChanges()
-    expect(fixture.nativeElement.querySelector('.app-shell__user-dropdown')).toBeTruthy()
+    return trigger
+  }
 
-    trigger.click()
-    fixture.detectChanges()
-    expect(fixture.nativeElement.querySelector('.app-shell__user-dropdown')).toBeFalsy()
-  })
-
-  it('closes the user menu when clicking outside it', () => {
+  it('names the user menu after the user, and lists the account, the docs and signing out', () => {
     const fixture = TestBed.createComponent(AppShell)
     fixture.detectChanges()
     flushMe({ id: 'user-1', username: 'florian', is_super_admin: false })
     fixture.detectChanges()
 
-    fixture.nativeElement.querySelector('.app-shell__user-trigger').click()
-    fixture.detectChanges()
-    expect(fixture.componentInstance.userMenuOpen()).toBe(true)
+    const trigger = openUserMenu(fixture)
 
-    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    fixture.detectChanges()
-    expect(fixture.componentInstance.userMenuOpen()).toBe(false)
-  })
-
-  it('closes the user menu on Escape', () => {
-    const fixture = TestBed.createComponent(AppShell)
-    fixture.detectChanges()
-    flushMe({ id: 'user-1', username: 'florian', is_super_admin: false })
-    fixture.detectChanges()
-
-    fixture.componentInstance.userMenuOpen.set(true)
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-
-    expect(fixture.componentInstance.userMenuOpen()).toBe(false)
+    expect(trigger.textContent).toContain('florian')
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    const items = Array.from(
+      fixture.nativeElement.querySelectorAll('[role="menu"] [gbtMenuItem]'),
+    ) as HTMLElement[]
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
+      'Mon compte',
+      'Documentation',
+      'Déconnexion',
+    ])
   })
 
   it('the user menu links to /account and closes on click', () => {
@@ -606,226 +650,20 @@ describe('AppShell', () => {
     fixture.detectChanges()
     flushMe({ id: 'user-1', username: 'florian', is_super_admin: false })
     fixture.detectChanges()
-    fixture.componentInstance.userMenuOpen.set(true)
-    fixture.detectChanges()
+    const trigger = openUserMenu(fixture)
 
     const accountLink: HTMLAnchorElement = fixture.nativeElement.querySelector(
-      '.app-shell__user-dropdown-item[href="/account"]',
+      '[role="menu"] a[href="/account"]',
     )
     expect(accountLink).toBeTruthy()
     expect(accountLink.textContent).toContain('Mon compte')
 
     accountLink.click()
     fixture.detectChanges()
-    expect(fixture.componentInstance.userMenuOpen()).toBe(false)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
   })
 
-  describe('search', () => {
-    it('filters repositories (and users, for super-admins) by the typed query', () => {
-      const fixture = TestBed.createComponent(AppShell)
-      fixture.detectChanges()
-      httpMock.expectOne('/api/version').flush({ version: '0.2.3' })
-      httpMock
-        .expectOne('/api/me')
-        .flush({ id: 'user-1', username: 'florian', is_super_admin: true })
-      httpMock.expectOne('/api/repositories').flush([
-        {
-          id: 'r1',
-          name: 'my-repo',
-          format: 'npm',
-          repo_type: 'hosted',
-          remote_url: null,
-          group_members: [],
-        },
-        {
-          id: 'r2',
-          name: 'other',
-          format: 'docker',
-          repo_type: 'hosted',
-          remote_url: null,
-          group_members: [],
-        },
-      ])
-      httpMock.expectOne('/api/users').flush([
-        { id: 'u1', username: 'my-user', is_super_admin: false },
-        { id: 'u2', username: 'someone-else', is_super_admin: false },
-      ])
-      fixture.detectChanges()
-
-      fixture.componentInstance.onSearchInput('my')
-      // Starting a search re-fetches, so the header search never shows stale data.
-      httpMock.expectOne('/api/repositories').flush([
-        {
-          id: 'r1',
-          name: 'my-repo',
-          format: 'npm',
-          repo_type: 'hosted',
-          remote_url: null,
-          group_members: [],
-        },
-      ])
-      httpMock
-        .expectOne('/api/users')
-        .flush([{ id: 'u1', username: 'my-user', is_super_admin: false }])
-
-      const categories = fixture.componentInstance.searchResults()
-      expect(categories.find((c) => c.label === 'Dépôts')?.items).toEqual([
-        { kind: 'repository', id: 'r1', label: 'my-repo' },
-      ])
-      expect(categories.find((c) => c.label === 'Utilisateurs')?.items).toEqual([
-        { kind: 'user', id: 'u1', label: 'my-user' },
-      ])
-    })
-
-    it('navigates to the selected result and clears the query', () => {
-      const fixture = TestBed.createComponent(AppShell)
-      fixture.detectChanges()
-      httpMock.expectOne('/api/version').flush({ version: '0.2.3' })
-      httpMock
-        .expectOne('/api/me')
-        .flush({ id: 'user-1', username: 'florian', is_super_admin: false })
-      httpMock.expectOne('/api/repositories').flush([
-        {
-          id: 'r1',
-          name: 'my-repo',
-          format: 'npm',
-          repo_type: 'hosted',
-          remote_url: null,
-          group_members: [],
-        },
-      ])
-      fixture.detectChanges()
-
-      const router = TestBed.inject(Router)
-      const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
-      fixture.componentInstance.onSearchInput('my')
-      httpMock.expectOne('/api/repositories').flush([
-        {
-          id: 'r1',
-          name: 'my-repo',
-          format: 'npm',
-          repo_type: 'hosted',
-          remote_url: null,
-          group_members: [],
-        },
-      ])
-      fixture.componentInstance.onSelectResult({ kind: 'repository', id: 'r1', label: 'my-repo' })
-
-      expect(navigate).toHaveBeenCalledWith('/repositories/r1')
-      expect(fixture.componentInstance.searchQuery()).toBe('')
-    })
-
-    it('re-fetches repositories when a search starts, so a repo created elsewhere in the session is found', () => {
-      const fixture = TestBed.createComponent(AppShell)
-      fixture.detectChanges()
-      httpMock.expectOne('/api/version').flush({ version: '0.2.3' })
-      httpMock
-        .expectOne('/api/me')
-        .flush({ id: 'user-1', username: 'florian', is_super_admin: false })
-      httpMock.expectOne('/api/repositories').flush([])
-      fixture.detectChanges()
-
-      fixture.componentInstance.onSearchInput('new')
-      httpMock.expectOne('/api/repositories').flush([
-        {
-          id: 'r1',
-          name: 'newly-created',
-          format: 'npm',
-          repo_type: 'hosted',
-          remote_url: null,
-          group_members: [],
-        },
-      ])
-
-      const categories = fixture.componentInstance.searchResults()
-      expect(categories.find((c) => c.label === 'Dépôts')?.items).toEqual([
-        { kind: 'repository', id: 'r1', label: 'newly-created' },
-      ])
-    })
-
-    it('does not re-fetch on every keystroke of the same search', () => {
-      const fixture = TestBed.createComponent(AppShell)
-      fixture.detectChanges()
-      httpMock.expectOne('/api/version').flush({ version: '0.2.3' })
-      httpMock
-        .expectOne('/api/me')
-        .flush({ id: 'user-1', username: 'florian', is_super_admin: false })
-      httpMock.expectOne('/api/repositories').flush([])
-      fixture.detectChanges()
-
-      fixture.componentInstance.onSearchInput('m')
-      httpMock.expectOne('/api/repositories').flush([])
-      fixture.componentInstance.onSearchInput('my')
-
-      httpMock.verify()
-    })
-
-    it('flags a failed search load, says so in the results panel, and retries on the next keystroke', () => {
-      const fixture = TestBed.createComponent(AppShell)
-      fixture.detectChanges()
-      httpMock.expectOne('/api/version').flush({ version: '0.2.3' })
-      httpMock
-        .expectOne('/api/me')
-        .flush({ id: 'user-1', username: 'florian', is_super_admin: false })
-      httpMock.expectOne('/api/repositories').flush([])
-      fixture.detectChanges()
-
-      const input: HTMLInputElement = fixture.nativeElement.querySelector('gbt-search-bar input')
-      input.value = 'm'
-      input.dispatchEvent(new Event('input'))
-      httpMock
-        .expectOne('/api/repositories')
-        .flush(null, { status: 500, statusText: 'Server Error' })
-      fixture.detectChanges()
-
-      expect(fixture.componentInstance.searchFailed()).toBe(true)
-      expect(fixture.nativeElement.querySelector('gbt-search-bar').textContent).toContain(
-        'La recherche a échoué',
-      )
-
-      fixture.componentInstance.onSearchInput('my')
-      httpMock.expectOne('/api/repositories').flush([
-        {
-          id: 'r1',
-          name: 'my-repo',
-          format: 'npm',
-          repo_type: 'hosted',
-          remote_url: null,
-          group_members: [],
-        },
-      ])
-      expect(fixture.componentInstance.searchFailed()).toBe(false)
-      expect(
-        fixture.componentInstance.searchResults().find((c) => c.label === 'Dépôts')?.items,
-      ).toHaveLength(1)
-    })
-
-    it('re-fetches again on a new search after the previous one was cleared', () => {
-      const fixture = TestBed.createComponent(AppShell)
-      fixture.detectChanges()
-      httpMock.expectOne('/api/version').flush({ version: '0.2.3' })
-      httpMock
-        .expectOne('/api/me')
-        .flush({ id: 'user-1', username: 'florian', is_super_admin: false })
-      httpMock.expectOne('/api/repositories').flush([])
-      fixture.detectChanges()
-
-      fixture.componentInstance.onSearchInput('first')
-      httpMock.expectOne('/api/repositories').flush([])
-      // clearing must reset the "new search" state, or the next search reuses the cache
-      fixture.componentInstance.onSearchInput('')
-      fixture.componentInstance.onSearchInput('second')
-
-      httpMock.expectOne('/api/repositories').flush([])
-    })
-  })
-
-  describe('package search', () => {
-    const PACKAGE_DEBOUNCE_MS = 250
-
-    beforeEach(() => vi.useFakeTimers())
-    afterEach(() => vi.useRealTimers())
-
+  describe('quick search', () => {
     function setup(me: { is_super_admin: boolean; is_organization_admin?: boolean }) {
       const fixture = TestBed.createComponent(AppShell)
       fixture.detectChanges()
@@ -834,269 +672,122 @@ describe('AppShell', () => {
       return fixture
     }
 
-    function search(fixture: ReturnType<typeof setup>, query: string) {
-      fixture.componentInstance.onSearchInput(query)
+    function openPalette(fixture: ReturnType<typeof setup>): void {
+      fixture.nativeElement
+        .querySelector('.app-shell__header gbt-command-palette-trigger button')
+        .click()
+      fixture.detectChanges()
+      // Opening fetches fresh lists, to catch what another tab changed.
       for (const req of httpMock.match('/api/repositories')) {
         req.flush([])
       }
       for (const req of httpMock.match('/api/users')) {
         req.flush([])
       }
+      fixture.detectChanges()
     }
 
-    const packageRequests = () => httpMock.match((req) => req.url === '/api/search')
-    const packageCategory = (fixture: ReturnType<typeof setup>) =>
-      fixture.componentInstance.searchResults().find((c) => c.label === 'Paquets et images')
-
-    it.each(['', ' ', 'a', ' a '])('does not query below two characters: %j', (query) => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, query)
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS * 4)
-
-      expect(packageRequests()).toEqual([])
-    })
-
-    it('waits for a pause in typing, then sends a single request for the last text', () => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, 'le')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS - 50)
-      search(fixture, 'lef')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS - 1)
-      expect(packageRequests()).toEqual([])
-
-      vi.advanceTimersByTime(1)
-      const requests = packageRequests()
-      expect(requests).toHaveLength(1)
-      expect(requests[0].request.method).toBe('GET')
-      expect(requests[0].request.params.get('q')).toBe('lef')
-      expect(requests[0].request.params.get('per_page')).toBe('5')
-      expect(requests[0].request.params.keys()).toEqual(['q', 'per_page'])
-    })
-
-    it('trims the text before sending it', () => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, '  left ')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-
-      expect(packageRequests()[0].request.params.get('q')).toBe('left')
-    })
-
-    it('lists packages and images under "Paquets et images", after the other categories', () => {
-      const fixture = setup({ is_super_admin: true })
-      search(fixture, 'a')
-      search(fixture, 'ap')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(
-        readableSearchResult([readableEntry(), readableDockerEntry(), proxiedEntry()]),
+    function type(fixture: ReturnType<typeof setup>, text: string): void {
+      const field: HTMLInputElement = fixture.nativeElement.querySelector(
+        '[role="dialog"] input[role="combobox"]',
       )
-
-      const categories = fixture.componentInstance.searchResults()
-      expect(categories.map((c) => c.label)).toEqual([
-        'Dépôts',
-        'Utilisateurs',
-        'Paquets et images',
-      ])
-      expect(categories[2].items).toEqual([
-        { kind: 'package', id: 'r-npm', format: 'npm', name: 'left-pad', label: 'left-pad (npm)' },
-        { kind: 'package', id: 'r-docker', format: 'docker', name: 'api', label: 'api (Docker)' },
-        {
-          kind: 'package',
-          id: 'r-proxy',
-          format: 'npm',
-          name: 'lodash',
-          label: 'lodash (npm) — cache du proxy',
-        },
-      ])
-    })
-
-    it('searches packages for a member who sees neither users nor admin items', () => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, 'left')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(readableSearchResult([readableEntry()]))
-
-      expect(fixture.componentInstance.searchResults().map((c) => c.label)).toEqual([
-        'Dépôts',
-        'Paquets et images',
-      ])
-    })
-
-    it('shows no category when nothing matches', () => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, 'zzz')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(readableSearchResult([]))
-
-      expect(packageCategory(fixture)).toBeUndefined()
-    })
-
-    it('flags a failed package search', () => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, 'zzz')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(null, { status: 500, statusText: 'Server Error' })
-
-      expect(fixture.componentInstance.searchFailed()).toBe(true)
-      expect(packageCategory(fixture)).toBeUndefined()
-    })
-
-    it('renders the packages in the search bar', () => {
-      const fixture = setup({ is_super_admin: false })
-      const input: HTMLInputElement = fixture.nativeElement.querySelector('gbt-search-bar input')
-      input.value = 'lod'
-      input.dispatchEvent(new Event('input'))
-      httpMock.match('/api/repositories').forEach((req) => req.flush([]))
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(readableSearchResult([proxiedEntry()]))
+      field.value = text
+      field.dispatchEvent(new Event('input'))
       fixture.detectChanges()
+    }
 
-      const text = fixture.nativeElement.querySelector('gbt-search-bar').textContent
-      expect(text).toContain('Paquets et images')
-      expect(text).toContain('lodash (npm) — cache du proxy')
-    })
+    function groups(fixture: ReturnType<typeof setup>): Record<string, string[]> {
+      const result: Record<string, string[]> = {}
+      for (const group of Array.from<HTMLElement>(
+        fixture.nativeElement.querySelectorAll('[role="group"]'),
+      )) {
+        const label = group.querySelector('.gbt-cp__group-label')!.textContent!.trim()
+        result[label] = Array.from(group.querySelectorAll('.gbt-cp__item-label'), (item) =>
+          item.textContent!.trim(),
+        )
+      }
+      return result
+    }
 
-    it('navigates to the package page of the selected result and clears the search', () => {
+    const ADMINISTRATION = ['Tableau de bord', 'Utilisateurs', 'Organisations', 'Santé', 'Export']
+
+    it('opens from a button in the header, the palette itself living outside it', () => {
       const fixture = setup({ is_super_admin: false })
-      const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true)
-      search(fixture, 'api')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(readableSearchResult([readableDockerEntry({ name: 'team/api' })]))
-
-      const item = packageCategory(fixture)!.items[0]
-      fixture.componentInstance.onSelectResult(item as never)
-
-      expect(navigate).toHaveBeenCalledWith([
-        '/repositories',
-        'r-docker',
-        'packages',
-        'docker',
-        'team/api',
-      ])
-      const router = TestBed.inject(Router)
-      expect(router.serializeUrl(router.createUrlTree(navigate.mock.calls[0][0]))).toBe(
-        '/repositories/r-docker/packages/docker/team%2Fapi',
+      const trigger: HTMLButtonElement = fixture.nativeElement.querySelector(
+        '.app-shell__header gbt-command-palette-trigger button',
       )
-      expect(fixture.componentInstance.searchQuery()).toBe('')
-      expect(packageCategory(fixture)).toBeUndefined()
+      expect(trigger.getAttribute('aria-label')).toBe('Rechercher ou aller à…')
+      expect(trigger.getAttribute('aria-keyshortcuts')).toMatch(/^(Meta|Control)\+K$/)
+
+      openPalette(fixture)
+
+      // Outside the header, whose dark theme it would otherwise take on.
+      expect(fixture.nativeElement.querySelector('app-quick-search [role="dialog"]')).not.toBeNull()
+      expect(fixture.nativeElement.querySelector('.app-shell__header [role="dialog"]')).toBeNull()
     })
 
-    it('cancels the pending request and drops the category as soon as the text gets too short', () => {
+    it('offers a standard user no administration entry, whatever is typed', () => {
       const fixture = setup({ is_super_admin: false })
-      search(fixture, 'left')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(readableSearchResult([readableEntry()]))
-      expect(packageCategory(fixture)).toBeDefined()
+      openPalette(fixture)
 
-      search(fixture, 'lef')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      const inFlight = packageRequests()[0]
-      search(fixture, 'l')
-
-      expect(inFlight.cancelled).toBe(true)
-      expect(packageCategory(fixture)).toBeUndefined()
+      expect(groups(fixture)).toEqual({
+        'Aller à': ['Explorer', 'Dépôts', 'Mon dépôt', 'Mon compte', 'Documentation'],
+        Actions: ['Nouveau dépôt', 'Nouveau projet', 'Déconnexion'],
+      })
+      for (const query of [
+        'admin',
+        'tableau',
+        'utilisateur',
+        'organisation',
+        'santé',
+        'export',
+        'réglages',
+        'inviter',
+      ]) {
+        type(fixture, query)
+        const shown = Object.values(groups(fixture)).flat()
+        expect(
+          shown.filter((label) => ADMINISTRATION.includes(label) || label === 'Réglages'),
+        ).toEqual([])
+        expect(shown).not.toContain('Inviter un utilisateur')
+        expect(Object.keys(groups(fixture))).not.toContain('Utilisateurs')
+      }
     })
 
-    it('never lets a slower, older response overwrite the newer one', () => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, 'ab')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      const [older] = packageRequests()
-      search(fixture, 'abc')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      const [newer] = packageRequests()
+    it("offers an organization admin its users and its organization's settings, not the instance's pages", () => {
+      const fixture = setup({ is_super_admin: false, is_organization_admin: true })
+      openPalette(fixture)
 
-      expect(older.cancelled).toBe(true)
-      newer.flush(readableSearchResult([readableEntry({ name: 'abc-new' })]))
-      expect(packageCategory(fixture)?.items).toHaveLength(1)
-      expect(packageCategory(fixture)?.items[0]).toMatchObject({ name: 'abc-new' })
-    })
-
-    it('ignores a response that lands after the search was cleared', () => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, 'left')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      const [inFlight] = packageRequests()
-      search(fixture, '')
-
-      expect(inFlight.cancelled).toBe(true)
-      expect(packageCategory(fixture)).toBeUndefined()
-    })
-
-    it.each([400, 401, 429, 500])(
-      'silently shows no category when the request fails with %i',
-      (status) => {
-        const fixture = setup({ is_super_admin: false })
-        search(fixture, 'left')
-        vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-        packageRequests()[0].flush({ error: 'nope' }, { status, statusText: 'Error' })
-
-        expect(packageCategory(fixture)).toBeUndefined()
-        expect(fixture.componentInstance.searchResults().map((c) => c.label)).toEqual(['Dépôts'])
-      },
-    )
-
-    it('drops earlier results when a later request fails, and recovers on the next one', () => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, 'left')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(readableSearchResult([readableEntry()]))
-      search(fixture, 'left-')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush({}, { status: 429, statusText: 'Too Many Requests' })
-      expect(packageCategory(fixture)).toBeUndefined()
-
-      search(fixture, 'left-p')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(readableSearchResult([readableEntry()]))
-      expect(packageCategory(fixture)?.items).toHaveLength(1)
-    })
-
-    it('keeps filtering repositories and users when the package search fails', () => {
-      const fixture = setup({ is_super_admin: true })
-      fixture.componentInstance.onSearchInput('my')
-      httpMock.expectOne('/api/repositories').flush([
-        {
-          id: 'r1',
-          name: 'my-repo',
-          format: 'npm',
-          repo_type: 'hosted',
-          remote_url: null,
-          group_members: [],
-        },
+      expect(groups(fixture)['Aller à']).toEqual([
+        'Explorer',
+        'Dépôts',
+        'Mon dépôt',
+        'Utilisateurs',
+        'Réglages',
+        'Mon compte',
+        'Documentation',
       ])
-      httpMock
-        .expectOne('/api/users')
-        .flush([{ id: 'u1', username: 'my-user', is_super_admin: false }])
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush({}, { status: 500, statusText: 'Error' })
-
-      const categories = fixture.componentInstance.searchResults()
-      expect(categories.map((c) => c.label)).toEqual(['Dépôts', 'Utilisateurs'])
-      expect(categories[0].items).toHaveLength(1)
-      expect(categories[1].items).toHaveLength(1)
+      expect(groups(fixture)['Actions']).not.toContain('Inviter un utilisateur')
     })
 
-    it('does not request the same text twice in a row', () => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, 'left')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(readableSearchResult([]))
-      search(fixture, 'left ')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
+    it('offers a super-admin every administration page and the invitation', () => {
+      const fixture = setup({ is_super_admin: true })
+      openPalette(fixture)
 
-      expect(packageRequests()).toEqual([])
-    })
-
-    it('searches again for the same text after the search was cleared', () => {
-      const fixture = setup({ is_super_admin: false })
-      search(fixture, 'left')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-      packageRequests()[0].flush(readableSearchResult([]))
-      search(fixture, '')
-      search(fixture, 'left')
-      vi.advanceTimersByTime(PACKAGE_DEBOUNCE_MS)
-
-      expect(packageRequests()).toHaveLength(1)
+      expect(groups(fixture)['Aller à']).toEqual([
+        'Explorer',
+        'Dépôts',
+        'Mon dépôt',
+        ...ADMINISTRATION,
+        'Mon compte',
+        'Documentation',
+      ])
+      expect(groups(fixture)['Actions']).toEqual([
+        'Nouveau dépôt',
+        'Nouveau projet',
+        'Inviter un utilisateur',
+        'Déconnexion',
+      ])
     })
   })
 
@@ -1111,17 +802,15 @@ describe('AppShell', () => {
     fixture.detectChanges()
     flushMe({ id: 'user-1', username: 'florian', is_super_admin: false })
     fixture.detectChanges()
-    fixture.componentInstance.userMenuOpen.set(true)
-    fixture.detectChanges()
+    openUserMenu(fixture)
 
     const items: HTMLButtonElement[] = Array.from(
-      fixture.nativeElement.querySelectorAll('button.app-shell__user-dropdown-item'),
+      fixture.nativeElement.querySelectorAll('[role="menu"] button[gbtMenuItem]'),
     )
     const logoutItem = items.find((el) => el.textContent?.includes('Déconnexion'))!
     logoutItem.click()
 
     expect(auth.token()).toBeNull()
     expect(navigate).toHaveBeenCalledWith('/login')
-    expect(fixture.componentInstance.userMenuOpen()).toBe(false)
   })
 })

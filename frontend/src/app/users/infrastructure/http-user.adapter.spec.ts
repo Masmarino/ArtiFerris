@@ -60,6 +60,24 @@ describe('HttpUserAdapter', () => {
     req.flush(null)
   })
 
+  it('sends a POST to reset a password', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.resetPassword('user-1').subscribe()
+    const req = httpMock.expectOne('/api/users/user-1/reset-password')
+    expect(req.request.method).toBe('POST')
+    req.flush({ email_sent: true })
+  })
+
+  it('sends a DELETE to reset the second factors', () => {
+    const { adapter, httpMock } = setup()
+
+    adapter.resetMfa('user-1').subscribe()
+    const req = httpMock.expectOne('/api/users/user-1/mfa')
+    expect(req.request.method).toBe('DELETE')
+    req.flush(null)
+  })
+
   it('keeps a hostile user id inside its path segment', () => {
     const { adapter, httpMock } = setup()
 

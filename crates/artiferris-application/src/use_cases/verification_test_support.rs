@@ -1,7 +1,6 @@
 //! A `UserSecurityPort` that only knows which accounts hold a verified address, for tests of notices that must reach verified addresses only.
 
 use async_trait::async_trait;
-use artiferris_domain::audit::SecurityAuditRecord;
 use artiferris_domain::error::DomainError;
 use artiferris_domain::user::{User, UserSecurityPort};
 use uuid::Uuid;
@@ -22,7 +21,7 @@ impl FakeVerification {
 
 #[async_trait]
 impl UserSecurityPort for FakeVerification {
-    async fn revoke_sessions(&self, _id: Uuid, _audit: Option<&SecurityAuditRecord>) -> Result<(), DomainError> {
+    async fn revoke_sessions(&self, _id: Uuid, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
         unreachable!("not exercised by these tests")
     }
     async fn find_by_verified_email(&self, organization_id: Uuid, email: &str) -> Result<Option<User>, DomainError> {

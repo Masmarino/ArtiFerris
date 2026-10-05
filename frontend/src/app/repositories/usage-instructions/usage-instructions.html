@@ -1,24 +1,31 @@
+<!-- Long commands scroll sideways, which the keyboard can only do once a block takes focus (WCAG 2.1.1). -->
 <section>
   @if (repository().format === 'docker') {
     <p>{{ 'repositories.usage.login' | transloco }}</p>
-    <pre>{{ 'repositories.usage.dockerLogin' | transloco: { host } }}</pre>
+    <pre tabindex="0" role="region" [attr.aria-label]="'common.command' | transloco">{{
+      'repositories.usage.dockerLogin' | transloco: { host }
+    }}</pre>
     @if (isHosted()) {
       <p>{{ 'repositories.usage.tagAndPush' | transloco }}</p>
-      <pre>{{
+      <pre tabindex="0" role="region" [attr.aria-label]="'common.command' | transloco">{{
         'repositories.usage.dockerTagPush' | transloco: { host, path: repositoryPath() }
       }}</pre>
     }
     <p>{{ 'repositories.usage.pull' | transloco }}</p>
-    <pre>{{ 'repositories.usage.dockerPull' | transloco: { host, path: repositoryPath() } }}</pre>
+    <pre tabindex="0" role="region" [attr.aria-label]="'common.command' | transloco">{{
+      'repositories.usage.dockerPull' | transloco: { host, path: repositoryPath() }
+    }}</pre>
   } @else {
     <p [innerHTML]="'repositories.usage.npmrc' | transloco"></p>
-    <pre>{{
+    <pre tabindex="0" role="region" [attr.aria-label]="'shared.readme.codeBlock' | transloco">{{
       'repositories.usage.npmrcContent' | transloco: { origin, host, path: repositoryPath() }
     }}</pre>
     @if (isHosted()) {
-      <pre>npm publish</pre>
+      <pre tabindex="0" role="region" [attr.aria-label]="'common.command' | transloco">
+npm publish</pre>
     }
-    <pre>npm install</pre>
+    <pre tabindex="0" role="region" [attr.aria-label]="'common.command' | transloco">
+npm install</pre>
   }
 
   <p>

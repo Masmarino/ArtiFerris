@@ -5,13 +5,14 @@ use chrono::{DateTime, Duration, Utc};
 use artiferris_domain::audit::{SecurityAuditRecord, SecurityEvent};
 use artiferris_domain::email::EmailPort;
 use artiferris_domain::error::DomainError;
+use artiferris_domain::mfa::{BackupCodePort, TotpCredentialPort};
 use artiferris_domain::user::{PasswordHasherPort, UserRepositoryPort, UserSecurityPort};
 use artiferris_domain::webauthn::{WebauthnCredential, WebauthnCredentialPort};
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
 
 use crate::error::ApplicationError;
-use crate::use_cases::mfa::verify_current_password;
+use crate::use_cases::mfa::{has_any_factor, verify_current_password};
 
 const CEREMONY_TTL_MINUTES: i64 = 5;
 /// Past either limit the oldest ceremony is dropped, so unauthenticated starts can't grow the store without bound.
@@ -236,7 +237,7 @@ impl FinishPasskeyRegistrationUseCase {
 
         let passkey = webauthn.finish_passkey_registration(response, &registration).map_err(|_| ApplicationError::InvalidMfaCode)?;
 
-        let credential = WebauthnCredential { id: Uuid::new_v4(), user_id, name: name.to_string(), passkey_data: serialize_passkey(&passkey), created_at: Utc::now() };
+        let credential = WebauthnCredential { id: Uuid::new_v4(), user_id, name: name.to_string(), passkey_data: serialize_passkey(&passkey), created_at: Utc::now(), last_used_at: None };
         let audit = SecurityAuditRecord { event: SecurityEvent::PasskeyAdded { user_id, organization_id, passkey_id: credential.id }, actor_id: Some(user_id) };
         self.credentials.insert(&credential, Some(&audit)).await?;
 
@@ -301,15 +302,17 @@ impl FinishPasskeyAuthenticationUseCase {
 
         let auth_result = webauthn.finish_passkey_authentication(response, &authentication).map_err(|_| ApplicationError::InvalidMfaCode)?;
 
-        if auth_result.needs_update() {
-            let existing = self.credentials.list_for_user(user_id).await?;
-            for stored in existing {
-                let mut passkey = deserialize_passkey(&stored)?;
-                if passkey.cred_id() == auth_result.cred_id() && passkey.update_credential(&auth_result).unwrap_or(false) {
-                    self.credentials.update_passkey_data(stored.id, serialize_passkey(&passkey)).await?;
-                    break;
-                }
+        for stored in self.credentials.list_for_user(user_id).await? {
+            // An unreadable record can't be the one that just verified.
+            let Ok(mut passkey) = deserialize_passkey(&stored) else { continue };
+            if passkey.cred_id() != auth_result.cred_id() {
+                continue;
             }
+            if auth_result.needs_update() && passkey.update_credential(&auth_result).unwrap_or(false) {
+                self.credentials.update_passkey_data(stored.id, serialize_passkey(&passkey)).await?;
+            }
+            self.credentials.mark_used(stored.id, Utc::now()).await?;
+            break;
         }
         Ok(())
     }
@@ -320,6 +323,7 @@ pub struct PasskeySummary {
     pub id: Uuid,
     pub name: String,
     pub created_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
 }
 
 pub struct ListPasskeysUseCase {
@@ -333,7 +337,7 @@ impl ListPasskeysUseCase {
 
     pub async fn execute(&self, user_id: Uuid) -> Result<Vec<PasskeySummary>, ApplicationError> {
         let credentials = self.credentials.list_for_user(user_id).await?;
-        Ok(credentials.into_iter().map(|c| PasskeySummary { id: c.id, name: c.name, created_at: c.created_at }).collect())
+        Ok(credentials.into_iter().map(|c| PasskeySummary { id: c.id, name: c.name, created_at: c.created_at, last_used_at: c.last_used_at }).collect())
     }
 }
 
@@ -341,20 +345,39 @@ pub struct DeletePasskeyUseCase {
     users: Arc<dyn UserRepositoryPort>,
     hasher: Arc<dyn PasswordHasherPort>,
     credentials: Arc<dyn WebauthnCredentialPort>,
+    totp: Arc<dyn TotpCredentialPort>,
+    backup_codes: Arc<dyn BackupCodePort>,
 }
 
 impl DeletePasskeyUseCase {
-    pub fn new(users: Arc<dyn UserRepositoryPort>, hasher: Arc<dyn PasswordHasherPort>, credentials: Arc<dyn WebauthnCredentialPort>) -> Self {
-        Self { users, hasher, credentials }
+    pub fn new(
+        users: Arc<dyn UserRepositoryPort>,
+        hasher: Arc<dyn PasswordHasherPort>,
+        credentials: Arc<dyn WebauthnCredentialPort>,
+        totp: Arc<dyn TotpCredentialPort>,
+        backup_codes: Arc<dyn BackupCodePort>,
+    ) -> Self {
+        Self { users, hasher, credentials, totp, backup_codes }
     }
 
-    /// `audit` is written in the same transaction as the deletion.
+    /// `audit` is written in the same transaction as the deletion. The backup codes go with the last factor: first when
+    /// nothing else would remain, so a failure halfway never leaves live codes without a factor, and again afterwards
+    /// if the other factor was removed at the same time.
     pub async fn execute(&self, user_id: Uuid, credential_id: Uuid, current_password: &str, audit: Option<&SecurityAuditRecord>) -> Result<(), ApplicationError> {
         let user = self.users.find_by_id(user_id).await?.ok_or(ApplicationError::InvalidCredentials)?;
         if !self.hasher.verify(current_password, &user.password_hash).await? {
             return Err(ApplicationError::InvalidCredentials);
         }
+        let owned = self.credentials.list_for_user(user_id).await?;
+        let other_passkey = owned.iter().any(|c| c.id != credential_id);
+        let another_factor_remains = other_passkey || self.totp.get(user_id).await?.is_some_and(|c| c.confirmed);
+        if !another_factor_remains && owned.iter().any(|c| c.id == credential_id) {
+            self.backup_codes.delete_all(user_id).await?;
+        }
         self.credentials.delete(credential_id, user_id, audit).await?;
+        if another_factor_remains && !has_any_factor(self.totp.as_ref(), self.credentials.as_ref(), user_id).await? {
+            self.backup_codes.delete_all(user_id).await?;
+        }
         Ok(())
     }
 }
@@ -415,6 +438,14 @@ mod tests {
                 if let Some(c) = creds.iter_mut().find(|c| c.id == id) {
                     c.passkey_data = passkey_data;
                     return Ok(());
+                }
+            }
+            Ok(())
+        }
+        async fn mark_used(&self, id: Uuid, at: DateTime<Utc>) -> Result<(), DomainError> {
+            for creds in self.by_user.lock().unwrap().values_mut() {
+                if let Some(c) = creds.iter_mut().find(|c| c.id == id) {
+                    c.last_used_at = Some(at);
                 }
             }
             Ok(())
@@ -788,7 +819,7 @@ mod tests {
     }
 
     async fn credential_named(user_id: Uuid, name: &str) -> WebauthnCredential {
-        WebauthnCredential { id: Uuid::new_v4(), user_id, name: name.to_string(), passkey_data: b"opaque".to_vec(), created_at: Utc::now() }
+        WebauthnCredential { id: Uuid::new_v4(), user_id, name: name.to_string(), passkey_data: b"opaque".to_vec(), created_at: Utc::now(), last_used_at: None }
     }
 
     #[tokio::test]
@@ -889,7 +920,7 @@ mod tests {
     async fn list_passkeys_returns_the_users_registered_credentials() {
         let credentials = Arc::new(FakeCredentials::new());
         let user_id = Uuid::new_v4();
-        credentials.insert(&WebauthnCredential { id: Uuid::new_v4(), user_id, name: "MacBook".to_string(), passkey_data: b"opaque".to_vec(), created_at: Utc::now() }, None).await.unwrap();
+        credentials.insert(&WebauthnCredential { id: Uuid::new_v4(), user_id, name: "MacBook".to_string(), passkey_data: b"opaque".to_vec(), created_at: Utc::now(), last_used_at: None }, None).await.unwrap();
 
         let summaries = ListPasskeysUseCase::new(credentials).execute(user_id).await.unwrap();
 
@@ -903,14 +934,80 @@ mod tests {
         let user = sample_user();
         let users = Arc::new(FakeUsers::with_user(user.clone()));
         let credential_id = Uuid::new_v4();
-        credentials.insert(&WebauthnCredential { id: credential_id, user_id: user.id, name: "MacBook".to_string(), passkey_data: b"opaque".to_vec(), created_at: Utc::now() }, None).await.unwrap();
+        credentials.insert(&WebauthnCredential { id: credential_id, user_id: user.id, name: "MacBook".to_string(), passkey_data: b"opaque".to_vec(), created_at: Utc::now(), last_used_at: None }, None).await.unwrap();
 
-        let use_case = DeletePasskeyUseCase::new(users, Arc::new(FakeHasher), credentials.clone());
+        let use_case = DeletePasskeyUseCase::new(users, Arc::new(FakeHasher), credentials.clone(), Arc::new(FakeTotp(false)), Arc::new(FakeBackupCodes::default()));
         let err = use_case.execute(user.id, credential_id, "wrong-password", None).await.unwrap_err();
         assert!(matches!(err, ApplicationError::InvalidCredentials));
         assert_eq!(credentials.count_for_user(user.id).await.unwrap(), 1);
 
         use_case.execute(user.id, credential_id, "s3cret!", None).await.unwrap();
         assert_eq!(credentials.count_for_user(user.id).await.unwrap(), 0);
+    }
+
+    /// Whether the account has a confirmed authenticator app; nothing else is asked of it here.
+    struct FakeTotp(bool);
+
+    #[async_trait]
+    impl TotpCredentialPort for FakeTotp {
+        async fn get(&self, user_id: Uuid) -> Result<Option<artiferris_domain::mfa::TotpCredential>, DomainError> {
+            Ok(self.0.then(|| artiferris_domain::mfa::TotpCredential { user_id, secret: "S".to_string(), confirmed: true, last_used_step: None, created_at: Utc::now() }))
+        }
+        async fn begin_enrollment(&self, _user_id: Uuid, _secret: &str, _created_at: DateTime<Utc>) -> Result<bool, DomainError> {
+            Ok(false)
+        }
+        async fn confirm(&self, _user_id: Uuid, _enrollment_created_at: DateTime<Utc>, _step: i64) -> Result<bool, DomainError> {
+            Ok(false)
+        }
+        async fn set_last_used_step(&self, _user_id: Uuid, _step: i64) -> Result<bool, DomainError> {
+            Ok(false)
+        }
+        async fn delete(&self, _user_id: Uuid) -> Result<(), DomainError> {
+            Ok(())
+        }
+    }
+
+    /// Only how many codes are left.
+    #[derive(Default)]
+    struct FakeBackupCodes(StdMutex<i64>);
+
+    #[async_trait]
+    impl BackupCodePort for FakeBackupCodes {
+        async fn replace_all(&self, _user_id: Uuid, code_hashes: &[String], _audit: Option<&SecurityAuditRecord>) -> Result<(), DomainError> {
+            *self.0.lock().unwrap() = code_hashes.len() as i64;
+            Ok(())
+        }
+        async fn try_consume(&self, _user_id: Uuid, _plaintext_code: &str) -> Result<bool, DomainError> {
+            Ok(false)
+        }
+        async fn count_unused(&self, _user_id: Uuid) -> Result<i64, DomainError> {
+            Ok(*self.0.lock().unwrap())
+        }
+        async fn delete_all(&self, _user_id: Uuid) -> Result<(), DomainError> {
+            *self.0.lock().unwrap() = 0;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn the_backup_codes_go_with_the_last_factor_only() {
+        for (other_passkey, app, codes_left) in [(false, false, 0), (true, false, 10), (false, true, 10)] {
+            let credentials = Arc::new(FakeCredentials::new());
+            let user = sample_user();
+            let removed = credential_named(user.id, "MacBook").await;
+            credentials.insert(&removed, None).await.unwrap();
+            if other_passkey {
+                credentials.insert(&credential_named(user.id, "YubiKey").await, None).await.unwrap();
+            }
+            let backup_codes = Arc::new(FakeBackupCodes::default());
+            backup_codes.replace_all(user.id, &vec!["h".to_string(); 10], None).await.unwrap();
+
+            DeletePasskeyUseCase::new(Arc::new(FakeUsers::with_user(user.clone())), Arc::new(FakeHasher), credentials, Arc::new(FakeTotp(app)), backup_codes.clone())
+                .execute(user.id, removed.id, "s3cret!", None)
+                .await
+                .unwrap();
+
+            assert_eq!(backup_codes.count_unused(user.id).await.unwrap(), codes_left, "other passkey {other_passkey}, app {app}");
+        }
     }
 }

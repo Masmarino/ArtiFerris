@@ -21,6 +21,15 @@ impl PostgresTotpCredentialRepository {
 
 #[async_trait]
 impl TotpCredentialPort for PostgresTotpCredentialRepository {
+    /// Reads `confirmed` only, never the encrypted secret.
+    async fn confirmed_among(&self, user_ids: &[Uuid]) -> Result<std::collections::HashSet<Uuid>, DomainError> {
+        if user_ids.is_empty() {
+            return Ok(std::collections::HashSet::new());
+        }
+        let rows: Vec<(Uuid,)> = sqlx::query_as("SELECT user_id FROM totp_credentials WHERE confirmed AND user_id = ANY($1)").bind(user_ids).fetch_all(&self.pool).await.infra_err()?;
+        Ok(rows.into_iter().map(|(user_id,)| user_id).collect())
+    }
+
     async fn get(&self, user_id: Uuid) -> Result<Option<TotpCredential>, DomainError> {
         let row = sqlx::query!(
             "SELECT user_id, encrypted_secret, secret_nonce, confirmed, last_used_step, created_at FROM totp_credentials WHERE user_id = $1",

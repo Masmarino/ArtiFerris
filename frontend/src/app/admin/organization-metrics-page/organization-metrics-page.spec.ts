@@ -36,7 +36,7 @@ describe('OrganizationMetricsPage', () => {
     expect(text).toContain('Utilisateurs')
     expect(text).toContain('2')
     expect(text).toContain('Dépôts')
-    expect(text).toContain('Permissions actives')
+    expect(text).toContain("Droits d'accès")
   })
 
   it('re-fetches stats when organizationId changes to a different organization', () => {

@@ -2,17 +2,28 @@ import { t } from '../../shared/i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core'
 import { HttpErrorResponse } from '@angular/common/http'
-import { Button, EmptyState, Spinner } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { EmptyState } from '@masmarino/gabarit/empty-state'
+import { Spinner } from '@masmarino/gabarit/spinner'
 import { PersonalRepositoryService } from '../application/personal-repository.service'
 import { RepositoriesList } from '../repositories-list/repositories-list'
 import { ConfirmModal } from '../../shared/confirm-modal/confirm-modal'
 import { ToastService } from '../../shared/toast.service'
 import { rejectionMessage } from '../../shared/api-error'
+import { PageHeading } from '../../shared/page-heading/page-heading'
 
 @Component({
   selector: 'app-my-repository-page',
   standalone: true,
-  imports: [TranslocoPipe, Button, EmptyState, Spinner, RepositoriesList, ConfirmModal],
+  imports: [
+    PageHeading,
+    TranslocoPipe,
+    Button,
+    EmptyState,
+    Spinner,
+    RepositoriesList,
+    ConfirmModal,
+  ],
   templateUrl: './my-repository-page.html',
   styleUrl: './my-repository-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

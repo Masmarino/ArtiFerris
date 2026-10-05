@@ -39,8 +39,8 @@ const INDEXING_SETTING_TIMEOUT: Duration = Duration::from_secs(1);
 const MAX_SITEMAP_ENTRIES: usize = 500_000;
 /// Paths of the built app (scripts, styles, images, fonts) that are not app routes when nothing serves them.
 const ASSET_PREFIXES: [&str; 4] = ["/assets/", "/media/", "/fonts/", "/i18n/"];
-const ASSET_EXTENSIONS: [&str; 20] =
-    ["js", "mjs", "css", "map", "ico", "png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "woff", "woff2", "ttf", "otf", "eot", "json", "txt", "webmanifest"];
+const ASSET_EXTENSIONS: [&str; 21] =
+    ["js", "mjs", "css", "map", "ico", "png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "woff", "woff2", "ttf", "otf", "eot", "json", "txt", "webmanifest", "md"];
 
 /// What the head of one response depends on besides the page itself.
 pub struct HeadContext<'a> {
@@ -149,7 +149,7 @@ pub fn robots_txt(public_url: &str, indexing_enabled: bool) -> String {
         return "User-agent: *\nDisallow: /\n".to_string();
     }
     let mut lines = vec!["User-agent: *".to_string()];
-    for area in ["/api/", "/npm/", "/v2/", "/login", "/register", "/activate", "/repositories", "/users", "/account", "/admin", "/my-repository"] {
+    for area in ["/api/", "/npm/", "/v2/", "/login", "/register", "/activate", "/reset-password", "/repositories", "/users", "/account", "/admin", "/my-repository"] {
         lines.push(format!("Disallow: {area}"));
     }
     lines.push(format!("Sitemap: {}/sitemap.xml", public_url.trim_end_matches('/')));
@@ -1313,6 +1313,26 @@ mod tests {
         assert_eq!((status, script.as_str()), (StatusCode::OK, "console.log(1)"), "real files are still served as they are");
         assert_eq!(get_via(&app, "/missing-DEF.js").await.0, StatusCode::NOT_FOUND);
         assert!(get_via(&app, "/explorer").await.1.contains(r#"content="index, follow""#));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn the_documentation_serves_its_files_and_leaves_its_pages_to_the_app(pool: sqlx::PgPool) {
+        let (state, _) = app_with(pool).await;
+        let dir = static_dir_with_index();
+        std::fs::create_dir_all(dir.join("docs/demarrer")).unwrap();
+        std::fs::write(dir.join("docs/index.json"), r#"{"sections":[]}"#).unwrap();
+        std::fs::write(dir.join("docs/demarrer/presentation.md"), "# Présentation").unwrap();
+        let app = app_router(dir.to_str().unwrap(), SeoState::new(state.clone(), TEMPLATE.to_string()));
+
+        assert_eq!(get_via(&app, "/docs/index.json").await, (StatusCode::OK, r#"{"sections":[]}"#.to_string()));
+        assert_eq!(get_via(&app, "/docs/demarrer/presentation.md").await, (StatusCode::OK, "# Présentation".to_string()));
+        assert_eq!(get_via(&app, "/docs/demarrer/absente.md").await.0, StatusCode::NOT_FOUND, "the reader shows its own \"not found\" for a missing page");
+        for uri in ["/docs", "/docs/demarrer", "/docs/demarrer/presentation"] {
+            let (status, html) = get_via(&app, uri).await;
+            assert_eq!(status, StatusCode::OK, "{uri}");
+            assert!(html.contains("<app-root>"), "{uri}: {html}");
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

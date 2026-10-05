@@ -27,15 +27,17 @@ use artiferris_application::use_cases::public_catalog::{GetOwnerSummaryUseCase, 
 use artiferris_application::use_cases::resolve_organization_repository::ResolveOrganizationRepositoryUseCase;
 use artiferris_application::use_cases::resolve_personal_repository::ResolvePersonalRepositoryUseCase;
 use artiferris_application::use_cases::invitation::{ActivateAccountUseCase, InviteUserUseCase, ResendInvitationUseCase};
+use artiferris_application::use_cases::password_reset::{AdminResetPasswordUseCase, ConsumePasswordResetUseCase};
+use artiferris_infrastructure::postgres::password_reset_repository::PostgresPasswordResetRepository;
 use artiferris_application::use_cases::mfa::{
-    ConfirmTotpUseCase, DisableTotpUseCase, EnrollTotpUseCase, GetMfaStatusUseCase, RegenerateBackupCodesUseCase, VerifyBackupCodeUseCase, VerifyTotpUseCase,
+    ConfirmTotpUseCase, DisableTotpUseCase, EnrollTotpUseCase, GetMfaStatusUseCase, IssueBackupCodesUseCase, RegenerateBackupCodesUseCase, ResetMfaUseCase, VerifyBackupCodeUseCase, VerifyTotpUseCase,
 };
 use artiferris_application::use_cases::smtp::{GetSmtpSettingsUseCase, SendTestEmailUseCase, UpdateSmtpSettingsUseCase};
 use artiferris_application::use_cases::webauthn::{
     build_webauthn_client, DeletePasskeyUseCase, FinishPasskeyAuthenticationUseCase, FinishPasskeyRegistrationUseCase, ListPasskeysUseCase, PasskeyCeremonyStore,
     StartPasskeyAuthenticationUseCase, StartPasskeyRegistrationUseCase,
 };
-use artiferris_application::use_cases::user::{AuthenticateUserUseCase, ChangePasswordUseCase, CreateUserUseCase, DeleteUserUseCase, ConfirmPasswordUseCase, RevokeUserSessionsUseCase, SetOrganizationAdminUseCase, SetSuperAdminUseCase};
+use artiferris_application::use_cases::user::{AuthenticateUserUseCase, ChangePasswordUseCase, CreateUserUseCase, DeleteUserUseCase, ConfirmPasswordUseCase, GetVerifiedEmailUseCase, RevokeUserSessionsUseCase, SetOrganizationAdminUseCase, SetSuperAdminUseCase};
 use artiferris_application::use_cases::registration::RegisterPublicUserUseCase;
 use artiferris_application::use_cases::sso::ProvisionSsoUserUseCase;
 use artiferris_domain::api_token::ApiTokenRepositoryPort;
@@ -186,6 +188,7 @@ pub struct AppState {
     /// MFA-pending tokens that already completed a login or mandatory setup.
     pub used_mfa_tokens: SingleUseTokens,
     pub revoke_user_sessions: Arc<RevokeUserSessionsUseCase>,
+    pub get_verified_email: Arc<GetVerifiedEmailUseCase>,
     pub confirm_password: Arc<ConfirmPasswordUseCase>,
     /// Direct TCP peers allowed to set `X-Forwarded-For` when resolving a client IP for throttling.
     pub trusted_proxy_ips: std::collections::HashSet<String>,
@@ -213,6 +216,8 @@ pub struct AppState {
     pub invite_user: Arc<InviteUserUseCase>,
     pub resend_invitation: Arc<ResendInvitationUseCase>,
     pub activate_account: Arc<ActivateAccountUseCase>,
+    pub reset_password: Arc<AdminResetPasswordUseCase>,
+    pub consume_password_reset: Arc<ConsumePasswordResetUseCase>,
     pub user_invitations: Arc<dyn artiferris_domain::invitation::UserInvitationPort>,
     pub totp_credentials: Arc<dyn artiferris_domain::mfa::TotpCredentialPort>,
     /// Signs a "password verified" proof — never interchangeable with `token_issuer`.
@@ -223,7 +228,9 @@ pub struct AppState {
     pub verify_totp: Arc<VerifyTotpUseCase>,
     pub verify_backup_code: Arc<VerifyBackupCodeUseCase>,
     pub disable_totp: Arc<DisableTotpUseCase>,
+    pub reset_mfa: Arc<ResetMfaUseCase>,
     pub regenerate_backup_codes: Arc<RegenerateBackupCodesUseCase>,
+    pub issue_backup_codes: Arc<IssueBackupCodesUseCase>,
     pub webauthn_credentials: Arc<dyn artiferris_domain::webauthn::WebauthnCredentialPort>,
     pub start_passkey_registration: Arc<StartPasskeyRegistrationUseCase>,
     pub finish_passkey_registration: Arc<FinishPasskeyRegistrationUseCase>,
@@ -328,6 +335,7 @@ impl AppState {
             Arc::new(artiferris_infrastructure::postgres::user_preferences_repository::PostgresUserPreferencesRepository::new(pool.clone()));
         let email_sender: Arc<dyn artiferris_domain::email::EmailPort> = Arc::new(SmtpEmailSender::new(smtp_settings.clone(), branding.clone()).with_preferences(user_preferences.clone()));
         let user_invitations: Arc<dyn artiferris_domain::invitation::UserInvitationPort> = Arc::new(PostgresUserInvitationRepository::new(pool.clone()));
+        let password_resets: Arc<dyn artiferris_domain::password_reset::PasswordResetPort> = Arc::new(PostgresPasswordResetRepository::new(pool.clone()));
         let totp_credentials: Arc<dyn artiferris_domain::mfa::TotpCredentialPort> = Arc::new(PostgresTotpCredentialRepository::new(pool.clone(), config.secrets_encryption_key.clone()));
         let backup_codes: Arc<dyn artiferris_domain::mfa::BackupCodePort> = Arc::new(PostgresBackupCodeRepository::new(pool.clone()));
         let mfa_pending_token_issuer: Arc<dyn TokenIssuerPort> = Arc::new(JwtMfaPendingTokenIssuer::new(config.jwt_secret.clone()));
@@ -512,6 +520,7 @@ impl AppState {
             login_throttle,
             used_mfa_tokens,
             revoke_user_sessions: Arc::new(RevokeUserSessionsUseCase::new(user_security.clone())),
+            get_verified_email: Arc::new(GetVerifiedEmailUseCase::new(users_repo.clone(), user_security.clone())),
             confirm_password: Arc::new(ConfirmPasswordUseCase::new(users_repo.clone(), hasher.clone())),
             trusted_proxy_ips: config.trusted_proxy_ips.clone(),
             trusted_proxies: Arc::new(
@@ -553,6 +562,18 @@ impl AppState {
             )),
             resend_invitation: Arc::new(ResendInvitationUseCase::new(users_repo.clone(), user_invitations.clone(), email_sender.clone(), organizations.clone(), config.artiferris_base_domain.clone())),
             activate_account: Arc::new(ActivateAccountUseCase::new(users_repo.clone(), user_security.clone(), user_invitations.clone(), hasher.clone())),
+            reset_password: Arc::new(AdminResetPasswordUseCase::new(
+                users_repo.clone(),
+                user_security.clone(),
+                user_invitations.clone(),
+                identity_providers.clone(),
+                password_resets.clone(),
+                hasher.clone(),
+                email_sender.clone(),
+                organizations.clone(),
+                config.artiferris_base_domain.clone(),
+            )),
+            consume_password_reset: Arc::new(ConsumePasswordResetUseCase::new(users_repo.clone(), user_security.clone(), password_resets.clone(), hasher.clone(), email_sender.clone())),
             user_invitations,
             totp_credentials: totp_credentials.clone(),
             mfa_pending_token_issuer,
@@ -561,15 +582,17 @@ impl AppState {
             confirm_totp: Arc::new(ConfirmTotpUseCase::new(totp_credentials.clone(), backup_codes.clone(), users_repo.clone(), user_security.clone(), email_sender.clone())),
             verify_totp: Arc::new(VerifyTotpUseCase::new(totp_credentials.clone())),
             verify_backup_code: Arc::new(VerifyBackupCodeUseCase::new(backup_codes.clone())),
-            disable_totp: Arc::new(DisableTotpUseCase::new(users_repo.clone(), hasher.clone(), totp_credentials.clone(), backup_codes.clone())),
-            regenerate_backup_codes: Arc::new(RegenerateBackupCodesUseCase::new(users_repo.clone(), hasher.clone(), totp_credentials, backup_codes)),
+            disable_totp: Arc::new(DisableTotpUseCase::new(users_repo.clone(), hasher.clone(), totp_credentials.clone(), backup_codes.clone(), webauthn_credentials.clone())),
+            reset_mfa: Arc::new(ResetMfaUseCase::new(users_repo.clone(), totp_credentials.clone(), backup_codes.clone(), webauthn_credentials.clone())),
+            regenerate_backup_codes: Arc::new(RegenerateBackupCodesUseCase::new(users_repo.clone(), hasher.clone(), totp_credentials.clone(), backup_codes.clone(), webauthn_credentials.clone())),
+            issue_backup_codes: Arc::new(IssueBackupCodesUseCase::new(totp_credentials.clone(), backup_codes.clone(), webauthn_credentials.clone())),
             webauthn_credentials: webauthn_credentials.clone(),
             start_passkey_registration: Arc::new(StartPasskeyRegistrationUseCase::new(webauthn_client.clone(), webauthn_credentials.clone(), passkey_ceremonies.clone(), users_repo.clone(), hasher.clone())),
             finish_passkey_registration: Arc::new(FinishPasskeyRegistrationUseCase::new(webauthn_client.clone(), webauthn_credentials.clone(), passkey_ceremonies.clone(), users_repo.clone(), user_security.clone(), email_sender.clone())),
             start_passkey_authentication: Arc::new(StartPasskeyAuthenticationUseCase::new(webauthn_client.clone(), webauthn_credentials.clone(), passkey_ceremonies.clone())),
             finish_passkey_authentication: Arc::new(FinishPasskeyAuthenticationUseCase::new(webauthn_client, webauthn_credentials.clone(), passkey_ceremonies)),
             list_passkeys: Arc::new(ListPasskeysUseCase::new(webauthn_credentials.clone())),
-            delete_passkey: Arc::new(DeletePasskeyUseCase::new(users_repo, hasher, webauthn_credentials)),
+            delete_passkey: Arc::new(DeletePasskeyUseCase::new(users_repo, hasher, webauthn_credentials, totp_credentials, backup_codes)),
         }
     }
 }

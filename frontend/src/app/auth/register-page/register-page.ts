@@ -1,94 +1,41 @@
-import { t } from '../../shared/i18n/translator'
-import { TranslocoPipe } from '@jsverse/transloco'
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms'
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
 import { Router, RouterLink } from '@angular/router'
-import { Button, Divider, GbtInput } from '@masmarino/gabarit'
-import { AuthService } from '../application/auth.service'
-import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
-import { errorCode, overloadMessage } from '../../shared/api-error'
+import { AuthFooterLink } from '@masmarino/gabarit/auth'
+import { AuthRegister } from '@masmarino/gabarit/auth-register'
+import { Button } from '@masmarino/gabarit/button'
+import { TranslocoPipe } from '@jsverse/transloco'
+import { provideAuthKit } from '../kit/auth-kit'
+import { GitField } from '@masmarino/gabarit/git-field'
 
+/**
+ * Owns the `/register` URL around Gabarit's registration: the new account is signed in and taken
+ * through the mandatory second factor, then lands on the home page.
+ */
 @Component({
   selector: 'app-register-page',
   standalone: true,
-  imports: [
-    TranslocoPipe,
-    ReactiveFormsModule,
-    GbtInput,
-    Button,
-    MfaEnrollmentPage,
-    RouterLink,
-    Divider,
-  ],
-  templateUrl: './register-page.html',
-  styleUrl: '../login-page/login-page.scss',
+  imports: [GitField, AuthRegister, AuthFooterLink, Button, RouterLink, TranslocoPipe],
+  providers: [provideAuthKit()],
+  host: { class: 'auth-layout' },
+  template: `
+    <gbt-auth-register (registered)="toHome()" (signIn)="toSignIn()">
+      <gbt-git-field auth-backdrop />
+      <img auth-logo src="/api/branding/logo" [alt]="'auth.login.logoAlt' | transloco" />
+      <a gbtButton variant="link" gbtAuthFooterLink routerLink="/login">{{
+        'auth.login.submit' | transloco
+      }}</a>
+    </gbt-auth-register>
+  `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RegisterPage {
-  private readonly auth = inject(AuthService)
   private readonly router = inject(Router)
 
-  readonly form = new FormGroup({
-    username: new FormControl('', {
-      nonNullable: true,
-      validators: [Validators.required, Validators.pattern(/^[A-Za-z][A-Za-z0-9_-]{2,31}$/)],
-    }),
-    email: new FormControl('', {
-      nonNullable: true,
-      validators: [Validators.required, Validators.email],
-    }),
-    password: new FormControl('', {
-      nonNullable: true,
-      validators: [Validators.required, Validators.minLength(8)],
-    }),
-  })
-
-  readonly errorMessage = signal<string | null>(null)
-  readonly submitting = signal(false)
-
-  readonly mfaToken = signal<string | null>(null)
-
-  submit(): void {
-    if (this.form.invalid || this.submitting()) {
-      return
-    }
-    this.submitting.set(true)
-    this.errorMessage.set(null)
-    const { username, email, password } = this.form.getRawValue()
-    this.auth.register(username, email, password).subscribe({
-      next: (outcome) => {
-        this.submitting.set(false)
-        if (outcome.mfaToken) {
-          this.mfaToken.set(outcome.mfaToken)
-        }
-      },
-      error: (err: unknown) => {
-        this.submitting.set(false)
-        this.errorMessage.set(overloadMessage(err) ?? this.messageFor(errorCode(err)))
-      },
-    })
+  protected toHome(): void {
+    void this.router.navigateByUrl('/')
   }
 
-  onEnrollmentCompleted(): void {
-    this.router.navigateByUrl('/')
-  }
-
-  private messageFor(code: string | null): string {
-    switch (code) {
-      case 'username_taken':
-        return t('auth.register.errors.usernameTaken')
-      case 'invalid_email':
-        return t('auth.register.errors.invalidEmail')
-      case 'password_too_short':
-        return t('auth.register.errors.passwordTooShort')
-      case 'registration_unavailable':
-        return t('auth.register.errors.notAvailable')
-      case 'registration_disabled':
-        return t('auth.register.errors.disabled')
-      case 'invalid_username':
-        return t('auth.register.errors.invalidUsername')
-      default:
-        return t('auth.register.errors.generic')
-    }
+  protected toSignIn(): void {
+    void this.router.navigateByUrl('/login')
   }
 }

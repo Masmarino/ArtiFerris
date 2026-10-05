@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing'
-import { ReadmeView } from './readme-view'
+import { makeScrollableBlocksFocusable, ReadmeView } from './readme-view'
 
 function render(html: string | null) {
   const fixture = TestBed.createComponent(ReadmeView)
@@ -78,5 +78,23 @@ describe('ReadmeView', () => {
 
       expect(el.querySelector('a')!.getAttribute('href')).not.toMatch(/^javascript:/i)
     })
+  })
+})
+
+describe('makeScrollableBlocksFocusable', () => {
+  it('lets the keyboard reach every code block and table, so a wide one can be scrolled sideways', () => {
+    const container = document.createElement('div')
+    container.innerHTML =
+      '<p>Text</p><pre><code>npm install</code></pre><table><tr><td>a</td></tr></table>'
+
+    makeScrollableBlocksFocusable(container, { codeBlock: 'Code block', table: 'Table' })
+
+    const pre = container.querySelector('pre')!
+    expect(pre.getAttribute('tabindex')).toBe('0')
+    expect(pre.getAttribute('role')).toBe('region')
+    expect(pre.getAttribute('aria-label')).toBe('Code block')
+    expect(container.querySelector('table')?.getAttribute('tabindex')).toBe('0')
+    expect(container.querySelector('table')?.getAttribute('aria-label')).toBe('Table')
+    expect(container.querySelector('p')?.hasAttribute('tabindex')).toBe(false)
   })
 })

@@ -23,6 +23,14 @@ describe('CopyableCommand', () => {
     expect(button.getAttribute('aria-label')).toBe('Copier la commande')
   })
 
+  it('lets the keyboard reach the command, so a long one can be scrolled sideways', () => {
+    const pre = render().el.querySelector('pre')!
+
+    expect(pre.getAttribute('tabindex')).toBe('0')
+    expect(pre.getAttribute('role')).toBe('region')
+    expect(pre.getAttribute('aria-label')).toBeTruthy()
+  })
+
   it('copies the command and announces it', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })

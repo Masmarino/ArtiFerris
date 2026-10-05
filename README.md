@@ -234,9 +234,10 @@ une nouvelle saisie.
   inondation distribuée : mettez une limite à l'ingress ou un CDN devant. Les connexions échouées ont leur propre limite,
   par processus.
 - Les fichiers de marque sont validés par leur signature, jamais par leur `Content-Type`.
-- Le jeton d'activation voyage dans l'URL (`/activate?token=…`) ; il est à usage unique côté serveur et expire. Au
-  retour d'un SSO, le navigateur n'accepte le token de session que s'il a lancé la connexion dans les 10 dernières
-  minutes, en plus du cookie et du `state` que le serveur vérifie.
+- Le jeton d'activation voyage dans le fragment du lien (`/activate#token=…`), qu'aucun serveur ni journal d'accès ne
+  voit ; la page le retire ensuite de la barre d'adresse. Il est à usage unique côté serveur et expire. Au retour d'un
+  SSO, le navigateur n'accepte le token de session que s'il a lancé la connexion dans les 10 dernières minutes, en plus
+  du cookie et du `state` que le serveur vérifie.
 
 Les README de paquets sont assainis côté serveur, mais leurs images peuvent venir de n'importe quel hôte `https` : sur
 les pages publiques, chaque visiteur révèle donc son IP et son User-Agent à cet hôte. C'est un risque accepté ; pour le

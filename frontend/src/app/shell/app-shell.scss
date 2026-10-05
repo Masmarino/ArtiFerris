@@ -1,99 +1,18 @@
 .app-shell {
   &__logo {
-    height: 60px;
-    width: fit-content;
+    display: block;
+    max-width: 100%;
+    height: 3rem;
+    width: auto;
+    object-fit: contain;
 
     &--collapsed {
       height: 2.25rem;
       width: 2.25rem;
-      object-fit: contain;
     }
   }
 
   &__nav-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-
-    // Icon-only rail: no room for the group toggle or submenus.
-    &--collapsed .app-shell__nav-link {
-      justify-content: center;
-      padding: 0.625rem;
-    }
-  }
-
-  &__nav-link {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--site-border-radius-sm);
-    color: var(--text-secondary);
-    text-decoration: none;
-    font-size: 0.875rem;
-
-    &:hover {
-      background: var(--bg-hover);
-    }
-
-    &--active {
-      background: var(--primary);
-      color: var(--text-on-primary);
-
-      &:hover {
-        background: var(--primary);
-        color: var(--text-on-primary);
-        opacity: 0.9;
-      }
-    }
-
-    &--sub {
-      padding-left: 2rem;
-      font-size: 0.8125rem;
-    }
-  }
-
-  &__nav-group-header {
-    display: flex;
-    align-items: center;
-    gap: 0.125rem;
-
-    .app-shell__nav-link {
-      flex: 1;
-      min-width: 0;
-    }
-  }
-
-  &__nav-group-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    flex-shrink: 0;
-    background: none;
-    border: none;
-    border-radius: var(--site-border-radius-sm);
-    color: var(--text-secondary);
-    cursor: pointer;
-
-    &:hover {
-      background: var(--bg-hover);
-    }
-
-    gbt-icon {
-      transition: transform 0.15s ease;
-    }
-
-    &--open gbt-icon {
-      transform: rotate(180deg);
-    }
-  }
-
-  &__nav-submenu {
     list-style: none;
     margin: 0;
     padding: 0;
@@ -110,82 +29,67 @@
   }
 
   // Inside Gabarit's <header> (flex, next to the burger toggle): grow into the remaining width for
-  // the grid below.
+  // the grid below. The same bar as FerrisGit's. The search sits in the middle of the window, under the palette it
+  // opens, not in the middle of this header, which starts after the rail: the first track is shortened by
+  // `--app-shell-search-shift`, half of what lies left of the header beyond its right padding (Gabarit's 220px rail,
+  // its 64px collapsed rail, or the menu button below 769px).
   &__header {
+    --app-shell-search-width: min(26rem, 45%);
+    --app-shell-search-shift: 110px;
+    --app-shell-gap: 1rem;
+
     flex: 1;
     min-width: 0;
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns:
+      max(
+        0px,
+        calc(
+          50% - var(--app-shell-search-shift) - var(--app-shell-search-width) /
+            2 - var(--app-shell-gap)
+        )
+      )
+      var(--app-shell-search-width)
+      minmax(0, 1fr);
     align-items: center;
-    gap: 1rem;
-  }
+    gap: var(--app-shell-gap);
 
-  &__page-title {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-    justify-self: start;
-  }
+    &--rail {
+      --app-shell-search-shift: 32px;
+    }
 
-  &__search {
-    justify-self: center;
-  }
+    @media (max-width: 768px) {
+      --app-shell-search-width: min(16rem, 45%);
+      --app-shell-search-shift: 24px;
+      --app-shell-gap: 0.5rem;
+    }
 
-  &__user-menu {
-    position: relative;
-    justify-self: end;
-  }
-
-  &__user-trigger {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    background: none;
-    border: none;
-    padding: 0.375rem 0.5rem;
-    border-radius: var(--site-border-radius-sm);
-    color: var(--text-primary);
-    font-size: 0.875rem;
-    cursor: pointer;
-
-    &:hover {
-      background: var(--bg-hover);
+    // On a phone the breadcrumb takes the room left and gives way first; the search is an icon beside the menu. A
+    // plain `auto` or `1fr` track never shrinks below its content, hence `minmax(0, 1fr)`.
+    @media (max-width: 599px) {
+      grid-template-columns: minmax(0, 1fr) auto auto;
     }
   }
 
-  &__user-dropdown {
-    position: absolute;
-    top: calc(100% + 0.375rem);
-    right: 0;
-    min-width: 180px;
-    background: var(--bg-principal);
-    border: 1px solid var(--border-color);
-    border-radius: var(--site-border-radius-sm);
-    box-shadow: var(--site-shadow-lg);
-    padding: 0.375rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
-    z-index: 10;
+  // Stretched to its track, so the track's width bounds it and a long path is cut short instead of running under the
+  // search and the menu.
+  &__breadcrumb {
+    justify-self: stretch;
+    min-width: 0;
   }
 
-  &__user-dropdown-item {
+  &__search {
+    min-width: 0;
+  }
+
+  &__header-end {
     display: flex;
     align-items: center;
-    gap: 0.625rem;
-    padding: 0.5rem 0.625rem;
-    border-radius: var(--site-border-radius-sm);
-    background: none;
-    border: none;
-    color: var(--text-primary);
-    text-decoration: none;
-    font-size: 0.875rem;
-    text-align: left;
-    cursor: pointer;
+    gap: 1rem;
+    justify-self: end;
 
-    &:hover {
-      background: var(--bg-hover);
+    @media (max-width: 768px) {
+      gap: 0.25rem;
     }
   }
 

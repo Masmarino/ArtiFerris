@@ -16,7 +16,6 @@ import { TranslocoHttpLoader } from './transloco-loader'
 import './shared/i18n/locale-data'
 import { apiTokenProviders } from './tokens/infrastructure/api-token.providers'
 import { authProviders } from './auth/infrastructure/auth.providers'
-import { mfaProviders } from './account/infrastructure/mfa.providers'
 import { userProviders } from './users/infrastructure/user.providers'
 import { repositoryProviders } from './repositories/infrastructure/repository.providers'
 import { adminProviders } from './admin/infrastructure/admin.providers'
@@ -58,7 +57,6 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => inject(LanguageService).use(detectBrowserLanguage())),
     ...apiTokenProviders,
     ...authProviders,
-    ...mfaProviders,
     ...userProviders,
     ...organizationsProviders,
     ...organizationMembersProviders,

@@ -8,6 +8,12 @@ versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de t
 
 ### Ajouté
 
+- **Documentation** sous `/docs`, en français : démarrer, utilisation (dépôts, npm, Docker, compte et jetons,
+  catalogue public), administration (installation, configuration, organisations et utilisateurs, mises à jour,
+  référencement) et API publique. Le lecteur vient de Gabarit (`@masmarino/gabarit/docs`) : recherche, sommaire, plan de
+  la page. Sans session, elle s'affiche sous la barre des pages publiques ; avec une session, dans l'application (menu
+  du compte). Elle se charge à la demande : `marked` et DOMPurify restent hors du bundle initial. Le serveur répond
+  `404` à une page `.md` absente plutôt que l'application.
 - **Limite des lectures anonymes npm et Docker** (#38) : par client (IPv4, /64 IPv6) et par minute, 1 200 par défaut
   (`ANONYMOUS_REGISTRY_READS_PER_MINUTE`, `0` pour supprimer la limite ; réponse `429` avec `Retry-After`, au format du
   registre pour Docker). Une requête avec un jeton n'est jamais comptée.
@@ -17,9 +23,44 @@ versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de t
 
 ### Modifié
 
+- **Le design de la famille Ferris vient désormais de Gabarit 2.0** : palette, IBM Plex (servie depuis le paquet), cadre
+  graphite du shell, page de connexion. Le thème local (`styles/_theme.scss`), sa correspondance avec les jetons de
+  Gabarit et les retouches du shell disparaissent ; seules restent les règles propres à ArtiFerris (barre publique,
+  fond animé de connexion, panneau clair). Quelques teintes changent à peine : chaque texte atteint 7:1 sur la page et
+  sur un panneau, d'où un texte secondaire plus clair en thème sombre et un bouton de danger un peu plus foncé.
+- Les deux champs de recherche des pages publiques (barre du haut et catalogue) sont ceux de FerrisGit : le champ de
+  Gabarit avec sa loupe, sans bouton « Rechercher » (Entrée lance la recherche, la saisie aussi après un court délai).
+  Les suggestions restent annoncées comme une liste (combobox ARIA).
 - La limite des pages et de l'API publiques passe d'une fenêtre glissante par horodatage à une fenêtre glissante par
   compteurs : même débit moyen, sans conserver chaque requête en mémoire. Les connexions échouées gardent leur limite par
   processus.
+- **Nouvelle apparence**, commune à la famille Ferris (celle de FerrisGit et de son site) : IBM Plex, actions à l'encre,
+  filets, coins de 2 à 6 px ; un cadre graphite autour des pages, avec la version claire du logo ; le chemin de la page
+  avant son titre dans la barre (« Administration / Export ») ; les pages de connexion, d'inscription et d'activation sur
+  un graphe de commits animé, qui s'arrête si le système demande moins de mouvement ; les pages publiques (catalogue,
+  dépôt, paquet) sous la même barre graphite. Gabarit 1.3.0.
+- **Pages de connexion, d'inscription et d'activation reprises du kit d'authentification de Gabarit** (1.4.0), comme
+  FerrisGit : chaque erreur sous son champ ou dans une alerte, le focus là où il faut agir, la double authentification
+  en étapes (clé d'accès recommandée, ou application et ses codes de secours), dans les cinq langues. L'invité choisit
+  toujours son nom d'utilisateur à l'activation ; la connexion LDAP et OIDC, les avis (sessions fermées, lien SSO
+  invalide) et le lien vers les paquets publics sont conservés.
+- **Paramètres de sécurité du compte repris de Gabarit** : application d'authentification, codes de secours et clés
+  d'accès, avec la date de dernière utilisation de chaque clé (migration `0014_passkey_last_used`). Une modification qui
+  ferme les sessions renvoie à la connexion.
+- **Codes de secours comme dans FerrisGit** : ils accompagnent aussi une clé d'accès configurée seule à la première
+  connexion, se régénèrent avec n'importe quel facteur et ne disparaissent qu'avec le dernier (supprimer l'application
+  les garde tant qu'une clé d'accès reste).
+- Le lien d'activation envoyé par e-mail porte le jeton dans son fragment (`/activate#token=…`) : aucun serveur ni
+  journal d'accès ne le voit, et la page le retire de la barre d'adresse. Les liens `?token=` déjà envoyés restent
+  valables.
+
+### Corrigé
+
+- Accessibilité (WCAG 2.2 AA, vérifiée avec axe-core en clair, en sombre et sur téléphone) : le texte des statuts et le
+  bord des champs atteignent les contrastes requis ; les commandes, les blocs de code et les tableaux qui défilent de
+  côté (README, instructions d'utilisation, jeton créé) sont atteignables au clavier.
+- Le logo de la barre de navigation repliée s'affiche : `Logo.png` était une icône dont le navigateur retenait une image
+  vide.
 
 ## [0.6.0] - 2026-10-01
 

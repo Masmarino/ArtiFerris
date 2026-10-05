@@ -1,10 +1,8 @@
 import { TestBed } from '@angular/core/testing'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
-import { provideRouter } from '@angular/router'
 import { CreateUserModal } from './create-user-modal'
 import { userProviders } from '../infrastructure/user.providers'
-import { ToastService } from '../../shared/toast.service'
 
 describe('CreateUserModal', () => {
   let httpMock: HttpTestingController
@@ -12,12 +10,7 @@ describe('CreateUserModal', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [CreateUserModal],
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-        ...userProviders,
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting(), ...userProviders],
     })
     httpMock = TestBed.inject(HttpTestingController)
   })
@@ -26,140 +19,120 @@ describe('CreateUserModal', () => {
     httpMock.verify()
   })
 
-  it('renders a control bound to the isSuperAdmin form control', () => {
+  function open() {
     const fixture = TestBed.createComponent(CreateUserModal)
     fixture.detectChanges()
+    return { fixture, modal: fixture.componentInstance }
+  }
 
-    const checkbox: HTMLInputElement | null =
-      fixture.nativeElement.querySelector('input[type="checkbox"]')
-    expect(checkbox).not.toBeNull()
+  it('posts the address and is_super_admin: true when the switch is on', () => {
+    const { modal } = open()
 
-    checkbox!.checked = true
-    checkbox!.dispatchEvent(new Event('change'))
-    fixture.detectChanges()
-
-    expect(fixture.componentInstance.form.getRawValue().isSuperAdmin).toBe(true)
-  })
-
-  it('posts is_super_admin: true when the checkbox is ticked', () => {
-    const fixture = TestBed.createComponent(CreateUserModal)
-    fixture.detectChanges()
-
-    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
-    const checkbox: HTMLInputElement = fixture.nativeElement.querySelector('input[type="checkbox"]')
-    checkbox.checked = true
-    checkbox.dispatchEvent(new Event('change'))
-    fixture.detectChanges()
-
-    fixture.componentInstance.submit()
+    modal.onEmailChange('florian@example.com')
+    modal.isSuperAdmin.set(true)
+    modal.submit()
 
     const request = httpMock.expectOne('/api/users')
-    expect(request.request.body).toEqual({
-      email: 'florian@example.com',
-      is_super_admin: true,
-    })
-    request.flush({
-      id: 'user-1',
-      username: 'florian',
-      is_super_admin: true,
-      email: 'florian@example.com',
-      invitation_pending: true,
-    })
+    expect(request.request.method).toBe('POST')
+    expect(request.request.body).toEqual({ email: 'florian@example.com', is_super_admin: true })
+    request.flush({})
   })
 
-  it('posts is_super_admin: false when the checkbox is left untouched', () => {
-    const fixture = TestBed.createComponent(CreateUserModal)
-    fixture.detectChanges()
+  it('sends nothing and says what to type when the address is missing or malformed', () => {
+    const { modal } = open()
 
-    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
-    fixture.componentInstance.submit()
+    modal.submit()
+    expect(modal.emailError()).toBe("Saisissez l'adresse e-mail")
 
-    const request = httpMock.expectOne('/api/users')
-    expect(request.request.body).toEqual({
-      email: 'florian@example.com',
-      is_super_admin: false,
-    })
-    request.flush({
-      id: 'user-1',
-      username: 'florian',
-      is_super_admin: false,
-      email: 'florian@example.com',
-      invitation_pending: true,
-    })
+    modal.onEmailChange('florian@example')
+    modal.submit()
+    expect(modal.emailError()).toBe(
+      'Saisissez une adresse e-mail valide, par exemple nom@exemple.fr',
+    )
+    httpMock.expectNone('/api/users')
   })
 
-  it('shows a success toast naming the user once created', () => {
-    const fixture = TestBed.createComponent(CreateUserModal)
+  it('clears the address error as soon as the address changes', () => {
+    const { modal } = open()
+
+    modal.submit()
+    modal.onEmailChange('f')
+
+    expect(modal.emailError()).toBeNull()
+  })
+
+  it('shows the outcome in the dialog and tells the parent', () => {
+    const { fixture, modal } = open()
+    const invited = vi.fn()
+    modal.invited.subscribe(invited)
+
+    modal.onEmailChange('  alice@example.com ')
+    modal.submit()
+    httpMock.expectOne('/api/users').flush({ id: 'u9', email_sent: true })
     fixture.detectChanges()
 
-    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
-    fixture.componentInstance.submit()
+    expect(invited).toHaveBeenCalledWith({ id: 'u9', email_sent: true })
+    expect(document.body.textContent).toContain('Invitation envoyée à alice@example.com')
+  })
 
+  it('hands over the activation link when the mail could not go out', () => {
+    const { fixture, modal } = open()
+
+    modal.onEmailChange('alice@example.com')
+    modal.submit()
     httpMock.expectOne('/api/users').flush({
-      id: 'user-1',
-      username: 'florian',
-      is_super_admin: false,
-      email: 'florian@example.com',
-      invitation_pending: true,
+      id: 'u9',
+      email_sent: false,
+      email_error: 'email_not_configured',
+      activation_url: 'https://app.example.com/activate#token=abc',
     })
-
-    expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
-      variant: 'success',
-      message: 'Invitation envoyée à florian@example.com.',
-    })
-  })
-
-  it('shows an error toast with the server message when creation fails', () => {
-    const fixture = TestBed.createComponent(CreateUserModal)
     fixture.detectChanges()
 
-    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
-    fixture.componentInstance.submit()
+    const text = document.body.textContent ?? ''
+    expect(text).toContain("Le mail n'a pas pu être envoyé")
+    expect(text).toContain("Aucun serveur mail n'est configuré pour cette organisation.")
+    expect(text).toContain('Transmettez ce lien à alice@example.com')
+    expect(text).not.toContain('Invitation envoyée')
+    expect(document.body.querySelector('gbt-copy-field code')?.textContent).toBe(
+      'https://app.example.com/activate#token=abc',
+    )
+  })
 
+  it('puts a taken address under the field and keeps the draft', () => {
+    const { modal } = open()
+
+    modal.onEmailChange('alice@example.com')
+    modal.submit()
     httpMock
       .expectOne('/api/users')
       .flush(
-        { error: 'ce nom d’utilisateur est déjà pris' },
+        { error: 'email already in use', code: 'email_taken' },
         { status: 409, statusText: 'Conflict' },
       )
 
-    expect(fixture.componentInstance.creating()).toBe(false)
-    expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
-      variant: 'error',
-      message: 'ce nom d’utilisateur est déjà pris',
-    })
+    expect(modal.emailError()).toBe('Cette adresse e-mail est déjà utilisée par un compte')
+    expect(modal.email()).toBe('alice@example.com')
+    expect(modal.result()).toBeNull()
   })
 
-  it('shows a French message, not the server text, when the server fails with a 500', () => {
-    const fixture = TestBed.createComponent(CreateUserModal)
-    fixture.detectChanges()
+  it('says the invitation could not be sent on any other failure', () => {
+    const { modal } = open()
 
-    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
-    fixture.componentInstance.submit()
+    modal.onEmailChange('alice@example.com')
+    modal.submit()
+    httpMock.expectOne('/api/users').flush('boom', { status: 500, statusText: 'Server Error' })
 
-    httpMock
-      .expectOne('/api/users')
-      .flush({ error: 'database is down' }, { status: 500, statusText: 'Server Error' })
-
-    expect(TestBed.inject(ToastService).toasts().at(-1)).toMatchObject({
-      variant: 'error',
-      message: "Échec de la création de l'utilisateur.",
-    })
+    expect(modal.formError()).toBe("L'invitation n'a pas pu être envoyée. Réessayez plus tard.")
+    expect(modal.sending()).toBe(false)
   })
 
-  it('does not print [object Object] when the server sends a non-string error', () => {
-    const fixture = TestBed.createComponent(CreateUserModal)
-    fixture.detectChanges()
+  it('ignores a second submit while the first is on its way', () => {
+    const { modal } = open()
 
-    fixture.componentInstance.form.patchValue({ email: 'florian@example.com' })
-    fixture.componentInstance.submit()
+    modal.onEmailChange('alice@example.com')
+    modal.submit()
+    modal.submit()
 
-    httpMock
-      .expectOne('/api/users')
-      .flush({ error: { code: 1 } }, { status: 400, statusText: 'Bad Request' })
-
-    expect(TestBed.inject(ToastService).toasts().at(-1)?.message).toBe(
-      "Échec de la création de l'utilisateur.",
-    )
+    httpMock.expectOne('/api/users').flush({})
   })
 })

@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core'
 import { HttpClient } from '@angular/common/http'
 import { Observable } from 'rxjs'
-import { UserSummary } from '../domain/user.entity'
+import { InvitedUser, UserSummary } from '../domain/user.entity'
+import { InvitationMail, PasswordResetMail } from '../../shared/invitation-mail'
 import { UserPort } from '../application/user.port'
 import { apiPath } from '../../shared/api-path'
 
@@ -17,8 +18,8 @@ export class HttpUserAdapter implements UserPort {
     return this.http.get<UserSummary>(apiPath`/api/users/${id}`)
   }
 
-  create(email: string, isSuperAdmin: boolean): Observable<UserSummary> {
-    return this.http.post<UserSummary>('/api/users', {
+  create(email: string, isSuperAdmin: boolean): Observable<InvitedUser> {
+    return this.http.post<InvitedUser>('/api/users', {
       email,
       is_super_admin: isSuperAdmin,
     })
@@ -34,7 +35,15 @@ export class HttpUserAdapter implements UserPort {
     })
   }
 
-  resendInvitation(id: string): Observable<void> {
-    return this.http.post<void>(apiPath`/api/users/${id}/resend-invitation`, {})
+  resetPassword(id: string): Observable<PasswordResetMail> {
+    return this.http.post<PasswordResetMail>(apiPath`/api/users/${id}/reset-password`, {})
+  }
+
+  resetMfa(id: string): Observable<void> {
+    return this.http.delete<void>(apiPath`/api/users/${id}/mfa`)
+  }
+
+  resendInvitation(id: string): Observable<InvitationMail> {
+    return this.http.post<InvitationMail>(apiPath`/api/users/${id}/resend-invitation`, {})
   }
 }

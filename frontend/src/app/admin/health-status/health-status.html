@@ -1,51 +1,115 @@
-<div class="container">
-  @if (loadError()) {
-    <gbt-card>
-      <p class="gbt-form-error" role="alert">{{ 'admin.health.loadFailed' | transloco }}</p>
-    </gbt-card>
-  } @else if (status(); as s) {
-    <gbt-card [heading]="'admin.health.database' | transloco" icon="database">
-      <ng-template #dbStatusValue>
-        <gbt-badge [variant]="s.database.status === 'up' ? 'success' : 'error'">
-          {{ s.database.status }}
-          @if (s.database.detail) {
-            — {{ s.database.detail }}
-          }
-        </gbt-badge>
-      </ng-template>
-      <gbt-description-list [items]="databaseItems()" layout="inline" />
-      <gbt-gauge-bar
-        [label]="'admin.health.connections' | transloco"
-        [value]="s.database.active_connections"
-        [max]="s.database.max_connections"
-        [formattedValue]="formatRatio(s.database.active_connections, s.database.max_connections)"
-        [warningLabel]="'admin.health.warning' | transloco"
-        [criticalLabel]="'admin.health.critical' | transloco"
-      />
-    </gbt-card>
-
-    <gbt-card [heading]="'admin.health.storage' | transloco" icon="hard-drive">
-      <ng-template #storageStatusValue>
-        <gbt-badge [variant]="s.storage.status === 'up' ? 'success' : 'error'">
-          {{ s.storage.status }}
-          @if (s.storage.detail) {
-            — {{ s.storage.detail }}
-          }
-        </gbt-badge>
-      </ng-template>
-      <gbt-description-list [items]="storageItems()" layout="inline" />
-      <gbt-gauge-bar
-        [label]="'admin.health.usedSpace' | transloco"
-        [value]="s.storage.used_bytes"
-        [max]="s.storage.total_bytes"
-        [formattedValue]="formatByteRatio(s.storage.used_bytes, s.storage.total_bytes)"
-        [warningLabel]="'admin.health.warning' | transloco"
-        [criticalLabel]="'admin.health.critical' | transloco"
-      />
-    </gbt-card>
-
-    <gbt-card [heading]="'admin.health.server' | transloco" icon="server">
-      <gbt-description-list [items]="serverItems()" layout="inline" />
-    </gbt-card>
+<app-page-heading>
+  @if (overall(); as status) {
+    <gbt-badge header-badges [variant]="status.variant" [icon]="status.icon">{{
+      status.label
+    }}</gbt-badge>
   }
-</div>
+  <p header-meta class="health__intro">
+    {{ 'admin.health.intro' | transloco }}
+    @if (checkedAtLabel(); as time) {
+      <span class="health__checked"
+        >· {{ 'admin.health.checkedAt' | transloco }} <time>{{ time }}</time></span
+      >
+    }
+  </p>
+  <gbt-button
+    header-actions
+    variant="secondary"
+    iconName="refresh-cw"
+    [text]="'admin.health.refresh' | transloco"
+    [loadingLabel]="'admin.health.checking' | transloco"
+    [loading]="checking()"
+    (clicked)="refresh()"
+  />
+</app-page-heading>
+
+<gbt-page-layout width="wide" asideWidth="sm">
+  @if (loadError()) {
+    <gbt-alert
+      variant="error"
+      appearance="subtle"
+      live="off"
+      [heading]="'admin.health.unreachableHeading' | transloco"
+    >
+      {{ 'admin.health.unreachableMessage' | transloco }}
+    </gbt-alert>
+  } @else if (status()) {
+    <div class="health__cards-frame">
+      <div class="health__cards" [attr.aria-busy]="checking() ? 'true' : null">
+        @for (card of cards(); track card.key) {
+          <gbt-card
+            class="health__card"
+            variant="outlined"
+            [icon]="card.icon"
+            [heading]="card.heading"
+            [tone]="card.status.variant === 'error' ? 'error' : 'default'"
+            [attr.data-status]="card.status.variant"
+          >
+            <gbt-badge
+              card-header-actions
+              class="health__card-status"
+              [variant]="card.status.variant"
+              [icon]="card.status.icon"
+              >{{ card.status.label }}</gbt-badge
+            >
+            <div class="health__card-body">
+              @if (card.detail) {
+                <p
+                  class="health__detail"
+                  [class.health__detail--down]="card.status.variant === 'error'"
+                >
+                  {{ card.detail }}
+                </p>
+              }
+              @if (card.gauge; as gauge) {
+                <gbt-gauge-bar
+                  class="health__gauge"
+                  [label]="gauge.label"
+                  [value]="gauge.value"
+                  [max]="gauge.max"
+                  [formattedValue]="gauge.formatted"
+                  [thresholds]="gaugeThresholds"
+                  [warningLabel]="'admin.health.warning' | transloco"
+                  [criticalLabel]="'admin.health.critical' | transloco"
+                />
+              }
+              @if (card.facts.length > 0) {
+                <gbt-description-list class="health__facts" layout="inline" [items]="card.facts" />
+              }
+            </div>
+          </gbt-card>
+        }
+      </div>
+    </div>
+  } @else {
+    <div class="health__cards-frame" aria-busy="true">
+      <span class="sr-only" role="status">{{ 'admin.health.checking' | transloco }}</span>
+      <div class="health__cards" aria-hidden="true">
+        @for (i of skeletonCards; track i) {
+          <gbt-card class="health__skeleton" variant="outlined">
+            <div class="health__card-body">
+              <gbt-skeleton width="8rem" height="0.875rem" />
+              <gbt-skeleton width="100%" height="0.5rem" variant="rect" />
+              <gbt-skeleton width="60%" height="0.75rem" />
+              <gbt-skeleton width="45%" height="0.75rem" />
+            </div>
+          </gbt-card>
+        }
+      </div>
+    </div>
+  }
+
+  @if (loadError() ? null : uptime(); as u) {
+    <div page-aside class="health__aside">
+      <gbt-panel [heading]="'admin.health.uptime' | transloco" [headingLevel]="2">
+        <p class="health__uptime-value">
+          <gbt-icon name="clock" aria-hidden="true" />{{ u.value }}
+        </p>
+        <p class="health__uptime-since">{{ u.startedAt }}</p>
+      </gbt-panel>
+      <gbt-panel [heading]="'admin.health.checksHeading' | transloco" [headingLevel]="2">
+        <p class="health__note">{{ 'admin.health.checksHelp' | transloco }}</p>
+      </gbt-panel>
+    </div>
+  }
+</gbt-page-layout>

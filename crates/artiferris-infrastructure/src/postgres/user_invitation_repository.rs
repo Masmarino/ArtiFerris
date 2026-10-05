@@ -32,6 +32,15 @@ pub(crate) async fn upsert_invitation<'e>(executor: impl sqlx::PgExecutor<'e>, i
 
 #[async_trait]
 impl UserInvitationPort for PostgresUserInvitationRepository {
+    async fn invitation_expiries(&self, user_ids: &[Uuid]) -> Result<std::collections::HashMap<Uuid, chrono::DateTime<chrono::Utc>>, DomainError> {
+        if user_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let rows: Vec<(Uuid, chrono::DateTime<chrono::Utc>)> =
+            sqlx::query_as("SELECT user_id, expires_at FROM user_invitations WHERE user_id = ANY($1)").bind(user_ids).fetch_all(&self.pool).await.infra_err()?;
+        Ok(rows.into_iter().collect())
+    }
+
     async fn upsert(&self, invitation: &UserInvitation, audit: Option<&AdminAuditRecord>) -> Result<(), DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
         upsert_invitation(&mut *tx, invitation).await?;
@@ -120,6 +129,20 @@ mod tests {
 
         let found = repo.find_by_token_hash("hash-a").await.unwrap().unwrap();
         assert_eq!(found.user_id, user_id);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn invitation_expiries_reads_the_expiry_of_those_who_have_an_invitation(pool: sqlx::PgPool) {
+        let invited = seed_user(&pool).await;
+        let repo = PostgresUserInvitationRepository::new(pool);
+        let invitation = sample(invited);
+        repo.upsert(&invitation, None).await.unwrap();
+
+        let expiries = repo.invitation_expiries(&[invited, Uuid::new_v4()]).await.unwrap();
+
+        assert_eq!(expiries.len(), 1);
+        assert_eq!(expiries[&invited].timestamp(), invitation.expires_at.timestamp());
+        assert!(repo.invitation_expiries(&[]).await.unwrap().is_empty());
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

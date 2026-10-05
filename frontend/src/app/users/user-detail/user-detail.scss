@@ -1,0 +1,205 @@
+@use '../../../styles/list-page';
+
+:host {
+  @include list-page.page-host;
+}
+
+.user-detail__badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.user-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.125rem 0.875rem;
+  min-width: 0;
+  margin: 0;
+}
+
+.user-detail__email {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.user-detail__segment {
+  white-space: nowrap;
+}
+
+.user-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+// Gabarit gap: gbt-menu has no button variant for its trigger, so reuse gbt-button--secondary's tokens.
+.user-detail__menu ::ng-deep .gbt-menu__trigger {
+  border-color: var(--border-color);
+  background: var(--bg-panel);
+  font-weight: 600;
+}
+
+.user-detail__menu ::ng-deep .gbt-menu__trigger:hover,
+.user-detail__menu ::ng-deep .gbt-menu__trigger--open {
+  background: var(--bg-hover);
+}
+
+.user-detail__menu ::ng-deep .gbt-menu__list {
+  max-width: min(20rem, calc(100vw - 2rem));
+}
+
+.user-detail__busy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+}
+
+.user-detail__main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.user-detail__band {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  min-width: 0;
+}
+
+.user-detail__heading {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+}
+
+.user-detail__count {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.user-detail__permissions {
+  @include list-page.row-list;
+}
+
+// !important: Gabarit's title slot sets `flex: none` on every direct child but links, and wins on specificity.
+.user-detail__repository-name {
+  flex: 0 1 auto !important;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.user-detail__format {
+  flex: none;
+}
+
+.user-detail__trailing {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.user-detail__row-menu {
+  @include list-page.row-menu;
+}
+
+.user-detail__grant {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.user-detail__grant-repositories {
+  flex: 2 1 16rem;
+  min-width: 0;
+}
+
+.user-detail__grant-role {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.user-detail__grant-submit {
+  flex: none;
+}
+
+.user-detail__facts {
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+.user-detail__facts-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.user-detail__help {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.user-detail__state {
+  @include list-page.empty-card;
+}
+
+.user-detail__state-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.user-detail__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.user-detail__loading-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding-top: 0.5rem;
+}
+
+.user-detail__loading-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+}
+
+@media (max-width: 599px) {
+  .user-detail__actions ::ng-deep .gbt-button,
+  .user-detail__menu ::ng-deep .gbt-menu__trigger {
+    min-height: 44px;
+  }
+
+  .user-detail__grant-submit {
+    flex: 1 1 100%;
+
+    ::ng-deep .gbt-button {
+      width: 100%;
+      min-height: 44px;
+    }
+  }
+}

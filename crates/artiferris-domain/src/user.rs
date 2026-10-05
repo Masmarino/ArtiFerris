@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::audit::{AdminAuditRecord, AuditRecord, SecurityAuditRecord};
+use crate::audit::{AdminAuditRecord, AuditRecord};
 use crate::error::DomainError;
 use crate::reserved_names::reject_reserved_name;
 
@@ -121,7 +121,7 @@ pub trait UserRepositoryPort: Send + Sync {
 #[async_trait]
 pub trait UserSecurityPort: Send + Sync {
     /// Sets `tokens_valid_after` to now: every session, Docker access token and API token issued before this call stops working. `audit` goes in the same transaction.
-    async fn revoke_sessions(&self, id: Uuid, audit: Option<&SecurityAuditRecord>) -> Result<(), DomainError>;
+    async fn revoke_sessions(&self, id: Uuid, audit: Option<&AuditRecord>) -> Result<(), DomainError>;
 
     /// Case-insensitive and within one organization, which is the scope of a verified address. Never a self-registered account.
     async fn find_by_verified_email(&self, organization_id: Uuid, email: &str) -> Result<Option<User>, DomainError>;

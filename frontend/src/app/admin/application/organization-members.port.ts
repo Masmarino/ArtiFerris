@@ -1,6 +1,6 @@
 import { InjectionToken } from '@angular/core'
 import { Observable } from 'rxjs'
-import { OrganizationMember } from '../domain/organization-member.entity'
+import { InvitedMember, OrganizationMember } from '../domain/organization-member.entity'
 
 export interface OrganizationMembersPort {
   list(organizationId: string): Observable<OrganizationMember[]>
@@ -8,7 +8,7 @@ export interface OrganizationMembersPort {
     organizationId: string,
     email: string,
     isOrganizationAdmin: boolean,
-  ): Observable<OrganizationMember>
+  ): Observable<InvitedMember>
   setOrganizationAdmin(
     organizationId: string,
     userId: string,

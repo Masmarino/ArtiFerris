@@ -75,6 +75,16 @@ pub enum ApplicationError {
     InvitationNotFound,
     #[error("this invitation has expired")]
     InvitationExpired,
+    /// Same answer for an unknown, expired, used or malformed link, so nobody can probe them.
+    #[error("invalid or expired password reset link")]
+    PasswordResetLinkInvalid,
+    /// Losing the mail would lock an administrator out of their own account, and a sole one has nobody to issue another.
+    #[error("use your account settings to change your own password")]
+    OwnPasswordReset,
+    #[error("this account has not been activated yet: resend the invitation instead")]
+    AccountNotActivated,
+    #[error("this organization signs in through its identity provider, which manages its passwords")]
+    PasswordManagedByIdentityProvider,
     #[error("two-factor authentication is already enabled")]
     MfaAlreadyEnabled,
     #[error("two-factor authentication is not enabled")]
@@ -152,6 +162,10 @@ impl ApplicationError {
             Self::InvitationExpired => "invitation_expired",
             Self::MfaAlreadyEnabled => "mfa_already_enabled",
             Self::MfaNotEnrolled => "mfa_not_enrolled",
+            Self::PasswordResetLinkInvalid => "password_reset_link_invalid",
+            Self::OwnPasswordReset => "own_password_reset",
+            Self::AccountNotActivated => "account_not_activated",
+            Self::PasswordManagedByIdentityProvider => "password_managed_by_identity_provider",
             Self::MfaEnrollmentExpired => "mfa_enrollment_expired",
             Self::InvalidMfaCode => "invalid_mfa_code",
             Self::PasskeysUnavailable => "passkeys_unavailable",

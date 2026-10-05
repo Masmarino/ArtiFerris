@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core'
-import type { ToastItem, ToastVariant } from '@masmarino/gabarit'
+import type { ToastItem, ToastVariant } from '@masmarino/gabarit/toaster'
 
 let nextId = 0
 

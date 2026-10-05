@@ -1,6 +1,8 @@
 import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
-import { Button, ConfirmDangerModal, Modal } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { ConfirmDangerModal } from '@masmarino/gabarit/confirm-danger-modal'
+import { Modal } from '@masmarino/gabarit/modal'
 import { ConfirmService } from '../confirm.service'
 
 @Component({

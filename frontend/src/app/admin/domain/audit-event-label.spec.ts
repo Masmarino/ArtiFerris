@@ -36,6 +36,8 @@ describe('audit event labels', () => {
     'UserInvited',
     'UserActivated',
     'InvitationResent',
+    'MfaReset',
+    'PasswordReset',
     'UserDeleted',
     'SuperAdminGranted',
     'SuperAdminRevoked',

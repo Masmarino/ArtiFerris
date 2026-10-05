@@ -4,114 +4,112 @@ import { expect, fn, userEvent, waitFor, within } from 'storybook/test'
 import { NEVER, of, throwError } from 'rxjs'
 import { CreateUserModal } from './create-user-modal'
 import { UsersService } from '../application/users.service'
-import { ToastService } from '../../shared/toast.service'
-import type { UserSummary } from '../domain/user.entity'
+import type { InvitedUser } from '../domain/user.entity'
 
-const CREATED: UserSummary = {
+const CREATED: InvitedUser = {
   id: 'u9',
   username: 'alice',
   is_super_admin: false,
   organization_id: 'org-acme',
   email: 'alice@example.com',
   invitation_pending: true,
+  created_at: '2026-10-06T08:00:00Z',
+  invitation_expires_at: '2026-10-07T08:00:00Z',
+  mfa_enabled: false,
+  email_sent: true,
 }
 
 function fakeUsers(overrides: Partial<UsersService> = {}): Partial<UsersService> {
   return { create: fn(() => of(CREATED)), ...overrides }
 }
 
-function withServices(users: Partial<UsersService>, toasts = new ToastService()) {
-  return moduleMetadata({
-    providers: [
-      { provide: UsersService, useValue: users },
-      { provide: ToastService, useValue: toasts },
-    ],
-  })
+function withServices(users: Partial<UsersService>) {
+  return moduleMetadata({ providers: [{ provide: UsersService, useValue: users }] })
 }
 
 const meta: Meta<CreateUserModal> = {
   title: 'Users/CreateUserModal',
   component: CreateUserModal,
   decorators: [withServices(fakeUsers())],
-  args: { created: fn(), cancelled: fn() },
+  args: { invited: fn(), closed: fn() },
 }
 export default meta
 
 type Story = StoryObj<CreateUserModal>
 
+const emailField = (canvas: ReturnType<typeof within>) => canvas.findByLabelText('Adresse e-mail')
+const sendButton = (canvas: ReturnType<typeof within>) =>
+  canvas.getByRole('button', { name: "Envoyer l'invitation" })
+
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    expect(await canvas.findByRole('heading', { name: 'Nouvel utilisateur' })).toBeInTheDocument()
-    expect(canvas.getByRole('button', { name: 'Inviter' })).toBeDisabled()
-    expect(canvas.getByRole('checkbox', { name: 'Super-administrateur' })).not.toBeChecked()
+    expect(await canvas.findByRole('heading', { name: 'Inviter un utilisateur' })).toBeVisible()
+    expect(canvas.getByRole('switch', { name: 'Super-administrateur' })).not.toBeChecked()
   },
 }
 
-export const InvalidEmail: Story = {
+export const Errors: Story = {
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement)
+    await userEvent.type(await emailField(canvas), 'alice@example')
+    await userEvent.click(sendButton(canvas))
+    expect(
+      await canvas.findByText('Saisissez une adresse e-mail valide, par exemple nom@exemple.fr'),
+    ).toBeVisible()
+    expect(args.invited).not.toHaveBeenCalled()
+  },
+}
+
+export const Sent: Story = {
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement)
+    await userEvent.type(await emailField(canvas), 'alice@example.com')
+    await userEvent.click(canvas.getByRole('switch', { name: 'Super-administrateur' }))
+    await userEvent.click(sendButton(canvas))
+
+    expect(await canvas.findByText('Invitation envoyée à alice@example.com')).toBeVisible()
+    expect(args.invited).toHaveBeenCalledWith(CREATED)
+    await userEvent.click(canvas.getByRole('button', { name: 'Terminé' }))
+    expect(args.closed).toHaveBeenCalledTimes(1)
+  },
+}
+
+export const MailFailed: Story = {
+  decorators: [
+    withServices(
+      fakeUsers({
+        create: fn(() =>
+          of({
+            ...CREATED,
+            email_sent: false,
+            email_error: 'email_send_failed' as const,
+            activation_url: 'https://app.artiferris.example.com/activate#token=3f9a1c',
+          }),
+        ),
+      }),
+    ),
+  ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'not-an-email')
-    await userEvent.tab()
-    expect(canvas.getByRole('button', { name: 'Inviter' })).toBeDisabled()
-
-    await userEvent.clear(canvas.getByLabelText(/Adresse e-mail/))
-    await userEvent.type(canvas.getByLabelText(/Adresse e-mail/), 'alice@example.com')
-    await waitFor(() => expect(canvas.getByRole('button', { name: 'Inviter' })).toBeEnabled())
+    await userEvent.type(await emailField(canvas), 'alice@example.com')
+    await userEvent.click(sendButton(canvas))
+    expect(await canvas.findByText("Le mail n'a pas pu être envoyé")).toBeVisible()
+    expect(canvas.getByText("Le serveur mail n'a pas accepté le message.")).toBeVisible()
   },
 }
 
-const successUsers = fakeUsers()
-const successToasts = new ToastService()
-
-export const InvitingAUser: Story = {
-  decorators: [withServices(successUsers, successToasts)],
-  play: async ({ canvasElement, args }) => {
-    const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'alice@example.com')
-    await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
-
-    await waitFor(() => expect(args.created).toHaveBeenCalledTimes(1))
-    expect(successUsers.create).toHaveBeenCalledWith('alice', 'alice@example.com', false)
-    expect(successToasts.toasts()).toEqual([
-      expect.objectContaining({ variant: 'success', message: 'Utilisateur « alice » créé.' }),
-    ])
-    expect(args.cancelled).not.toHaveBeenCalled()
-  },
-}
-
-const adminUsers = fakeUsers()
-
-export const InvitingASuperAdmin: Story = {
-  decorators: [withServices(adminUsers)],
-  play: async ({ canvasElement, args }) => {
-    const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'root@example.com')
-    await userEvent.click(canvas.getByRole('checkbox', { name: 'Super-administrateur' }))
-    await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
-
-    await waitFor(() => expect(args.created).toHaveBeenCalledTimes(1))
-    expect(adminUsers.create).toHaveBeenCalledWith('root', 'root@example.com', true)
-  },
-}
-
-export const Submitting: Story = {
+export const Sending: Story = {
   decorators: [withServices(fakeUsers({ create: () => NEVER }))],
-  play: async ({ canvasElement, args }) => {
+  play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'alice@example.com')
-    await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
-
-    const submit = await canvas.findByRole('button', { name: /Inviter/ })
-    await waitFor(() => expect(submit).toHaveAttribute('aria-busy', 'true'))
-    expect(submit).toBeDisabled()
-    expect(args.created).not.toHaveBeenCalled()
+    await userEvent.type(await emailField(canvas), 'alice@example.com')
+    await userEvent.click(sendButton(canvas))
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Annuler' })).toBeDisabled())
   },
 }
 
-const conflictToasts = new ToastService()
-
-export const ServerRejectsTheUser: Story = {
+export const Refused: Story = {
   decorators: [
     withServices(
       fakeUsers({
@@ -119,63 +117,44 @@ export const ServerRejectsTheUser: Story = {
           throwError(
             () =>
               new HttpErrorResponse({
-                status: 400,
-                error: { error: 'Cette adresse e-mail est déjà utilisée.' },
+                status: 409,
+                error: { error: 'email already in use', code: 'email_taken' },
               }),
           ),
       }),
-      conflictToasts,
     ),
   ],
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'alice@example.com')
-    await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
-
-    await waitFor(() =>
-      expect(conflictToasts.toasts()).toEqual([
-        expect.objectContaining({
-          variant: 'error',
-          message: 'Cette adresse e-mail est déjà utilisée.',
-        }),
-      ]),
-    )
-    expect(args.created).not.toHaveBeenCalled()
-    expect(canvas.getByRole('button', { name: 'Inviter' })).toBeEnabled()
-    expect(canvas.getByLabelText(/Adresse e-mail/)).toHaveValue('alice@example.com')
+    await userEvent.type(await emailField(canvas), 'alice@example.com')
+    await userEvent.click(sendButton(canvas))
+    expect(
+      await canvas.findByText('Cette adresse e-mail est déjà utilisée par un compte'),
+    ).toBeVisible()
+    expect(args.invited).not.toHaveBeenCalled()
+    expect(canvas.getByLabelText('Adresse e-mail')).toHaveValue('alice@example.com')
   },
 }
 
-const genericFailureToasts = new ToastService()
-
-export const CreationFailsWithoutDetails: Story = {
+export const Failed: Story = {
   decorators: [
-    withServices(
-      fakeUsers({ create: () => throwError(() => new Error('network error')) }),
-      genericFailureToasts,
-    ),
+    withServices(fakeUsers({ create: () => throwError(() => new Error('network error')) })),
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(await canvas.findByLabelText(/Adresse e-mail/), 'alice@example.com')
-    await userEvent.click(canvas.getByRole('button', { name: 'Inviter' }))
-
-    await waitFor(() =>
-      expect(genericFailureToasts.toasts()).toEqual([
-        expect.objectContaining({
-          variant: 'error',
-          message: "Échec de la création de l'utilisateur.",
-        }),
-      ]),
-    )
+    await userEvent.type(await emailField(canvas), 'alice@example.com')
+    await userEvent.click(sendButton(canvas))
+    expect(
+      await canvas.findByText("L'invitation n'a pas pu être envoyée. Réessayez plus tard."),
+    ).toBeVisible()
   },
 }
 
 export const Cancelling: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('button', { name: 'Fermer' }))
-    await waitFor(() => expect(args.cancelled).toHaveBeenCalledTimes(1))
-    expect(args.created).not.toHaveBeenCalled()
+    await userEvent.click(await canvas.findByRole('button', { name: 'Annuler' }))
+    expect(args.closed).toHaveBeenCalledTimes(1)
+    expect(args.invited).not.toHaveBeenCalled()
   },
 }

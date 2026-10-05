@@ -7,6 +7,7 @@
   >
     <app-suggest-search-box
       class="catalog-search__input"
+      labelHidden
       [label]="'catalog.search.label' | transloco"
       [placeholder]="'catalog.search.placeholder' | transloco"
       [value]="text()"
@@ -15,12 +16,12 @@
       (valueChange)="onTextChange($event)"
       (search)="searchNow()"
     />
-    <gbt-button type="submit" [text]="'catalog.search.submit' | transloco" iconName="search" />
   </form>
 
   <div class="catalog-search__filters">
     @if (!format()) {
       <gbt-segmented-control
+        tinted
         [ariaLabel]="'common.format' | transloco"
         [options]="formatOptions()"
         [value]="activeFormat() ?? ''"
@@ -28,6 +29,7 @@
       />
     }
     <gbt-segmented-control
+      tinted
       [ariaLabel]="'catalog.search.sortBy' | transloco"
       [options]="sortOptions()"
       [value]="sort()"

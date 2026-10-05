@@ -1,112 +1,265 @@
-<div class="container">
-  @if (loadFailed()) {
-    <div role="alert">
-      <p class="gbt-form-error">{{ 'admin.dashboard.partialFailure' | transloco }}</p>
-      <gbt-button [text]="'common.retry' | transloco" variant="secondary" (clicked)="retry()" />
-    </div>
-  }
-  @if (stats(); as s) {
-    <section>
-      <gbt-card [heading]="'admin.dashboard.users' | transloco" icon="users">
-        <p>{{ s.total_users }}</p>
-      </gbt-card>
-      <gbt-card [heading]="'admin.dashboard.repositories' | transloco" icon="package">
-        <p>{{ s.total_repositories }}</p>
-      </gbt-card>
-      <gbt-card [heading]="'admin.dashboard.permissions' | transloco" icon="shield">
-        <p>{{ s.total_active_permissions }}</p>
-      </gbt-card>
-    </section>
-  }
+<app-page-heading>
+  <p header-meta class="admin-dashboard__intro">{{ 'admin.dashboard.intro' | transloco }}</p>
+</app-page-heading>
 
-  <section class="admin-dashboard__charts">
-    <gbt-card [heading]="'admin.dashboard.activity' | transloco" icon="activity">
-      @if (activityTruncated()) {
-        <p class="partial-note">
-          {{ 'admin.dashboard.activityTruncated' | transloco: { count: activityEvents().length } }}
-        </p>
+<gbt-page-layout width="wide">
+  <div class="admin-dashboard__main">
+    @if (loadFailed()) {
+      <gbt-alert variant="error" appearance="subtle">
+        {{ 'admin.dashboard.partialFailure' | transloco }}
+        <gbt-button
+          alert-actions
+          variant="secondary"
+          size="small"
+          [text]="'common.retry' | transloco"
+          (clicked)="retry()"
+        />
+      </gbt-alert>
+    }
+
+    <gbt-stat-grid
+      [ariaLabel]="'admin.dashboard.summary' | transloco"
+      [loading]="statsState() === 'loading'"
+      [loadingLabel]="'admin.dashboard.loadingStats' | transloco"
+    >
+      @for (tile of tiles(); track tile.key) {
+        <gbt-stat-tile
+          [attr.data-key]="tile.key"
+          [label]="tile.label"
+          [value]="tile.value"
+          [icon]="tile.icon"
+          [hint]="tile.hint"
+        />
       }
-      <gbt-dimension-card
-        [rows]="activityChartData()"
-        [caption]="'admin.dashboard.eventsPerDay' | transloco"
-        [labelColumn]="'admin.dashboard.day' | transloco"
-        [valueColumn]="'admin.dashboard.events' | transloco"
-        [emptyMessage]="'admin.dashboard.noEvents' | transloco"
-        [locale]="locale"
-      />
-    </gbt-card>
-    <gbt-card [heading]="'admin.dashboard.reposByFormat' | transloco" icon="bar-chart">
-      <gbt-dimension-card
-        [rows]="repositoriesByFormatChartData()"
-        [caption]="'admin.dashboard.reposByFormat' | transloco"
-        [labelColumn]="'common.format' | transloco"
-        [valueColumn]="'admin.dashboard.repositories' | transloco"
-        [emptyMessage]="'admin.dashboard.noReposByFormat' | transloco"
-        [locale]="locale"
-      />
-    </gbt-card>
-  </section>
+    </gbt-stat-grid>
 
-  <section class="admin-dashboard__charts">
-    <gbt-card [heading]="'admin.dashboard.storageEvolution' | transloco" icon="hard-drive">
-      <gbt-select
-        size="sm"
-        card-header-actions
-        [placeholder]="'common.select' | transloco"
-        [options]="evolutionDaysOptions"
-        [ngModel]="storageEvolutionDays()"
-        (ngModelChange)="setStorageEvolutionDays($event)"
+    <section class="admin-dashboard__section" aria-labelledby="admin-dashboard-evolution-heading">
+      <!-- Stays `ready` so the header (heading and period) names the card in every state. -->
+      <gbt-list-card>
+        <div list-card-header class="admin-dashboard__band">
+          <span class="admin-dashboard__card-title">
+            <gbt-icon name="activity" aria-hidden="true" />
+            <h2 id="admin-dashboard-evolution-heading" class="admin-dashboard__card-heading">
+              {{ 'admin.dashboard.evolution' | transloco }}
+            </h2>
+          </span>
+          <gbt-segmented-control
+            class="admin-dashboard__range"
+            [ariaLabel]="'admin.dashboard.period' | transloco"
+            tinted
+            [options]="dayOptions"
+            [value]="historyDays()"
+            (valueChange)="setHistoryDays($event)"
+          />
+        </div>
+
+        @if (historyState() === 'failed' && history() === null) {
+          <gbt-alert
+            class="admin-dashboard__charts-failed"
+            variant="error"
+            appearance="subtle"
+            live="off"
+          >
+            {{ 'admin.dashboard.historyFailed' | transloco }}
+            <gbt-button
+              alert-actions
+              variant="secondary"
+              size="small"
+              [text]="'common.retry' | transloco"
+              (clicked)="loadHistory()"
+            />
+          </gbt-alert>
+        } @else {
+          <!-- Beside the busy charts, not inside: a live region in an aria-busy one isn't announced. -->
+          <span class="sr-only" role="status">{{
+            history() === null ? ('admin.dashboard.loadingHistory' | transloco) : ''
+          }}</span>
+          <div
+            class="admin-dashboard__charts"
+            [attr.aria-busy]="historyState() === 'loading' ? 'true' : null"
+          >
+            <section
+              class="admin-dashboard__chart-pane"
+              aria-labelledby="admin-dashboard-storage-heading"
+            >
+              <div class="admin-dashboard__pane-header">
+                <h3 id="admin-dashboard-storage-heading" class="admin-dashboard__pane-heading">
+                  {{ 'admin.dashboard.storage' | transloco }}
+                </h3>
+                @if (hasEnoughReadings()) {
+                  <span class="admin-dashboard__pane-unit">{{
+                    'admin.dashboard.unit' | transloco: { unit: storageUnit().label }
+                  }}</span>
+                }
+              </div>
+              <ng-container
+                [ngTemplateOutlet]="chartOrPlaceholder"
+                [ngTemplateOutletContext]="storagePane"
+              />
+            </section>
+            <section
+              class="admin-dashboard__chart-pane"
+              aria-labelledby="admin-dashboard-counts-heading"
+            >
+              <div class="admin-dashboard__pane-header">
+                <h3 id="admin-dashboard-counts-heading" class="admin-dashboard__pane-heading">
+                  {{ 'admin.dashboard.usersAndRepos' | transloco }}
+                </h3>
+              </div>
+              <ng-container
+                [ngTemplateOutlet]="chartOrPlaceholder"
+                [ngTemplateOutletContext]="countsPane"
+              />
+            </section>
+          </div>
+        }
+      </gbt-list-card>
+    </section>
+
+    <div class="admin-dashboard__pair">
+      <section class="admin-dashboard__section" aria-labelledby="admin-dashboard-activity-heading">
+        <gbt-list-card>
+          <div list-card-header class="admin-dashboard__band">
+            <span class="admin-dashboard__card-title">
+              <gbt-icon name="bar-chart" aria-hidden="true" />
+              <h2 id="admin-dashboard-activity-heading" class="admin-dashboard__card-heading">
+                {{ 'admin.dashboard.activity' | transloco }}
+              </h2>
+            </span>
+          </div>
+          <div class="admin-dashboard__pane">
+            @if (activityTruncated()) {
+              <p class="admin-dashboard__note">
+                {{
+                  'admin.dashboard.activityTruncated'
+                    | transloco: { count: activityEvents().length }
+                }}
+              </p>
+            }
+            <gbt-dimension-card
+              [rows]="activityChartData()"
+              [caption]="'admin.dashboard.eventsPerDay' | transloco"
+              [labelColumn]="'admin.dashboard.day' | transloco"
+              [valueColumn]="'admin.dashboard.events' | transloco"
+              [emptyMessage]="'admin.dashboard.noEvents' | transloco"
+              [locale]="locale"
+            />
+          </div>
+        </gbt-list-card>
+      </section>
+
+      <section class="admin-dashboard__section" aria-labelledby="admin-dashboard-formats-heading">
+        <gbt-list-card>
+          <div list-card-header class="admin-dashboard__band">
+            <span class="admin-dashboard__card-title">
+              <gbt-icon name="package" aria-hidden="true" />
+              <h2 id="admin-dashboard-formats-heading" class="admin-dashboard__card-heading">
+                {{ 'admin.dashboard.reposByFormat' | transloco }}
+              </h2>
+            </span>
+          </div>
+          <div class="admin-dashboard__pane">
+            <gbt-dimension-card
+              [rows]="repositoriesByFormatChartData()"
+              [caption]="'admin.dashboard.reposByFormat' | transloco"
+              [labelColumn]="'common.format' | transloco"
+              [valueColumn]="'admin.dashboard.repositories' | transloco"
+              [emptyMessage]="'admin.dashboard.noReposByFormat' | transloco"
+              [locale]="locale"
+            />
+          </div>
+        </gbt-list-card>
+      </section>
+    </div>
+
+    <section class="admin-dashboard__section" aria-labelledby="admin-dashboard-recent-heading">
+      <gbt-list-card
+        [state]="
+          activityState() === 'loading'
+            ? 'loading'
+            : activityState() === 'failed'
+              ? 'failed'
+              : recentRows().length === 0
+                ? 'empty'
+                : 'ready'
+        "
+        [loadingLabel]="'admin.dashboard.loadingActivity' | transloco"
+        [skeletonRows]="3"
+        [failedHeading]="'admin.dashboard.activityFailed' | transloco"
+        [retryLabel]="'common.retry' | transloco"
+        emptyIllustration="checklist"
+        [emptyHeading]="'admin.dashboard.noRecentHeading' | transloco"
+        [emptyMessage]="'admin.dashboard.noRecentMessage' | transloco"
+        (retry)="retry()"
+      >
+        <div list-card-header class="admin-dashboard__band">
+          <span class="admin-dashboard__card-title">
+            <gbt-icon name="history" aria-hidden="true" />
+            <h2 id="admin-dashboard-recent-heading" class="admin-dashboard__card-heading">
+              {{ 'admin.dashboard.recent' | transloco }}
+            </h2>
+          </span>
+        </div>
+        <ul
+          class="admin-dashboard__recent"
+          [attr.aria-label]="'admin.dashboard.recent' | transloco"
+        >
+          @for (row of recentRows(); track row.key) {
+            <li>
+              <gbt-list-row>
+                <span class="admin-dashboard__event">{{ row.label }}</span>
+                <span row-trailing class="admin-dashboard__when"
+                  ><time [attr.datetime]="row.iso" [title]="row.title">{{ row.when }}</time></span
+                >
+              </gbt-list-row>
+            </li>
+          }
+        </ul>
+      </gbt-list-card>
+    </section>
+  </div>
+</gbt-page-layout>
+
+<ng-template #chartOrPlaceholder let-kind>
+  <div class="admin-dashboard__chart">
+    @if (history() === null) {
+      <gbt-skeleton
+        class="admin-dashboard__chart-skeleton"
+        width="100%"
+        height="100%"
+        variant="rect"
+        aria-hidden="true"
       />
-      <div style="height: 18rem">
-        <gbt-line-chart
-          [series]="storageEvolutionSeries()"
-          xKind="time"
-          [locale]="locale"
-          [label]="'admin.dashboard.storageEvolution' | transloco"
-          [tableCaption]="'admin.dashboard.storageTable' | transloco"
-          [xColumn]="'common.date' | transloco"
-          [emptyMessage]="'admin.dashboard.notEnoughData' | transloco"
+    } @else if (!hasEnoughReadings()) {
+      <div class="admin-dashboard__chart-empty">
+        <gbt-empty-state
+          size="compact"
+          icon="activity"
+          [heading]="'admin.dashboard.notEnoughData' | transloco"
+          [message]="'admin.dashboard.notEnoughDataMessage' | transloco"
         />
       </div>
-    </gbt-card>
-    <gbt-card [heading]="'admin.dashboard.usersAndRepos' | transloco" icon="trending-up">
-      <gbt-select
-        size="sm"
-        card-header-actions
-        [placeholder]="'common.select' | transloco"
-        [options]="evolutionDaysOptions"
-        [ngModel]="countsEvolutionDays()"
-        (ngModelChange)="setCountsEvolutionDays($event)"
+    } @else if (kind === 'storage') {
+      <gbt-line-chart
+        [series]="storageSeries()"
+        xKind="time"
+        [locale]="locale"
+        [area]="true"
+        [label]="'admin.dashboard.storageEvolution' | transloco"
+        [tableCaption]="'admin.dashboard.storageTable' | transloco"
+        [xColumn]="'common.date' | transloco"
+        [emptyMessage]="'admin.dashboard.notEnoughData' | transloco"
       />
-      <div style="height: 18rem">
-        <gbt-line-chart
-          [series]="countsEvolutionSeries()"
-          xKind="time"
-          [locale]="locale"
-          [label]="'admin.dashboard.usersAndRepos' | transloco"
-          [tableCaption]="'admin.dashboard.usersAndReposTable' | transloco"
-          [xColumn]="'common.date' | transloco"
-          [emptyMessage]="'admin.dashboard.notEnoughData' | transloco"
-        />
-      </div>
-    </gbt-card>
-  </section>
-
-  <gbt-card [heading]="'admin.dashboard.recent' | transloco" icon="history">
-    @for (
-      event of recentEvents();
-      track event.occurred_at + event.event_type + event.aggregate_id
-    ) {
-      <p>
-        {{ event.occurred_at | date: 'short' }} · {{ event.aggregate_type }} ·
-        {{ eventLabel(event.event_type) }}
-      </p>
-    } @empty {
-      <gbt-empty-state
-        illustration="checklist"
-        [heading]="'admin.dashboard.noRecentHeading' | transloco"
-        [message]="'admin.dashboard.noRecentMessage' | transloco"
+    } @else {
+      <gbt-line-chart
+        [series]="countsSeries()"
+        xKind="time"
+        [locale]="locale"
+        [label]="'admin.dashboard.usersAndReposEvolution' | transloco"
+        [tableCaption]="'admin.dashboard.usersAndReposTable' | transloco"
+        [xColumn]="'common.date' | transloco"
+        [emptyMessage]="'admin.dashboard.notEnoughData' | transloco"
       />
     }
-  </gbt-card>
-</div>
+  </div>
+</ng-template>

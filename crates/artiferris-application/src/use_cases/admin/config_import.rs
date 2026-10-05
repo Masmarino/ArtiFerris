@@ -198,7 +198,7 @@ fn plan_import(import: ConfigurationImport, context: PlanContext) -> Plan {
             token_hash: crate::use_cases::invitation::hash_invitation_token(&token),
             expires_at: Utc::now() + chrono::Duration::hours(crate::use_cases::invitation::INVITATION_TTL_HOURS),
         });
-        pending_invitations.push(PendingInvitation { username: exported.username.clone(), email: email.to_string(), activation_url: format!("{}/activate?token={token}", context.activation_origin) });
+        pending_invitations.push(PendingInvitation { username: exported.username.clone(), email: email.to_string(), activation_url: format!("{}/activate#token={token}", context.activation_origin) });
     }
 
     batch.audit = Some(AdminAuditRecord {
@@ -819,7 +819,7 @@ mod tests {
         assert_eq!(settings.settings.lock().unwrap().get(&caller_org_id).unwrap().max_login_attempts, 7);
 
         let sent = email.sent.lock().unwrap();
-        assert!(sent[0].3.contains(&format!("https://app.{TEST_BASE_DOMAIN}/activate?token=")), "expected the public organization's own origin, got: {}", sent[0].3);
+        assert!(sent[0].3.contains(&format!("https://app.{TEST_BASE_DOMAIN}/activate#token=")), "expected the public organization's own origin, got: {}", sent[0].3);
     }
 
     #[tokio::test]

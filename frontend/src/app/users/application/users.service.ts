@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core'
 import { Observable, tap } from 'rxjs'
-import { UserSummary } from '../domain/user.entity'
+import { InvitedUser, UserSummary } from '../domain/user.entity'
+import { InvitationMail, PasswordResetMail } from '../../shared/invitation-mail'
 import { USER_PORT } from './user.port'
 import { TokenScopedCache } from '../../shared/token-scoped-cache'
 
@@ -20,7 +21,7 @@ export class UsersService {
     return this.port.get(id)
   }
 
-  create(email: string, isSuperAdmin: boolean): Observable<UserSummary> {
+  create(email: string, isSuperAdmin: boolean): Observable<InvitedUser> {
     return this.port.create(email, isSuperAdmin).pipe(tap(() => this.listCache.clear()))
   }
 
@@ -32,7 +33,16 @@ export class UsersService {
     return this.port.setSuperAdmin(id, isSuperAdmin).pipe(tap(() => this.listCache.clear()))
   }
 
-  resendInvitation(id: string): Observable<void> {
+  resetPassword(id: string): Observable<PasswordResetMail> {
+    return this.port.resetPassword(id)
+  }
+
+  // The list shows who has a second factor: it changes.
+  resetMfa(id: string): Observable<void> {
+    return this.port.resetMfa(id).pipe(tap(() => this.listCache.clear()))
+  }
+
+  resendInvitation(id: string): Observable<InvitationMail> {
     return this.port.resendInvitation(id)
   }
 }

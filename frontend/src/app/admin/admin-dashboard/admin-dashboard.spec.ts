@@ -36,10 +36,8 @@ describe('AdminDashboard', () => {
       .expectOne((r) => r.url === '/api/audit/events' && r.params.has('from'))
       .flush({ entries: activityEntries, next_cursor: null })
     httpMock.expectOne('/api/repositories').flush(repositories)
-    // Two independent requests: one per chart.
-    const historyRequests = httpMock.match((r) => r.url === '/api/admin/metrics/history')
-    expect(historyRequests.length).toBe(2)
-    historyRequests.forEach((req) => req.flush(history))
+    // One period for both charts, so one request.
+    httpMock.expectOne((r) => r.url === '/api/admin/metrics/history').flush(history)
   }
 
   it('asks for the largest audit page so the activity chart keeps its window', () => {
@@ -62,7 +60,7 @@ describe('AdminDashboard', () => {
     fixture.detectChanges()
 
     const alert = fixture.nativeElement.querySelector('[role="alert"]')
-    expect(alert.textContent).toContain("Échec du chargement d'une partie du tableau de bord.")
+    expect(alert.textContent).toContain("Une partie du tableau de bord n'a pas pu être chargée.")
 
     fixture.componentInstance.retry()
     // The repository list succeeded the first time and is cached, so only the rest is refetched.
@@ -119,16 +117,42 @@ describe('AdminDashboard', () => {
     expect(text).not.toContain('LoginFailed')
   })
 
-  it('shows the three stat totals', () => {
+  it('shows the totals as tiles, with the storage of the last reading', () => {
     const { fixture, httpMock } = render()
 
-    flushCommon(httpMock, { total_users: 5, total_repositories: 3, total_active_permissions: 7 })
+    flushCommon(
+      httpMock,
+      { total_users: 5, total_repositories: 3, total_active_permissions: 7 },
+      [],
+      [],
+      [
+        {
+          recorded_at: '2026-01-01T10:00:00Z',
+          total_users: 5,
+          total_repositories: 3,
+          total_storage_bytes: 2048,
+        },
+      ],
+    )
     fixture.detectChanges()
 
-    const text = fixture.nativeElement.textContent as string
-    expect(text).toContain('5')
-    expect(text).toContain('3')
-    expect(text).toContain('7')
+    const tile = (key: string) =>
+      (fixture.nativeElement as HTMLElement).querySelector(`[data-key="${key}"]`)?.textContent
+    expect(tile('users')).toContain('5')
+    expect(tile('repositories')).toContain('3')
+    expect(tile('permissions')).toContain('7')
+    expect(tile('storage')).toContain('2,0 Ko')
+    expect(tile('storage')).toContain('dernier relevé')
+  })
+
+  it('says there are not enough readings for a line with fewer than two', () => {
+    const { fixture, httpMock } = render()
+
+    flushCommon(httpMock)
+    fixture.detectChanges()
+
+    expect(fixture.nativeElement.textContent).toContain('Pas encore assez de mesures')
+    expect(fixture.nativeElement.querySelector('gbt-line-chart')).toBeNull()
   })
 
   it('shows at most the 10 most recent activity entries', () => {
@@ -257,16 +281,17 @@ describe('AdminDashboard', () => {
     )
     fixture.detectChanges()
 
-    expect(fixture.componentInstance.storageEvolutionSeries()).toEqual([
+    // In the largest reading's unit, so the axis reads 1 and 2 (Ko).
+    expect(fixture.componentInstance.storageSeries()).toEqual([
       {
-        label: 'Stockage',
+        label: 'Stockage (Ko)',
         points: [
-          { x: new Date('2026-01-01T10:00:00Z'), y: 1024, display: formatBytes(1024) },
-          { x: new Date('2026-01-01T11:00:00Z'), y: 2048, display: formatBytes(2048) },
+          { x: new Date('2026-01-01T10:00:00Z'), y: 1, display: formatBytes(1024) },
+          { x: new Date('2026-01-01T11:00:00Z'), y: 2, display: formatBytes(2048) },
         ],
       },
     ])
-    expect(fixture.componentInstance.countsEvolutionSeries()).toEqual([
+    expect(fixture.componentInstance.countsSeries()).toEqual([
       {
         label: 'Utilisateurs',
         points: [
@@ -284,37 +309,32 @@ describe('AdminDashboard', () => {
     ])
   })
 
-  it('defaults each evolution window to 1 day, and re-fetching one leaves the other untouched', () => {
+  it('shows 30 days by default, and one period change refetches both charts', () => {
     const { fixture, httpMock } = render()
     flushCommon(httpMock)
     fixture.detectChanges()
 
-    expect(fixture.componentInstance.storageEvolutionDays()).toBe(1)
-    expect(fixture.componentInstance.countsEvolutionDays()).toBe(1)
+    expect(fixture.componentInstance.historyDays()).toBe(30)
 
-    fixture.componentInstance.setStorageEvolutionDays(30)
-
-    const req = httpMock.expectOne((r) => r.url === '/api/admin/metrics/history')
-    expect(req.request.params.get('days')).toBe('30')
-    req.flush([])
-
-    expect(fixture.componentInstance.storageEvolutionDays()).toBe(30)
-    expect(fixture.componentInstance.countsEvolutionDays()).toBe(1)
-  })
-
-  it('changing the counts evolution window does not touch the storage one', () => {
-    const { fixture, httpMock } = render()
-    flushCommon(httpMock)
-    fixture.detectChanges()
-
-    fixture.componentInstance.setCountsEvolutionDays(7)
+    fixture.componentInstance.setHistoryDays(7)
 
     const req = httpMock.expectOne((r) => r.url === '/api/admin/metrics/history')
     expect(req.request.params.get('days')).toBe('7')
     req.flush([])
+    expect(fixture.componentInstance.historyDays()).toBe(7)
+  })
 
-    expect(fixture.componentInstance.countsEvolutionDays()).toBe(7)
-    expect(fixture.componentInstance.storageEvolutionDays()).toBe(1)
+  it('drops a slower answer for an earlier period', () => {
+    const { fixture, httpMock } = render()
+    flushCommon(httpMock)
+
+    fixture.componentInstance.setHistoryDays(1)
+    const first = httpMock.expectOne((r) => r.params.get('days') === '1')
+    fixture.componentInstance.setHistoryDays(3)
+    const second = httpMock.expectOne((r) => r.params.get('days') === '3')
+
+    expect(first.cancelled).toBe(true)
+    second.flush([])
   })
 
   describe('activity chart coverage', () => {
@@ -338,7 +358,7 @@ describe('AdminDashboard', () => {
         .expectOne((r) => r.url === '/api/audit/events' && r.params.has('from'))
         .flush({ entries: [entry(1), entry(2), entry(3)], next_cursor: nextCursor })
       httpMock.expectOne('/api/repositories').flush([])
-      httpMock.match((r) => r.url === '/api/admin/metrics/history').forEach((r) => r.flush([]))
+      httpMock.expectOne((r) => r.url === '/api/admin/metrics/history').flush([])
       fixture.detectChanges()
       return fixture.nativeElement as HTMLElement
     }

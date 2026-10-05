@@ -16,6 +16,7 @@ pub mod npm_dependency_audit_repository;
 pub mod npm_package_repository;
 pub mod organization_repository;
 pub mod package_repository_store;
+pub mod password_reset_repository;
 pub mod permission_store;
 pub mod public_catalog_repository;
 pub mod rate_limit_store;

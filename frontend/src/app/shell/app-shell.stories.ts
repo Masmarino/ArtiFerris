@@ -4,12 +4,14 @@ import {
   type Meta,
   type StoryObj,
 } from '@storybook/angular-vite'
-import { provideRouter } from '@angular/router'
-import { Component, signal } from '@angular/core'
+import { Router, provideRouter } from '@angular/router'
+import { Component, inject, provideAppInitializer, signal } from '@angular/core'
 import { expect, userEvent, waitFor, within } from 'storybook/test'
 import { HttpErrorResponse } from '@angular/common/http'
 import { of, throwError } from 'rxjs'
 import { AppShell } from './app-shell'
+import { ADMIN_TRAIL } from './page-trail'
+import { PageHeading } from '../shared/page-heading/page-heading'
 import { AuthService } from '../auth/application/auth.service'
 import { MeService } from './application/me.service'
 import { ReadableCatalogService } from './application/readable-catalog.service'
@@ -60,6 +62,9 @@ const USER: UserSummary = {
   organization_id: 'org-acme',
   email: null,
   invitation_pending: false,
+  created_at: '2026-03-02T09:00:00Z',
+  invitation_expires_at: null,
+  mfa_enabled: false,
 }
 
 function fakeReadableCatalog(entries: ReadableCatalogEntry[]) {
@@ -85,6 +90,31 @@ function fakeMe(overrides: {
 @Component({ standalone: true, template: '' })
 class DummyRoutedComponent {}
 
+/** A page as every page under the shell starts: its own heading, the bar naming what is above it. */
+@Component({
+  standalone: true,
+  imports: [PageHeading],
+  template: `<div class="container">
+    <app-page-heading />
+    <p>The page's content.</p>
+  </div>`,
+})
+class ExamplePage {}
+
+/** Opens the quick search from the header's button and returns its field. */
+async function openSearch(canvas: ReturnType<typeof within>): Promise<HTMLElement> {
+  await userEvent.click(await canvas.findByRole('button', { name: 'Rechercher ou aller à…' }))
+  return canvas.findByRole('combobox', { name: 'Recherche rapide' })
+}
+
+/** The options' own labels, without their descriptions. */
+function optionLabels(canvasElement: HTMLElement): string[] {
+  return Array.from(
+    canvasElement.querySelectorAll<HTMLElement>('[role="option"] .gbt-cp__item-label'),
+    (label) => label.textContent?.trim() ?? '',
+  )
+}
+
 const meta: Meta<AppShell> = {
   title: 'Shell/AppShell',
   component: AppShell,
@@ -98,6 +128,11 @@ const meta: Meta<AppShell> = {
             component: DummyRoutedComponent,
           },
           { path: 'users/:id', component: DummyRoutedComponent },
+          {
+            path: 'admin/export',
+            component: ExamplePage,
+            data: { trail: ADMIN_TRAIL, titleKey: 'nav.export' },
+          },
         ]),
       ],
     }),
@@ -124,8 +159,18 @@ export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await waitFor(() => expect(canvas.getByText('florian')).toBeInTheDocument())
-    expect(canvas.getByRole('link', { name: /Administration/ })).toBeInTheDocument()
-    expect(canvas.getByRole('link', { name: /Utilisateurs/ })).toBeInTheDocument()
+    const administration = canvas.getByRole('button', { name: /Administration/ })
+    expect(administration).toHaveAttribute('aria-expanded', 'false')
+    // Utilisateurs is in Administration, as in FerrisGit: the dashboard first, the configuration last.
+    await userEvent.click(administration)
+    const links = await waitFor(() => {
+      const found = Array.from(
+        canvasElement.querySelectorAll<HTMLElement>('.gbt-app-shell-nav-group__panel a'),
+      ).map((link) => link.textContent?.trim())
+      expect(found.length).toBeGreaterThan(0)
+      return found
+    })
+    expect(links).toEqual(['Tableau de bord', 'Utilisateurs', 'Organisations', 'Santé', 'Export'])
     expect(canvas.getByText('v0.4.6')).toBeInTheDocument()
   },
 }
@@ -139,8 +184,9 @@ export const CollapsingTheSidebar: Story = {
     await waitFor(() =>
       expect(canvas.getByRole('button', { name: 'Déployer le menu' })).toBeInTheDocument(),
     )
+    // The label stays for assistive technology; the collapsed rail only shows it as a flyout on hover or focus.
     expect(canvas.getByRole('link', { name: 'Dépôts' })).toBeInTheDocument()
-    expect(canvas.queryByText('Dépôts')).not.toBeInTheDocument()
+    expect(canvas.getByText('Dépôts').getBoundingClientRect().width).toBe(0)
     expect(canvas.queryByAltText('ArtiFerris logo')).not.toBeInTheDocument()
     expect(canvas.getByAltText('ArtiFerris')).toHaveAttribute('src', '/Logo.png')
     expect(canvas.queryByText('v0.4.6')).not.toBeInTheDocument()
@@ -219,50 +265,78 @@ export const AsOrganizationAdmin: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await waitFor(() =>
-      expect(canvas.getByRole('link', { name: /Utilisateurs/ })).toBeInTheDocument(),
-    )
-    // Org admins get their own "Administration" link, scoped to their organization.
-    expect(canvas.getByRole('link', { name: 'Administration' }).getAttribute('href')).toContain(
+    // Org admins get their users and their own organization's settings, in Administration.
+    await userEvent.click(await canvas.findByRole('button', { name: /Administration/ }))
+    expect(
+      (await canvas.findByRole('link', { name: /Utilisateurs/ })).getAttribute('href'),
+    ).toMatch(/\/users$/)
+    expect(canvas.getByRole('link', { name: /Réglages/ }).getAttribute('href')).toContain(
       '/admin/organizations/org-acme',
     )
+  },
+}
+
+export const QuickSearchOpen: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await openSearch(canvas)
+    const goTo = await canvas.findByText('Aller à')
+    // The palette fades in.
+    await waitFor(() => expect(goTo).toBeVisible())
+  },
+}
+
+/** A member sees no administration entry, whatever they type. */
+export const QuickSearchAsPlainMember: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        {
+          provide: MeService,
+          useValue: fakeMe({ isSuperAdmin: false, isOrganizationAdmin: false }),
+        },
+      ],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const searchInput = await openSearch(canvas)
+    await waitFor(() => expect(optionLabels(canvasElement)).toContain('Mon compte'))
+    const administration = ['Tableau de bord', 'Utilisateurs', 'Organisations', 'Santé', 'Export']
+    expect(optionLabels(canvasElement).filter((label) => administration.includes(label))).toEqual(
+      [],
+    )
+    await userEvent.type(searchInput, 'acme')
+    await waitFor(() => expect(optionLabels(canvasElement)).toContain('artiferris-web'))
+    expect(canvas.queryByText('acme-writer')).not.toBeInTheDocument()
   },
 }
 
 export const SearchingForARepository: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const searchInput = await canvas.findByRole('combobox', {
-      name: 'Rechercher un dépôt ou un utilisateur...',
-    })
+    const searchInput = await openSearch(canvas)
     await userEvent.type(searchInput, 'artiferris')
-    await waitFor(() =>
-      expect(canvas.getByRole('option', { name: 'artiferris-web' })).toBeInTheDocument(),
-    )
-    await userEvent.click(canvas.getByRole('option', { name: 'artiferris-web' }))
-    await waitFor(() => expect(searchInput).toHaveValue(''))
+    await waitFor(() => expect(optionLabels(canvasElement)).toContain('artiferris-web'))
+    await userEvent.click(canvas.getByText('artiferris-web'))
+    await waitFor(() => expect(canvas.queryByRole('dialog')).not.toBeInTheDocument())
   },
 }
 
 export const SearchingForAPackage: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const searchInput = await canvas.findByRole('combobox', {
-      name: 'Rechercher un dépôt ou un utilisateur...',
-    })
+    const searchInput = await openSearch(canvas)
     await userEvent.type(searchInput, 'a')
-    await waitFor(() =>
-      expect(canvas.getByRole('option', { name: 'artiferris-web' })).toBeVisible(),
-    )
+    await waitFor(() => expect(optionLabels(canvasElement)).toContain('artiferris-web'))
     expect(canvas.queryByText('Paquets et images')).not.toBeInTheDocument()
 
     await userEvent.type(searchInput, 'p')
     await waitFor(() => expect(canvas.getByText('Paquets et images')).toBeVisible())
-    expect(canvas.getByRole('option', { name: 'left-pad (npm)' })).toBeVisible()
-    expect(canvas.getByRole('option', { name: 'api (Docker)' })).toBeVisible()
+    expect(optionLabels(canvasElement)).toEqual(expect.arrayContaining(['left-pad', 'api']))
 
-    await userEvent.click(canvas.getByRole('option', { name: 'left-pad (npm)' }))
-    await waitFor(() => expect(searchInput).toHaveValue(''))
+    await userEvent.click(canvas.getByText('left-pad'))
+    await waitFor(() => expect(canvas.queryByRole('dialog')).not.toBeInTheDocument())
   },
 }
 
@@ -279,14 +353,10 @@ export const SearchingForACachedPackage: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const searchInput = await canvas.findByRole('combobox', {
-      name: 'Rechercher un dépôt ou un utilisateur...',
-    })
+    const searchInput = await openSearch(canvas)
     await userEvent.type(searchInput, 'lodash')
-    await waitFor(() =>
-      expect(canvas.getByRole('option', { name: 'lodash (npm) — cache du proxy' })).toBeVisible(),
-    )
-    expect(canvas.getByRole('option', { name: 'lodash (npm)' })).toBeVisible()
+    await waitFor(() => expect(canvas.getByText('npm, npmjs-proxy (cache du proxy)')).toBeVisible())
+    expect(canvas.getByText('npm, test-npm')).toBeVisible()
   },
 }
 
@@ -298,13 +368,9 @@ export const SearchingWithoutMatchingPackages: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const searchInput = await canvas.findByRole('combobox', {
-      name: 'Rechercher un dépôt ou un utilisateur...',
-    })
+    const searchInput = await openSearch(canvas)
     await userEvent.type(searchInput, 'artiferris')
-    await waitFor(() =>
-      expect(canvas.getByRole('option', { name: 'artiferris-web' })).toBeVisible(),
-    )
+    await waitFor(() => expect(optionLabels(canvasElement)).toContain('artiferris-web'))
     await new Promise((resolve) => setTimeout(resolve, 500))
     expect(canvas.queryByText('Paquets et images')).not.toBeInTheDocument()
   },
@@ -325,16 +391,12 @@ export const PackageSearchFailing: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const searchInput = await canvas.findByRole('combobox', {
-      name: 'Rechercher un dépôt ou un utilisateur...',
-    })
+    const searchInput = await openSearch(canvas)
     await userEvent.type(searchInput, 'artiferris')
-    await waitFor(() =>
-      expect(canvas.getByRole('option', { name: 'artiferris-web' })).toBeVisible(),
-    )
+    await waitFor(() => expect(optionLabels(canvasElement)).toContain('artiferris-web'))
     await new Promise((resolve) => setTimeout(resolve, 500))
     expect(canvas.queryByText('Paquets et images')).not.toBeInTheDocument()
-    expect(canvas.getByRole('option', { name: 'artiferris-web' })).toBeVisible()
+    expect(optionLabels(canvasElement)).toContain('artiferris-web')
   },
 }
 
@@ -353,9 +415,7 @@ export const SearchLoadFailed: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const searchInput = await canvas.findByRole('combobox', {
-      name: 'Rechercher un dépôt ou un utilisateur...',
-    })
+    const searchInput = await openSearch(canvas)
     await userEvent.type(searchInput, 'artiferris')
     expect(await canvas.findByText('La recherche a échoué')).toBeVisible()
   },
@@ -387,5 +447,25 @@ export const MeLoadFailed: Story = {
     await waitFor(() =>
       expect(within(canvasElement).queryByText('Chargement…')).not.toBeInTheDocument(),
     )
+  },
+}
+
+/** An admin page: the bar's breadcrumb names what is above it, the page names itself in its own h1. */
+export const OnAPageUnderAdministration: Story = {
+  decorators: [
+    applicationConfig({
+      providers: [provideAppInitializer(() => inject(Router).navigateByUrl('/admin/export'))],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const trail = await canvas.findByRole('navigation', { name: "Fil d'Ariane" })
+    await waitFor(() =>
+      expect(
+        within(trail).getByRole('link', { name: 'Administration' }).getAttribute('href'),
+      ).toMatch(/\/admin$/),
+    )
+    expect(await canvas.findByRole('heading', { level: 1, name: 'Export' })).toBeInTheDocument()
+    expect(canvasElement.querySelectorAll('h1')).toHaveLength(1)
   },
 }

@@ -24,6 +24,17 @@ pub trait UserInvitationPort: Send + Sync {
     async fn find_by_user_id(&self, user_id: Uuid) -> Result<Option<UserInvitation>, DomainError>;
     /// Batched form of `find_by_user_id`: which of these users have a pending invitation.
     async fn list_pending_user_ids(&self, user_ids: &[Uuid]) -> Result<HashSet<Uuid>, DomainError>;
+    /// Batched: when each of these users' invitation expires, for those who have one (expired or not). One lookup per
+    /// user by default; a store overrides it with a single query.
+    async fn invitation_expiries(&self, user_ids: &[Uuid]) -> Result<std::collections::HashMap<Uuid, chrono::DateTime<chrono::Utc>>, DomainError> {
+        let mut expiries = std::collections::HashMap::new();
+        for &user_id in user_ids {
+            if let Some(invitation) = self.find_by_user_id(user_id).await? {
+                expiries.insert(user_id, invitation.expires_at);
+            }
+        }
+        Ok(expiries)
+    }
     async fn delete(&self, user_id: Uuid) -> Result<(), DomainError>;
     /// Single use: deletes and returns the invitation for this token if it hasn't expired. Of several parallel calls, only one gets `Some`.
     async fn redeem(&self, token_hash: &str) -> Result<Option<UserInvitation>, DomainError>;

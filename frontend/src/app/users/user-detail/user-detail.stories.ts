@@ -13,6 +13,8 @@ import { UsersService } from '../application/users.service'
 import { PermissionsService } from '../../repositories/application/permissions.service'
 import { RepositoriesService } from '../../repositories/application/repositories.service'
 import { MeService } from '../../shell/application/me.service'
+import { PageTitleService } from '../../shell/page-title.service'
+import { HttpErrorResponse } from '@angular/common/http'
 import type { UserSummary } from '../domain/user.entity'
 import type { UserPermissionEntry } from '../../repositories/domain/permission.entity'
 import type { RepositorySummary } from '../../repositories/domain/repository.entity'
@@ -24,6 +26,9 @@ const ACME_USER: UserSummary = {
   organization_id: 'org-acme',
   email: 'user@acme.example.com',
   invitation_pending: false,
+  created_at: '2026-03-02T09:00:00Z',
+  invitation_expires_at: null,
+  mfa_enabled: true,
 }
 
 const PENDING_USER: UserSummary = {
@@ -32,6 +37,7 @@ const PENDING_USER: UserSummary = {
   username: 'pending-user',
   email: null,
   invitation_pending: true,
+  invitation_expires_at: '2026-10-07T08:00:00Z',
 }
 
 const PERMISSIONS: UserPermissionEntry[] = [
@@ -95,7 +101,7 @@ function fakeRepositories(
   return { list: () => of(REPOSITORIES), ...overrides }
 }
 function fakeMe(isSuperAdmin: boolean): Partial<MeService> {
-  return { isSuperAdmin: signal(isSuperAdmin) }
+  return { isSuperAdmin: signal(isSuperAdmin), username: signal('florian') }
 }
 
 const meta: Meta<UserDetail> = {
@@ -106,6 +112,8 @@ const meta: Meta<UserDetail> = {
     moduleMetadata({
       providers: [
         withRoute('user-2'),
+        // The shell's title, which the page sets once the user is in.
+        { provide: PageTitleService, useValue: { title: signal('') } },
         { provide: UsersService, useValue: fakeUsers() },
         { provide: PermissionsService, useValue: fakePermissions() },
         { provide: RepositoriesService, useValue: fakeRepositories() },
@@ -125,8 +133,14 @@ export const AsOrganizationAdmin: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await waitFor(() => expect(canvas.getByText('acme-npm')).toBeInTheDocument())
+    // An organization admin resets second factors but grants no super-administrator rights.
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions' }))
+    const menu = within(canvasElement.ownerDocument.body)
     expect(
-      canvas.queryByRole('button', { name: 'Promouvoir super-administrateur' }),
+      await menu.findByRole('menuitem', { name: 'Réinitialiser la double authentification' }),
+    ).toBeInTheDocument()
+    expect(
+      menu.queryByRole('menuitem', { name: 'Nommer super-administrateur' }),
     ).not.toBeInTheDocument()
     expect(canvas.getByRole('button', { name: "Supprimer l'utilisateur" })).toBeInTheDocument()
   },
@@ -153,21 +167,70 @@ export const NoPermissions: Story = {
     }),
   ],
   play: async ({ canvasElement }) => {
-    expect(
-      await within(canvasElement).findByText("Aucun droit d'accès accordé"),
-    ).toBeInTheDocument()
+    expect(await within(canvasElement).findByText("Aucun droit d'accès")).toBeInTheDocument()
   },
 }
 
 export const OpeningTheRoleEditor: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByText('acme-npm'))
+    await userEvent.click(await canvas.findByRole('button', { name: 'Actions pour acme-npm' }))
+    await userEvent.click(
+      await within(canvasElement.ownerDocument.body).findByRole('menuitem', {
+        name: 'Changer le rôle',
+      }),
+    )
     await waitFor(() =>
       expect(
         canvas.getByRole('heading', { name: "Modifier l'accès du dépôt acme-npm" }),
       ).toBeInTheDocument(),
     )
+  },
+}
+
+export const ActionsMenu: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.click(await canvas.findByRole('button', { name: 'Actions' }))
+    expect(
+      await within(canvasElement.ownerDocument.body).findByRole('menuitem', {
+        name: 'Nommer super-administrateur',
+      }),
+    ).toBeInTheDocument()
+  },
+}
+
+export const NotFound: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        {
+          provide: UsersService,
+          useValue: fakeUsers({
+            get: () => throwError(() => new HttpErrorResponse({ status: 404 })),
+          }),
+        },
+      ],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    expect(await within(canvasElement).findByText('Utilisateur introuvable')).toBeVisible()
+  },
+}
+
+export const OwnAccount: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        {
+          provide: UsersService,
+          useValue: fakeUsers({ get: () => of({ ...ACME_USER, username: 'florian' }) }),
+        },
+      ],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    expect(await within(canvasElement).findByText("C'est votre propre compte")).toBeVisible()
   },
 }
 

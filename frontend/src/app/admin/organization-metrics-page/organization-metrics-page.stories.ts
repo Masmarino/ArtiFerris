@@ -42,7 +42,7 @@ export const Default: Story = {
     expect(canvas.getByText('5')).toBeInTheDocument()
     expect(canvas.getByText('Dépôts')).toBeInTheDocument()
     expect(canvas.getByText('18')).toBeInTheDocument()
-    expect(canvas.getByText('Permissions actives')).toBeInTheDocument()
+    expect(canvas.getByText("Droits d'accès")).toBeInTheDocument()
 
     expect(canvas.getByText('Espace utilisé par dépôt')).toBeInTheDocument()
     expect(canvas.getByRole('progressbar', { name: 'acme-npm' })).toBeInTheDocument()
@@ -81,7 +81,7 @@ export const StatsPending: Story = {
     const canvas = within(canvasElement)
     expect(await canvas.findByText('Espace utilisé par dépôt')).toBeInTheDocument()
     expect(canvas.queryByText('Utilisateurs')).not.toBeInTheDocument()
-    expect(canvas.queryByText('Permissions actives')).not.toBeInTheDocument()
+    expect(canvas.queryByText("Droits d'accès")).not.toBeInTheDocument()
   },
 }
 

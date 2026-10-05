@@ -1,6 +1,6 @@
 import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core'
-import { Card } from '@masmarino/gabarit'
+import { Card } from '@masmarino/gabarit/card'
 import { AdminMetricsService } from '../application/metrics.service'
 import { AdminStats } from '../domain/metrics.entity'
 import { UsageMetrics } from '../usage-metrics/usage-metrics'

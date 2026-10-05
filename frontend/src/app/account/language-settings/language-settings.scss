@@ -1,0 +1,17 @@
+@use '../../../styles/settings';
+
+:host {
+  display: block;
+}
+
+.language-settings__field {
+  @include settings.field;
+}
+
+.language-settings__footer {
+  @include settings.field-footer;
+}
+
+.language-settings__hint {
+  @include settings.hint;
+}

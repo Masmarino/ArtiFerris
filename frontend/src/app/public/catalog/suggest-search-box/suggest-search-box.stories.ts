@@ -88,7 +88,9 @@ export const Compact: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     expect(canvas.getByRole('combobox', { name: 'Rechercher un paquet' })).toBeInTheDocument()
-    expect(canvas.getByText('Rechercher un paquet', { selector: 'label' })).toHaveClass('sr-only')
+    expect(canvas.getByText('Rechercher un paquet', { selector: 'label' })).toHaveClass(
+      'gbt-input__label--hidden',
+    )
   },
 }
 

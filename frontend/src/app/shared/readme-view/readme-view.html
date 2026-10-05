@@ -1,7 +1,7 @@
 <gbt-card class="readme-view">
   <h2 class="readme-view__title">{{ 'shared.readme.title' | transloco }}</h2>
   @if (content(); as html) {
-    <div class="readme-view__content" [innerHTML]="html"></div>
+    <div #body class="readme-view__content" [innerHTML]="html"></div>
   } @else {
     <gbt-empty-state
       illustration="book"

@@ -1,81 +1,205 @@
-<div class="container">
-  <gbt-tabs>
-    <gbt-tab [label]="'account.tabs.profile' | transloco">
-      <div class="stack">
-        <gbt-card [heading]="'account.profile.infoHeading' | transloco" icon="user">
-          <div class="stack">
-            <p>{{ 'account.profile.username' | transloco: { username: me.username() } }}</p>
-            @if (me.isSuperAdmin()) {
-              <p>{{ 'account.profile.superAdminStatus' | transloco }}</p>
-            }
-            <p>
-              {{
-                'account.profile.memberSince' | transloco: { date: me.createdAt() | date: 'medium' }
-              }}
-            </p>
-          </div>
-        </gbt-card>
+<app-page-heading>
+  <p header-meta class="account-page__intro">{{ 'account.intro' | transloco }}</p>
+</app-page-heading>
 
-        <app-language-settings />
+<gbt-page-layout width="wide" [navLabel]="'account.sections.label' | transloco" stickyNav>
+  <!-- The layout already wraps [page-nav] in a labelled <nav>, so no second landmark here. -->
+  <gbt-nav-tabs
+    page-nav
+    orientation="vertical"
+    [ariaLabel]="'account.sections.label' | transloco"
+    [landmark]="false"
+  >
+    @for (section of sections; track section.key) {
+      <a
+        gbtNavTab
+        [routerLink]="[]"
+        [queryParams]="section.queryParams"
+        [icon]="section.icon"
+        [active]="section.key === activeSection()"
+        >{{ section.labelKey | transloco }}</a
+      >
+    }
+  </gbt-nav-tabs>
 
-        <gbt-card [heading]="'account.password.heading' | transloco" icon="lock">
-          <form class="stack" [formGroup]="form" (ngSubmit)="submit()">
-            <p class="gbt-form-required-note">
-              {{ 'common.requiredNote' | transloco }}
-            </p>
-            <gbt-input
-              [label]="'account.password.current' | transloco"
-              type="password"
-              [showPasswordLabel]="'common.showPassword' | transloco"
-              [hidePasswordLabel]="'common.hidePassword' | transloco"
-              formControlName="currentPassword"
-              [required]="true"
-              autocomplete="current-password"
+  <!-- Only the selected section renders, so the tokens load when their section opens. -->
+  <div class="account-page__section">
+    @switch (activeSection()) {
+      @case ('password') {
+        <gbt-card
+          variant="outlined"
+          icon="lock"
+          [heading]="'account.password.heading' | transloco"
+          [description]="'account.password.description' | transloco: { min: minPasswordLength }"
+        >
+          <form class="account-page__password-form" [formGroup]="form" (ngSubmit)="submit()">
+            <p class="gbt-form-required-note">{{ 'common.requiredNote' | transloco }}</p>
+            <!-- Tells password managers which account this is for. -->
+            <input
+              class="sr-only"
+              type="text"
+              name="username"
+              autocomplete="username"
+              tabindex="-1"
+              aria-hidden="true"
+              readonly
+              [value]="me.username() ?? ''"
             />
-            <gbt-input
-              [label]="'account.password.new' | transloco"
-              type="password"
-              [showPasswordLabel]="'common.showPassword' | transloco"
-              [hidePasswordLabel]="'common.hidePassword' | transloco"
-              formControlName="newPassword"
-              [required]="true"
-              autocomplete="new-password"
-              [errorMessage]="newPasswordError"
-            />
-            <gbt-input
-              [label]="'account.password.confirm' | transloco"
-              type="password"
-              [showPasswordLabel]="'common.showPassword' | transloco"
-              [hidePasswordLabel]="'common.hidePassword' | transloco"
-              formControlName="confirmPassword"
-              [required]="true"
-              autocomplete="new-password"
-              [errorMessage]="confirmPasswordError"
-            />
-            <gbt-button
-              [text]="'account.password.heading' | transloco"
-              type="submit"
-              [loading]="submitting()"
-              [loadingLabel]="'common.loadingLabel' | transloco"
-              [disabled]="form.invalid || submitting()"
-            />
+
+            <div class="account-page__field account-page__current">
+              <gbt-input
+                [label]="'account.password.current' | transloco"
+                type="password"
+                autocomplete="current-password"
+                [showPasswordLabel]="'common.showPassword' | transloco"
+                [hidePasswordLabel]="'common.hidePassword' | transloco"
+                formControlName="currentPassword"
+                [required]="true"
+              />
+            </div>
+
+            <div class="account-page__password-row">
+              <div class="account-page__field">
+                <gbt-input
+                  [label]="'account.password.new' | transloco"
+                  type="password"
+                  autocomplete="new-password"
+                  [showPasswordLabel]="'common.showPassword' | transloco"
+                  [hidePasswordLabel]="'common.hidePassword' | transloco"
+                  formControlName="newPassword"
+                  [required]="true"
+                  [errorMessage]="newPasswordError"
+                />
+                <p
+                  class="account-page__hint account-page__length-hint"
+                  [attr.data-state]="passwordLongEnough() ? 'met' : null"
+                >
+                  <gbt-icon [name]="passwordLongEnough() ? 'check' : 'lock'" aria-hidden="true" />{{
+                    'account.password.minLength' | transloco: { min: minPasswordLength }
+                  }}
+                </p>
+              </div>
+
+              <div class="account-page__field">
+                <gbt-input
+                  [label]="'account.password.confirm' | transloco"
+                  type="password"
+                  autocomplete="new-password"
+                  [showPasswordLabel]="'common.showPassword' | transloco"
+                  [hidePasswordLabel]="'common.hidePassword' | transloco"
+                  formControlName="confirmPassword"
+                  [required]="true"
+                  [errorMessage]="confirmPasswordError"
+                />
+              </div>
+            </div>
+
+            <div class="account-page__password-actions">
+              <!-- Always in the DOM: a live region only announces changes if it already exists. -->
+              <gbt-save-status
+                class="account-page__password-status"
+                [state]="passwordResult()?.state ?? 'idle'"
+                [message]="passwordResult()?.message ?? null"
+              />
+              <gbt-button
+                type="submit"
+                iconName="lock"
+                [text]="'account.password.submit' | transloco"
+                [loadingLabel]="'common.loadingLabel' | transloco"
+                [variant]="passwordReady() ? 'primary' : 'secondary'"
+                [loading]="submitting()"
+              />
+            </div>
           </form>
         </gbt-card>
-      </div>
-    </gbt-tab>
-
-    <gbt-tab [label]="'account.tabs.security' | transloco">
-      <div class="stack">
-        <app-mfa-settings />
-        <app-passkey-settings />
+      }
+      @case ('security') {
+        <gbt-passkey-settings [locale]="locale()" (sessionRevoked)="sessionsEnded()" />
+        <gbt-mfa-settings (sessionRevoked)="sessionsEnded()" />
         <app-session-settings />
-      </div>
-    </gbt-tab>
-
-    <gbt-tab [label]="'account.tabs.tokens' | transloco">
-      <gbt-card [heading]="'account.tokens.heading' | transloco" icon="key">
+      }
+      @case ('tokens') {
         <app-api-tokens-list />
-      </gbt-card>
-    </gbt-tab>
-  </gbt-tabs>
-</div>
+      }
+      @default {
+        <gbt-card
+          variant="outlined"
+          icon="user"
+          [heading]="'account.profile.heading' | transloco"
+          [description]="'account.profile.description' | transloco"
+        >
+          <div class="account-page__profile">
+            <div class="account-page__identity">
+              @if (me.username(); as username) {
+                <gbt-avatar
+                  class="account-page__avatar"
+                  size="lg"
+                  [name]="avatarName()"
+                  aria-hidden="true"
+                />
+                <div class="account-page__identity-text">
+                  <div class="account-page__name-row">
+                    <p class="account-page__username">{{ username }}</p>
+                    @if (me.isSuperAdmin()) {
+                      <gbt-badge class="account-page__role" variant="info" icon="settings">{{
+                        'account.profile.superAdmin' | transloco
+                      }}</gbt-badge>
+                    }
+                  </div>
+                  <p class="account-page__identity-meta">
+                    {{ 'account.profile.usernameMeta' | transloco }}
+                  </p>
+                  @if (me.createdAt(); as createdAt) {
+                    <p class="account-page__identity-meta">
+                      {{ 'account.profile.memberSince' | transloco: { date: createdAt | date } }}
+                    </p>
+                  }
+                </div>
+              } @else {
+                <div class="account-page__identity-loading" aria-busy="true">
+                  <span class="sr-only" role="status">{{
+                    'account.profile.loading' | transloco
+                  }}</span>
+                  <gbt-skeleton variant="circle" width="3rem" height="3rem" aria-hidden="true" />
+                  <div class="account-page__identity-text" aria-hidden="true">
+                    <gbt-skeleton width="8rem" height="1rem" />
+                    <gbt-skeleton width="12rem" height="0.75rem" />
+                  </div>
+                </div>
+              }
+            </div>
+
+            <!-- Shown, not edited: ArtiFerris writes only to an address verified at the invitation or by the
+                 identity provider, and has no way to verify a new one yet. -->
+            <dl class="account-page__field account-page__email">
+              <dt class="account-page__label">{{ 'account.profile.email' | transloco }}</dt>
+              @if (me.email(); as email) {
+                <dd class="account-page__value">{{ email }}</dd>
+                <dd class="account-page__hint">{{ 'account.profile.emailHint' | transloco }}</dd>
+              } @else {
+                <dd class="account-page__value account-page__value--none">
+                  {{ 'account.profile.noEmail' | transloco }}
+                </dd>
+                <dd class="account-page__hint">{{ 'account.profile.noEmailHint' | transloco }}</dd>
+              }
+            </dl>
+
+            <app-language-settings class="account-page__language" />
+
+            <div class="account-page__session">
+              <p class="account-page__session-text">
+                {{ 'account.profile.sessionText' | transloco }}
+              </p>
+              <gbt-button
+                variant="secondary"
+                iconName="log-out"
+                [text]="'account.profile.signOut' | transloco"
+                (clicked)="logout()"
+              />
+            </div>
+          </div>
+        </gbt-card>
+      }
+    }
+  </div>
+</gbt-page-layout>

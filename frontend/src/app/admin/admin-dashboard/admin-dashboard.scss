@@ -1,15 +1,212 @@
-section {
+@use '../../../styles/list-page';
+
+// Header and layout share the page's 1440px ("wide") frame, so the h1 lines up with the tiles.
+:host {
+  @include list-page.page-host;
+}
+
+.admin-dashboard__intro {
+  margin: 0;
+}
+
+.admin-dashboard__main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+// Unlike Gabarit's gbt-stat-grid, rows take the tallest tile's height and placeholders the height of a tile with its
+// hint (105px from 600px up). Otherwise the page jumps when the figures arrive.
+gbt-stat-grid ::ng-deep .gbt-stat-grid {
+  grid-auto-rows: 1fr;
+}
+
+gbt-stat-grid ::ng-deep .gbt-stat-grid__placeholder {
+  min-height: 6.5625rem;
+}
+
+.admin-dashboard__section {
+  min-width: 0;
+}
+
+// The week's activity and the formats side by side once both fit.
+.admin-dashboard__pair {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
 }
 
-gbt-select[card-header-actions] {
-  min-width: 9rem;
+@media (min-width: 900px) {
+  .admin-dashboard__pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-.partial-note {
-  margin: 0 0 0.5rem;
-  font-size: 0.875rem;
+.admin-dashboard__pane {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.admin-dashboard__note {
+  margin: 0 0 0.75rem;
   color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.admin-dashboard__recent {
+  @include list-page.row-list;
+}
+
+.admin-dashboard__when {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.admin-dashboard__band {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  min-width: 0;
+}
+
+.admin-dashboard__card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+
+  gbt-icon {
+    flex: none;
+    color: var(--text-secondary);
+  }
+}
+
+.admin-dashboard__card-heading {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1.5rem;
+}
+
+.admin-dashboard__range {
+  flex: none;
+  max-width: 100%;
+}
+
+.admin-dashboard__charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  transition: opacity var(--site-transition-fast);
+
+  &[aria-busy='true'] .admin-dashboard__chart {
+    opacity: 0.55;
+  }
+}
+
+.admin-dashboard__chart-pane {
+  min-width: 0;
+  padding: 1rem 1.25rem 1.25rem;
+
+  & + & {
+    border-top: 1px solid var(--gbt-hairline);
+  }
+}
+
+@container gbt-list-card (min-width: 760px) {
+  .admin-dashboard__charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-dashboard__chart-pane + .admin-dashboard__chart-pane {
+    border-top: 0;
+    border-left: 1px solid var(--gbt-hairline);
+  }
+}
+
+@container gbt-list-card (max-width: 559px) {
+  .admin-dashboard__chart-pane {
+    padding-inline: 0.75rem;
+  }
+}
+
+.admin-dashboard__pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  height: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-dashboard__pane-heading {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.admin-dashboard__pane-unit {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+}
+
+// Every pane has the same height whatever it holds, so panes line up and nothing jumps when data arrives.
+.admin-dashboard__chart {
+  display: flex;
+  flex-direction: column;
+  height: 17rem;
+  min-width: 0;
+  transition: opacity var(--site-transition-fast);
+
+  gbt-line-chart {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  ::ng-deep gbt-chart-frame {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+.admin-dashboard__chart-skeleton {
+  display: block;
+  height: 100%;
+}
+
+.admin-dashboard__chart-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  border: 1px dashed var(--gbt-card-border);
+  border-radius: var(--site-border-radius-sm);
+}
+
+.admin-dashboard__charts-failed {
+  display: block;
+  padding: 1rem 1.25rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-dashboard__charts,
+  .admin-dashboard__chart {
+    transition: none;
+  }
 }

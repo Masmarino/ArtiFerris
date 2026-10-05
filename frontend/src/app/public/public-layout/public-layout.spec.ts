@@ -16,10 +16,13 @@ import { PublicLayout } from './public-layout'
 })
 class TestHost {}
 
+@Component({ standalone: true, template: '' })
+class AnyPage {}
+
 function render(isAuthenticated = false) {
   TestBed.configureTestingModule({
     providers: [
-      provideRouter([]),
+      provideRouter([{ path: '**', component: AnyPage }]),
       NO_SUGGESTIONS,
       { provide: AuthService, useValue: { isAuthenticated: () => isAuthenticated } },
     ],
@@ -30,25 +33,50 @@ function render(isAuthenticated = false) {
 }
 
 describe('PublicLayout', () => {
-  it('shows the branding logo', () => {
+  it('shows the light logo drawn for the graphite bar', () => {
     const { fixture } = render()
 
     const logo: HTMLImageElement = fixture.nativeElement.querySelector('img')
-    expect(logo.getAttribute('src')).toBe('/api/branding/logo')
+    expect(logo.getAttribute('src')).toBe('/Logo_horizontal.png')
   })
 
-  it('links an anonymous visitor to /login', () => {
+  it('links an anonymous visitor to /login, with the primary button', () => {
     const { fixture } = render(false)
 
-    const link = fixture.debugElement.query(By.css('.public-layout__login-link'))
+    const link = fixture.debugElement.query(By.css('.public-layout__account'))
     expect(link.injector.get(RouterLink).href).toBe('/login')
     expect(link.nativeElement.textContent).toContain('Se connecter')
+    expect(link.nativeElement.classList).toContain('gbt-button--primary')
+  })
+
+  it('comes back to the page after signing in', async () => {
+    const { fixture } = render(false)
+    await TestBed.inject(Router).navigateByUrl('/npm/left-pad')
+    fixture.detectChanges()
+
+    const link = fixture.debugElement.query(By.css('.public-layout__account'))
+    expect(link.injector.get(RouterLink).href).toBe('/login?returnUrl=%2Fnpm%2Fleft-pad')
+  })
+
+  it('links to the documentation and to the project on GitHub, in a new tab', () => {
+    const { fixture } = render()
+
+    const [github, docs] = fixture.debugElement.queryAll(By.css('.public-layout__link'))
+    expect(github.nativeElement.getAttribute('href')).toBe(
+      'https://github.com/Masmarino/ArtiFerris',
+    )
+    expect(github.nativeElement.getAttribute('target')).toBe('_blank')
+    expect(github.nativeElement.getAttribute('aria-label')).toBe(
+      'ArtiFerris sur GitHub (nouvel onglet)',
+    )
+    expect(docs.injector.get(RouterLink).href).toBe('/docs')
+    expect(docs.nativeElement.textContent).toContain('Documentation')
   })
 
   it('links a signed-in visitor to their dashboard instead', () => {
     const { fixture } = render(true)
 
-    const link = fixture.debugElement.query(By.css('.public-layout__login-link'))
+    const link = fixture.debugElement.query(By.css('.public-layout__account'))
     expect(link.injector.get(RouterLink).href).toBe('/repositories')
     expect(link.nativeElement.textContent).toContain('Mes dépôts')
   })
@@ -70,7 +98,9 @@ describe('PublicLayout', () => {
       const field = input(fixture)
       field.value = text
       field.dispatchEvent(new Event('input'))
-      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }))
+      field.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', cancelable: true, bubbles: true }),
+      )
     }
 
     function renderAt(url: string) {
@@ -92,7 +122,7 @@ describe('PublicLayout', () => {
         `label[for="${field.id}"]`,
       )
       expect(label.textContent).toContain('Rechercher un paquet')
-      expect(label.classList).toContain('sr-only')
+      expect(label.classList).toContain('gbt-input__label--hidden')
       expect(field.getAttribute('maxlength')).toBe('100')
     })
 
@@ -143,8 +173,12 @@ describe('PublicLayout', () => {
       field.dispatchEvent(new Event('input'))
       vi.advanceTimersByTime(200)
       fixture.detectChanges()
-      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true }))
-      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }))
+      field.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true, bubbles: true }),
+      )
+      field.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', cancelable: true, bubbles: true }),
+      )
 
       expect(navigate).toHaveBeenCalledExactlyOnceWith([
         '/@admin',

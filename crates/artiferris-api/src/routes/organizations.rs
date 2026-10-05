@@ -84,6 +84,15 @@ struct OrganizationMemberResponse {
     invitation_pending: bool,
 }
 
+/// The invited member, and what became of their activation mail.
+#[derive(Serialize)]
+struct InvitedMemberResponse {
+    #[serde(flatten)]
+    member: OrganizationMemberResponse,
+    #[serde(flatten)]
+    mail: crate::dto::InvitationMailResponse,
+}
+
 async fn list_organization_members(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<Json<Vec<OrganizationMemberResponse>>, (StatusCode, Json<ErrorResponse>)> {
     require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     let members: Vec<_> = state
@@ -120,18 +129,22 @@ async fn invite_organization_member(
     user: AuthUser,
     Path(id): Path<Uuid>,
     Json(body): Json<InviteOrganizationMemberRequest>,
-) -> Result<(StatusCode, Json<OrganizationMemberResponse>), (StatusCode, Json<ErrorResponse>)> {
+) -> Result<(StatusCode, Json<InvitedMemberResponse>), (StatusCode, Json<ErrorResponse>)> {
     require_organization_admin(&user, id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
     // is_super_admin is never read from this request — an org-scoped invite can never grant it.
-    let member_id = state
+    let delivery = state
         .invite_user
         .execute(id, body.is_organization_admin, &body.email, false, user.id)
         .await
         .map_err(|e| application_error_response("failed to invite organization member", e))?;
+    let member_id = delivery.user_id;
     let invited = state.users.find_by_id(member_id).await.ok().flatten().ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     Ok((
         StatusCode::CREATED,
-        Json(OrganizationMemberResponse { id: member_id, username: invited.username.as_str().to_string(), email: Some(body.email), is_organization_admin: body.is_organization_admin, invitation_pending: true }),
+        Json(InvitedMemberResponse {
+            member: OrganizationMemberResponse { id: member_id, username: invited.username.as_str().to_string(), email: Some(body.email), is_organization_admin: body.is_organization_admin, invitation_pending: true },
+            mail: delivery.undelivered.into(),
+        }),
     ))
 }
 

@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute } from '@angular/router'
 import { map } from 'rxjs'
-import { Tab, Tabs } from '@masmarino/gabarit'
+import { Tab, Tabs } from '@masmarino/gabarit/tabs'
 import { MeService } from '../../shell/application/me.service'
 import { OrganizationsList } from '../organizations-list/organizations-list'
 import { OrganizationDetail } from '../organization-detail/organization-detail'
@@ -14,12 +14,14 @@ import { SecurityLog } from '../security-log/security-log'
 import { OrganizationMetricsPage } from '../organization-metrics-page/organization-metrics-page'
 import { SystemSettingsAdmin } from '../system-settings/system-settings'
 import { SmtpSettingsAdmin } from '../smtp-settings/smtp-settings'
+import { PageHeading } from '../../shared/page-heading/page-heading'
 
 // The detail panel shows once the route has an id.
 @Component({
   selector: 'app-organizations-page',
   standalone: true,
   imports: [
+    PageHeading,
     TranslocoPipe,
     OrganizationsList,
     Tabs,

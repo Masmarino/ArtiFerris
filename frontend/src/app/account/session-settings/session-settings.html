@@ -1,12 +1,14 @@
-<gbt-card [heading]="'account.sessions.heading' | transloco" icon="lock">
-  <div class="stack">
-    <p>
-      {{ 'account.sessions.description' | transloco }}
-    </p>
+<gbt-card
+  variant="outlined"
+  icon="log-out"
+  [heading]="'account.sessions.heading' | transloco"
+  [description]="'account.sessions.description' | transloco"
+>
+  <div class="session-settings__actions">
     <gbt-button
-      class="w-content"
       [text]="'account.sessions.signOutEverywhere' | transloco"
       variant="danger"
+      iconName="log-out"
       [loading]="signingOut()"
       [loadingLabel]="'common.loadingLabel' | transloco"
       (clicked)="logoutEverywhere()"

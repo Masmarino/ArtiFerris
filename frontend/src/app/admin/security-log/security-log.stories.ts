@@ -23,6 +23,9 @@ const USERS: UserSummary[] = [
     organization_id: 'org-public',
     email: 'florian@example.com',
     invitation_pending: false,
+    created_at: '2026-01-12T09:00:00Z',
+    invitation_expires_at: null,
+    mfa_enabled: true,
   },
 ]
 

@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideHttpClient } from '@angular/common/http'
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router'
 import { By } from '@angular/platform-browser'
-import { Table } from '@masmarino/gabarit'
+import { Table } from '@masmarino/gabarit/table'
 import { RepositoryDetail } from './repository-detail'
 import { UsageInstructions } from '../usage-instructions/usage-instructions'
 import { PermissionRoleEditor } from '../permission-role-editor/permission-role-editor'

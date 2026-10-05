@@ -1,110 +1,322 @@
-<div class="container">
-  @if (loadError()) {
-    <gbt-card>
-      <p class="gbt-form-error" role="alert">{{ 'users.detail.loadFailed' | transloco }}</p>
-    </gbt-card>
-  } @else {
+@switch (view()) {
+  @case ('ready') {
     @if (user(); as u) {
-      <gbt-card>
-        <div class="stack">
-          <h2>{{ 'users.detail.info' | transloco }}</h2>
-          <p>{{ 'users.detail.email' | transloco: { email: u.email ?? '—' } }}</p>
-          @if (u.invitation_pending) {
-            <p>{{ 'users.detail.pending' | transloco }}</p>
+      <app-page-heading>
+        @if (header(); as h) {
+          <span header-badges class="user-detail__badges">
+            @if (u.is_super_admin) {
+              <gbt-badge [variant]="superAdmin().variant" [icon]="superAdmin().icon">{{
+                superAdmin().label
+              }}</gbt-badge>
+            }
+            <gbt-badge [variant]="h.state.variant" [icon]="h.state.icon">{{
+              h.state.label
+            }}</gbt-badge>
+            @if (h.mfa; as mfa) {
+              <gbt-badge [variant]="mfa.variant" [icon]="mfa.icon">{{ mfa.label }}</gbt-badge>
+            }
+          </span>
+        }
+        @if (header(); as h) {
+          <p header-meta class="user-detail__meta">
+            <!-- An invitation is named by its address already: the title shows it. -->
+            @if (u.email && !u.invitation_pending) {
+              <span class="user-detail__email" [title]="u.email">{{ u.email }}</span>
+            }
+            <span class="user-detail__segment"
+              ><time [attr.datetime]="h.created.iso" [title]="h.created.title">{{
+                h.created.label
+              }}</time></span
+            >
+            @if (h.expiry; as expiry) {
+              <span class="user-detail__segment user-detail__expiry"
+                ><time [attr.datetime]="expiry.iso" [title]="expiry.title">{{
+                  expiry.label
+                }}</time></span
+              >
+            }
+          </p>
+        }
+
+        <!-- Single root element: content projected from inside an @if needs one. -->
+        @if (canManageTarget() || actions()) {
+          <div header-actions class="user-detail__actions">
+            @if (busy(); as busyLabel) {
+              <span class="user-detail__busy"><gbt-spinner size="sm" [label]="busyLabel" /></span>
+            } @else if (actions(); as a) {
+              <gbt-menu
+                class="user-detail__menu"
+                [label]="'users.detail.actions' | transloco"
+                [chevron]="true"
+                align="end"
+              >
+                @if (a.canResend) {
+                  <button gbtMenuItem icon="send" (click)="resendInvitation()">
+                    {{ 'users.detail.resend' | transloco }}
+                  </button>
+                }
+                @if (a.canResetPassword) {
+                  <button gbtMenuItem icon="key" (click)="resetPassword()">
+                    {{ 'users.passwordReset.heading' | transloco }}
+                  </button>
+                }
+                @if (a.canResetMfa) {
+                  <button gbtMenuItem icon="shield-alert" (click)="resetMfa()">
+                    {{ 'users.mfaReset.heading' | transloco }}
+                  </button>
+                }
+                @if (a.admin; as rights) {
+                  <button gbtMenuItem [icon]="rights.icon" (click)="setSuperAdmin()">
+                    {{ rights.label }}
+                  </button>
+                }
+              </gbt-menu>
+            }
             @if (canManageTarget()) {
               <gbt-button
-                [text]="'users.detail.resend' | transloco"
-                [loading]="resendingInvitation()"
-                (clicked)="resendInvitation()"
-                [loadingLabel]="'common.loadingLabel' | transloco"
+                class="user-detail__delete"
+                variant="danger"
+                iconName="trash-2"
+                [text]="'users.detail.delete' | transloco"
+                (clicked)="deleteUser()"
               />
             }
+          </div>
+        }
+      </app-page-heading>
+
+      <gbt-page-layout width="wide" asideWidth="md">
+        <div class="user-detail__main">
+          @if (mailFailure(); as failure) {
+            <app-link-mail-failed
+              dismissible
+              [name]="username()"
+              [mail]="failure.mail"
+              [kind]="failure.kind"
+              (dismissed)="mailFailure.set(null)"
+            />
+          }
+          <gbt-list-card
+            [ariaLabel]="'users.detail.permissions' | transloco"
+            [state]="permissionsCard()"
+            [loadingLabel]="'users.detail.loadingPermissions' | transloco"
+            [skeletonRows]="3"
+            emptyIllustration="folder"
+            [emptyHeading]="'users.detail.noPermissions' | transloco"
+            [emptyMessage]="
+              'users.detail.noPermissionsMessage' | transloco: { username: username() }
+            "
+          >
+            <div list-card-header class="user-detail__band">
+              <h2 class="user-detail__heading">{{ 'users.detail.permissions' | transloco }}</h2>
+              @if (permissionsSummary(); as summary) {
+                <span class="user-detail__count">{{ summary }}</span>
+              }
+            </div>
+
+            <ul
+              class="user-detail__permissions"
+              [attr.aria-label]="'users.detail.permissions' | transloco"
+            >
+              @for (entry of permissions(); track entry.repository_id) {
+                <li>
+                  <gbt-list-row>
+                    <a
+                      class="user-detail__repository-name"
+                      [routerLink]="['/repositories', entry.repository_id]"
+                      [title]="entry.repository_name"
+                      >{{ entry.repository_name }}</a
+                    >
+                    <gbt-badge class="user-detail__format" variant="neutral">{{
+                      entry.format
+                    }}</gbt-badge>
+
+                    <span row-trailing class="user-detail__trailing">
+                      <gbt-badge variant="info" icon="shield-check">{{ entry.role }}</gbt-badge>
+                      <gbt-menu
+                        class="user-detail__row-menu"
+                        [label]="
+                          'users.detail.permissionMenuLabel'
+                            | transloco: { repository: entry.repository_name }
+                        "
+                        triggerIcon="ellipsis-vertical"
+                        align="end"
+                      >
+                        <button gbtMenuItem icon="pencil" (click)="openRoleEditor(entry)">
+                          {{ 'users.detail.changeRole' | transloco }}
+                        </button>
+                        <button gbtMenuItem icon="trash-2" (click)="revokePermission(entry)">
+                          {{ 'users.detail.revokeAction' | transloco }}
+                        </button>
+                      </gbt-menu>
+                    </span>
+                  </gbt-list-row>
+                </li>
+              }
+            </ul>
+          </gbt-list-card>
+
+          <gbt-card [heading]="'users.detail.grantHeading' | transloco">
+            <div class="user-detail__grant">
+              <gbt-select
+                class="user-detail__grant-repositories"
+                [label]="'users.detail.repositories' | transloco"
+                [placeholder]="'users.detail.repositoriesPlaceholder' | transloco"
+                [multiple]="true"
+                [selectedCountLabel]="selectedCountLabel"
+                [options]="repositoryOptions()"
+                [ngModel]="grantRepositoryIds()"
+                (ngModelChange)="grantRepositoryIds.set($event)"
+              />
+              <gbt-select
+                class="user-detail__grant-role"
+                [label]="'users.detail.role' | transloco"
+                [placeholder]="'common.select' | transloco"
+                [options]="roleOptions"
+                [ngModel]="grantRole()"
+                (ngModelChange)="grantRole.set($event)"
+              />
+              <gbt-button
+                class="user-detail__grant-submit"
+                iconName="plus"
+                [text]="
+                  grantRepositoryIds().length > 1
+                    ? ('users.detail.grantMany' | transloco: { count: grantRepositoryIds().length })
+                    : ('users.detail.grant' | transloco)
+                "
+                [disabled]="grantRepositoryIds().length === 0"
+                [loading]="granting()"
+                [loadingLabel]="'common.saving' | transloco"
+                (clicked)="grantPermission()"
+              />
+            </div>
+          </gbt-card>
+        </div>
+
+        <div page-aside class="user-detail__aside">
+          <gbt-panel [heading]="'users.detail.rolesHeading' | transloco" [headingLevel]="2">
+            @if (permissionsCard() === 'loading') {
+              <div class="user-detail__facts-loading" aria-hidden="true">
+                <gbt-skeleton width="70%" height="0.75rem" />
+                <gbt-skeleton width="55%" height="0.75rem" />
+              </div>
+            } @else {
+              <gbt-description-list
+                class="user-detail__facts"
+                layout="inline"
+                valueAlign="end"
+                [items]="permissionFacts()"
+              />
+            }
+            <p class="user-detail__help">{{ 'users.detail.rolesHelp' | transloco }}</p>
+          </gbt-panel>
+          <gbt-panel [heading]="'users.detail.deletionHeading' | transloco" [headingLevel]="2">
+            <p class="user-detail__help">{{ 'users.detail.deletionHelp' | transloco }}</p>
+          </gbt-panel>
+        </div>
+      </gbt-page-layout>
+
+      @if (editingPermission(); as entry) {
+        <app-permission-role-editor
+          [isOpen]="true"
+          [label]="entry.repository_name"
+          [currentRole]="entry.role"
+          [subjectKind]="'repository'"
+          [saving]="savingRole()"
+          (roleChanged)="changeRole($event)"
+          (revoked)="revokeFromEditor()"
+          (closed)="closeRoleEditor()"
+        />
+      }
+    }
+  }
+
+  @case ('not-found') {
+    <gbt-page-layout width="wide">
+      <gbt-card variant="outlined" [flush]="true">
+        <div class="user-detail__state">
+          <gbt-empty-state
+            illustration="checklist"
+            [heading]="'users.detail.notFoundHeading' | transloco"
+            [message]="'users.detail.notFoundMessage' | transloco"
+          >
+            <a
+              gbtButton
+              variant="secondary"
+              size="small"
+              iconName="arrow-left"
+              routerLink="/users"
+              >{{ 'users.detail.backToUsers' | transloco }}</a
+            >
+          </gbt-empty-state>
+        </div>
+      </gbt-card>
+    </gbt-page-layout>
+  }
+
+  @case ('self') {
+    <gbt-page-layout width="wide">
+      <gbt-card variant="outlined" [flush]="true">
+        <div class="user-detail__state">
+          <gbt-empty-state
+            illustration="checklist"
+            [heading]="'users.detail.selfHeading' | transloco"
+            [message]="'users.detail.selfMessage' | transloco"
+          >
+            <span class="user-detail__state-actions">
+              <a gbtButton variant="secondary" size="small" iconName="user" routerLink="/account">{{
+                'users.detail.myAccount' | transloco
+              }}</a>
+              <a
+                gbtButton
+                variant="secondary"
+                size="small"
+                iconName="arrow-left"
+                routerLink="/users"
+                >{{ 'users.detail.backToUsers' | transloco }}</a
+              >
+            </span>
+          </gbt-empty-state>
+        </div>
+      </gbt-card>
+    </gbt-page-layout>
+  }
+
+  @case ('failed') {
+    <gbt-page-layout width="wide">
+      <gbt-card variant="outlined" [flush]="true">
+        <div class="user-detail__state" role="alert">
+          <gbt-empty-state
+            tone="error"
+            [heading]="'users.detail.loadFailed' | transloco"
+            [message]="'users.detail.loadFailedMessage' | transloco"
+          >
+            <gbt-button
+              variant="secondary"
+              size="small"
+              [text]="'common.retry' | transloco"
+              (clicked)="retryLoad()"
+            />
+          </gbt-empty-state>
+        </div>
+      </gbt-card>
+    </gbt-page-layout>
+  }
+
+  @default {
+    <div class="user-detail__loading" aria-busy="true">
+      <span class="sr-only" role="status">{{ 'users.detail.loading' | transloco }}</span>
+      <div class="user-detail__loading-header" aria-hidden="true">
+        <gbt-skeleton width="min(16rem, 70%)" height="1.75rem" />
+        <gbt-skeleton width="14rem" height="0.875rem" />
+      </div>
+      <gbt-card variant="outlined" [flush]="true" aria-hidden="true">
+        <div class="user-detail__loading-card">
+          @for (width of skeletonLines; track $index) {
+            <gbt-skeleton [width]="width" height="0.875rem" />
           }
         </div>
       </gbt-card>
-    }
-
-    <gbt-card>
-      <div class="stack">
-        <h2>{{ 'users.detail.permissions' | transloco }}</h2>
-        <gbt-table
-          [caption]="'users.detail.permissionsCaption' | transloco"
-          [emptyMessage]="'users.detail.noPermissions' | transloco"
-          [clickableRows]="true"
-          [data]="permissions()"
-          [columns]="permissionColumns"
-          [trackBy]="permissionRowId"
-          (rowClick)="openRoleEditor($event)"
-        />
-        <div class="stack">
-          <gbt-select
-            [label]="'users.detail.repositories' | transloco"
-            [placeholder]="'users.detail.repositoriesPlaceholder' | transloco"
-            [multiple]="true"
-            [selectedCountLabel]="selectedCountLabel"
-            [options]="repositoryOptions()"
-            [ngModel]="grantRepositoryIds()"
-            (ngModelChange)="grantRepositoryIds.set($event)"
-          />
-          <gbt-select
-            [label]="'users.detail.role' | transloco"
-            [placeholder]="'common.select' | transloco"
-            [options]="roleOptions"
-            [ngModel]="grantRole()"
-            (ngModelChange)="grantRole.set($event)"
-          />
-          <gbt-button
-            [text]="
-              grantRepositoryIds().length > 1
-                ? ('users.detail.grantMany' | transloco: { count: grantRepositoryIds().length })
-                : ('users.detail.grant' | transloco)
-            "
-            (clicked)="grantPermission()"
-          />
-        </div>
-      </div>
-    </gbt-card>
-
-    @if (editingPermission(); as entry) {
-      <app-permission-role-editor
-        [isOpen]="true"
-        [label]="entry.repository_name"
-        [currentRole]="entry.role"
-        [subjectKind]="'repository'"
-        [saving]="savingRole()"
-        (roleChanged)="changeRole($event)"
-        (revoked)="revokeFromEditor()"
-        (closed)="closeRoleEditor()"
-      />
-    }
-
-    <div class="d-flex justify-content-end gap-4">
-      @if (isSuperAdminViewer()) {
-        <gbt-tooltip
-          [text]="
-            (user()?.is_super_admin ? 'users.detail.demoteHint' : 'users.detail.promoteHint')
-              | transloco
-          "
-        >
-          <gbt-button
-            [text]="
-              (user()?.is_super_admin ? 'users.detail.demote' : 'users.detail.promote') | transloco
-            "
-            [loading]="settingSuperAdmin()"
-            [loadingLabel]="'common.loadingLabel' | transloco"
-            (clicked)="setSuperAdmin()"
-          />
-        </gbt-tooltip>
-      }
-      @if (canManageTarget()) {
-        <gbt-tooltip [text]="'users.detail.deleteHint' | transloco">
-          <gbt-button
-            [text]="'users.detail.delete' | transloco"
-            variant="danger"
-            (clicked)="deleteUser()"
-          />
-        </gbt-tooltip>
-      }
     </div>
   }
-</div>
+}

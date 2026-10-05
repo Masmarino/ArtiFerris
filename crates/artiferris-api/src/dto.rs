@@ -67,11 +67,21 @@ pub struct MeResponse {
     pub created_at: DateTime<Utc>,
     /// The language the user chose for the interface; `null` until they have (or the app has recorded one).
     pub language: Option<String>,
+    /// The address ArtiFerris writes to: the account's email once verified (invitation, identity provider); `null`
+    /// otherwise.
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SetLanguageRequest {
     pub language: String,
+}
+
+/// The session a password change hands back: the change ended every session, the caller's included, so it would
+/// otherwise be signed out.
+#[derive(Debug, Serialize)]
+pub struct ChangePasswordResponse {
+    pub token: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +95,32 @@ pub struct ActivateAccountRequest {
     pub token: String,
     pub username: String,
     pub new_password: String,
+}
+
+#[derive(Deserialize)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    pub new_password: String,
+}
+
+/// What became of a password-reset mail. When it could not go out, `email_error` says why (`email_not_configured`,
+/// `email_send_failed`, `email_no_address`) and `reset_url` carries the link for the administrator to pass on, once.
+#[derive(Serialize, Debug)]
+pub struct PasswordResetMailResponse {
+    pub email_sent: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_error: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reset_url: Option<String>,
+}
+
+impl From<Option<artiferris_application::use_cases::password_reset::UndeliveredReset>> for PasswordResetMailResponse {
+    fn from(undelivered: Option<artiferris_application::use_cases::password_reset::UndeliveredReset>) -> Self {
+        match undelivered {
+            None => Self { email_sent: true, email_error: None, reset_url: None },
+            Some(undelivered) => Self { email_sent: false, email_error: Some(undelivered.reason.code()), reset_url: Some(undelivered.reset_url) },
+        }
+    }
 }
 
 /// Exactly one of `code`/`backup_code` should be set; `code` is tried first if both are present.
@@ -122,6 +158,27 @@ static LAST_BUSY_LOG: AtomicU64 = AtomicU64::new(0);
 fn busy_log_due(last: &AtomicU64, now: u64) -> bool {
     let before = last.load(Ordering::Relaxed);
     now.saturating_sub(before) >= BUSY_LOG_INTERVAL_SECONDS && last.compare_exchange(before, now, Ordering::Relaxed, Ordering::Relaxed).is_ok()
+}
+
+/// What became of an invitation's mail, sent with the invited account or alone after a resend. When the mail could not
+/// go out, `email_error` says why (`email_not_configured`, `email_send_failed`) and `activation_url` carries the link for
+/// the administrator to pass on: the only copy, handed over this once.
+#[derive(Serialize, Debug, Default)]
+pub struct InvitationMailResponse {
+    pub email_sent: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_error: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub activation_url: Option<String>,
+}
+
+impl From<Option<artiferris_application::use_cases::invitation::UndeliveredInvitation>> for InvitationMailResponse {
+    fn from(undelivered: Option<artiferris_application::use_cases::invitation::UndeliveredInvitation>) -> Self {
+        match undelivered {
+            None => Self { email_sent: true, email_error: None, activation_url: None },
+            Some(undelivered) => Self { email_sent: false, email_error: Some(undelivered.reason.code()), activation_url: Some(undelivered.activation_url) },
+        }
+    }
 }
 
 /// Infrastructure-shaped errors are logged server-side and answered with a flat `500`, never echoing raw backend text to the client.

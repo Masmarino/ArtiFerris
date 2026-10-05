@@ -92,7 +92,12 @@
       "event_store_failure": "Interner Serverfehler. Versuchen Sie es später erneut.",
       "storage_failure": "Speicherfehler auf dem Server. Versuchen Sie es später erneut.",
       "registration_unavailable": "Die öffentliche Registrierung ist für diese Organisation nicht verfügbar.",
-      "registration_disabled": "Die Kontoerstellung ist derzeit vom Administrator deaktiviert."
+      "registration_disabled": "Die Kontoerstellung ist derzeit vom Administrator deaktiviert.",
+      "email_not_configured": "Für diese Organisation ist kein Mailserver konfiguriert.",
+      "password_reset_link_invalid": "Dieser Link zum Zurücksetzen ist ungültig, wurde bereits verwendet oder ist abgelaufen.",
+      "own_password_reset": "Ändern Sie Ihr eigenes Passwort unter Mein Konto.",
+      "account_not_activated": "Dieses Konto ist noch nicht aktiviert: Senden Sie stattdessen die Einladung erneut.",
+      "password_managed_by_identity_provider": "Diese Organisation meldet sich über ihren Identitätsanbieter an, der ihre Passwörter verwaltet."
     }
   },
   "catalog": {
@@ -113,7 +118,6 @@
       "ariaLabel": "Katalogsuche",
       "label": "Nach einem Paket suchen",
       "placeholder": "Name, Beschreibung oder Stichwort",
-      "submit": "Suchen",
       "sortBy": "Sortieren nach",
       "searching": "Suche läuft…",
       "ownerEmptyHeading": "Nichts anzuzeigen",
@@ -176,7 +180,9 @@
       "quickSearch": "Schnellsuche",
       "searchPlaceholder": "Nach einem Paket suchen…",
       "myRepositories": "Meine Repositories",
-      "login": "Anmelden"
+      "login": "Anmelden",
+      "githubLabel": "ArtiFerris auf GitHub (neuer Tab)",
+      "docs": "Dokumentation"
     }
   },
   "severity": {
@@ -208,86 +214,18 @@
   "auth": {
     "sessionsEnded": "Ihre Sitzungen wurden beendet: Melden Sie sich erneut an.",
     "login": {
-      "heading": "Bei ArtiFerris anmelden",
       "logoAlt": "ArtiFerris-Logo",
       "ssoLinkInvalid": "Ungültiger oder abgelaufener Anmeldelink.",
       "oidcNotice": "Diese Organisation verwendet Single Sign-On (OIDC).",
       "oidcLink": "Mit dem Identitätsanbieter anmelden",
-      "username": "Benutzername",
       "password": "Passwort",
       "submit": "Anmelden",
       "createAccount": "Konto erstellen",
-      "explorePublic": "Öffentliche Pakete entdecken",
-      "backupCode": "Backup-Code",
-      "verificationCode": "Bestätigungscode",
-      "verify": "Bestätigen",
-      "useAuthenticatorApp": "Authentifizierungs-App verwenden",
-      "useBackupCode": "Backup-Code verwenden",
-      "usePasskey": "Passkey verwenden",
-      "errors": {
-        "busy": "Dienst vorübergehend ausgelastet, versuchen Sie es erneut",
-        "tooManyRequests": "Zu viele Versuche, versuchen Sie es später erneut.",
-        "invalidCredentials": "Ungültige Anmeldedaten",
-        "invalidBackupCode": "Ungültiger Backup-Code.",
-        "invalidCode": "Ungültiger Code.",
-        "passkeyFailed": "Die Authentifizierung per Passkey ist fehlgeschlagen."
-      }
-    },
-    "mfaEnrollment": {
-      "required": "Die Zwei-Faktor-Authentifizierung ist für dieses Konto verpflichtend.",
-      "chooseMethod": "Wählen Sie eine Methode, um fortzufahren:",
-      "totpTooltip": "Erfordert eine App wie Google Authenticator, Authy oder 1Password.",
-      "totpButton": "Authentifizierungs-App (TOTP)",
-      "passkeyTooltip": "Verwendet Touch ID, Windows Hello oder einen physischen Sicherheitsschlüssel.",
-      "passkeyButton": "Passkey",
-      "scanQr": "Scannen Sie diesen QR-Code mit Ihrer Authentifizierungs-App oder geben Sie den Code manuell ein:",
-      "qrAlt": "Aktivierungs-QR-Code",
-      "verificationCode": "Bestätigungscode",
-      "confirm": "Bestätigen",
-      "back": "Zurück",
-      "enabled": "Zwei-Faktor-Authentifizierung aktiviert. Bewahren Sie diese Backup-Codes an einem sicheren Ort auf — jeder kann nur einmal verwendet werden.",
-      "savedCodes": "Ich habe diese Codes gespeichert",
-      "passkeyName": "Name des Schlüssels (z. B. „MacBook Touch ID“)",
-      "registerPasskey": "Passkey registrieren",
-      "errors": {
-        "invalidCode": "Ungültiger Code.",
-        "totpSetupFailed": "Die Authentifizierungs-App konnte nicht eingerichtet werden.",
-        "passkeyFailed": "Der Passkey konnte nicht registriert werden. Versuchen Sie es erneut."
-      }
-    },
-    "register": {
-      "heading": "ArtiFerris-Konto erstellen",
-      "email": "E-Mail-Adresse",
-      "submit": "Mein Konto erstellen",
-      "haveAccount": "Ich habe bereits ein Konto",
-      "errors": {
-        "usernameTaken": "Dieser Benutzername ist bereits vergeben.",
-        "invalidEmail": "Ungültige E-Mail-Adresse.",
-        "passwordTooShort": "Das Passwort muss mindestens 8 Zeichen lang sein.",
-        "notAvailable": "Die öffentliche Registrierung ist für diese Organisation nicht verfügbar.",
-        "disabled": "Die Kontoerstellung ist derzeit vom Administrator deaktiviert.",
-        "invalidUsername": "Ungültiger Benutzername: 3 bis 32 Zeichen, muss mit einem Buchstaben beginnen.",
-        "generic": "Das Konto konnte nicht erstellt werden. Versuchen Sie es erneut."
-      }
-    },
-    "activate": {
-      "impossibleHeading": "Aktivierung nicht möglich",
-      "tokenMissing": "Ungültiger Aktivierungslink: kein Token angegeben.",
-      "heading": "Ihr Konto aktivieren",
-      "username": "Benutzername",
-      "usernameHint": "3 bis 32 Zeichen, beginnt mit einem Buchstaben: Buchstaben, Ziffern, „_“ und „-“.",
-      "newPassword": "Neues Passwort",
-      "confirmPassword": "Passwort bestätigen",
-      "mismatch": "Die Passwörter stimmen nicht überein.",
-      "submit": "Mein Konto aktivieren",
-      "errors": {
-        "invalidLink": "Dieser Aktivierungslink ist ungültig oder abgelaufen. Bitten Sie einen Administrator, Ihnen eine neue Einladung zu senden.",
-        "usernameTaken": "Dieser Benutzername ist bereits vergeben.",
-        "invalidUsername": "Ungültiger Benutzername: 3 bis 32 Zeichen, muss mit einem Buchstaben beginnen."
-      }
+      "explorePublic": "Öffentliche Pakete entdecken"
     }
   },
   "common": {
+    "command": "Befehl",
     "loadingLabel": "Wird geladen",
     "loading": "Wird geladen…",
     "select": "Auswählen…",
@@ -298,7 +236,6 @@
     "next": "Weiter",
     "previous": "Zurück",
     "requiredNote": "Mit einem Sternchen (*) markierte Felder sind Pflichtfelder.",
-    "or": "ODER",
     "confirm": "Bestätigen",
     "cancel": "Abbrechen",
     "copy": "Kopieren",
@@ -326,12 +263,15 @@
       "failed": "Kopieren nicht möglich, markieren Sie den Befehl manuell"
     },
     "readme": {
+      "codeBlock": "Codeblock",
+      "table": "Tabelle",
       "title": "README",
       "emptyHeading": "Kein README",
       "emptyMessage": "Dieses Paket hat kein README."
     }
   },
   "shell": {
+    "trailLabel": "Brotkrümelnavigation",
     "loadFailed": "Ihre Sitzung konnte nicht geladen werden. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
     "navLabel": "Hauptnavigation",
     "skipLabel": "Zum Hauptinhalt springen",
@@ -341,20 +281,22 @@
     "expandMenu": "Menü ausklappen",
     "logoAlt": "ArtiFerris",
     "search": {
-      "placeholder": "Nach einem Repository oder Benutzer suchen...",
+      "open": "Öffnen",
+      "close": "Suche schließen",
+      "placeholder": "Suchen oder springen zu…",
+      "label": "Schnellsuche",
       "clear": "Suche löschen",
       "navigate": "Navigieren",
-      "select": "Auswählen",
       "failed": "Die Suche ist fehlgeschlagen",
       "noResults": "Keine Ergebnisse",
-      "failedHint": "Ändern Sie Ihre Eingabe und versuchen Sie es erneut.",
-      "noResultsHint": "Versuchen Sie eine andere Suche.",
       "packagesAndImages": "Pakete und Images",
-      "proxyCache": "Proxy-Cache"
+      "proxyCache": "Proxy-Cache",
+      "loading": "Suche läuft…",
+      "recent": "Zuletzt geöffnet",
+      "goTo": "Gehe zu",
+      "actions": "Aktionen"
     },
-    "logout": "Abmelden",
-    "collapseItem": "{{ name }} einklappen",
-    "expandItem": "{{ name }} ausklappen"
+    "logout": "Abmelden"
   },
   "nav": {
     "account": "Mein Konto",
@@ -362,215 +304,306 @@
     "myRepository": "Mein Repository",
     "users": "Benutzer",
     "administration": "Administration",
+    "dashboard": "Übersicht",
     "organizations": "Organisationen",
     "export": "Export",
     "explorer": "Entdecken",
     "health": "Status",
-    "systemHealth": "Systemstatus"
+    "docs": "Dokumentation",
+    "settings": "Einstellungen"
   },
   "account": {
-    "profile": {
-      "username": "Benutzername: {{ username }}",
-      "memberSince": "Mitglied seit: {{ date }}",
-      "infoHeading": "Informationen",
-      "superAdminStatus": "Status: Super-Administrator"
-    },
-    "mfa": {
-      "backupCodesRemaining": "Verbleibende Backup-Codes: {{ count }}",
-      "heading": "Zwei-Faktor-Authentifizierung (TOTP)",
-      "loadFailed": "Die Zwei-Faktor-Authentifizierung konnte nicht geladen werden.",
-      "notEnabled": "Die Zwei-Faktor-Authentifizierung ist für dieses Konto nicht aktiviert.",
-      "enable": "Aktivieren",
-      "scanQr": "Scannen Sie diesen QR-Code mit Ihrer Authentifizierungs-App (Google Authenticator, Authy, 1Password…) oder geben Sie den Code manuell ein:",
-      "enabledWithCodes": "Zwei-Faktor-Authentifizierung aktiviert. Bewahren Sie diese Backup-Codes an einem sicheren Ort auf — jeder kann nur einmal verwendet werden, falls Sie den Zugriff auf Ihre Authentifizierungs-App verlieren.",
-      "savedCodesReconnect": "Ich habe diese Codes gespeichert, erneut anmelden",
-      "enabled": "Zwei-Faktor-Authentifizierung aktiviert.",
-      "regenerate": {
-        "label": "NEU GENERIEREN",
-        "warning": "Die alten Backup-Codes funktionieren sofort nicht mehr und Ihre Sitzungen werden beendet.",
-        "button": "Backup-Codes neu generieren"
-      },
-      "currentPassword": "Aktuelles Passwort",
-      "disable": {
-        "label": "DEAKTIVIERUNG",
-        "warning": "Das Konto verlangt bei der Anmeldung keinen Code mehr. Ihre Sitzungen werden beendet.",
-        "button": "Zwei-Faktor-Authentifizierung deaktivieren"
-      },
-      "newBackupCodes": "Neue Backup-Codes — die alten funktionieren nicht mehr:",
-      "sessionsWillClose": "Ihre Sitzungen werden beendet: Sie müssen sich erneut anmelden, sobald diese Codes gespeichert sind.",
-      "errors": {
-        "startFailed": "Die Aktivierung konnte nicht gestartet werden. Versuchen Sie es erneut.",
-        "wrongPassword": "Falsches Passwort.",
-        "disableFailed": "Die Deaktivierung ist fehlgeschlagen.",
-        "regenerateFailed": "Die Neugenerierung ist fehlgeschlagen."
-      }
-    },
-    "tabs": {
+    "intro": "Profil, Passwort, Zwei-Faktor-Authentifizierung und Zugriffstoken",
+    "sections": {
+      "label": "Kontoeinstellungen",
       "profile": "Profil",
+      "password": "Passwort",
       "security": "Sicherheit",
-      "tokens": "API-Token"
+      "tokens": "Zugriffstoken"
+    },
+    "profile": {
+      "heading": "Profil",
+      "description": "Ihre Identität bei ArtiFerris. Die Sprache wird gespeichert, sobald Sie sie wählen.",
+      "usernameMeta": "Benutzername, nicht änderbar",
+      "memberSince": "Mitglied seit {{ date }}",
+      "superAdmin": "Super-Administrator",
+      "loading": "Profil wird geladen…",
+      "sessionText": "Sitzung in diesem Browser geöffnet.",
+      "signOut": "Abmelden",
+      "email": "E-Mail",
+      "emailHint": "Die Adresse, unter der ArtiFerris Sie erreicht, bestätigt mit Ihrer Einladung oder durch Ihren Identitätsanbieter.",
+      "noEmail": "Keine bestätigte Adresse",
+      "noEmailHint": "ArtiFerris schreibt nur an eine Adresse, die mit einer Einladung oder durch einen Identitätsanbieter bestätigt wurde."
+    },
+    "save": {
+      "saving": "Wird gespeichert…",
+      "saved": "Gespeichert",
+      "error": "Nicht gespeichert"
     },
     "password": {
-      "heading": "Passwort ändern",
+      "heading": "Passwort",
+      "description": "Wählen Sie eines mit mindestens {{ min }} Zeichen, das Sie nirgendwo sonst verwenden. Eine Änderung beendet Ihre anderen Sitzungen.",
       "current": "Aktuelles Passwort",
       "new": "Neues Passwort",
       "confirm": "Neues Passwort bestätigen",
+      "minLength": "Mindestens {{ min }} Zeichen",
+      "submit": "Passwort ändern",
       "errors": {
-        "mismatch": "Die Passwörter stimmen nicht überein.",
+        "mismatch": "Die neuen Passwörter stimmen nicht überein.",
         "tooShort": "Das Passwort muss mindestens 8 Zeichen lang sein.",
-        "change": "Aktuelles Passwort falsch oder neues Passwort ungültig."
-      }
-    },
-    "tokens": {
-      "heading": "API-Token"
-    },
-    "passkeys": {
-      "heading": "Passkeys",
-      "emptyHeading": "Keine Passkeys",
-      "emptyMessage": "Fügen Sie einen Passkey hinzu, um sich ohne Passwort anzumelden.",
-      "registerNew": "Neuen Schlüssel registrieren",
-      "add": "Passkey hinzufügen",
-      "unsupported": "Ihr Browser unterstützt keine Passkeys.",
-      "errors": {
-        "loadFailed": "Die Passkeys konnten nicht geladen werden."
+        "change": "Das Passwort konnte nicht geändert werden. Versuchen Sie es später erneut.",
+        "wrongCurrent": "Aktuelles Passwort falsch.",
+        "tooMany": "Zu viele Versuche, versuchen Sie es in einigen Minuten erneut.",
+        "notChanged": "Das Passwort konnte nicht geändert werden."
       },
-      "registered": "Passkey registriert."
-    },
-    "sessions": {
-      "heading": "Sitzungen",
-      "description": "Widerruft alle Ihre offenen Sitzungen, Ihre API-Token und Ihre Docker-Token. Nützlich, wenn ein Gerät verloren geht oder kompromittiert wird, oder wenn Ihr Konto über SSO läuft und kein Passwort zu ändern hat.",
-      "signOutEverywhere": "Überall abmelden",
-      "confirmMessage": "Alle Ihre Sitzungen, API-Token und Docker-Token werden widerrufen, auch diese. Sie müssen sich erneut anmelden.",
-      "errors": {
-        "signOutFailed": "Die Sitzungen konnten nicht beendet werden. Versuchen Sie es erneut."
-      }
+      "changed": "Passwort geändert."
     },
     "language": {
-      "heading": "Sprache",
       "label": "Sprache der Oberfläche",
+      "hint": "In Ihrem Konto gespeichert: Sie gilt auf allen Ihren Geräten.",
       "saved": "Sprache gespeichert.",
       "errors": {
         "saveFailed": "Die Sprache konnte nicht gespeichert werden. Versuchen Sie es erneut."
       }
+    },
+    "sessions": {
+      "heading": "Sitzungen",
+      "description": "Beendet alle Ihre offenen Sitzungen, auch diese, und widerruft Ihre Zugriffstoken und Docker-Token. Nützlich, wenn ein Gerät verloren geht oder kompromittiert wird, oder wenn Ihr Konto über SSO läuft und kein Passwort zu ändern hat.",
+      "signOutEverywhere": "Überall abmelden",
+      "confirmMessage": "Alle Ihre Sitzungen werden beendet, auch diese, und Ihre Zugriffs- und Docker-Token widerrufen. Sie müssen sich erneut anmelden.",
+      "errors": {
+        "signOutFailed": "Die Sitzungen konnten nicht beendet werden. Versuchen Sie es erneut."
+      }
     }
   },
   "tokens": {
-    "intro": "Verwenden Sie ein Token, um <code>npm publish</code>/<code>npm install</code> in Ihrer <code>.npmrc</code> zu authentifizieren.",
     "create": {
+      "heading": "Neues Token",
+      "description": "Ein Token authentifiziert npm publish und npm install über Ihre .npmrc. Benennen Sie es nach dem Rechner oder Werkzeug, das es verwendet.",
+      "name": "Name des Tokens",
+      "namePlaceholder": "z. B. ci-npm-publish",
+      "password": "Passwort (optional)",
       "labelTooLong": "Der Name darf höchstens {{ max }} Zeichen lang sein.",
       "expiresFull": "Dieses Token läuft in {{ days }} Tagen ab.",
-      "expiresShort": "Dieses Token läuft in {{ days }} Tagen ab: Geben Sie Ihr Passwort für 365 Tage ein.",
-      "heading": "Neues API-Token",
-      "name": "Name (z. B. „mein Laptop“)",
-      "password": "Passwort (für ein langlebiges Token)",
-      "submit": "Erstellen"
+      "expiresShort": "Dieses Token läuft in {{ days }} Tagen ab: Geben Sie Ihr Passwort ein, damit es 365 Tage gilt.",
+      "submit": "Erzeugen"
     },
     "created": {
-      "expires": "Es läuft in {{ days }} Tagen ab.",
-      "heading": "Token erstellt",
-      "copyNow": "Kopieren Sie dieses Token jetzt — es wird nie wieder angezeigt.",
-      "done": "Ich habe das Token kopiert"
+      "heading": "Token „{{ label }}“ erzeugt",
+      "description": "Kopieren Sie es jetzt und bewahren Sie es sicher auf: in einem Secrets-Manager, einer maskierten CI-Variablen. Es läuft in {{ days }} Tagen ab.",
+      "copy": "Token kopieren",
+      "copied": "Kopiert",
+      "copyFailed": "Kopieren nicht möglich, Token markiert",
+      "warning": "Dieses Token wird nie wieder angezeigt. Geht es verloren, widerrufen Sie es und erzeugen Sie ein neues.",
+      "done": "Ich habe das Token kopiert",
+      "badge": "Neu",
+      "toast": "Token erzeugt."
+    },
+    "list": {
+      "heading": "Aktive Token",
+      "description": "Jedes gewährt Zugriff auf Ihr Konto: Widerrufen Sie die, die Sie nicht mehr verwenden.",
+      "loading": "Token werden geladen…",
+      "retry": "Erneut versuchen",
+      "createdAgo": "Erstellt {{ when }}",
+      "createdOn": "Erstellt am {{ date }}",
+      "usedAgo": "Verwendet {{ when }}",
+      "usedOn": "Verwendet am {{ date }}",
+      "neverUsed": "Nie verwendet"
     },
     "empty": {
       "heading": "Keine Token",
-      "message": "Erstellen Sie ein Token, um Ihre npm-Veröffentlichungen und -Installationen zu authentifizieren."
-    },
-    "new": "Neues Token",
-    "table": {
-      "caption": "API-Token",
-      "name": "Name",
-      "createdAt": "Erstellt am"
+      "message": "Erzeugen Sie eines, um npm-Pakete aus einem Skript, einer CI oder einem anderen Werkzeug zu veröffentlichen oder zu installieren."
     },
     "errors": {
       "tooMany": "Zu viele Versuche, versuchen Sie es später erneut.",
-      "createFailed": "Das Token konnte nicht erstellt werden.",
+      "createFailed": "Das Token konnte nicht erzeugt werden.",
       "wrongPassword": "Falsches Passwort.",
       "loadFailed": "Die Token konnten nicht geladen werden.",
-      "revokeFailed": "Das Token \"{{ label }}\" konnte nicht widerrufen werden."
+      "revokeFailed": "Dieses Token konnte nicht widerrufen werden."
     },
     "revoke": {
       "heading": "Token widerrufen",
       "confirm": "Widerrufen",
-      "message": "Das Token \"{{ label }}\" widerrufen? Jede npm-Integration, die es verwendet, funktioniert danach nicht mehr."
+      "label": "Token {{ label }} widerrufen",
+      "message": "Die Werkzeuge und Skripte, die „{{ label }}“ verwenden, können keine Pakete mehr veröffentlichen oder installieren. Ein widerrufenes Token kann nicht reaktiviert werden.",
+      "done": "Token widerrufen."
+    },
+    "table": {
+      "caption": "API-Token",
+      "createdAt": "Erstellt am"
     }
   },
   "users": {
     "detail": {
-      "email": "E-Mail: {{ email }}",
-      "info": "Informationen",
       "grant": "Erteilen",
       "grantMany": "Erteilen ({{ count }})",
-      "demoteHint": "Entzieht alle Super-Administrationsrechte.",
-      "promoteHint": "Gewährt vollen Zugriff auf alle Organisationen und deren Administration.",
-      "demote": "Herabstufen",
-      "promote": "Zum Super-Administrator befördern",
-      "promoteConfirm": "\"{{ username }}\" zum Super-Administrator befördern?",
-      "demoteConfirm": "\"{{ username }}\" den Super-Administrator-Rang entziehen?",
-      "promoteHeading": "Zum Super-Administrator befördern",
-      "demoteHeading": "Super-Administrator-Rang entziehen",
-      "promoteAction": "Befördern",
-      "demoteAction": "Entziehen",
+      "demoteHeading": "Super-Administrator-Rechte entziehen",
+      "demoteAction": "Rechte entziehen",
       "promoted": "{{ username }} ist jetzt Super-Administrator.",
       "demoted": "{{ username }} ist kein Super-Administrator mehr.",
-      "deleteConfirm": "Den Benutzer \"{{ username }}\" löschen?",
+      "deleteConfirm": "Das Konto von {{ username }} wird endgültig gelöscht: Die Person wird überall abgemeldet, ihre API-Tokens und ihre Zwei-Faktor-Authentifizierung werden gelöscht.",
       "deleted": "Benutzer „{{ username }}“ gelöscht.",
       "errors": {
         "lastSuperAdmin": "Der letzte Super-Administrator kann nicht herabgestuft werden.",
         "superAdminStatus": "Der Super-Administrator-Status konnte nicht geändert werden.",
-        "resendFailed": "Die Einladung konnte nicht gesendet werden. Prüfen Sie die Konfiguration des Mailservers.",
+        "resendFailed": "Die Einladung konnte nicht erneut gesendet werden. Versuchen Sie es später erneut.",
         "updateFailed": "Das Zugriffsrecht konnte nicht aktualisiert werden.",
         "revokeFailed": "Das Zugriffsrecht konnte nicht widerrufen werden.",
         "grantFailed": "Der Zugriff konnte für mindestens ein Repository nicht erteilt werden.",
-        "deleteFailed": "Der Benutzer konnte nicht gelöscht werden."
+        "deleteFailed": "Der Benutzer konnte nicht gelöscht werden.",
+        "deleteLastSuperAdmin": "Der letzte Super-Administrator kann nicht gelöscht werden."
       },
-      "loadFailed": "Der Benutzer konnte nicht geladen werden.",
-      "pending": "Status: Einladung wartet auf Aktivierung",
+      "loadFailed": "Dieser Benutzer konnte nicht geladen werden.",
       "resend": "Einladung erneut senden",
       "permissions": "Zugriffsrechte",
-      "permissionsCaption": "Zugriffsrechte dieses Benutzers",
-      "noPermissions": "Keine Zugriffsrechte erteilt",
+      "noPermissions": "Keine Zugriffsrechte",
       "repositories": "Repositories",
       "repositoriesPlaceholder": "Wählen Sie ein oder mehrere Repositories",
       "role": "Rolle",
-      "deleteHint": "Endgültige Löschung des Kontos.",
       "delete": "Benutzer löschen",
-      "columns": {
-        "repository": "Repository"
-      },
       "updated": "Zugriffsrecht aktualisiert.",
       "revoked": "Zugriffsrecht widerrufen.",
       "granted": "Zugriffsrecht erteilt.",
-      "resent": "Einladung erneut gesendet."
+      "loadFailedMessage": "Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+      "loading": "Benutzer wird geladen…",
+      "actions": "Aktionen",
+      "loadingPermissions": "Zugriffsrechte werden geladen…",
+      "noPermissionsMessage": "{{ username }} hat auf kein Repository Zugriff. Vergeben Sie mit dem Formular unten eine Rolle.",
+      "repositoryCount_one": "{{ count }} Repository",
+      "repositoryCount_other": "{{ count }} Repositorys",
+      "permissionMenuLabel": "Aktionen für {{ repository }}",
+      "changeRole": "Rolle ändern",
+      "revokeAction": "Zugriff entziehen",
+      "revokeHeading": "Zugriff entziehen",
+      "revokeMessage": "{{ username }} hat dann keinen Zugriff mehr auf {{ repository }}.",
+      "grantHeading": "Zugriff gewähren",
+      "facts": {
+        "repositories": "Repositorys"
+      },
+      "rolesHelp": "Die Rollen bauen aufeinander auf: read erlaubt Ansehen und Herunterladen, write zusätzlich Veröffentlichen, admin zusätzlich die Verwaltung des Repositorys, seiner Zugriffe und Kontingente.",
+      "deletionHeading": "Löschen des Kontos",
+      "deletionHelp": "Das Löschen eines Kontos meldet es sofort ab und löscht seine API-Tokens, seine Zwei-Faktor-Authentifizierung und seine Einstellungen. Die von ihm veröffentlichten Versionen bleiben erhalten, ohne Autorennamen.",
+      "notFoundHeading": "Benutzer nicht gefunden",
+      "notFoundMessage": "Dieses Konto existiert nicht oder wurde gelöscht.",
+      "backToUsers": "Zurück zu den Benutzern",
+      "selfHeading": "Das ist Ihr eigenes Konto",
+      "selfMessage": "Es wird nicht über die Verwaltung gepflegt und kann hier nicht gelöscht werden: Seine Einstellungen finden Sie unter „Mein Konto“.",
+      "myAccount": "Mein Konto",
+      "rolesHeading": "Rollen"
     },
     "create": {
-      "created": "Einladung an {{ email }} gesendet.",
-      "heading": "Neuer Benutzer",
-      "username": "Benutzername",
+      "heading": "Benutzer einladen",
       "email": "E-Mail-Adresse",
+      "intro": "An diese Adresse wird eine E-Mail mit einem 24 Stunden gültigen Aktivierungslink gesendet. Dort wählt die Person ihren Benutzernamen und ihr Passwort.",
       "superAdmin": "Super-Administrator",
-      "inviteNote": "An diese Adresse wird eine E-Mail gesendet, damit die Person ihr Konto aktiviert und Benutzernamen und Passwort wählt, innerhalb von 24 Stunden.",
-      "invite": "Einladen",
+      "superAdminHint": "Ein Super-Administrator verwaltet Benutzer, Organisationen und die Einstellungen der Instanz.",
+      "send": "Einladung senden",
+      "sending": "Wird gesendet",
+      "done": "Fertig",
+      "sentTitle": "Einladung an {{ email }} gesendet",
+      "sentHelp": "Die Person findet darin einen 24 Stunden gültigen Aktivierungslink, um Benutzernamen und Passwort zu wählen.",
       "errors": {
-        "createFailed": "Der Benutzer konnte nicht erstellt werden."
-      }
+        "emailRequired": "Geben Sie die E-Mail-Adresse ein",
+        "emailInvalid": "Geben Sie eine gültige E-Mail-Adresse ein, zum Beispiel name@beispiel.de",
+        "emailTaken": "Diese E-Mail-Adresse wird bereits von einem Konto verwendet",
+        "createFailed": "Die Einladung konnte nicht gesendet werden. Versuchen Sie es später erneut."
+      },
+      "username": "Benutzername",
+      "invite": "Einladen"
     },
     "list": {
-      "new": "Neuer Benutzer",
       "organization": "Organisation",
       "emptyHeading": "Keine Benutzer",
-      "emptyMessage": "Erstellte oder eingeladene Benutzer erscheinen hier.",
-      "noResultsHeading": "Keine Ergebnisse",
-      "noResultsMessage": "Keine Benutzer in dieser Organisation. Ändern Sie den Filter, um andere zu sehen.",
+      "emptyMessage": "Laden Sie die erste Person ein: Sie erhält per E-Mail einen Link, um ihr Konto zu aktivieren.",
       "caption": "Benutzer",
       "allOrganizations": "Alle Organisationen",
-      "columns": {
-        "username": "Benutzername",
-        "email": "E-Mail",
-        "superAdmin": "Super-Admin",
-        "invitationPending": "Einladung ausstehend"
-      },
       "errors": {
         "loadFailed": "Die Benutzer konnten nicht geladen werden."
+      },
+      "invite": "Benutzer einladen",
+      "cardLabel": "Konten",
+      "loading": "Benutzer werden geladen…",
+      "emptyMessageMember": "Die Konten Ihrer Organisation werden hier angezeigt.",
+      "filterLabel": "Konten filtern",
+      "searchLabel": "Benutzer suchen",
+      "searchPlaceholder": "Benutzername oder E-Mail",
+      "sortLabel": "Sortieren nach",
+      "directionLabel": "Sortierrichtung umkehren",
+      "sortCreated": "Erstellungsdatum",
+      "sortUsername": "Benutzername",
+      "tabAll": "Alle ({{ count }})",
+      "tabPending": "Offene Einladungen ({{ count }})",
+      "accounts_one": "{{ count }} Konto",
+      "accounts_other": "{{ count }} Konten",
+      "pendingCount_one": "{{ count }} offene Einladung",
+      "pendingCount_other": "{{ count }} offene Einladungen",
+      "summaryWithPending": "{{ accounts }} · {{ pending }}",
+      "menuLabel": "Aktionen für {{ name }}",
+      "you": "Sie",
+      "noPendingMatch": "Keine offene Einladung entspricht dieser Suche",
+      "noPending": "Keine offenen Einladungen",
+      "noMatch": "Kein Benutzer entspricht dieser Suche",
+      "sending": "Wird gesendet",
+      "saving": "Wird gespeichert",
+      "resent": "Einladung erneut an {{ email }} gesendet.",
+      "demoteMessage": "{{ username }} kann dann keine Benutzer, Organisationen oder Instanzeinstellungen mehr verwalten. Sie können diese Rechte später wieder vergeben.",
+      "demoteSelfMessage": "Sie entfernen sich selbst aus den Super-Administratoren, {{ username }}: Sie verlieren sofort den Zugriff auf die Verwaltung der Instanz. Nur ein anderer Super-Administrator kann Ihnen diese Rechte zurückgeben.",
+      "noneInOrganization": "Keine Benutzer in dieser Organisation."
+    },
+    "row": {
+      "createdAgo": "erstellt {{ when }}",
+      "createdOn": "erstellt am {{ date }}",
+      "expiredAgo": "abgelaufen {{ when }}",
+      "expiredOn": "abgelaufen am {{ date }}",
+      "expires": "läuft ab am {{ date }}"
+    },
+    "state": {
+      "active": "Aktiv",
+      "pending": "Einladung offen",
+      "expired": "Einladung abgelaufen"
+    },
+    "mfa": {
+      "on": "Zwei-Faktor-Authentifizierung aktiv",
+      "off": "Nicht eingerichtet"
+    },
+    "superAdmin": "Super-Administrator",
+    "actions": {
+      "promote": "Zum Super-Administrator ernennen",
+      "demote": "Super-Administrator-Rechte entziehen"
+    },
+    "help": {
+      "invitationsHeading": "Einladungen",
+      "invitations": "Ein eingeladenes Konto wird ohne Passwort erstellt. Eine E-Mail enthält einen 24 Stunden gültigen Aktivierungslink, um Benutzernamen und Passwort zu wählen; „Einladung erneut senden“ erzeugt einen neuen und macht den alten ungültig.",
+      "mfaHeading": "Zwei-Faktor-Authentifizierung",
+      "mfa": "Sie ist für alle Konten Pflicht. Hat jemand sein Gerät und seine Backup-Codes verloren, setzen Sie sie zurück: Die Person wird überall abgemeldet und richtet sie bei der nächsten Anmeldung neu ein.",
+      "organizationsHeading": "Organisationen",
+      "organizations": "Jedes Konto gehört zu einer Organisation. Wählen Sie eine, um nur ihre Konten anzuzeigen, oder „Alle Organisationen“, um alle zu sehen.",
+      "passwordHeading": "Passwort",
+      "password": "Hat jemand sein Passwort verloren, setzen Sie es zurück: Das alte funktioniert sofort nicht mehr, und eine E-Mail enthält einen 1 Stunde gültigen Link, um ein neues zu wählen."
+    },
+    "mfaReset": {
+      "heading": "Zwei-Faktor-Authentifizierung zurücksetzen",
+      "confirm": "Zurücksetzen",
+      "resetting": "Wird zurückgesetzt",
+      "done": "Zwei-Faktor-Authentifizierung zurückgesetzt.",
+      "message": "{{ username }} wird auf allen Geräten abgemeldet und muss die Zwei-Faktor-Authentifizierung bei der nächsten Anmeldung neu einrichten. Die bisherige Authenticator-App, Passkeys und Backup-Codes funktionieren dann nicht mehr.",
+      "selfMessage": "Das ist Ihr eigenes Konto: Sie werden sofort auf allen Geräten abgemeldet und müssen die Zwei-Faktor-Authentifizierung bei der nächsten Anmeldung neu einrichten. Ihre bisherige Authenticator-App, Ihre Passkeys und Backup-Codes funktionieren dann nicht mehr.",
+      "errors": {
+        "notEnrolled": "Dieses Konto hat keine Zwei-Faktor-Authentifizierung mehr, die zurückgesetzt werden könnte.",
+        "failed": "Die Zwei-Faktor-Authentifizierung konnte nicht zurückgesetzt werden. Versuchen Sie es später erneut."
+      }
+    },
+    "passwordReset": {
+      "heading": "Passwort zurücksetzen",
+      "confirm": "Zurücksetzen",
+      "resetting": "Wird zurückgesetzt",
+      "sent": "Ein Link zur Wahl eines neuen Passworts wurde an {{ username }} gesendet.",
+      "message": "Das aktuelle Passwort von {{ username }} funktioniert sofort nicht mehr, und die Person wird auf allen Geräten abgemeldet. Mit einem 1 Stunde gültigen Link wählt sie ein neues: Vorher kann sie sich nicht anmelden.",
+      "errors": {
+        "own": "Ändern Sie Ihr eigenes Passwort unter Mein Konto.",
+        "notActivated": "Dieses Konto ist noch nicht aktiviert: Senden Sie stattdessen die Einladung erneut.",
+        "identityProvider": "Diese Organisation meldet sich über ihren Identitätsanbieter an, der ihre Passwörter verwaltet.",
+        "failed": "Das Passwort konnte nicht zurückgesetzt werden. Versuchen Sie es später erneut."
       }
     }
   },
@@ -943,8 +976,8 @@
       "activityTruncated": "Basierend auf den {{ count }} neuesten Ereignissen: Ältere Tage sind unterschätzt.",
       "users": "Benutzer",
       "repositories": "Repositories",
-      "permissions": "Aktive Berechtigungen",
-      "activity": "Aktivität (letzte 7 Tage)",
+      "permissions": "Zugriffsrechte",
+      "activity": "Aktivität der letzten 7 Tage",
       "eventsPerDay": "Ereignisse pro Tag",
       "day": "Tag",
       "noEvents": "Keine Ereignisse in den letzten 7 Tagen.",
@@ -952,8 +985,8 @@
       "noReposByFormat": "Keine Repositories, die nach Format aufgeschlüsselt werden könnten.",
       "storageEvolution": "Entwicklung des Speichers",
       "storageTable": "Gesamtspeicher pro Messung",
-      "notEnoughData": "Noch nicht genug Messwerte.",
-      "usersAndRepos": "Entwicklung von Benutzern und Repositories",
+      "notEnoughData": "Noch nicht genug Messungen",
+      "usersAndRepos": "Benutzer und Repositorys",
       "usersAndReposTable": "Benutzer und Repositories pro Messung",
       "recent": "Letzte Aktivität",
       "noRecentHeading": "Keine letzte Aktivität",
@@ -961,9 +994,23 @@
       "partialFailure": "Ein Teil des Dashboards konnte nicht geladen werden.",
       "days_one": "{{ count }} Tag",
       "days_other": "{{ count }} Tage",
-      "month": "1 Monat",
       "storage": "Speicher",
-      "events": "Ereignisse"
+      "events": "Ereignisse",
+      "intro": "Überblick über die Instanz: Konten, Repositorys, Zugriffsrechte und Speicher",
+      "summary": "Übersicht",
+      "loadingStats": "Statistiken werden geladen…",
+      "lastReading": "letzte Messung",
+      "noReading": "keine Messung",
+      "storageIn": "Speicher ({{ unit }})",
+      "evolution": "Entwicklung",
+      "period": "Zeitraum",
+      "historyFailed": "Der Verlauf konnte nicht geladen werden.",
+      "loadingHistory": "Verlauf wird geladen…",
+      "unit": "in {{ unit }}",
+      "notEnoughDataMessage": "Jede Stunde wird gemessen: Die Kurve erscheint ab der zweiten Messung.",
+      "usersAndReposEvolution": "Entwicklung der Benutzer und Repositorys",
+      "loadingActivity": "Aktivität wird geladen…",
+      "activityFailed": "Die Aktivität konnte nicht geladen werden."
     },
     "audit": {
       "events": {
@@ -1018,7 +1065,9 @@
         "PackageVersionDeprecated": "Version als veraltet markiert",
         "DistTagChanged": "Dist-Tag geändert",
         "ImagePushed": "Image veröffentlicht",
-        "ManifestDeleted": "Manifest gelöscht"
+        "ManifestDeleted": "Manifest gelöscht",
+        "MfaReset": "Zwei-Faktor-Authentifizierung zurückgesetzt",
+        "PasswordReset": "Passwort zurückgesetzt"
       },
       "loginMethods": {
         "password": "Passwort",
@@ -1114,21 +1163,37 @@
     "health": {
       "responseTime": "Antwortzeit",
       "milliseconds": "{{ count }} ms",
-      "days": "{{ count }} T",
-      "hours": "{{ count }} Std.",
-      "minutes": "{{ count }} Min.",
-      "loadFailed": "Der Systemstatus konnte nicht geladen werden.",
+      "loadFailed": "Der Systemzustand konnte nicht geladen werden. Versuchen Sie es später erneut.",
       "database": "Datenbank",
-      "connections": "Verbindungen",
-      "warning": "Warnung",
-      "critical": "Kritisch",
+      "connections": "Aktive Verbindungen",
+      "warning": "fast voll",
+      "critical": "ausgelastet",
       "storage": "Speicher",
       "usedSpace": "Belegter Speicher",
-      "server": "Server",
-      "status": "Status",
-      "postgresVersion": "PostgreSQL-Version",
-      "freeSpace": "Freier Speicher",
-      "uptime": "Läuft seit"
+      "uptime": "Verfügbarkeit",
+      "intro": "Zustand der Dienste der Instanz",
+      "checkedAt": "geprüft um",
+      "refresh": "Aktualisieren",
+      "checking": "Dienste werden geprüft…",
+      "down": "Nicht verfügbar",
+      "up": "In Betrieb",
+      "upFeminine": "In Betrieb",
+      "allUp": "Alle Dienste sind in Betrieb",
+      "degraded": "Eingeschränkter Dienst",
+      "unreachable": "Nicht erreichbar",
+      "unreachableHeading": "API oder Datenbank nicht erreichbar.",
+      "unreachableMessage": "Der Zustand der Dienste konnte nicht geprüft werden. Aktualisieren Sie, sobald der Server wieder läuft.",
+      "version": "Version",
+      "postgres": "PostgreSQL {{ version }}",
+      "unknownVersion": "Unbekannt",
+      "ratio": "{{ value }} von {{ max }}",
+      "used": "Belegt",
+      "free": "Frei",
+      "total": "Gesamt",
+      "storageRatio": "{{ used }} von {{ total }} · {{ percent }}",
+      "startedAt": "Gestartet am {{ date }}",
+      "checksHeading": "Prüfungen",
+      "checksHelp": "Diese Seite aktualisiert sich nicht selbst: „Aktualisieren“ fragt Datenbank und Speicher erneut ab."
     },
     "usage": {
       "others": "Andere ({{ count }})",
@@ -1291,7 +1356,22 @@
   },
   "notFound": {
     "heading": "Seite nicht gefunden",
-    "message": "Diese Adresse entspricht keiner Seite.",
-    "backHome": "Zurück zur Startseite"
+    "message": "Prüfen Sie die Adresse. Ist diese Seite privat, melden Sie sich an, um sie zu sehen.",
+    "backHome": "Zurück zur Startseite",
+    "signIn": "Anmelden"
+  },
+  "invitationMail": {
+    "title": "Die E-Mail konnte nicht gesendet werden",
+    "notConfigured": "Für diese Organisation ist kein Mailserver konfiguriert.",
+    "sendFailed": "Der Mailserver hat die Nachricht nicht angenommen.",
+    "help": "Geben Sie diesen Link an {{ name }} weiter: Er ist 24 Stunden gültig. Er wird danach nicht mehr angezeigt — „Einladung erneut senden“ erzeugt einen neuen.",
+    "copy": "Aktivierungslink kopieren",
+    "copied": "Kopiert",
+    "copyFailed": "Kopieren nicht möglich, Link markiert",
+    "noLink": "Verwenden Sie „Einladung erneut senden“, um den Aktivierungslink für {{ name }} zu erhalten.",
+    "noAddress": "Dieses Konto hat keine bestätigte E-Mail-Adresse.",
+    "resetHelp": "Geben Sie diesen Link an {{ name }} weiter: Er ist 1 Stunde gültig. Er wird danach nicht mehr angezeigt — „Passwort zurücksetzen“ erzeugt einen neuen.",
+    "resetCopy": "Link zum Zurücksetzen kopieren",
+    "resetNoLink": "Verwenden Sie erneut „Passwort zurücksetzen“, um einen Link für {{ name }} zu erhalten."
   }
 }

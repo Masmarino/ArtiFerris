@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing'
 import { By } from '@angular/platform-browser'
 import { Subject, of, throwError } from 'rxjs'
 import { OrganizationMember } from '../domain/organization-member.entity'
-import { Tooltip } from '@masmarino/gabarit'
+import { Tooltip } from '@masmarino/gabarit/tooltip'
 import { OrganizationMembers } from './organization-members'
 import { OrganizationMembersService } from '../application/organization-members.service'
 import { ConfirmService } from '../../shared/confirm.service'
@@ -75,6 +75,7 @@ describe('OrganizationMembers', () => {
         email: 'newmember@example.com',
         is_organization_admin: false,
         invitation_pending: true,
+        email_sent: true,
       }),
     )
     component.startAdding()
@@ -89,6 +90,34 @@ describe('OrganizationMembers', () => {
       variant: 'success',
       message: 'Invitation envoyée à newmember@example.com.',
     })
+  })
+
+  it('hands over the activation link when the mail could not go out', () => {
+    setup()
+    serviceSpy.invite.mockReturnValue(
+      of({
+        id: 'user-2',
+        username: 'invite-0a1b2c',
+        email: 'newmember@example.com',
+        is_organization_admin: false,
+        invitation_pending: true,
+        email_sent: false,
+        email_error: 'email_not_configured',
+        activation_url: 'https://acme.example.com/activate#token=abc',
+      }),
+    )
+    component.startAdding()
+    component.newEmail.set('newmember@example.com')
+
+    component.invite()
+
+    expect(component.mailFailure()).toEqual({
+      name: 'newmember@example.com',
+      mail: expect.objectContaining({
+        activation_url: 'https://acme.example.com/activate#token=abc',
+      }),
+    })
+    expect(TestBed.inject(ToastService).toasts()).toEqual([])
   })
 
   it('shows an error toast when the invite fails', () => {
@@ -242,7 +271,7 @@ describe('OrganizationMembers', () => {
 
   it('does not reopen or reload the new organization when an invite for the previous one finishes late', () => {
     setup()
-    const pending = new Subject<void>()
+    const pending = new Subject<{ email_sent: boolean }>()
     serviceSpy.invite.mockReturnValue(pending)
     component.startAdding()
     component.newEmail.set('alice@example.com')
@@ -251,7 +280,7 @@ describe('OrganizationMembers', () => {
     fixture.detectChanges()
     serviceSpy.list.mockClear()
 
-    pending.next()
+    pending.next({ email_sent: true })
     pending.complete()
 
     expect(serviceSpy.list).not.toHaveBeenCalled()

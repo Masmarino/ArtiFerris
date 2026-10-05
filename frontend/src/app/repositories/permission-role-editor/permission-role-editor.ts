@@ -11,7 +11,9 @@ import {
   signal,
 } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { Button, Modal, Select } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Modal } from '@masmarino/gabarit/modal'
+import { Select } from '@masmarino/gabarit/select'
 import { ConfirmService } from '../../shared/confirm.service'
 import { ROLE_OPTIONS, Role } from '../domain/permission.entity'
 

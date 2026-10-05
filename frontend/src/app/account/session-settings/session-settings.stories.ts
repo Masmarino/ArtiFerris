@@ -70,7 +70,7 @@ export const ServerFailure: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: 'Se déconnecter partout' }))
     await waitFor(() =>
       expect(failureToasts.toasts().at(-1)?.message).toBe(
-        'Échec de la déconnexion des sessions. Réessayez.',
+        'Impossible de fermer les sessions. Réessayez.',
       ),
     )
   },

@@ -207,8 +207,29 @@ impl RevokeUserSessionsUseCase {
     }
 
     pub async fn execute(&self, user_id: Uuid, audit: Option<&SecurityAuditRecord>) -> Result<(), ApplicationError> {
-        self.security.revoke_sessions(user_id, audit).await?;
+        let audit = audit.map(|record| AuditRecord::Security(record.clone()));
+        self.security.revoke_sessions(user_id, audit.as_ref()).await?;
         Ok(())
+    }
+}
+
+/// The address ArtiFerris writes to, for the account page: the account's email when it is verified, `None` otherwise
+/// (no address, one not verified yet, or one another account of the organization holds as verified).
+pub struct GetVerifiedEmailUseCase {
+    users: Arc<dyn UserRepositoryPort>,
+    security: Arc<dyn UserSecurityPort>,
+}
+
+impl GetVerifiedEmailUseCase {
+    pub fn new(users: Arc<dyn UserRepositoryPort>, security: Arc<dyn UserSecurityPort>) -> Self {
+        Self { users, security }
+    }
+
+    pub async fn execute(&self, user_id: Uuid) -> Result<Option<String>, ApplicationError> {
+        let Some(user) = self.users.find_by_id(user_id).await? else {
+            return Ok(None);
+        };
+        Ok(crate::use_cases::mfa::verified_address(self.security.as_ref(), &user).await)
     }
 }
 
@@ -775,7 +796,7 @@ mod tests {
 
     #[async_trait]
     impl UserSecurityPort for FakeSecurity {
-        async fn revoke_sessions(&self, id: Uuid, _audit: Option<&artiferris_domain::audit::SecurityAuditRecord>) -> Result<(), DomainError> {
+        async fn revoke_sessions(&self, id: Uuid, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
             self.revoked.lock().unwrap().push(id);
             Ok(())
         }
@@ -801,5 +822,74 @@ mod tests {
         RevokeUserSessionsUseCase::new(security.clone()).execute(user_id, None).await.unwrap();
 
         assert_eq!(*security.revoked.lock().unwrap(), vec![user_id]);
+    }
+
+    /// Holds one verified address, for one account.
+    struct OneVerifiedAddress {
+        holder: Option<User>,
+    }
+
+    #[async_trait]
+    impl UserSecurityPort for OneVerifiedAddress {
+        async fn revoke_sessions(&self, _id: Uuid, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
+            unreachable!("not exercised by these tests")
+        }
+        async fn find_by_verified_email(&self, organization_id: Uuid, email: &str) -> Result<Option<User>, DomainError> {
+            Ok(self.holder.clone().filter(|holder| holder.organization_id == organization_id && holder.email.as_deref().is_some_and(|held| held.eq_ignore_ascii_case(email))))
+        }
+        async fn insert_with_verified_email(&self, _user: &User) -> Result<(), DomainError> {
+            unreachable!("not exercised by these tests")
+        }
+        async fn activate_invited(&self, _id: Uuid, _username: &artiferris_domain::user::Username, _new_password_hash: String, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
+            unreachable!("not exercised by these tests")
+        }
+        async fn mark_email_verified(&self, _id: Uuid) -> Result<bool, DomainError> {
+            unreachable!("not exercised by these tests")
+        }
+    }
+
+    fn account_with_email(email: Option<&str>) -> User {
+        User {
+            id: Uuid::new_v4(),
+            username: Username::parse("florian").unwrap(),
+            password_hash: "hashed".to_string(),
+            is_super_admin: false,
+            is_organization_admin: false,
+            organization_id: Uuid::new_v4(),
+            created_at: chrono::Utc::now(),
+            tokens_valid_after: chrono::Utc::now(),
+            email: email.map(str::to_string),
+        }
+    }
+
+    async fn verified_email_of(user: &User, verified_holder: Option<User>) -> Option<String> {
+        let users = Arc::new(FakeUserRepository::new());
+        users.users.lock().unwrap().insert(user.id, user.clone());
+        let use_case = GetVerifiedEmailUseCase::new(users, Arc::new(OneVerifiedAddress { holder: verified_holder }));
+        use_case.execute(user.id).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn the_account_page_shows_the_address_when_it_is_verified_for_that_account() {
+        let user = account_with_email(Some("florian@corp.example"));
+
+        assert_eq!(verified_email_of(&user, Some(user.clone())).await.as_deref(), Some("florian@corp.example"));
+    }
+
+    #[tokio::test]
+    async fn the_account_page_shows_no_address_that_is_not_verified_or_held_by_another_account() {
+        let user = account_with_email(Some("florian@corp.example"));
+        let other_holder = User { id: Uuid::new_v4(), ..user.clone() };
+
+        assert_eq!(verified_email_of(&user, None).await, None);
+        assert_eq!(verified_email_of(&user, Some(other_holder)).await, None);
+        assert_eq!(verified_email_of(&account_with_email(None), None).await, None);
+    }
+
+    #[tokio::test]
+    async fn the_account_page_shows_no_address_for_an_account_that_is_gone() {
+        let use_case = GetVerifiedEmailUseCase::new(Arc::new(FakeUserRepository::new()), Arc::new(OneVerifiedAddress { holder: None }));
+
+        assert_eq!(use_case.execute(Uuid::new_v4()).await.unwrap(), None);
     }
 }

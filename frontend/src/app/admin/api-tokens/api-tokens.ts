@@ -10,7 +10,10 @@ import {
   signal,
 } from '@angular/core'
 import { LocalizedDatePipe } from '../../shared/i18n/localized-date'
-import { Button, Card, EmptyState, Tooltip } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Card } from '@masmarino/gabarit/card'
+import { EmptyState } from '@masmarino/gabarit/empty-state'
+import { Tooltip } from '@masmarino/gabarit/tooltip'
 import { AdminApiTokensService } from '../application/admin-api-tokens.service'
 import { ADMIN_TOKEN_PAGE_LIMIT, AdminApiToken } from '../domain/admin-api-token.entity'
 import { ConfirmService } from '../../shared/confirm.service'

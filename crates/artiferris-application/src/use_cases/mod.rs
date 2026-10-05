@@ -28,6 +28,7 @@ pub mod docker_manifest_cache;
 pub mod docker_list;
 pub mod docker_access_token;
 pub mod invitation;
+pub mod password_reset;
 pub mod mfa;
 pub mod retention;
 pub mod webauthn;

@@ -12,8 +12,8 @@ export class HttpMeAdapter implements MePort {
     return this.http.get<MeResponse>('/api/me')
   }
 
-  changePassword(currentPassword: string, newPassword: string): Observable<void> {
-    return this.http.put<void>('/api/me/password', {
+  changePassword(currentPassword: string, newPassword: string): Observable<{ token: string }> {
+    return this.http.put<{ token: string }>('/api/me/password', {
       current_password: currentPassword,
       new_password: newPassword,
     })

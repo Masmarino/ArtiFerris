@@ -71,7 +71,7 @@ function press(
   key: string,
   init: KeyboardEventInit = {},
 ) {
-  const event = new KeyboardEvent('keydown', { key, cancelable: true, ...init })
+  const event = new KeyboardEvent('keydown', { key, cancelable: true, bubbles: true, ...init })
   input.dispatchEvent(event)
   fixture.detectChanges()
   return event
@@ -111,7 +111,7 @@ describe('SuggestSearchBox', () => {
 
       const label = el.querySelector<HTMLLabelElement>(`label[for="${input.id}"]`)!
       expect(label.textContent).toBe('Rechercher un paquet')
-      expect(label.classList).not.toContain('sr-only')
+      expect(label.classList).not.toContain('gbt-input__label--hidden')
     })
 
     it('can hide the label visually while keeping it for screen readers', () => {
@@ -120,7 +120,9 @@ describe('SuggestSearchBox', () => {
       fixture.componentRef.setInput('labelHidden', true)
       fixture.detectChanges()
 
-      expect(el.querySelector(`label[for="${input.id}"]`)!.classList).toContain('sr-only')
+      expect(el.querySelector(`label[for="${input.id}"]`)!.classList).toContain(
+        'gbt-input__label--hidden',
+      )
     })
 
     it('shows the placeholder and the initial value', () => {
@@ -745,7 +747,7 @@ describe('SuggestSearchBox in a host', () => {
 
     input.value = 'left'
     input.dispatchEvent(new Event('input'))
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
 
     expect(fixture.componentInstance.found).toBe('left')
   })

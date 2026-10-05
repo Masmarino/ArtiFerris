@@ -10,7 +10,11 @@ import {
   signal,
 } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { Button, Card, Checkbox, GbtInput, Spinner } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Card } from '@masmarino/gabarit/card'
+import { Checkbox } from '@masmarino/gabarit/checkbox'
+import { GbtInput } from '@masmarino/gabarit/input'
+import { Spinner } from '@masmarino/gabarit/spinner'
 import { SystemSettingsService } from '../application/system-settings.service'
 import { ToastService } from '../../shared/toast.service'
 import { MeService } from '../../shell/application/me.service'

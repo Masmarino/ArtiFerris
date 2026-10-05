@@ -18,12 +18,20 @@ impl PostgresWebauthnCredentialRepository {
 
 #[async_trait]
 impl WebauthnCredentialPort for PostgresWebauthnCredentialRepository {
+    async fn holders_among(&self, user_ids: &[Uuid]) -> Result<std::collections::HashSet<Uuid>, DomainError> {
+        if user_ids.is_empty() {
+            return Ok(std::collections::HashSet::new());
+        }
+        let rows: Vec<(Uuid,)> = sqlx::query_as("SELECT DISTINCT user_id FROM webauthn_credentials WHERE user_id = ANY($1)").bind(user_ids).fetch_all(&self.pool).await.infra_err()?;
+        Ok(rows.into_iter().map(|(user_id,)| user_id).collect())
+    }
+
     async fn list_for_user(&self, user_id: Uuid) -> Result<Vec<WebauthnCredential>, DomainError> {
-        let rows = sqlx::query!("SELECT id, user_id, name, passkey_data, created_at FROM webauthn_credentials WHERE user_id = $1 ORDER BY created_at", user_id)
+        let rows = sqlx::query!("SELECT id, user_id, name, passkey_data, created_at, last_used_at FROM webauthn_credentials WHERE user_id = $1 ORDER BY created_at", user_id)
             .fetch_all(&self.pool)
             .await
             .infra_err()?;
-        Ok(rows.into_iter().map(|r| WebauthnCredential { id: r.id, user_id: r.user_id, name: r.name, passkey_data: r.passkey_data, created_at: r.created_at }).collect())
+        Ok(rows.into_iter().map(|r| WebauthnCredential { id: r.id, user_id: r.user_id, name: r.name, passkey_data: r.passkey_data, created_at: r.created_at, last_used_at: r.last_used_at }).collect())
     }
 
     async fn insert(&self, credential: &WebauthnCredential, audit: Option<&SecurityAuditRecord>) -> Result<(), DomainError> {
@@ -52,6 +60,14 @@ impl WebauthnCredentialPort for PostgresWebauthnCredentialRepository {
         Ok(())
     }
 
+    async fn mark_used(&self, id: Uuid, at: chrono::DateTime<chrono::Utc>) -> Result<(), DomainError> {
+        sqlx::query!("UPDATE webauthn_credentials SET last_used_at = $1 WHERE id = $2", at, id)
+            .execute(&self.pool)
+            .await
+            .infra_err()?;
+        Ok(())
+    }
+
     async fn delete(&self, id: Uuid, user_id: Uuid, audit: Option<&SecurityAuditRecord>) -> Result<(), DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!("DELETE FROM webauthn_credentials WHERE id = $1 AND user_id = $2", id, user_id).execute(&mut *tx).await.infra_err()?;
@@ -67,6 +83,11 @@ impl WebauthnCredentialPort for PostgresWebauthnCredentialRepository {
             .infra_err()?
             .unwrap_or(0);
         Ok(count)
+    }
+
+    async fn delete_all_for_user(&self, user_id: Uuid) -> Result<(), DomainError> {
+        sqlx::query("DELETE FROM webauthn_credentials WHERE user_id = $1").bind(user_id).execute(&self.pool).await.infra_err()?;
+        Ok(())
     }
 }
 
@@ -95,7 +116,7 @@ mod tests {
     }
 
     fn sample(user_id: Uuid) -> WebauthnCredential {
-        WebauthnCredential { id: Uuid::new_v4(), user_id, name: "MacBook".to_string(), passkey_data: b"opaque-passkey-bytes".to_vec(), created_at: chrono::Utc::now() }
+        WebauthnCredential { id: Uuid::new_v4(), user_id, name: "MacBook".to_string(), passkey_data: b"opaque-passkey-bytes".to_vec(), created_at: chrono::Utc::now(), last_used_at: None }
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -113,6 +134,36 @@ mod tests {
             found
         );
         assert_eq!(found.created_at.timestamp_micros(), credential.created_at.timestamp_micros());
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn deleting_every_passkey_of_an_account_leaves_the_others(pool: sqlx::PgPool) {
+        let florian = seed_user(&pool, "florian").await;
+        let alice = seed_user(&pool, "alice").await;
+        let repo = PostgresWebauthnCredentialRepository::new(pool);
+        repo.insert(&sample(florian), None).await.unwrap();
+        repo.insert(&sample(florian), None).await.unwrap();
+        repo.insert(&sample(alice), None).await.unwrap();
+
+        repo.delete_all_for_user(florian).await.unwrap();
+
+        assert_eq!(repo.count_for_user(florian).await.unwrap(), 0);
+        assert_eq!(repo.count_for_user(alice).await.unwrap(), 1);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_passkey_records_when_it_was_last_used(pool: sqlx::PgPool) {
+        let user_id = seed_user(&pool, "florian").await;
+        let repo = PostgresWebauthnCredentialRepository::new(pool);
+        let credential = sample(user_id);
+        repo.insert(&credential, None).await.unwrap();
+        assert_eq!(repo.list_for_user(user_id).await.unwrap()[0].last_used_at, None);
+
+        let at = chrono::Utc::now();
+        repo.mark_used(credential.id, at).await.unwrap();
+
+        let used = repo.list_for_user(user_id).await.unwrap()[0].last_used_at.unwrap();
+        assert_eq!(used.timestamp_micros(), at.timestamp_micros());
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

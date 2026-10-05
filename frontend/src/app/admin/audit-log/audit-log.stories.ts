@@ -149,7 +149,9 @@ export const AdministrativeEvents: Story = {
     expect(within(table).getByText('Super-administrateur accordé')).toBeInTheDocument()
     expect(within(table).getByText('Inscription ouverte : oui → non')).toBeInTheDocument()
     expect(within(table).getByText('12 utilisateurs, 4 dépôts, 30 permissions')).toBeInTheDocument()
-    expect(within(table).getByText("alice (administrateur d'organisation)")).toBeInTheDocument()
+    expect(
+      within(table).getByText("alice@example.com (administrateur d'organisation)"),
+    ).toBeInTheDocument()
     expect(within(table).queryByText('IdentityProviderSet')).not.toBeInTheDocument()
   },
 }

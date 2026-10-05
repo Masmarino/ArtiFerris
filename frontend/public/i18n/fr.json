@@ -92,7 +92,12 @@
       "event_store_failure": "Erreur interne du serveur. Réessayez plus tard.",
       "storage_failure": "Erreur de stockage sur le serveur. Réessayez plus tard.",
       "registration_unavailable": "L'inscription publique n'est pas disponible sur cette organisation.",
-      "registration_disabled": "La création de compte est actuellement désactivée par l'administrateur."
+      "registration_disabled": "La création de compte est actuellement désactivée par l'administrateur.",
+      "email_not_configured": "Aucun serveur mail n'est configuré pour cette organisation.",
+      "password_reset_link_invalid": "Ce lien de réinitialisation est invalide, a déjà servi ou a expiré.",
+      "own_password_reset": "Utilisez Mon compte pour changer votre propre mot de passe.",
+      "account_not_activated": "Ce compte n'est pas encore activé : renvoyez-lui plutôt l'invitation.",
+      "password_managed_by_identity_provider": "Cette organisation se connecte par son fournisseur d'identité, qui gère ses mots de passe."
     }
   },
   "catalog": {
@@ -113,7 +118,6 @@
       "ariaLabel": "Recherche dans le catalogue",
       "label": "Rechercher un paquet",
       "placeholder": "Nom, description ou mot-clé",
-      "submit": "Rechercher",
       "sortBy": "Trier par",
       "searching": "Recherche en cours…",
       "ownerEmptyHeading": "Rien à afficher",
@@ -176,7 +180,9 @@
       "quickSearch": "Recherche rapide",
       "searchPlaceholder": "Rechercher un paquet…",
       "myRepositories": "Mes dépôts",
-      "login": "Se connecter"
+      "login": "Se connecter",
+      "githubLabel": "ArtiFerris sur GitHub (nouvel onglet)",
+      "docs": "Documentation"
     }
   },
   "severity": {
@@ -208,86 +214,18 @@
   "auth": {
     "sessionsEnded": "Vos sessions ont été fermées : reconnectez-vous.",
     "login": {
-      "heading": "Connexion à ArtiFerris",
       "logoAlt": "ArtiFerris logo",
       "ssoLinkInvalid": "Lien de connexion invalide ou expiré.",
       "oidcNotice": "Cette organisation utilise l'authentification unique (OIDC).",
       "oidcLink": "Se connecter avec le fournisseur d'identité",
-      "username": "Nom d'utilisateur",
       "password": "Mot de passe",
       "submit": "Se connecter",
       "createAccount": "Créer un compte",
-      "explorePublic": "Explorer les paquets publics",
-      "backupCode": "Code de secours",
-      "verificationCode": "Code de vérification",
-      "verify": "Vérifier",
-      "useAuthenticatorApp": "Utiliser l'application d'authentification",
-      "useBackupCode": "Utiliser un code de secours",
-      "usePasskey": "Utiliser une clé d'accès",
-      "errors": {
-        "busy": "Service momentanément occupé, réessayez",
-        "tooManyRequests": "Trop de tentatives, réessayez plus tard.",
-        "invalidCredentials": "Identifiants invalides",
-        "invalidBackupCode": "Code de secours invalide.",
-        "invalidCode": "Code invalide.",
-        "passkeyFailed": "Échec de l'authentification par clé d'accès."
-      }
-    },
-    "mfaEnrollment": {
-      "required": "La double authentification est obligatoire sur ce compte.",
-      "chooseMethod": "Choisissez une méthode pour continuer :",
-      "totpTooltip": "Nécessite une application comme Google Authenticator, Authy ou 1Password.",
-      "totpButton": "Application d'authentification (TOTP)",
-      "passkeyTooltip": "Utilise Touch ID, Windows Hello ou une clé de sécurité physique.",
-      "passkeyButton": "Clé d'accès (passkey)",
-      "scanQr": "Scannez ce QR code avec votre application d'authentification, ou saisissez le code manuellement :",
-      "qrAlt": "QR code d'activation",
-      "verificationCode": "Code de vérification",
-      "confirm": "Confirmer",
-      "back": "Retour",
-      "enabled": "Double authentification activée. Conservez ces codes de secours dans un endroit sûr — chacun ne peut être utilisé qu'une seule fois.",
-      "savedCodes": "J'ai sauvegardé ces codes",
-      "passkeyName": "Nom de la clé (ex. « MacBook Touch ID »)",
-      "registerPasskey": "Enregistrer la clé d'accès",
-      "errors": {
-        "invalidCode": "Code invalide.",
-        "totpSetupFailed": "Échec de la préparation de l'application d'authentification.",
-        "passkeyFailed": "Échec de l'enregistrement de la clé d'accès. Réessayez."
-      }
-    },
-    "register": {
-      "heading": "Créer un compte ArtiFerris",
-      "email": "Adresse e-mail",
-      "submit": "Créer mon compte",
-      "haveAccount": "J'ai déjà un compte",
-      "errors": {
-        "usernameTaken": "Ce nom d’utilisateur est déjà pris.",
-        "invalidEmail": "Adresse e-mail invalide.",
-        "passwordTooShort": "Le mot de passe doit comporter au moins 8 caractères.",
-        "notAvailable": "L'inscription publique n'est pas disponible sur cette organisation.",
-        "disabled": "La création de compte est actuellement désactivée par l'administrateur.",
-        "invalidUsername": "Nom d'utilisateur invalide : 3 à 32 caractères, doit commencer par une lettre.",
-        "generic": "Impossible de créer le compte. Réessayez."
-      }
-    },
-    "activate": {
-      "impossibleHeading": "Activation impossible",
-      "tokenMissing": "Lien d'activation invalide : aucun jeton fourni.",
-      "heading": "Activer votre compte",
-      "username": "Nom d'utilisateur",
-      "usernameHint": "3 à 32 caractères, commence par une lettre : lettres, chiffres, « _ » et « - ».",
-      "newPassword": "Nouveau mot de passe",
-      "confirmPassword": "Confirmer le mot de passe",
-      "mismatch": "Les mots de passe ne correspondent pas.",
-      "submit": "Activer mon compte",
-      "errors": {
-        "invalidLink": "Ce lien d'activation est invalide ou a expiré. Demandez à un administrateur de vous renvoyer une invitation.",
-        "usernameTaken": "Ce nom d'utilisateur est déjà pris.",
-        "invalidUsername": "Nom d'utilisateur invalide : 3 à 32 caractères, doit commencer par une lettre."
-      }
+      "explorePublic": "Explorer les paquets publics"
     }
   },
   "common": {
+    "command": "Commande",
     "loadingLabel": "Chargement en cours",
     "loading": "Chargement…",
     "select": "Sélectionner…",
@@ -298,7 +236,6 @@
     "next": "Suivant",
     "previous": "Précédent",
     "requiredNote": "Les champs marqués d'un astérisque (*) sont obligatoires.",
-    "or": "OU",
     "confirm": "Confirmer",
     "cancel": "Annuler",
     "copy": "Copier",
@@ -326,12 +263,15 @@
       "failed": "Copie impossible, sélectionnez la commande manuellement"
     },
     "readme": {
+      "codeBlock": "Bloc de code",
+      "table": "Tableau",
       "title": "README",
       "emptyHeading": "Aucun README",
       "emptyMessage": "Ce package n'a pas de README."
     }
   },
   "shell": {
+    "trailLabel": "Fil d'Ariane",
     "loadFailed": "Impossible de charger votre session. Vérifiez votre connexion puis réessayez.",
     "navLabel": "Navigation principale",
     "skipLabel": "Aller au contenu principal",
@@ -341,20 +281,22 @@
     "expandMenu": "Déployer le menu",
     "logoAlt": "ArtiFerris",
     "search": {
-      "placeholder": "Rechercher un dépôt ou un utilisateur...",
+      "open": "Ouvrir",
+      "close": "Fermer la recherche",
+      "placeholder": "Rechercher ou aller à…",
+      "label": "Recherche rapide",
       "clear": "Effacer la recherche",
       "navigate": "Naviguer",
-      "select": "Sélectionner",
       "failed": "La recherche a échoué",
       "noResults": "Aucun résultat",
-      "failedHint": "Modifiez votre saisie pour réessayer.",
-      "noResultsHint": "Essayez une autre recherche.",
       "packagesAndImages": "Paquets et images",
-      "proxyCache": "cache du proxy"
+      "proxyCache": "cache du proxy",
+      "loading": "Recherche en cours…",
+      "recent": "Récents",
+      "goTo": "Aller à",
+      "actions": "Actions"
     },
-    "logout": "Déconnexion",
-    "collapseItem": "Réduire {{ name }}",
-    "expandItem": "Déployer {{ name }}"
+    "logout": "Déconnexion"
   },
   "nav": {
     "account": "Mon compte",
@@ -362,215 +304,306 @@
     "myRepository": "Mon dépôt",
     "users": "Utilisateurs",
     "administration": "Administration",
+    "dashboard": "Tableau de bord",
     "organizations": "Organisations",
     "export": "Export",
     "explorer": "Explorer",
     "health": "Santé",
-    "systemHealth": "Santé système"
+    "docs": "Documentation",
+    "settings": "Réglages"
   },
   "account": {
-    "profile": {
-      "username": "Nom d'utilisateur : {{ username }}",
-      "memberSince": "Membre depuis : {{ date }}",
-      "infoHeading": "Informations",
-      "superAdminStatus": "Statut : Super-administrateur"
-    },
-    "mfa": {
-      "backupCodesRemaining": "Codes de secours restants : {{ count }}",
-      "heading": "Double authentification (TOTP)",
-      "loadFailed": "Échec du chargement de la double authentification.",
-      "notEnabled": "La double authentification n'est pas activée sur ce compte.",
-      "enable": "Activer",
-      "scanQr": "Scannez ce QR code avec votre application d'authentification (Google Authenticator, Authy, 1Password…), ou saisissez le code manuellement :",
-      "enabledWithCodes": "Double authentification activée. Conservez ces codes de secours dans un endroit sûr — chacun ne peut être utilisé qu'une seule fois, si vous perdez l'accès à votre application d'authentification.",
-      "savedCodesReconnect": "J'ai sauvegardé ces codes, me reconnecter",
-      "enabled": "Double authentification activée.",
-      "regenerate": {
-        "label": "REGÉNÉRATION",
-        "warning": "Les anciens codes de secours cesseront de fonctionner immédiatement et vos sessions seront fermées.",
-        "button": "Régénérer les codes de secours"
-      },
-      "currentPassword": "Mot de passe actuel",
-      "disable": {
-        "label": "DÉSACTIVATION",
-        "warning": "Le compte ne demandera plus de code à la connexion. Vos sessions seront fermées.",
-        "button": "Désactiver la double authentification"
-      },
-      "newBackupCodes": "Nouveaux codes de secours — les anciens ne fonctionnent plus :",
-      "sessionsWillClose": "Vos sessions vont être fermées : vous devrez vous reconnecter une fois ces codes sauvegardés.",
-      "errors": {
-        "startFailed": "Échec du démarrage de l'activation. Réessayez.",
-        "wrongPassword": "Mot de passe incorrect.",
-        "disableFailed": "Échec de la désactivation.",
-        "regenerateFailed": "Échec de la régénération."
-      }
-    },
-    "tabs": {
+    "intro": "Profil, mot de passe, double authentification et jetons d'accès",
+    "sections": {
+      "label": "Réglages du compte",
       "profile": "Profil",
+      "password": "Mot de passe",
       "security": "Sécurité",
-      "tokens": "Jetons API"
+      "tokens": "Jetons d'accès"
+    },
+    "profile": {
+      "heading": "Profil",
+      "description": "Votre identité sur ArtiFerris. La langue est enregistrée dès que vous la choisissez.",
+      "usernameMeta": "Nom d'utilisateur, non modifiable",
+      "memberSince": "Membre depuis le {{ date }}",
+      "superAdmin": "Super-administrateur",
+      "loading": "Chargement du profil…",
+      "sessionText": "Session ouverte sur ce navigateur.",
+      "signOut": "Déconnexion",
+      "email": "Email",
+      "emailHint": "L'adresse à laquelle ArtiFerris peut vous joindre, vérifiée à votre invitation ou par votre fournisseur d'identité.",
+      "noEmail": "Aucune adresse vérifiée",
+      "noEmailHint": "ArtiFerris n'écrit qu'à une adresse vérifiée, à l'invitation ou par un fournisseur d'identité."
+    },
+    "save": {
+      "saving": "Enregistrement…",
+      "saved": "Enregistré",
+      "error": "Non enregistré"
     },
     "password": {
-      "heading": "Changer le mot de passe",
+      "heading": "Mot de passe",
+      "description": "Choisissez-en un d'au moins {{ min }} caractères, que vous n'utilisez nulle part ailleurs. Le changer ferme vos autres sessions.",
       "current": "Mot de passe actuel",
       "new": "Nouveau mot de passe",
       "confirm": "Confirmer le nouveau mot de passe",
+      "minLength": "{{ min }} caractères minimum",
+      "submit": "Changer le mot de passe",
       "errors": {
-        "mismatch": "Les mots de passe ne correspondent pas.",
+        "mismatch": "Les nouveaux mots de passe ne correspondent pas.",
         "tooShort": "Le mot de passe doit contenir au moins 8 caractères.",
-        "change": "Mot de passe actuel incorrect ou nouveau mot de passe invalide."
-      }
-    },
-    "tokens": {
-      "heading": "Tokens API"
-    },
-    "passkeys": {
-      "heading": "Clés d'accès (passkeys)",
-      "emptyHeading": "Aucune clé d'accès",
-      "emptyMessage": "Ajoutez une clé d'accès pour vous connecter sans mot de passe.",
-      "registerNew": "Enregistrer une nouvelle clé",
-      "add": "Ajouter une clé d'accès",
-      "unsupported": "Votre navigateur ne prend pas en charge les clés d'accès.",
-      "errors": {
-        "loadFailed": "Échec du chargement des clés d'accès."
+        "change": "Le mot de passe n'a pas pu être modifié. Réessayez plus tard.",
+        "wrongCurrent": "Mot de passe actuel incorrect.",
+        "tooMany": "Trop de tentatives, réessayez dans quelques minutes.",
+        "notChanged": "Impossible de modifier le mot de passe."
       },
-      "registered": "Clé d’accès enregistrée."
-    },
-    "sessions": {
-      "heading": "Sessions",
-      "description": "Révoque toutes vos sessions ouvertes, vos jetons API et vos jetons Docker. Utile si un appareil est perdu ou compromis, ou si votre compte passe par un SSO et n'a pas de mot de passe à changer.",
-      "signOutEverywhere": "Se déconnecter partout",
-      "confirmMessage": "Toutes vos sessions, jetons API et jetons Docker seront révoqués, y compris celui-ci. Vous devrez vous reconnecter.",
-      "errors": {
-        "signOutFailed": "Échec de la déconnexion des sessions. Réessayez."
-      }
+      "changed": "Mot de passe modifié."
     },
     "language": {
-      "heading": "Langue",
       "label": "Langue de l'interface",
+      "hint": "Enregistrée sur votre compte : elle vous suit sur tous vos appareils.",
       "saved": "Langue enregistrée.",
       "errors": {
         "saveFailed": "Échec de l'enregistrement de la langue. Réessayez."
       }
+    },
+    "sessions": {
+      "heading": "Sessions",
+      "description": "Ferme toutes vos sessions ouvertes, celle-ci comprise, et révoque vos jetons d'accès et vos jetons Docker. Utile si un appareil est perdu ou compromis, ou si votre compte passe par un SSO et n'a pas de mot de passe à changer.",
+      "signOutEverywhere": "Se déconnecter partout",
+      "confirmMessage": "Toutes vos sessions seront fermées, celle-ci comprise, et vos jetons d'accès et Docker révoqués. Vous devrez vous reconnecter.",
+      "errors": {
+        "signOutFailed": "Impossible de fermer les sessions. Réessayez."
+      }
     }
   },
   "tokens": {
-    "intro": "Utilisez un token pour authentifier <code>npm publish</code>/<code>npm install</code> dans votre <code>.npmrc</code>.",
     "create": {
+      "heading": "Nouveau jeton",
+      "description": "Un jeton authentifie npm publish et npm install depuis votre .npmrc. Nommez-le d'après la machine ou l'outil qui s'en sert.",
+      "name": "Nom du jeton",
+      "namePlaceholder": "ex. ci-npm-publish",
+      "password": "Mot de passe (facultatif)",
       "labelTooLong": "Le nom ne peut pas dépasser {{ max }} caractères.",
-      "expiresFull": "Ce token expirera dans {{ days }} jours.",
-      "expiresShort": "Ce token expirera dans {{ days }} jours : renseignez votre mot de passe pour 365 jours.",
-      "heading": "Nouveau token API",
-      "name": "Nom (ex. « mon laptop »)",
-      "password": "Mot de passe (pour un jeton de longue durée)",
-      "submit": "Créer"
+      "expiresFull": "Ce jeton expirera dans {{ days }} jours.",
+      "expiresShort": "Ce jeton expirera dans {{ days }} jours : renseignez votre mot de passe pour qu'il dure 365 jours.",
+      "submit": "Générer"
     },
     "created": {
-      "expires": "Il expirera dans {{ days }} jours.",
-      "heading": "Token créé",
-      "copyNow": "Copiez ce token maintenant — il ne sera plus jamais affiché.",
-      "done": "J'ai copié le token"
+      "heading": "Jeton « {{ label }} » généré",
+      "description": "Copiez-le maintenant et rangez-le en lieu sûr : un gestionnaire de secrets, une variable de CI masquée. Il expirera dans {{ days }} jours.",
+      "copy": "Copier le jeton",
+      "copied": "Copié",
+      "copyFailed": "Copie impossible, jeton sélectionné",
+      "warning": "Ce jeton ne sera plus jamais affiché. Perdu, il faudra le révoquer et en générer un autre.",
+      "done": "J'ai copié le jeton",
+      "badge": "Nouveau",
+      "toast": "Jeton généré."
+    },
+    "list": {
+      "heading": "Jetons actifs",
+      "description": "Chacun donne accès à votre compte : révoquez ceux dont vous ne vous servez plus.",
+      "loading": "Chargement des jetons…",
+      "retry": "Réessayer",
+      "createdAgo": "Créé {{ when }}",
+      "createdOn": "Créé le {{ date }}",
+      "usedAgo": "Utilisé {{ when }}",
+      "usedOn": "Utilisé le {{ date }}",
+      "neverUsed": "Jamais utilisé"
     },
     "empty": {
-      "heading": "Aucun token",
-      "message": "Créez un token pour authentifier vos publications et installations npm."
-    },
-    "new": "Nouveau token",
-    "table": {
-      "caption": "Jetons API",
-      "name": "Nom",
-      "createdAt": "Créé le"
+      "heading": "Aucun jeton",
+      "message": "Générez-en un pour publier ou installer des paquets npm depuis un script, une CI ou un autre outil."
     },
     "errors": {
       "tooMany": "Trop de tentatives, réessayez plus tard.",
-      "createFailed": "Échec de la création du token.",
+      "createFailed": "Impossible de générer le jeton.",
       "wrongPassword": "Mot de passe incorrect.",
-      "loadFailed": "Échec du chargement des tokens.",
-      "revokeFailed": "Échec de la révocation du token \"{{ label }}\"."
+      "loadFailed": "Les jetons n'ont pas pu être chargés.",
+      "revokeFailed": "Impossible de révoquer ce jeton."
     },
     "revoke": {
-      "heading": "Révoquer le token",
+      "heading": "Révoquer le jeton",
       "confirm": "Révoquer",
-      "message": "Révoquer le token \"{{ label }}\" ? Toute intégration npm qui l'utilise cessera de fonctionner."
+      "label": "Révoquer le jeton {{ label }}",
+      "message": "Les outils et scripts qui utilisent « {{ label }} » ne pourront plus publier ni installer de paquets. Un jeton révoqué ne peut pas être réactivé.",
+      "done": "Jeton révoqué."
+    },
+    "table": {
+      "caption": "Jetons API",
+      "createdAt": "Créé le"
     }
   },
   "users": {
     "detail": {
-      "email": "E-mail : {{ email }}",
-      "info": "Informations",
       "grant": "Accorder",
       "grantMany": "Accorder ({{ count }})",
-      "demoteHint": "Retire tous les droits de super-administration.",
-      "promoteHint": "Donne un accès complet à toutes les organisations et à leur administration.",
-      "demote": "Rétrograder",
-      "promote": "Promouvoir super-administrateur",
-      "promoteConfirm": "Promouvoir \"{{ username }}\" au rang de super-administrateur ?",
-      "demoteConfirm": "Retirer le rang de super-administrateur à \"{{ username }}\" ?",
-      "promoteHeading": "Promouvoir en super-administrateur",
-      "demoteHeading": "Retirer le rang de super-administrateur",
-      "promoteAction": "Promouvoir",
-      "demoteAction": "Retirer",
-      "promoted": "{{ username }} est désormais super-administrateur·rice.",
-      "demoted": "{{ username }} n'est plus super-administrateur·rice.",
-      "deleteConfirm": "Supprimer l'utilisateur \"{{ username }}\" ?",
+      "demoteHeading": "Retirer les droits de super-administrateur",
+      "demoteAction": "Retirer les droits",
+      "promoted": "{{ username }} est désormais super-administrateur.",
+      "demoted": "{{ username }} n'est plus super-administrateur.",
+      "deleteConfirm": "Le compte de {{ username }} sera supprimé définitivement : il sera déconnecté partout, et ses jetons d'API et sa double authentification seront effacés.",
       "deleted": "Utilisateur « {{ username }} » supprimé.",
       "errors": {
         "lastSuperAdmin": "Impossible de rétrograder le dernier super-administrateur.",
         "superAdminStatus": "Impossible de modifier le statut super-administrateur.",
-        "resendFailed": "Échec de l'envoi de l'invitation. Vérifiez la configuration du serveur mail.",
+        "resendFailed": "L'invitation n'a pas pu être renvoyée. Réessayez plus tard.",
         "updateFailed": "Échec de la mise à jour du droit d'accès.",
         "revokeFailed": "Échec de la révocation du droit d'accès.",
         "grantFailed": "Échec de l'attribution sur au moins un dépôt.",
-        "deleteFailed": "Échec de la suppression de l'utilisateur."
+        "deleteFailed": "Échec de la suppression de l'utilisateur.",
+        "deleteLastSuperAdmin": "Impossible de supprimer le dernier super-administrateur."
       },
-      "loadFailed": "Échec du chargement de l'utilisateur.",
-      "pending": "Statut : invitation en attente d'activation",
+      "loadFailed": "Impossible de charger cet utilisateur.",
       "resend": "Renvoyer l'invitation",
       "permissions": "Droits d'accès",
-      "permissionsCaption": "Droits d'accès de cet utilisateur",
-      "noPermissions": "Aucun droit d'accès accordé",
+      "noPermissions": "Aucun droit d'accès",
       "repositories": "Dépôts",
       "repositoriesPlaceholder": "Choisir un ou plusieurs dépôts",
       "role": "Rôle",
-      "deleteHint": "Suppression définitive du compte.",
       "delete": "Supprimer l'utilisateur",
-      "columns": {
-        "repository": "Dépôt"
-      },
       "updated": "Droit d'accès mis à jour.",
       "revoked": "Droit d'accès révoqué.",
       "granted": "Droit d'accès accordé.",
-      "resent": "Invitation renvoyée."
+      "loadFailedMessage": "Vérifiez votre connexion, puis réessayez.",
+      "loading": "Chargement de l'utilisateur…",
+      "actions": "Actions",
+      "loadingPermissions": "Chargement des droits d'accès…",
+      "noPermissionsMessage": "{{ username }} n'a accès à aucun dépôt. Accordez-lui un rôle avec le formulaire ci-dessous.",
+      "repositoryCount_one": "{{ count }} dépôt",
+      "repositoryCount_other": "{{ count }} dépôts",
+      "permissionMenuLabel": "Actions pour {{ repository }}",
+      "changeRole": "Changer le rôle",
+      "revokeAction": "Retirer l'accès",
+      "revokeHeading": "Retirer l'accès",
+      "revokeMessage": "{{ username }} n'aura plus accès à {{ repository }}.",
+      "grantHeading": "Accorder un accès",
+      "facts": {
+        "repositories": "Dépôts"
+      },
+      "rolesHelp": "Les rôles se cumulent : read permet de consulter et de télécharger, write aussi de publier, admin aussi de gérer le dépôt, ses accès et ses quotas.",
+      "deletionHeading": "Suppression du compte",
+      "deletionHelp": "Supprimer un compte le déconnecte aussitôt et efface ses jetons d'API, sa double authentification et ses préférences. Les versions qu'il a publiées restent, sans nom d'auteur.",
+      "notFoundHeading": "Utilisateur introuvable",
+      "notFoundMessage": "Ce compte n'existe pas, ou a été supprimé.",
+      "backToUsers": "Retour aux utilisateurs",
+      "selfHeading": "C'est votre propre compte",
+      "selfMessage": "Il ne se gère pas depuis l'administration et ne peut pas être supprimé d'ici : ses réglages sont dans « Mon compte ».",
+      "myAccount": "Mon compte",
+      "rolesHeading": "Rôles"
     },
     "create": {
-      "created": "Invitation envoyée à {{ email }}.",
-      "heading": "Nouvel utilisateur",
-      "username": "Nom d'utilisateur",
+      "heading": "Inviter un utilisateur",
       "email": "Adresse e-mail",
+      "intro": "Un e-mail avec un lien d'activation valable 24 heures est envoyé à cette adresse. La personne y choisit son nom d'utilisateur et son mot de passe.",
       "superAdmin": "Super-administrateur",
-      "inviteNote": "Un e-mail sera envoyé à cette adresse pour que l'utilisateur active son compte, choisisse son nom d'utilisateur et son mot de passe, sous 24 heures.",
-      "invite": "Inviter",
+      "superAdminHint": "Un super-administrateur gère les utilisateurs, les organisations et les réglages de l'instance.",
+      "send": "Envoyer l'invitation",
+      "sending": "Envoi en cours",
+      "done": "Terminé",
+      "sentTitle": "Invitation envoyée à {{ email }}",
+      "sentHelp": "La personne y trouvera un lien d'activation valable 24 heures pour choisir son nom d'utilisateur et son mot de passe.",
       "errors": {
-        "createFailed": "Échec de la création de l'utilisateur."
-      }
+        "emailRequired": "Saisissez l'adresse e-mail",
+        "emailInvalid": "Saisissez une adresse e-mail valide, par exemple nom@exemple.fr",
+        "emailTaken": "Cette adresse e-mail est déjà utilisée par un compte",
+        "createFailed": "L'invitation n'a pas pu être envoyée. Réessayez plus tard."
+      },
+      "username": "Nom d'utilisateur",
+      "invite": "Inviter"
     },
     "list": {
-      "new": "Nouvel utilisateur",
       "organization": "Organisation",
       "emptyHeading": "Aucun utilisateur",
-      "emptyMessage": "Les utilisateurs créés ou invités apparaîtront ici.",
-      "noResultsHeading": "Aucun résultat",
-      "noResultsMessage": "Aucun utilisateur dans cette organisation. Changez le filtre pour en voir d'autres.",
+      "emptyMessage": "Invitez la première personne : elle recevra un lien par e-mail pour activer son compte.",
       "caption": "Utilisateurs",
       "allOrganizations": "Toutes les organisations",
-      "columns": {
-        "username": "Nom d'utilisateur",
-        "email": "E-mail",
-        "superAdmin": "Super-admin",
-        "invitationPending": "Invitation en attente"
-      },
       "errors": {
-        "loadFailed": "Échec du chargement des utilisateurs."
+        "loadFailed": "Impossible de charger les utilisateurs."
+      },
+      "invite": "Inviter un utilisateur",
+      "cardLabel": "Comptes",
+      "loading": "Chargement des utilisateurs…",
+      "emptyMessageMember": "Les comptes de votre organisation apparaîtront ici.",
+      "filterLabel": "Filtrer les comptes",
+      "searchLabel": "Rechercher un utilisateur",
+      "searchPlaceholder": "Nom d'utilisateur ou e-mail",
+      "sortLabel": "Trier par",
+      "directionLabel": "Inverser le sens du tri",
+      "sortCreated": "Date de création",
+      "sortUsername": "Nom d'utilisateur",
+      "tabAll": "Tous ({{ count }})",
+      "tabPending": "Invitations en attente ({{ count }})",
+      "accounts_one": "{{ count }} compte",
+      "accounts_other": "{{ count }} comptes",
+      "pendingCount_one": "{{ count }} invitation en attente",
+      "pendingCount_other": "{{ count }} invitations en attente",
+      "summaryWithPending": "{{ accounts }} · {{ pending }}",
+      "menuLabel": "Actions pour {{ name }}",
+      "you": "Vous",
+      "noPendingMatch": "Aucune invitation en attente ne correspond à cette recherche",
+      "noPending": "Aucune invitation en attente",
+      "noMatch": "Aucun utilisateur ne correspond à cette recherche",
+      "sending": "Envoi en cours",
+      "saving": "Enregistrement en cours",
+      "resent": "Invitation renvoyée à {{ email }}.",
+      "demoteMessage": "{{ username }} ne pourra plus gérer les utilisateurs, les organisations ni les réglages de l'instance. Vous pourrez lui rendre ces droits plus tard.",
+      "demoteSelfMessage": "Vous allez vous retirer vous-même des super-administrateurs, {{ username }} : vous perdrez aussitôt l'accès à l'administration de l'instance. Seul un autre super-administrateur pourra vous rendre ces droits.",
+      "noneInOrganization": "Aucun utilisateur dans cette organisation."
+    },
+    "row": {
+      "createdAgo": "créé {{ when }}",
+      "createdOn": "créé le {{ date }}",
+      "expiredAgo": "a expiré {{ when }}",
+      "expiredOn": "a expiré le {{ date }}",
+      "expires": "expire le {{ date }}"
+    },
+    "state": {
+      "active": "Actif",
+      "pending": "Invitation en attente",
+      "expired": "Invitation expirée"
+    },
+    "mfa": {
+      "on": "Double authentification active",
+      "off": "Non configurée"
+    },
+    "superAdmin": "Super-administrateur",
+    "actions": {
+      "promote": "Nommer super-administrateur",
+      "demote": "Retirer les droits de super-administrateur"
+    },
+    "help": {
+      "invitationsHeading": "Invitations",
+      "invitations": "Un compte invité est créé sans mot de passe. Un e-mail contient un lien d'activation valable 24 heures pour choisir son nom d'utilisateur et son mot de passe ; « Renvoyer l'invitation » en génère un nouveau et invalide l'ancien.",
+      "mfaHeading": "Double authentification",
+      "mfa": "Elle est obligatoire pour tous les comptes. Si quelqu'un a perdu son appareil et ses codes de secours, réinitialisez-la : il est déconnecté partout et la configure à nouveau à sa prochaine connexion.",
+      "organizationsHeading": "Organisations",
+      "organizations": "Chaque compte appartient à une organisation. Choisissez-en une pour n'afficher que ses comptes, ou « Toutes les organisations » pour les voir tous.",
+      "passwordHeading": "Mot de passe",
+      "password": "Si quelqu'un a perdu son mot de passe, réinitialisez-le : l'ancien cesse aussitôt de fonctionner, et un e-mail contient un lien valable 1 heure pour en choisir un nouveau."
+    },
+    "mfaReset": {
+      "heading": "Réinitialiser la double authentification",
+      "confirm": "Réinitialiser",
+      "resetting": "Réinitialisation en cours",
+      "done": "Double authentification réinitialisée.",
+      "message": "{{ username }} sera déconnecté de tous ses appareils et devra configurer à nouveau la double authentification à sa prochaine connexion. Son application d'authentification, ses clés d'accès et ses codes de secours actuels cesseront de fonctionner.",
+      "selfMessage": "C'est votre propre compte : vous serez déconnecté aussitôt de tous vos appareils et devrez configurer à nouveau la double authentification à votre prochaine connexion. Votre application d'authentification, vos clés d'accès et vos codes de secours actuels cesseront de fonctionner.",
+      "errors": {
+        "notEnrolled": "Ce compte n'a plus de double authentification à réinitialiser.",
+        "failed": "La double authentification n'a pas pu être réinitialisée. Réessayez plus tard."
+      }
+    },
+    "passwordReset": {
+      "heading": "Réinitialiser le mot de passe",
+      "confirm": "Réinitialiser",
+      "resetting": "Réinitialisation en cours",
+      "sent": "Un lien pour choisir un nouveau mot de passe a été envoyé à {{ username }}.",
+      "message": "Le mot de passe actuel de {{ username }} cessera de fonctionner immédiatement, et la personne sera déconnectée de tous ses appareils. Un lien valable 1 heure lui permettra d'en choisir un nouveau : elle ne pourra pas se connecter avant de l'avoir utilisé.",
+      "errors": {
+        "own": "Utilisez Mon compte pour changer votre propre mot de passe.",
+        "notActivated": "Ce compte n'est pas encore activé : renvoyez-lui plutôt l'invitation.",
+        "identityProvider": "Cette organisation se connecte par son fournisseur d'identité, qui gère ses mots de passe.",
+        "failed": "Le mot de passe n'a pas pu être réinitialisé. Réessayez plus tard."
       }
     }
   },
@@ -943,8 +976,8 @@
       "activityTruncated": "Basé sur les {{ count }} événements les plus récents : les jours plus anciens sont sous-estimés.",
       "users": "Utilisateurs",
       "repositories": "Dépôts",
-      "permissions": "Permissions actives",
-      "activity": "Activité (7 derniers jours)",
+      "permissions": "Droits d'accès",
+      "activity": "Activité des 7 derniers jours",
       "eventsPerDay": "Événements par jour",
       "day": "Jour",
       "noEvents": "Aucun événement ces 7 derniers jours.",
@@ -952,18 +985,32 @@
       "noReposByFormat": "Aucun dépôt à répartir par format.",
       "storageEvolution": "Évolution du stockage",
       "storageTable": "Stockage total par relevé",
-      "notEnoughData": "Pas encore assez de mesures.",
-      "usersAndRepos": "Évolution des utilisateurs et dépôts",
+      "notEnoughData": "Pas encore assez de mesures",
+      "usersAndRepos": "Utilisateurs et dépôts",
       "usersAndReposTable": "Utilisateurs et dépôts par relevé",
       "recent": "Activité récente",
       "noRecentHeading": "Aucune activité récente",
       "noRecentMessage": "Les événements du registre apparaîtront ici dès qu'il y en aura.",
-      "partialFailure": "Échec du chargement d'une partie du tableau de bord.",
+      "partialFailure": "Une partie du tableau de bord n'a pas pu être chargée.",
       "days_one": "{{ count }} jour",
       "days_other": "{{ count }} jours",
-      "month": "1 mois",
       "storage": "Stockage",
-      "events": "Événements"
+      "events": "Événements",
+      "intro": "Vue d'ensemble de l'instance : comptes, dépôts, droits d'accès et stockage",
+      "summary": "Résumé",
+      "loadingStats": "Chargement des statistiques…",
+      "lastReading": "dernier relevé",
+      "noReading": "aucun relevé",
+      "storageIn": "Stockage ({{ unit }})",
+      "evolution": "Évolution",
+      "period": "Période",
+      "historyFailed": "L'historique n'a pas pu être chargé.",
+      "loadingHistory": "Chargement de l'historique…",
+      "unit": "en {{ unit }}",
+      "notEnoughDataMessage": "Un relevé est pris toutes les heures : la courbe apparaît dès le deuxième.",
+      "usersAndReposEvolution": "Évolution des utilisateurs et dépôts",
+      "loadingActivity": "Chargement de l'activité…",
+      "activityFailed": "L'activité n'a pas pu être chargée."
     },
     "audit": {
       "events": {
@@ -1018,7 +1065,9 @@
         "PackageVersionDeprecated": "Version dépréciée",
         "DistTagChanged": "Dist-tag modifié",
         "ImagePushed": "Image publiée",
-        "ManifestDeleted": "Manifeste supprimé"
+        "ManifestDeleted": "Manifeste supprimé",
+        "MfaReset": "Double authentification réinitialisée",
+        "PasswordReset": "Mot de passe réinitialisé"
       },
       "loginMethods": {
         "password": "mot de passe",
@@ -1114,21 +1163,37 @@
     "health": {
       "responseTime": "Temps de réponse",
       "milliseconds": "{{ count }} ms",
-      "days": "{{ count }} j",
-      "hours": "{{ count }} h",
-      "minutes": "{{ count }} min",
-      "loadFailed": "Échec du chargement de l'état du système.",
+      "loadFailed": "Impossible de charger l'état de santé. Réessayez plus tard.",
       "database": "Base de données",
-      "connections": "Connexions",
-      "warning": "Avertissement",
-      "critical": "Critique",
+      "connections": "Connexions actives",
+      "warning": "presque plein",
+      "critical": "saturé",
       "storage": "Stockage",
       "usedSpace": "Espace utilisé",
-      "server": "Serveur",
-      "status": "Statut",
-      "postgresVersion": "Version PostgreSQL",
-      "freeSpace": "Espace libre",
-      "uptime": "Démarré depuis"
+      "uptime": "Disponibilité",
+      "intro": "État des services de l'instance",
+      "checkedAt": "vérifié à",
+      "refresh": "Actualiser",
+      "checking": "Vérification des services…",
+      "down": "Indisponible",
+      "up": "Opérationnel",
+      "upFeminine": "Opérationnelle",
+      "allUp": "Tous les services sont opérationnels",
+      "degraded": "Service dégradé",
+      "unreachable": "Injoignable",
+      "unreachableHeading": "API ou base de données injoignable.",
+      "unreachableMessage": "L'état des services n'a pas pu être vérifié. Actualisez une fois le serveur rétabli.",
+      "version": "Version",
+      "postgres": "PostgreSQL {{ version }}",
+      "unknownVersion": "Inconnue",
+      "ratio": "{{ value }} sur {{ max }}",
+      "used": "Utilisé",
+      "free": "Libre",
+      "total": "Total",
+      "storageRatio": "{{ used }} sur {{ total }} · {{ percent }}",
+      "startedAt": "Démarré le {{ date }}",
+      "checksHeading": "Vérifications",
+      "checksHelp": "Cette page ne se met pas à jour seule : « Actualiser » interroge à nouveau la base de données et le stockage."
     },
     "usage": {
       "others": "Autres ({{ count }})",
@@ -1291,7 +1356,22 @@
   },
   "notFound": {
     "heading": "Page introuvable",
-    "message": "Cette adresse ne correspond à aucune page.",
-    "backHome": "Retour à l'accueil"
+    "message": "Vérifiez l'adresse. Si cette page est privée, connectez-vous pour la voir.",
+    "backHome": "Retour à l'accueil",
+    "signIn": "Se connecter"
+  },
+  "invitationMail": {
+    "title": "Le mail n'a pas pu être envoyé",
+    "notConfigured": "Aucun serveur mail n'est configuré pour cette organisation.",
+    "sendFailed": "Le serveur mail n'a pas accepté le message.",
+    "help": "Transmettez ce lien à {{ name }} : il est valable 24 heures. Il ne sera plus affiché ensuite — « Renvoyer l'invitation » en génère un nouveau.",
+    "copy": "Copier le lien d'activation",
+    "copied": "Copié",
+    "copyFailed": "Copie impossible, lien sélectionné",
+    "noLink": "Utilisez « Renvoyer l'invitation » pour obtenir le lien d'activation de {{ name }}.",
+    "noAddress": "Ce compte n'a pas d'adresse e-mail vérifiée.",
+    "resetHelp": "Transmettez ce lien à {{ name }} : il est valable 1 heure. Il ne sera plus affiché ensuite — « Réinitialiser le mot de passe » en génère un nouveau.",
+    "resetCopy": "Copier le lien de réinitialisation",
+    "resetNoLink": "Utilisez à nouveau « Réinitialiser le mot de passe » pour obtenir un lien pour {{ name }}."
   }
 }

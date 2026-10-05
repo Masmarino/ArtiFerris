@@ -5,7 +5,11 @@ import { ActivatedRoute, RouterLink } from '@angular/router'
 import { LocalizedDatePipe } from '../../shared/i18n/localized-date'
 import { FormsModule } from '@angular/forms'
 import { HttpErrorResponse } from '@angular/common/http'
-import { Button, Card, Select, Spinner, Tab, Tabs } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Card } from '@masmarino/gabarit/card'
+import { Select } from '@masmarino/gabarit/select'
+import { Spinner } from '@masmarino/gabarit/spinner'
+import { Tab, Tabs } from '@masmarino/gabarit/tabs'
 import { RepositoriesService } from '../../repositories/application/repositories.service'
 import {
   DockerImageDetails,

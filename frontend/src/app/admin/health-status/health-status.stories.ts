@@ -1,9 +1,11 @@
+import { signal } from '@angular/core'
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite'
 import { expect, waitFor, within } from 'storybook/test'
 import { of, throwError } from 'rxjs'
 import { HealthStatusPage } from './health-status'
 import { AdminMetricsService } from '../application/metrics.service'
 import type { HealthStatus } from '../domain/metrics.entity'
+import { PageTitleService } from '../../shell/page-title.service'
 
 const HEALTHY: HealthStatus = {
   database: {
@@ -44,7 +46,13 @@ const meta: Meta<HealthStatusPage> = {
   title: 'Admin/HealthStatusPage',
   component: HealthStatusPage,
   decorators: [
-    moduleMetadata({ providers: [{ provide: AdminMetricsService, useValue: fakeMetrics() }] }),
+    moduleMetadata({
+      providers: [
+        { provide: AdminMetricsService, useValue: fakeMetrics() },
+        // The shell sets the title from the route.
+        { provide: PageTitleService, useValue: { title: signal('Santé') } },
+      ],
+    }),
   ],
 }
 export default meta
@@ -54,9 +62,34 @@ type Story = StoryObj<HealthStatusPage>
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await waitFor(() => expect(canvas.getByText('18.0')).toBeInTheDocument())
-    expect(canvas.getByText('3 / 10')).toBeInTheDocument()
-    expect(canvas.getByText('1 j 1 h 0 min')).toBeInTheDocument()
+    expect(await canvas.findByText('Tous les services sont opérationnels')).toBeInTheDocument()
+    expect(canvas.getByText('PostgreSQL 18.0')).toBeInTheDocument()
+    expect(canvas.getByText('3 sur 10')).toBeInTheDocument()
+  },
+}
+
+export const StorageAlmostFull: Story = {
+  decorators: [
+    moduleMetadata({
+      providers: [
+        {
+          provide: AdminMetricsService,
+          useValue: fakeMetrics({
+            health: () =>
+              of({
+                ...HEALTHY,
+                storage: { ...HEALTHY.storage, used_bytes: 960_000_000, free_bytes: 40_000_000 },
+              }),
+          }),
+        },
+      ],
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    await waitFor(() => {
+      const gauges = canvasElement.querySelectorAll('gbt-gauge-bar .gbt-gauge-bar__fill')
+      expect(gauges[1]?.getAttribute('data-tier')).toBe('critical')
+    })
   },
 }
 
@@ -70,12 +103,10 @@ export const Degraded: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await waitFor(() => expect(canvas.getByText(/connection refused/)).toBeInTheDocument())
+    expect(await canvas.findByText('Service dégradé')).toBeInTheDocument()
+    expect(canvas.getByText(/connection refused/)).toBeInTheDocument()
     expect(canvas.getByText(/disk full/)).toBeInTheDocument()
-    const gauges: HTMLElement[] = Array.from(
-      canvasElement.querySelectorAll('gbt-gauge-bar .gbt-gauge-bar__fill'),
-    )
-    expect(gauges[1].getAttribute('data-tier')).toBe('critical')
+    expect(canvas.getAllByText('Indisponible')).toHaveLength(2)
   },
 }
 
@@ -91,10 +122,8 @@ export const LoadFailed: Story = {
     }),
   ],
   play: async ({ canvasElement }) => {
-    await waitFor(() =>
-      expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
-        "Échec du chargement de l'état du système.",
-      ),
-    )
+    expect(
+      await within(canvasElement).findByText('API ou base de données injoignable.'),
+    ).toBeInTheDocument()
   },
 }

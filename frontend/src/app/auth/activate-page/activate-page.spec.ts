@@ -1,11 +1,17 @@
 import { TestBed } from '@angular/core/testing'
+import { By } from '@angular/platform-browser'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
-import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router'
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router'
+import { AuthActivate } from '@masmarino/gabarit/auth-activate'
 import { ActivatePage } from './activate-page'
 import { authProviders } from '../infrastructure/auth.providers'
 
-function render(token: string | null = 'raw-token') {
+const TOKEN = 'ab12'.repeat(16)
+
+function render(
+  link: { fragment?: string | null; token?: string } = { fragment: `token=${TOKEN}` },
+) {
   TestBed.configureTestingModule({
     imports: [ActivatePage],
     providers: [
@@ -16,7 +22,10 @@ function render(token: string | null = 'raw-token') {
       {
         provide: ActivatedRoute,
         useValue: {
-          snapshot: { queryParamMap: convertToParamMap(token === null ? {} : { token }) },
+          snapshot: {
+            fragment: link.fragment ?? null,
+            queryParamMap: convertToParamMap(link.token ? { token: link.token } : {}),
+          },
         },
       },
     ],
@@ -24,130 +33,95 @@ function render(token: string | null = 'raw-token') {
   const fixture = TestBed.createComponent(ActivatePage)
   const httpMock = TestBed.inject(HttpTestingController)
   fixture.detectChanges()
-  return { fixture, httpMock }
+  const form = fixture.debugElement.query(By.directive(AuthActivate))
+    .componentInstance as AuthActivate
+  return { fixture, httpMock, form, el: fixture.nativeElement as HTMLElement }
+}
+
+function fill(form: AuthActivate, username = 'Marie'): void {
+  form['username'].set(username)
+  form['password'].set('sup3r-s3cret!')
+  form['confirmation'].set('sup3r-s3cret!')
 }
 
 describe('ActivatePage', () => {
   afterEach(() => {
     TestBed.inject(HttpTestingController).verify()
-    vi.restoreAllMocks()
   })
 
-  it('shows an error and no form when the token query param is missing', () => {
-    const { fixture } = render(null)
+  it('asks for a username first, the administrator having invited by e-mail only', () => {
+    const { el } = render()
+    const fields = Array.from(el.querySelectorAll('input')).map((input) =>
+      input.id.split('-').pop(),
+    )
 
-    expect(fixture.componentInstance.tokenMissing).toBe(true)
-    expect(fixture.nativeElement.textContent).toContain('Lien')
+    expect(fields).toEqual(['username', 'password', 'confirmation'])
+    expect(el.textContent).toContain("Choisissez votre nom d'utilisateur et votre mot de passe.")
   })
 
-  it('rejects a mismatched password confirmation without sending a request', () => {
-    const { fixture, httpMock } = render()
-    fixture.componentInstance.form.setValue({
-      username: 'florian',
-      newPassword: 'new-s3cret!',
-      confirmPassword: 'different!',
-    })
+  it('shows the dead link, without any request, when the link has no token', () => {
+    const { el } = render({ fragment: null })
 
-    fixture.componentInstance.submit()
-
-    httpMock.expectNone('/api/auth/activate')
-    expect(fixture.componentInstance.passwordMismatch).toBe(true)
+    expect(el.querySelector('h1')?.textContent).toContain('Ce lien ne fonctionne pas')
+    expect(el.querySelector('form')).toBeNull()
   })
 
-  it('submits the token, chosen username and new password, then redirects to login', () => {
-    const { fixture, httpMock } = render('raw-token')
-    const router = TestBed.inject(Router)
-    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
-    fixture.componentInstance.form.setValue({
-      username: 'florian',
-      newPassword: 'new-s3cret!',
-      confirmPassword: 'new-s3cret!',
-    })
+  it('still reads the token of an older ?token= link', () => {
+    const { httpMock, form } = render({ token: TOKEN })
+    fill(form)
 
-    fixture.componentInstance.submit()
+    form.submit()
 
+    expect(httpMock.expectOne('/api/auth/activate').request.body.token).toBe(TOKEN)
+  })
+
+  it('sends the token, the chosen username and the password, then says the account is active', () => {
+    const { fixture, httpMock, form, el } = render()
+    fill(form)
+
+    form.submit()
     const req = httpMock.expectOne('/api/auth/activate')
-    expect(req.request.method).toBe('POST')
     expect(req.request.body).toEqual({
-      token: 'raw-token',
-      username: 'florian',
-      new_password: 'new-s3cret!',
+      token: TOKEN,
+      username: 'Marie',
+      new_password: 'sup3r-s3cret!',
     })
     req.flush(null)
-
-    expect(router.navigateByUrl).toHaveBeenCalledWith('/login')
-  })
-
-  it('says the server is busy, not that the link is invalid, on a 503', () => {
-    const { fixture, httpMock } = render()
-    fixture.componentInstance.form.setValue({
-      username: 'florian',
-      newPassword: 'new-s3cret!',
-      confirmPassword: 'new-s3cret!',
-    })
-
-    fixture.componentInstance.submit()
-    httpMock
-      .expectOne('/api/auth/activate')
-      .flush({ error: 'busy' }, { status: 503, statusText: 'Service Unavailable' })
     fixture.detectChanges()
 
-    const text = fixture.nativeElement.textContent as string
-    expect(text).toContain('Service momentanément occupé')
-    expect(text).not.toContain('invalide ou a expiré')
+    expect(el.querySelector('h1')?.textContent).toContain('Votre compte est activé')
   })
 
-  it('shows an error message when activation fails', () => {
-    const { fixture, httpMock } = render()
-    fixture.componentInstance.form.setValue({
-      username: 'florian',
-      newPassword: 'new-s3cret!',
-      confirmPassword: 'new-s3cret!',
-    })
+  it('keeps the form and says so when the username is already taken', () => {
+    const { fixture, httpMock, form, el } = render()
+    fill(form)
 
-    fixture.componentInstance.submit()
-
-    httpMock.expectOne('/api/auth/activate').flush(null, { status: 400, statusText: 'Bad Request' })
-    fixture.detectChanges()
-
-    expect(fixture.nativeElement.textContent).toContain(
-      "Ce lien d'activation est invalide ou a expiré",
-    )
-  })
-
-  it('says the username is taken, and keeps the form, when the server refuses it', () => {
-    const { fixture, httpMock } = render()
-    fixture.componentInstance.form.setValue({
-      username: 'florian',
-      newPassword: 'new-s3cret!',
-      confirmPassword: 'new-s3cret!',
-    })
-
-    fixture.componentInstance.submit()
+    form.submit()
     httpMock
       .expectOne('/api/auth/activate')
       .flush(
-        { error: 'username already in use', code: 'username_taken' },
-        { status: 409, statusText: 'Conflict' },
+        { error: 'username already taken', code: 'username_taken' },
+        { status: 400, statusText: 'Bad Request' },
       )
     fixture.detectChanges()
 
-    expect(fixture.nativeElement.textContent).toContain("Ce nom d'utilisateur est déjà pris.")
-    expect(fixture.nativeElement.textContent).not.toContain('invalide ou a expiré')
-    expect(fixture.componentInstance.form.getRawValue().username).toBe('florian')
-    expect(fixture.componentInstance.submitting()).toBe(false)
+    expect(el.querySelector('h1')?.textContent).toContain('Activez votre compte')
+    expect(el.textContent).toContain("Ce nom d'utilisateur est déjà utilisé")
   })
 
-  it('does not submit without a username', () => {
-    const { fixture, httpMock } = render()
-    fixture.componentInstance.form.setValue({
-      username: '',
-      newPassword: 'new-s3cret!',
-      confirmPassword: 'new-s3cret!',
-    })
+  it('turns into the dead link when the invitation has expired', () => {
+    const { fixture, httpMock, form, el } = render()
+    fill(form)
 
-    fixture.componentInstance.submit()
+    form.submit()
+    httpMock
+      .expectOne('/api/auth/activate')
+      .flush(
+        { error: 'invitation expired', code: 'invitation_expired' },
+        { status: 400, statusText: 'Bad Request' },
+      )
+    fixture.detectChanges()
 
-    httpMock.expectNone('/api/auth/activate')
+    expect(el.querySelector('h1')?.textContent).toContain('Ce lien ne fonctionne pas')
   })
 })

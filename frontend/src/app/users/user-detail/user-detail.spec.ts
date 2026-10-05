@@ -4,7 +4,6 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideHttpClient } from '@angular/common/http'
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router'
 import { By } from '@angular/platform-browser'
-import { Table, Tooltip } from '@masmarino/gabarit'
 import { PermissionRoleEditor } from '../../repositories/permission-role-editor/permission-role-editor'
 import { UserDetail } from './user-detail'
 import { PageTitleService } from '../../shell/page-title.service'
@@ -13,6 +12,19 @@ import { repositoryProviders } from '../../repositories/infrastructure/repositor
 import { MeService } from '../../shell/application/me.service'
 import { ToastService } from '../../shared/toast.service'
 import { ConfirmService } from '../../shared/confirm.service'
+
+function userFixture(overrides: Record<string, unknown>) {
+  return {
+    is_super_admin: false,
+    organization_id: 'org-acme',
+    email: null,
+    invitation_pending: false,
+    created_at: '2026-08-22T09:00:00Z',
+    invitation_expires_at: null,
+    mfa_enabled: false,
+    ...overrides,
+  }
+}
 
 describe('UserDetail', () => {
   afterEach(() => {
@@ -36,7 +48,13 @@ describe('UserDetail', () => {
             paramMap: of(convertToParamMap({ id: 'user-2' })),
           },
         },
-        { provide: MeService, useValue: { isSuperAdmin: () => options?.isSuperAdmin ?? true } },
+        {
+          provide: MeService,
+          useValue: {
+            isSuperAdmin: () => options?.isSuperAdmin ?? true,
+            username: () => 'admin',
+          },
+        },
         { provide: ConfirmService, useValue: { ask } },
       ],
     })
@@ -53,7 +71,7 @@ describe('UserDetail', () => {
 
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock
       .expectOne('/api/users/user-2/permissions')
       .flush([
@@ -73,7 +91,7 @@ describe('UserDetail', () => {
 
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
@@ -98,20 +116,14 @@ describe('UserDetail', () => {
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock
       .expectOne('/api/users/user-2/permissions')
       .flush([{ repository_id: 'repo-1', repository_name: 'my-repo', format: 'npm', role: 'read' }])
     httpMock.expectOne('/api/repositories').flush([])
     fixture.detectChanges()
 
-    const tableDebugElement = fixture.debugElement.query(By.directive(Table))
-    tableDebugElement.triggerEventHandler('rowClick', {
-      repository_id: 'repo-1',
-      repository_name: 'my-repo',
-      format: 'npm',
-      role: 'read',
-    })
+    fixture.componentInstance.openRoleEditor(fixture.componentInstance.permissions()[0])
     fixture.detectChanges()
 
     const editorDebugElement = fixture.debugElement.query(By.directive(PermissionRoleEditor))
@@ -140,7 +152,7 @@ describe('UserDetail', () => {
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
@@ -164,7 +176,7 @@ describe('UserDetail', () => {
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
@@ -181,7 +193,7 @@ describe('UserDetail', () => {
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock
       .expectOne('/api/users/user-2/permissions')
       .flush([
@@ -190,13 +202,7 @@ describe('UserDetail', () => {
     httpMock.expectOne('/api/repositories').flush([])
     fixture.detectChanges()
 
-    const tableDebugElement = fixture.debugElement.query(By.directive(Table))
-    tableDebugElement.triggerEventHandler('rowClick', {
-      repository_id: 'repo-9',
-      repository_name: 'other-repo',
-      format: 'npm',
-      role: 'write',
-    })
+    fixture.componentInstance.openRoleEditor(fixture.componentInstance.permissions()[0])
     fixture.detectChanges()
 
     expect(fixture.componentInstance.editingPermission()).toEqual({
@@ -220,23 +226,18 @@ describe('UserDetail', () => {
     expect(fixture.componentInstance.permissions()).toEqual([])
   })
 
-  it('promotes a user to super-admin after confirmation', async () => {
+  it('promotes a user to super-admin at once, as the list does', async () => {
     const { fixture, httpMock, ask } = setup()
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
     await fixture.componentInstance.setSuperAdmin()
 
-    expect(ask).toHaveBeenCalledWith(
-      expect.objectContaining({
-        heading: 'Promouvoir en super-administrateur',
-        message: 'Promouvoir "florian" au rang de super-administrateur ?',
-      }),
-    )
+    expect(ask).not.toHaveBeenCalled()
 
     const req = httpMock.expectOne('/api/users/user-2/super-admin')
     expect(req.request.method).toBe('PUT')
@@ -245,7 +246,7 @@ describe('UserDetail', () => {
 
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: true })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: true }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
 
     expect(fixture.componentInstance.user()?.is_super_admin).toBe(true)
@@ -256,7 +257,7 @@ describe('UserDetail', () => {
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: true })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: true }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
@@ -264,8 +265,8 @@ describe('UserDetail', () => {
 
     expect(ask).toHaveBeenCalledWith(
       expect.objectContaining({
-        heading: 'Retirer le rang de super-administrateur',
-        message: 'Retirer le rang de super-administrateur à "florian" ?',
+        heading: 'Retirer les droits de super-administrateur',
+        message: expect.stringContaining('florian ne pourra plus gérer les utilisateurs'),
       }),
     )
 
@@ -284,7 +285,7 @@ describe('UserDetail', () => {
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
@@ -300,12 +301,12 @@ describe('UserDetail', () => {
     })
   })
 
-  it('does not change super-admin status when the confirmation is cancelled', async () => {
+  it('keeps the super-admin rights when their removal is cancelled', async () => {
     const { fixture, httpMock } = setup({ confirmed: false })
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: true }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
 
@@ -319,7 +320,7 @@ describe('UserDetail', () => {
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([
       {
@@ -359,7 +360,7 @@ describe('UserDetail', () => {
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([
       {
@@ -407,7 +408,7 @@ describe('UserDetail', () => {
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([
       {
@@ -441,7 +442,7 @@ describe('UserDetail', () => {
     // the successful grant against repo-5 already committed server-side, so reload still runs
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock
       .expectOne('/api/users/user-2/permissions')
       .flush([{ repository_id: 'repo-5', repository_name: 'repo-a', format: 'npm', role: 'read' }])
@@ -455,7 +456,7 @@ describe('UserDetail', () => {
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
     fixture.detectChanges()
@@ -473,7 +474,7 @@ describe('UserDetail', () => {
 
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
     fixture.detectChanges()
@@ -491,7 +492,9 @@ describe('UserDetail', () => {
     fixture.detectChanges()
 
     expect(fixture.componentInstance.loadError()).toBe(true)
-    expect(fixture.nativeElement.textContent).toContain('Échec du chargement')
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
+      'Impossible de charger cet utilisateur.',
+    )
     expect(fixture.nativeElement.textContent).not.toContain('Supprimer')
   })
 
@@ -501,7 +504,7 @@ describe('UserDetail', () => {
       fixture.detectChanges()
       httpMock
         .expectOne('/api/users/user-2')
-        .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+        .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
       httpMock.expectOne('/api/users/user-2/permissions').flush([])
       httpMock.expectOne('/api/repositories').flush([])
       fixture.detectChanges()
@@ -512,55 +515,257 @@ describe('UserDetail', () => {
     it('still shows delete and resend-invitation for a regular (non-super-admin) target', () => {
       const { fixture, httpMock } = setup({ isSuperAdmin: false })
       fixture.detectChanges()
-      httpMock.expectOne('/api/users/user-2').flush({
-        id: 'user-2',
-        username: 'florian',
-        is_super_admin: false,
-        invitation_pending: true,
-      })
+      httpMock.expectOne('/api/users/user-2').flush(
+        userFixture({
+          id: 'user-2',
+          username: 'florian',
+          is_super_admin: false,
+          invitation_pending: true,
+        }),
+      )
       httpMock.expectOne('/api/users/user-2/permissions').flush([])
       httpMock.expectOne('/api/repositories').flush([])
       fixture.detectChanges()
 
-      expect(fixture.nativeElement.textContent).toContain('Supprimer')
-      expect(fixture.nativeElement.textContent).toContain("Renvoyer l'invitation")
+      expect(fixture.nativeElement.querySelector('.user-detail__delete')).not.toBeNull()
+      expect(fixture.componentInstance.actions()?.canResend).toBe(true)
     })
 
     it('hides delete and resend-invitation when the target is a super-admin — a global privilege outside their reach', () => {
       const { fixture, httpMock } = setup({ isSuperAdmin: false })
       fixture.detectChanges()
-      httpMock.expectOne('/api/users/user-2').flush({
-        id: 'user-2',
-        username: 'florian',
-        is_super_admin: true,
-        invitation_pending: true,
-      })
+      httpMock.expectOne('/api/users/user-2').flush(
+        userFixture({
+          id: 'user-2',
+          username: 'florian',
+          is_super_admin: true,
+          invitation_pending: true,
+        }),
+      )
       httpMock.expectOne('/api/users/user-2/permissions').flush([])
       httpMock.expectOne('/api/repositories').flush([])
       fixture.detectChanges()
 
-      expect(fixture.nativeElement.textContent).not.toContain('Supprimer')
-      expect(fixture.nativeElement.textContent).not.toContain("Renvoyer l'invitation")
+      expect(fixture.nativeElement.querySelector('.user-detail__delete')).toBeNull()
+      expect(fixture.componentInstance.actions()).toBeNull()
     })
   })
 
-  it('explains via tooltips what promoting to super-admin and deleting the account do', () => {
+  it('explains on the side what the roles allow and what deleting the account does', () => {
     const { fixture, httpMock } = setup()
     fixture.detectChanges()
     httpMock
       .expectOne('/api/users/user-2')
-      .flush({ id: 'user-2', username: 'florian', is_super_admin: false })
+      .flush(userFixture({ id: 'user-2', username: 'florian', is_super_admin: false }))
     httpMock.expectOne('/api/users/user-2/permissions').flush([])
     httpMock.expectOne('/api/repositories').flush([])
     fixture.detectChanges()
 
-    const tooltips = fixture.debugElement.queryAll(By.directive(Tooltip))
-    const texts = tooltips.map((t) => (t.componentInstance as Tooltip).text())
+    const aside = fixture.nativeElement.querySelector('.user-detail__aside').textContent
+    expect(aside).toContain('Les rôles se cumulent')
+    expect(aside).toContain('Supprimer un compte le déconnecte aussitôt')
+  })
 
-    expect(texts).toContain(
-      'Donne un accès complet à toutes les organisations et à leur administration.',
+  it('says so when the account does not exist', () => {
+    const { fixture, httpMock } = setup()
+    fixture.detectChanges()
+    httpMock
+      .expectOne('/api/users/user-2')
+      .flush('not found', { status: 404, statusText: 'Not Found' })
+    httpMock.expectOne('/api/users/user-2/permissions').flush([])
+    httpMock.expectOne('/api/repositories').flush([])
+    fixture.detectChanges()
+
+    expect(fixture.nativeElement.textContent).toContain('Utilisateur introuvable')
+    expect(fixture.nativeElement.querySelector('a[href="/users"]')).not.toBeNull()
+  })
+
+  it("sends one's own account to « Mon compte », as FerrisGit does", () => {
+    const { fixture, httpMock } = setup()
+    fixture.detectChanges()
+    httpMock.expectOne('/api/users/user-2').flush(userFixture({ id: 'user-2', username: 'admin' }))
+    httpMock.expectOne('/api/users/user-2/permissions').flush([])
+    httpMock.expectOne('/api/repositories').flush([])
+    fixture.detectChanges()
+
+    expect(fixture.nativeElement.textContent).toContain("C'est votre propre compte")
+    expect(fixture.nativeElement.querySelector('a[href="/account"]')).not.toBeNull()
+    expect(fixture.nativeElement.querySelector('.user-detail__delete')).toBeNull()
+  })
+
+  it('shows the state, second factor and creation date beside the name', () => {
+    const { fixture, httpMock } = setup()
+    fixture.detectChanges()
+    httpMock.expectOne('/api/users/user-2').flush(
+      userFixture({
+        id: 'user-2',
+        username: 'florian',
+        email: 'florian@example.com',
+        mfa_enabled: true,
+      }),
     )
-    expect(texts).toContain('Suppression définitive du compte.')
+    httpMock
+      .expectOne('/api/users/user-2/permissions')
+      .flush([{ repository_id: 'repo-1', repository_name: 'my-repo', format: 'npm', role: 'read' }])
+    httpMock.expectOne('/api/repositories').flush([])
+    fixture.detectChanges()
+
+    const text = fixture.nativeElement.textContent
+    expect(text).toContain('Actif')
+    expect(text).toContain('Double authentification active')
+    expect(text).toContain('florian@example.com')
+    expect(text).toContain('créé le 22/08/2026')
+    expect(text).toContain('1 dépôt')
+  })
+
+  it('asks before removing an access from its row', async () => {
+    const { fixture, httpMock, ask } = setup()
+    fixture.detectChanges()
+    httpMock
+      .expectOne('/api/users/user-2')
+      .flush(userFixture({ id: 'user-2', username: 'florian' }))
+    httpMock
+      .expectOne('/api/users/user-2/permissions')
+      .flush([{ repository_id: 'repo-1', repository_name: 'my-repo', format: 'npm', role: 'read' }])
+    httpMock.expectOne('/api/repositories').flush([])
+
+    await fixture.componentInstance.revokePermission(fixture.componentInstance.permissions()[0])
+
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "florian n'aura plus accès à my-repo." }),
+    )
+    const request = httpMock.expectOne('/api/repositories/repo-1/permissions/user-2')
+    expect(request.request.method).toBe('DELETE')
+  })
+
+  it('offers to grant only the repositories not reached yet', () => {
+    const { fixture, httpMock } = setup()
+    fixture.detectChanges()
+    httpMock
+      .expectOne('/api/users/user-2')
+      .flush(userFixture({ id: 'user-2', username: 'florian' }))
+    httpMock
+      .expectOne('/api/users/user-2/permissions')
+      .flush([{ repository_id: 'repo-1', repository_name: 'my-repo', format: 'npm', role: 'read' }])
+    httpMock.expectOne('/api/repositories').flush([
+      { id: 'repo-1', name: 'my-repo' },
+      { id: 'repo-2', name: 'other-repo' },
+    ])
+
+    expect(fixture.componentInstance.repositoryOptions()).toEqual([
+      { value: 'repo-2', label: 'other-repo' },
+    ])
+  })
+
+  it('resets the password from the actions menu and hands back the link when no mail went out', async () => {
+    const { fixture, httpMock, ask } = setup()
+    fixture.detectChanges()
+    httpMock
+      .expectOne('/api/users/user-2')
+      .flush(userFixture({ id: 'user-2', username: 'florian' }))
+    httpMock.expectOne('/api/users/user-2/permissions').flush([])
+    httpMock.expectOne('/api/repositories').flush([])
+
+    expect(fixture.componentInstance.actions()?.canResetPassword).toBe(true)
+    await fixture.componentInstance.resetPassword()
+
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({ heading: 'Réinitialiser le mot de passe' }),
+    )
+    httpMock.expectOne('/api/users/user-2/reset-password').flush({
+      email_sent: false,
+      email_error: 'email_send_failed',
+      reset_url: 'https://app.example.com/reset-password#token=abc',
+    })
+    fixture.detectChanges()
+    expect(fixture.nativeElement.querySelector('app-link-mail-failed code')?.textContent).toBe(
+      'https://app.example.com/reset-password#token=abc',
+    )
+  })
+
+  it('resets the second factors from the actions menu once confirmed', async () => {
+    const { fixture, httpMock, ask } = setup()
+    fixture.detectChanges()
+    httpMock
+      .expectOne('/api/users/user-2')
+      .flush(userFixture({ id: 'user-2', username: 'florian', mfa_enabled: true }))
+    httpMock.expectOne('/api/users/user-2/permissions').flush([])
+    httpMock.expectOne('/api/repositories').flush([])
+
+    expect(fixture.componentInstance.actions()?.canResetMfa).toBe(true)
+    await fixture.componentInstance.resetMfa()
+
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({ heading: 'Réinitialiser la double authentification' }),
+    )
+    httpMock.expectOne('/api/users/user-2/mfa').flush(null)
+    expect(TestBed.inject(ToastService).toasts().at(-1)?.message).toBe(
+      'Double authentification réinitialisée.',
+    )
+  })
+
+  describe('resending an invitation', () => {
+    function loadPending() {
+      const context = setup()
+      context.fixture.detectChanges()
+      context.httpMock.expectOne('/api/users/user-2').flush(
+        userFixture({
+          id: 'user-2',
+          username: 'invite-0a1b2c',
+          email: 'dave@example.com',
+          invitation_pending: true,
+          invitation_expires_at: '2026-10-07T08:00:00Z',
+        }),
+      )
+      context.httpMock.expectOne('/api/users/user-2/permissions').flush([])
+      context.httpMock.expectOne('/api/repositories').flush([])
+      context.fixture.detectChanges()
+      return context
+    }
+
+    function answerReload(httpMock: HttpTestingController) {
+      httpMock.match('/api/users/user-2').forEach((request) =>
+        request.flush(
+          userFixture({
+            id: 'user-2',
+            username: 'x',
+            invitation_pending: true,
+            email: 'dave@example.com',
+          }),
+        ),
+      )
+      httpMock.match('/api/users/user-2/permissions').forEach((request) => request.flush([]))
+    }
+
+    it('says to whom it went', () => {
+      const { fixture, httpMock } = loadPending()
+      const toast = vi.spyOn(TestBed.inject(ToastService), 'success')
+
+      fixture.componentInstance.resendInvitation()
+      httpMock.expectOne('/api/users/user-2/resend-invitation').flush({ email_sent: true })
+      answerReload(httpMock)
+
+      expect(toast).toHaveBeenCalledWith('Invitation renvoyée à dave@example.com.')
+    })
+
+    it('shows the new activation link when its mail could not go out', () => {
+      const { fixture, httpMock } = loadPending()
+
+      fixture.componentInstance.resendInvitation()
+      httpMock.expectOne('/api/users/user-2/resend-invitation').flush({
+        email_sent: false,
+        email_error: 'email_not_configured',
+        activation_url: 'https://app.example.com/activate#token=new',
+      })
+      answerReload(httpMock)
+      fixture.detectChanges()
+
+      const alert = fixture.nativeElement.querySelector('app-link-mail-failed')
+      expect(alert?.textContent).toContain("Aucun serveur mail n'est configuré")
+      expect(alert?.querySelector('code')?.textContent).toBe(
+        'https://app.example.com/activate#token=new',
+      )
+    })
   })
 
   describe('navigating from one user to another', () => {
@@ -584,7 +789,7 @@ describe('UserDetail', () => {
             provide: ActivatedRoute,
             useValue: { snapshot: { paramMap: paramMap$.value }, paramMap: paramMap$ },
           },
-          { provide: MeService, useValue: { isSuperAdmin: () => true } },
+          { provide: MeService, useValue: { isSuperAdmin: () => true, username: () => 'admin' } },
           { provide: ConfirmService, useValue: { ask: vi.fn().mockResolvedValue(true) } },
         ],
       })

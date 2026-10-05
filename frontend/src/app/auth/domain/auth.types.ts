@@ -6,14 +6,6 @@ export interface LoginResponse {
   mfa_has_passkey: boolean
 }
 
-export interface LoginOutcome {
-  mfaRequired: boolean
-  mfaToken?: string
-  mfaSetupRequired?: boolean
-  mfaHasTotp?: boolean
-  mfaHasPasskey?: boolean
-}
-
 export interface TotpSetupEnrollment {
   secret: string
   otpauth_url: string

@@ -2,16 +2,33 @@ import { t } from '../../shared/i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { Button, Checkbox, EmptyState, GbtInput, Spinner, Tooltip } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Checkbox } from '@masmarino/gabarit/checkbox'
+import { EmptyState } from '@masmarino/gabarit/empty-state'
+import { GbtInput } from '@masmarino/gabarit/input'
+import { Spinner } from '@masmarino/gabarit/spinner'
+import { Tooltip } from '@masmarino/gabarit/tooltip'
 import { OrganizationMembersService } from '../application/organization-members.service'
 import { OrganizationMember } from '../domain/organization-member.entity'
 import { ConfirmService } from '../../shared/confirm.service'
 import { ToastService } from '../../shared/toast.service'
+import { LinkMailFailed } from '../../shared/link-mail-failed/link-mail-failed'
+import { InvitationMail } from '../../shared/invitation-mail'
 
 @Component({
   selector: 'app-organization-members',
   standalone: true,
-  imports: [TranslocoPipe, Button, EmptyState, GbtInput, Checkbox, FormsModule, Spinner, Tooltip],
+  imports: [
+    TranslocoPipe,
+    Button,
+    EmptyState,
+    GbtInput,
+    Checkbox,
+    FormsModule,
+    LinkMailFailed,
+    Spinner,
+    Tooltip,
+  ],
   templateUrl: './organization-members.html',
   styleUrl: './organization-members.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -31,6 +48,8 @@ export class OrganizationMembers {
   readonly newEmail = signal('')
   readonly newIsOrganizationAdmin = signal(false)
   readonly inviting = signal(false)
+  /** An invitation whose mail did not go out: the link to pass on, shown until dismissed. */
+  readonly mailFailure = signal<{ name: string; mail: InvitationMail } | null>(null)
 
   // effect, not ngOnInit: this component is reused across organizations.
   constructor() {
@@ -41,6 +60,7 @@ export class OrganizationMembers {
       this.newEmail.set('')
       this.newIsOrganizationAdmin.set(false)
       this.inviting.set(false)
+      this.mailFailure.set(null)
       this.loading.set(true)
       this.reload()
     })
@@ -87,13 +107,16 @@ export class OrganizationMembers {
     this.organizationMembersService
       .invite(organizationId, email, this.newIsOrganizationAdmin())
       .subscribe({
-        next: () => {
+        next: (member) => {
           if (stillCurrent()) {
             this.inviting.set(false)
             this.addingMember.set(false)
+            this.mailFailure.set(member.email_sent ? null : { name: email, mail: member })
             this.reload()
           }
-          this.toastService.success(t('admin.members.invited', { email }))
+          if (member.email_sent) {
+            this.toastService.success(t('admin.members.invited', { email }))
+          }
         },
         error: () => {
           if (stillCurrent()) {

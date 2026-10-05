@@ -76,7 +76,7 @@ impl EmailPort for SmtpEmailSender {
 
     async fn send(&self, organization_id: Uuid, to: &str, subject: &str, text_body: &str, html_body: &str) -> Result<(), DomainError> {
         let Some(settings) = self.settings.get(organization_id).await? else {
-            return Err(DomainError::Infrastructure("SMTP is not configured".to_string()));
+            return Err(DomainError::EmailNotConfigured);
         };
 
         // Only attach the logo when the HTML actually references it.

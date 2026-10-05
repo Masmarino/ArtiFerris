@@ -1,10 +1,13 @@
+import { inject } from '@angular/core'
 import { Routes } from '@angular/router'
+import { AuthService } from './auth/application/auth.service'
 import { authGuard } from './auth/auth.guard'
 import { adminGuard } from './auth/admin.guard'
 import { usersGuard } from './auth/users.guard'
 import { organizationAdminGuard } from './auth/organization-admin.guard'
 import { CATALOGS } from './public/catalog/domain/catalog.registry'
 import { personalOwnerMatcher } from './public/catalog/owner-url-matcher'
+import { ADMIN_TRAIL, ADMINISTRATION_TRAIL } from './shell/page-trail'
 import { knownFormatAt } from './public/known-format'
 
 const catalogRoutes: Routes = CATALOGS.map((catalog) => ({
@@ -24,6 +27,11 @@ export const routes: Routes = [
     loadComponent: () => import('./auth/activate-page/activate-page').then((m) => m.ActivatePage),
   },
   {
+    path: 'reset-password',
+    loadComponent: () =>
+      import('./auth/reset-password-page/reset-password-page').then((m) => m.ResetPasswordPage),
+  },
+  {
     path: 'register',
     loadComponent: () => import('./auth/register-page/register-page').then((m) => m.RegisterPage),
   },
@@ -40,6 +48,12 @@ export const routes: Routes = [
       import('./public/catalog/explorer-page/explorer-page').then((m) => m.ExplorerPage),
   },
   ...catalogRoutes,
+  // The documentation without a session, under the public pages' bar; with one, it is in the shell below.
+  {
+    path: 'docs',
+    canMatch: [() => !inject(AuthService).isAuthenticated()],
+    loadChildren: () => import('./docs/docs.routes').then((m) => m.PUBLIC_DOCS_ROUTES),
+  },
   // Authenticated routes never start with '@'.
   {
     matcher: personalOwnerMatcher,
@@ -55,12 +69,17 @@ export const routes: Routes = [
         path: 'users',
         loadComponent: () => import('./users/users-list/users-list').then((m) => m.UsersList),
         canActivate: [usersGuard],
-        data: { titleKey: 'nav.users' },
+        data: { trail: ADMINISTRATION_TRAIL, titleKey: 'nav.users' },
       },
       {
         path: 'users/:id',
         loadComponent: () => import('./users/user-detail/user-detail').then((m) => m.UserDetail),
         canActivate: [usersGuard],
+        data: { trail: [...ADMINISTRATION_TRAIL, { labelKey: 'nav.users', link: '/users' }] },
+      },
+      {
+        path: 'docs',
+        loadChildren: () => import('./docs/docs.routes').then((m) => m.SHELL_DOCS_ROUTES),
       },
       {
         path: 'account',
@@ -90,6 +109,7 @@ export const routes: Routes = [
           import('./repositories/repository-detail/repository-detail').then(
             (m) => m.RepositoryDetail,
           ),
+        data: { trail: [{ labelKey: 'nav.repositories', link: '/repositories' }] },
       },
       {
         path: 'repositories/:id/packages/:format/:name',
@@ -98,39 +118,43 @@ export const routes: Routes = [
           import('./repositories/package-detail-page/package-detail-page').then(
             (m) => m.PackageDetailPage,
           ),
+        data: { trail: [{ labelKey: 'nav.repositories', link: '/repositories' }] },
       },
       {
         path: 'admin',
         loadComponent: () =>
           import('./admin/admin-dashboard/admin-dashboard').then((m) => m.AdminDashboard),
         canActivate: [adminGuard],
-        data: { titleKey: 'nav.administration' },
+        data: { trail: ADMINISTRATION_TRAIL, titleKey: 'nav.dashboard' },
       },
       {
         path: 'admin/export',
         loadComponent: () => import('./admin/export/export').then((m) => m.ExportAdmin),
         canActivate: [adminGuard],
-        data: { titleKey: 'nav.export' },
+        data: { trail: ADMIN_TRAIL, titleKey: 'nav.export' },
       },
       {
         path: 'admin/health',
         loadComponent: () =>
           import('./admin/health-status/health-status').then((m) => m.HealthStatusPage),
         canActivate: [adminGuard],
-        data: { titleKey: 'nav.systemHealth' },
+        data: { trail: ADMIN_TRAIL, titleKey: 'nav.health' },
       },
       {
         path: 'admin/organizations',
         loadComponent: () =>
           import('./admin/organizations-page/organizations-page').then((m) => m.OrganizationsPage),
         canActivate: [adminGuard],
-        data: { titleKey: 'nav.organizations' },
+        data: { trail: ADMIN_TRAIL, titleKey: 'nav.organizations' },
       },
       {
         path: 'admin/organizations/:id',
         loadComponent: () =>
           import('./admin/organizations-page/organizations-page').then((m) => m.OrganizationsPage),
         canActivate: [organizationAdminGuard],
+        data: {
+          trail: [...ADMIN_TRAIL, { labelKey: 'nav.organizations', link: '/admin/organizations' }],
+        },
       },
     ],
   },

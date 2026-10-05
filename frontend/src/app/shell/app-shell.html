@@ -29,143 +29,82 @@
         shell-brand
       />
     } @else {
+      <!-- The light version of the logo, drawn for the graphite frame. -->
       <img
-        src="/api/branding/logo"
+        src="/Logo_horizontal.png"
         [alt]="'auth.login.logoAlt' | transloco"
         class="app-shell__logo"
         shell-brand
       />
     }
     <ng-container shell-nav>
-      <ul class="app-shell__nav-list" [class.app-shell__nav-list--collapsed]="navCollapsed()">
+      <ul class="app-shell__nav-list">
         @for (item of navItems(); track item.action) {
-          @if (item.children) {
-            <li class="app-shell__nav-group">
-              <div class="app-shell__nav-group-header">
-                <a
-                  [routerLink]="item.link"
-                  routerLinkActive="app-shell__nav-link--active"
-                  [routerLinkActiveOptions]="{ exact: true }"
-                  [ariaCurrentWhenActive]="'page'"
-                  [attr.aria-label]="navCollapsed() ? item.text : null"
-                  [title]="navCollapsed() ? item.text : null"
-                  class="app-shell__nav-link"
-                >
-                  <gbt-icon [name]="item.icon" aria-hidden="true" />
-                  @if (!navCollapsed()) {
-                    <span>{{ item.text }}</span>
-                  }
-                </a>
-                @if (!navCollapsed()) {
-                  <button
-                    type="button"
-                    class="app-shell__nav-group-toggle"
-                    [class.app-shell__nav-group-toggle--open]="isMenuOpen(item)"
-                    [attr.aria-expanded]="isMenuOpen(item)"
-                    [attr.aria-label]="
-                      (isMenuOpen(item) ? 'shell.collapseItem' : 'shell.expandItem')
-                        | transloco: { name: item.text }
-                    "
-                    (click)="toggleMenu(item)"
+          <li>
+            @if (item.children) {
+              <gbt-app-shell-nav-group
+                [label]="item.text"
+                [icon]="item.icon"
+                [expanded]="isMenuOpen(item)"
+                (expandedChange)="setMenuOpen(item, $event)"
+              >
+                @for (child of item.children; track child.action) {
+                  <a
+                    [routerLink]="child.link"
+                    routerLinkActive
+                    [routerLinkActiveOptions]="{ exact: child.exact ?? false }"
+                    ariaCurrentWhenActive="page"
+                    class="gbt-app-shell__link"
                   >
-                    <gbt-icon name="chevron-down" aria-hidden="true" />
-                  </button>
+                    <gbt-icon [name]="child.icon" />
+                    <span>{{ child.text }}</span>
+                  </a>
                 }
-              </div>
-              @if (isMenuOpen(item) && !navCollapsed()) {
-                <ul class="app-shell__nav-submenu">
-                  @for (child of item.children; track child.action) {
-                    <li>
-                      <a
-                        [routerLink]="child.link"
-                        routerLinkActive="app-shell__nav-link--active"
-                        [ariaCurrentWhenActive]="'page'"
-                        class="app-shell__nav-link app-shell__nav-link--sub"
-                      >
-                        <gbt-icon [name]="child.icon" aria-hidden="true" />
-                        <span>{{ child.text }}</span>
-                      </a>
-                    </li>
-                  }
-                </ul>
-              }
-            </li>
-          } @else {
-            <li>
+              </gbt-app-shell-nav-group>
+            } @else {
               <a
                 [routerLink]="item.link"
-                routerLinkActive="app-shell__nav-link--active"
+                routerLinkActive
                 [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
-                [ariaCurrentWhenActive]="'page'"
-                [attr.aria-label]="navCollapsed() ? item.text : null"
-                [title]="navCollapsed() ? item.text : null"
-                class="app-shell__nav-link"
+                ariaCurrentWhenActive="page"
+                class="gbt-app-shell__link"
               >
-                <gbt-icon [name]="item.icon" aria-hidden="true" />
-                @if (!navCollapsed()) {
-                  <span>{{ item.text }}</span>
-                }
+                <gbt-icon [name]="item.icon" />
+                <span>{{ item.text }}</span>
               </a>
-            </li>
-          }
+            }
+          </li>
         }
       </ul>
     </ng-container>
-    <div class="app-shell__header" shell-header>
-      <h1 class="app-shell__page-title">{{ pageTitle.title() }}</h1>
-      <gbt-search-bar
-        class="app-shell__search"
-        [placeholder]="'shell.search.placeholder' | transloco"
-        [noResultsMessage]="
-          (searchFailed() ? 'shell.search.failed' : 'shell.search.noResults') | transloco
-        "
-        [noResultsHint]="
-          (searchFailed() ? 'shell.search.failedHint' : 'shell.search.noResultsHint') | transloco
-        "
-        [clearLabel]="'shell.search.clear' | transloco"
-        [navigateHint]="'shell.search.navigate' | transloco"
-        [selectHint]="'shell.search.select' | transloco"
-        [closeHint]="'common.close' | transloco"
-        [groupedResults]="searchResults()"
-        [displayFn]="searchResultLabel"
-        [resultsAnnouncement]="resultsAnnouncement"
-        (queryChange)="onSearchInput($event)"
-        (clear)="onSearchInput('')"
-        (itemSelected)="onSelectResult($event)"
-      />
-      <div class="app-shell__user-menu" #userMenu>
-        <button
-          type="button"
-          class="app-shell__user-trigger"
-          [attr.aria-expanded]="userMenuOpen()"
-          aria-haspopup="menu"
-          (click)="toggleUserMenu()"
-        >
-          <span>{{ me.username() }}</span>
-          <gbt-icon name="chevron-down" aria-hidden="true" />
-        </button>
-        @if (userMenuOpen()) {
-          <div class="app-shell__user-dropdown" role="menu">
-            <a
-              routerLink="/account"
-              class="app-shell__user-dropdown-item"
-              role="menuitem"
-              (click)="userMenuOpen.set(false)"
-            >
-              <gbt-icon name="user" aria-hidden="true" />
-              <span>{{ 'nav.account' | transloco }}</span>
-            </a>
-            <button
-              type="button"
-              class="app-shell__user-dropdown-item"
-              role="menuitem"
-              (click)="logout()"
-            >
-              <gbt-icon name="log-out" aria-hidden="true" />
-              <span>{{ 'shell.logout' | transloco }}</span>
-            </button>
-          </div>
+    <div class="app-shell__header" shell-header [class.app-shell__header--rail]="navCollapsed()">
+      <!-- The bar names what is above the page; the page names itself in its own header, so the current step is
+           only read by assistive technology. -->
+      <gbt-breadcrumb [ariaLabel]="'shell.trailLabel' | transloco" class="app-shell__breadcrumb">
+        @for (step of trail(); track step.label) {
+          <li breadcrumb-ancestor>
+            @if (step.link) {
+              <a class="gbt-breadcrumb__item" [routerLink]="step.link">{{ step.label }}</a>
+            } @else {
+              <span class="gbt-breadcrumb__item app-shell__crumb">{{ step.label }}</span>
+            }
+          </li>
         }
+        {{ pageTitle.title() }}
+      </gbt-breadcrumb>
+      <gbt-command-palette-trigger
+        class="app-shell__search"
+        [label]="'shell.search.placeholder' | transloco"
+        [palette]="quickSearch"
+      />
+      <div class="app-shell__header-end">
+        <gbt-menu [label]="me.username() || ('nav.account' | transloco)" align="end">
+          <a gbtMenuItem icon="user" routerLink="/account">{{ 'nav.account' | transloco }}</a>
+          <a gbtMenuItem icon="book-open" routerLink="/docs">{{ 'nav.docs' | transloco }}</a>
+          <button gbtMenuItem icon="log-out" (click)="logout()">
+            {{ 'shell.logout' | transloco }}
+          </button>
+        </gbt-menu>
       </div>
     </div>
     <!-- A language change re-creates the routed view, so what was computed at creation is rebuilt in the new language. -->
@@ -173,6 +112,8 @@
       <router-outlet />
     }
   </gbt-app-shell>
+  <!-- Outside the header, whose dark theme it would otherwise take on. -->
+  <app-quick-search #quickSearch [navItems]="navItems()" (logout)="logout()" />
 }
 
 <gbt-toaster

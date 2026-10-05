@@ -1,114 +1,45 @@
-<main class="auth-layout">
-  <div class="auth-layout__card">
-    <h1 class="sr-only">{{ 'auth.login.heading' | transloco }}</h1>
-    <img
-      src="/api/branding/logo"
-      [alt]="'auth.login.logoAlt' | transloco"
-      class="auth-layout__logo"
-    />
-    @if (sessionsEndedMessage) {
-      <gbt-alert variant="info">{{ sessionsEndedMessage }}</gbt-alert>
-    }
-    @if (ssoLinkInvalid()) {
-      <gbt-alert variant="error">{{ 'auth.login.ssoLinkInvalid' | transloco }}</gbt-alert>
-    }
-    @if (!mfaToken()) {
-      @if (ssoType() === 'oidc') {
-        <gbt-alert variant="info">{{ 'auth.login.oidcNotice' | transloco }}</gbt-alert>
-        <a href="/api/auth/sso/oidc/login" class="auth-layout__link" (click)="startSso()">{{
-          'auth.login.oidcLink' | transloco
-        }}</a>
-      } @else {
-        <form [formGroup]="form" (ngSubmit)="submit()">
-          <p class="gbt-form-required-note">
-            {{ 'common.requiredNote' | transloco }}
-          </p>
-          <gbt-input
-            [label]="'auth.login.username' | transloco"
-            formControlName="username"
-            [required]="true"
-            autocomplete="username"
-          />
-          <gbt-input
-            [label]="'auth.login.password' | transloco"
-            type="password"
-            formControlName="password"
-            [required]="true"
-            autocomplete="current-password"
-            [showPasswordLabel]="'common.showPassword' | transloco"
-            [hidePasswordLabel]="'common.hidePassword' | transloco"
-          />
-          @if (errorMessage(); as message) {
-            <p class="gbt-form-error" role="alert">{{ message }}</p>
-          }
-          <gbt-button
-            [text]="'auth.login.submit' | transloco"
-            type="submit"
-            [loading]="submitting()"
-            [loadingLabel]="'common.loadingLabel' | transloco"
-            [disabled]="form.invalid || submitting()"
-          />
-        </form>
-        @if (registrationEnabled()) {
-          <gbt-divider />
-          <a routerLink="/register" class="auth-layout__link">{{
-            'auth.login.createAccount' | transloco
-          }}</a>
-        }
-      }
-      <a routerLink="/explorer" class="auth-layout__link">{{
-        'auth.login.explorePublic' | transloco
+@if (redirecting()) {
+  <!-- On the way to the app. -->
+} @else if (oidc()) {
+  <gbt-auth-panel [heading]="heading" [intro]="'auth.login.oidcNotice' | transloco">
+    <gbt-git-field auth-backdrop />
+    <img auth-logo src="/api/branding/logo" [alt]="'auth.login.logoAlt' | transloco" />
+    <div class="gbt-auth-panel__form">
+      <ng-container *ngTemplateOutlet="notices" />
+      <a gbtButton block size="large" href="/api/auth/sso/oidc/login" (click)="startSso()">{{
+        'auth.login.oidcLink' | transloco
       }}</a>
-    } @else if (mfaSetupRequired()) {
-      <app-mfa-enrollment [mfaToken]="mfaToken()!" (completed)="onEnrollmentCompleted()" />
-    } @else {
-      @if (mfaHasTotp()) {
-        <form [formGroup]="mfaForm" (ngSubmit)="submitMfa()">
-          <p class="gbt-form-required-note">
-            {{ 'common.requiredNote' | transloco }}
-          </p>
-          <div class="d-flex align-items-end gap-2">
-            <gbt-input
-              [label]="
-                (useBackupCode() ? 'auth.login.backupCode' : 'auth.login.verificationCode')
-                  | transloco
-              "
-              formControlName="code"
-              [required]="true"
-              [autocomplete]="useBackupCode() ? 'off' : 'one-time-code'"
-            />
-            <gbt-button
-              [text]="'auth.login.verify' | transloco"
-              type="submit"
-              [loading]="submitting()"
-              [loadingLabel]="'common.loadingLabel' | transloco"
-              [disabled]="mfaForm.invalid || submitting()"
-            />
-          </div>
-          @if (errorMessage(); as message) {
-            <p class="gbt-form-error" role="alert">{{ message }}</p>
-          }
-          <button type="button" class="auth-layout__link" (click)="toggleBackupCode()">
-            {{
-              (useBackupCode() ? 'auth.login.useAuthenticatorApp' : 'auth.login.useBackupCode')
-                | transloco
-            }}
-          </button>
-        </form>
-      } @else if (errorMessage(); as message) {
-        <p class="gbt-form-error" role="alert">{{ message }}</p>
-      }
-      @if (passkeysSupported && mfaHasPasskey()) {
-        <gbt-divider [label]="'common.or' | transloco" />
-        <gbt-button
-          [text]="'auth.login.usePasskey' | transloco"
-          variant="secondary"
-          [loading]="submitting()"
-          [loadingLabel]="'common.loadingLabel' | transloco"
-          [disabled]="submitting()"
-          (clicked)="submitPasskey()"
-        />
-      }
+    </div>
+  </gbt-auth-panel>
+} @else {
+  <gbt-auth-login (loggedIn)="signedIn()">
+    <gbt-git-field auth-backdrop />
+    <img auth-logo src="/api/branding/logo" [alt]="'auth.login.logoAlt' | transloco" />
+    @if (sessionsEndedMessage || ssoLinkInvalid()) {
+      <div auth-notice class="login-page__notices">
+        <ng-container *ngTemplateOutlet="notices" />
+      </div>
     }
-  </div>
-</main>
+    <a gbtButton variant="link" gbtAuthFooterLink routerLink="/register">{{
+      'auth.login.createAccount' | transloco
+    }}</a>
+  </gbt-auth-login>
+}
+<footer class="auth-layout__footer">
+  <a gbtButton variant="link" size="small" iconName="globe" routerLink="/explorer">{{
+    'auth.login.explorePublic' | transloco
+  }}</a>
+</footer>
+
+<ng-template #notices>
+  @if (sessionsEndedMessage) {
+    <gbt-alert variant="info" appearance="subtle" iconAlign="start" live="off">{{
+      sessionsEndedMessage
+    }}</gbt-alert>
+  }
+  @if (ssoLinkInvalid()) {
+    <gbt-alert variant="error" appearance="subtle" iconAlign="start">{{
+      'auth.login.ssoLinkInvalid' | transloco
+    }}</gbt-alert>
+  }
+</ng-template>

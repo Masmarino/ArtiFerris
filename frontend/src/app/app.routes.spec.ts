@@ -4,14 +4,22 @@ import { provideHttpClient } from '@angular/common/http'
 import { provideHttpClientTesting } from '@angular/common/http/testing'
 import { filter, firstValueFrom } from 'rxjs'
 import { routes } from './app.routes'
+import { AuthService } from './auth/application/auth.service'
 
 // Tells which loadComponent() a URL resolved to, without loading it: RoutesRecognized fires before
 // guards and loading.
 // A loadComponent closure ends in `.then((m) => m.<ClassName>)`, so match on the class name (Vite
 // compiles the path to a chunk reference).
-async function matchedComponentName(url: string): Promise<string> {
+async function matchedComponentName(url: string, signedIn?: boolean): Promise<string> {
   TestBed.configureTestingModule({
-    providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
+    providers: [
+      provideRouter(routes),
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      ...(signedIn === undefined
+        ? []
+        : [{ provide: AuthService, useValue: { isAuthenticated: () => signedIn } }]),
+    ],
   })
   const router = TestBed.inject(Router)
   const recognized = firstValueFrom(
@@ -140,6 +148,25 @@ describe('app.routes', () => {
     expect(await matchedComponentName('/users/user-1')).toContain('UserDetail')
     TestBed.resetTestingModule()
     expect(await matchedComponentName('/account')).toContain('AccountPage')
+  })
+
+  it('shows the documentation under the public bar to a visitor without a session', async () => {
+    const name = await matchedComponentName('/docs/demarrer/presentation', false)
+
+    expect(name).toContain('PublicDocsPage')
+  })
+
+  it('shows the documentation inside the shell to a signed-in user', async () => {
+    const name = await matchedComponentName('/docs/demarrer/presentation', true)
+
+    expect(name).toContain('ShellDocsPage')
+    expect(name).not.toContain('PublicDocsPage')
+  })
+
+  it('does not send a documentation page to the not-found page', async () => {
+    expect(await matchedComponentName('/docs/administration/configuration', false)).not.toContain(
+      'NotFoundPage',
+    )
   })
 
   it('sends unknown URLs of any depth to the not-found page', async () => {

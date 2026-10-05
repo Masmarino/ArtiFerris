@@ -219,6 +219,10 @@ pub enum AdminAuditEvent {
     UserInvited { user_id: Uuid, organization_id: Uuid, email: String, is_organization_admin: bool, is_super_admin: bool },
     UserActivated { user_id: Uuid, organization_id: Uuid },
     InvitationResent { user_id: Uuid, organization_id: Uuid },
+    /// An administrator removed every second factor of an account and signed it out everywhere.
+    MfaReset { user_id: Uuid, organization_id: Uuid },
+    /// An administrator voided an account's password and issued a link to choose a new one.
+    PasswordReset { user_id: Uuid, organization_id: Uuid },
     UserDeleted { user_id: Uuid, organization_id: Uuid, username: String },
     SuperAdminGranted { user_id: Uuid, organization_id: Uuid },
     SuperAdminRevoked { user_id: Uuid, organization_id: Uuid },
@@ -243,6 +247,8 @@ impl AdminAuditEvent {
             AdminAuditEvent::UserInvited { .. } => "UserInvited",
             AdminAuditEvent::UserActivated { .. } => "UserActivated",
             AdminAuditEvent::InvitationResent { .. } => "InvitationResent",
+            AdminAuditEvent::MfaReset { .. } => "MfaReset",
+            AdminAuditEvent::PasswordReset { .. } => "PasswordReset",
             AdminAuditEvent::UserDeleted { .. } => "UserDeleted",
             AdminAuditEvent::SuperAdminGranted { .. } => "SuperAdminGranted",
             AdminAuditEvent::SuperAdminRevoked { .. } => "SuperAdminRevoked",
@@ -266,6 +272,8 @@ impl AdminAuditEvent {
             AdminAuditEvent::UserInvited { organization_id, .. }
             | AdminAuditEvent::UserActivated { organization_id, .. }
             | AdminAuditEvent::InvitationResent { organization_id, .. }
+            | AdminAuditEvent::MfaReset { organization_id, .. }
+            | AdminAuditEvent::PasswordReset { organization_id, .. }
             | AdminAuditEvent::UserDeleted { organization_id, .. }
             | AdminAuditEvent::SuperAdminGranted { organization_id, .. }
             | AdminAuditEvent::SuperAdminRevoked { organization_id, .. }
@@ -528,6 +536,8 @@ mod tests {
             AdminAuditEvent::UserInvited { user_id, organization_id, email: "alice@example.com".to_string(), is_organization_admin: true, is_super_admin: false },
             AdminAuditEvent::UserActivated { user_id, organization_id },
             AdminAuditEvent::InvitationResent { user_id, organization_id },
+            AdminAuditEvent::MfaReset { user_id, organization_id },
+            AdminAuditEvent::PasswordReset { user_id, organization_id },
             AdminAuditEvent::UserDeleted { user_id, organization_id, username: "alice".to_string() },
             AdminAuditEvent::SuperAdminGranted { user_id, organization_id },
             AdminAuditEvent::SuperAdminRevoked { user_id, organization_id },

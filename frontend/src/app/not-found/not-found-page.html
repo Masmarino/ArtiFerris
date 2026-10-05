@@ -1,9 +1,21 @@
 <app-public-layout>
-  <gbt-card>
-    <h1>{{ 'notFound.heading' | transloco }}</h1>
-    <p>{{ 'notFound.message' | transloco }}</p>
-    <p>
-      <a routerLink="/">{{ 'notFound.backHome' | transloco }}</a>
-    </p>
+  <gbt-card class="not-found" variant="outlined">
+    <gbt-empty-state
+      illustration="folder"
+      [headingLevel]="1"
+      [heading]="'notFound.heading' | transloco"
+      [message]="'notFound.message' | transloco"
+    >
+      <div class="not-found__actions">
+        @if (signedIn()) {
+          <a gbtButton variant="primary" routerLink="/">{{ 'notFound.backHome' | transloco }}</a>
+        } @else {
+          <a gbtButton variant="primary" routerLink="/login" [queryParams]="returnUrl">{{
+            'notFound.signIn' | transloco
+          }}</a>
+          <a gbtButton variant="secondary" routerLink="/">{{ 'notFound.backHome' | transloco }}</a>
+        }
+      </div>
+    </gbt-empty-state>
   </gbt-card>
 </app-public-layout>

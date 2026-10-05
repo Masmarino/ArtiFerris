@@ -92,7 +92,12 @@
       "event_store_failure": "Internal server error. Try again later.",
       "storage_failure": "Storage error on the server. Try again later.",
       "registration_unavailable": "Public sign-up is not available on this organization.",
-      "registration_disabled": "Account creation is currently disabled by the administrator."
+      "registration_disabled": "Account creation is currently disabled by the administrator.",
+      "email_not_configured": "No mail server is configured for this organization.",
+      "password_reset_link_invalid": "This reset link is invalid, was already used or has expired.",
+      "own_password_reset": "Use My account to change your own password.",
+      "account_not_activated": "This account is not activated yet: resend the invitation instead.",
+      "password_managed_by_identity_provider": "This organization signs in through its identity provider, which manages its passwords."
     }
   },
   "catalog": {
@@ -113,7 +118,6 @@
       "ariaLabel": "Catalog search",
       "label": "Search for a package",
       "placeholder": "Name, description or keyword",
-      "submit": "Search",
       "sortBy": "Sort by",
       "searching": "Searching…",
       "ownerEmptyHeading": "Nothing to show",
@@ -176,7 +180,9 @@
       "quickSearch": "Quick search",
       "searchPlaceholder": "Search for a package…",
       "myRepositories": "My repositories",
-      "login": "Sign in"
+      "login": "Sign in",
+      "githubLabel": "ArtiFerris on GitHub (new tab)",
+      "docs": "Documentation"
     }
   },
   "severity": {
@@ -208,86 +214,18 @@
   "auth": {
     "sessionsEnded": "Your sessions have been closed: sign in again.",
     "login": {
-      "heading": "Sign in to ArtiFerris",
       "logoAlt": "ArtiFerris logo",
       "ssoLinkInvalid": "Invalid or expired sign-in link.",
       "oidcNotice": "This organization uses single sign-on (OIDC).",
       "oidcLink": "Sign in with the identity provider",
-      "username": "Username",
       "password": "Password",
       "submit": "Sign in",
       "createAccount": "Create an account",
-      "explorePublic": "Explore public packages",
-      "backupCode": "Backup code",
-      "verificationCode": "Verification code",
-      "verify": "Verify",
-      "useAuthenticatorApp": "Use the authenticator app",
-      "useBackupCode": "Use a backup code",
-      "usePasskey": "Use a passkey",
-      "errors": {
-        "busy": "Service temporarily busy, try again",
-        "tooManyRequests": "Too many attempts, try again later.",
-        "invalidCredentials": "Invalid credentials",
-        "invalidBackupCode": "Invalid backup code.",
-        "invalidCode": "Invalid code.",
-        "passkeyFailed": "Passkey authentication failed."
-      }
-    },
-    "mfaEnrollment": {
-      "required": "Two-factor authentication is mandatory on this account.",
-      "chooseMethod": "Choose a method to continue:",
-      "totpTooltip": "Requires an app such as Google Authenticator, Authy or 1Password.",
-      "totpButton": "Authenticator app (TOTP)",
-      "passkeyTooltip": "Uses Touch ID, Windows Hello or a physical security key.",
-      "passkeyButton": "Passkey",
-      "scanQr": "Scan this QR code with your authenticator app, or enter the code manually:",
-      "qrAlt": "Activation QR code",
-      "verificationCode": "Verification code",
-      "confirm": "Confirm",
-      "back": "Back",
-      "enabled": "Two-factor authentication enabled. Keep these backup codes somewhere safe — each one can only be used once.",
-      "savedCodes": "I have saved these codes",
-      "passkeyName": "Key name (e.g. “MacBook Touch ID”)",
-      "registerPasskey": "Register the passkey",
-      "errors": {
-        "invalidCode": "Invalid code.",
-        "totpSetupFailed": "Failed to set up the authenticator app.",
-        "passkeyFailed": "Failed to register the passkey. Try again."
-      }
-    },
-    "register": {
-      "heading": "Create an ArtiFerris account",
-      "email": "Email address",
-      "submit": "Create my account",
-      "haveAccount": "I already have an account",
-      "errors": {
-        "usernameTaken": "This username is already taken.",
-        "invalidEmail": "Invalid email address.",
-        "passwordTooShort": "The password must be at least 8 characters long.",
-        "notAvailable": "Public sign-up is not available on this organization.",
-        "disabled": "Account creation is currently disabled by the administrator.",
-        "invalidUsername": "Invalid username: 3 to 32 characters, must start with a letter.",
-        "generic": "Unable to create the account. Try again."
-      }
-    },
-    "activate": {
-      "impossibleHeading": "Activation impossible",
-      "tokenMissing": "Invalid activation link: no token provided.",
-      "heading": "Activate your account",
-      "username": "Username",
-      "usernameHint": "3 to 32 characters, starting with a letter: letters, digits, “_” and “-”.",
-      "newPassword": "New password",
-      "confirmPassword": "Confirm the password",
-      "mismatch": "The passwords do not match.",
-      "submit": "Activate my account",
-      "errors": {
-        "invalidLink": "This activation link is invalid or has expired. Ask an administrator to send you a new invitation.",
-        "usernameTaken": "This username is already taken.",
-        "invalidUsername": "Invalid username: 3 to 32 characters, must start with a letter."
-      }
+      "explorePublic": "Explore public packages"
     }
   },
   "common": {
+    "command": "Command",
     "loadingLabel": "Loading",
     "loading": "Loading…",
     "select": "Select…",
@@ -298,7 +236,6 @@
     "next": "Next",
     "previous": "Previous",
     "requiredNote": "Fields marked with an asterisk (*) are required.",
-    "or": "OR",
     "confirm": "Confirm",
     "cancel": "Cancel",
     "copy": "Copy",
@@ -326,12 +263,15 @@
       "failed": "Unable to copy, select the command manually"
     },
     "readme": {
+      "codeBlock": "Code block",
+      "table": "Table",
       "title": "README",
       "emptyHeading": "No README",
       "emptyMessage": "This package has no README."
     }
   },
   "shell": {
+    "trailLabel": "Breadcrumb",
     "loadFailed": "Unable to load your session. Check your connection and try again.",
     "navLabel": "Main navigation",
     "skipLabel": "Skip to main content",
@@ -341,20 +281,22 @@
     "expandMenu": "Expand the menu",
     "logoAlt": "ArtiFerris",
     "search": {
-      "placeholder": "Search for a repository or a user...",
+      "open": "Open",
+      "close": "Close the search",
+      "placeholder": "Search or jump to…",
+      "label": "Quick search",
       "clear": "Clear the search",
       "navigate": "Navigate",
-      "select": "Select",
       "failed": "The search failed",
       "noResults": "No results",
-      "failedHint": "Change your input and try again.",
-      "noResultsHint": "Try another search.",
       "packagesAndImages": "Packages and images",
-      "proxyCache": "proxy cache"
+      "proxyCache": "proxy cache",
+      "loading": "Searching…",
+      "recent": "Recent",
+      "goTo": "Go to",
+      "actions": "Actions"
     },
-    "logout": "Sign out",
-    "collapseItem": "Collapse {{ name }}",
-    "expandItem": "Expand {{ name }}"
+    "logout": "Sign out"
   },
   "nav": {
     "account": "My account",
@@ -362,215 +304,306 @@
     "myRepository": "My repository",
     "users": "Users",
     "administration": "Administration",
+    "dashboard": "Dashboard",
     "organizations": "Organizations",
     "export": "Export",
     "explorer": "Explore",
     "health": "Health",
-    "systemHealth": "System health"
+    "docs": "Documentation",
+    "settings": "Settings"
   },
   "account": {
-    "profile": {
-      "username": "Username: {{ username }}",
-      "memberSince": "Member since: {{ date }}",
-      "infoHeading": "Information",
-      "superAdminStatus": "Status: Super administrator"
-    },
-    "mfa": {
-      "backupCodesRemaining": "Remaining backup codes: {{ count }}",
-      "heading": "Two-factor authentication (TOTP)",
-      "loadFailed": "Failed to load two-factor authentication.",
-      "notEnabled": "Two-factor authentication is not enabled on this account.",
-      "enable": "Enable",
-      "scanQr": "Scan this QR code with your authenticator app (Google Authenticator, Authy, 1Password…), or enter the code manually:",
-      "enabledWithCodes": "Two-factor authentication enabled. Keep these backup codes somewhere safe — each one can only be used once, in case you lose access to your authenticator app.",
-      "savedCodesReconnect": "I have saved these codes, sign me back in",
-      "enabled": "Two-factor authentication enabled.",
-      "regenerate": {
-        "label": "REGENERATION",
-        "warning": "The old backup codes will stop working immediately and your sessions will be closed.",
-        "button": "Regenerate the backup codes"
-      },
-      "currentPassword": "Current password",
-      "disable": {
-        "label": "DEACTIVATION",
-        "warning": "The account will no longer ask for a code at sign-in. Your sessions will be closed.",
-        "button": "Disable two-factor authentication"
-      },
-      "newBackupCodes": "New backup codes — the old ones no longer work:",
-      "sessionsWillClose": "Your sessions are about to be closed: you will need to sign in again once these codes are saved.",
-      "errors": {
-        "startFailed": "Failed to start the activation. Try again.",
-        "wrongPassword": "Incorrect password.",
-        "disableFailed": "Failed to disable.",
-        "regenerateFailed": "Failed to regenerate."
-      }
-    },
-    "tabs": {
+    "intro": "Profile, password, two-factor authentication and access tokens",
+    "sections": {
+      "label": "Account settings",
       "profile": "Profile",
+      "password": "Password",
       "security": "Security",
-      "tokens": "API tokens"
+      "tokens": "Access tokens"
+    },
+    "profile": {
+      "heading": "Profile",
+      "description": "Your identity on ArtiFerris. The language is saved as soon as you choose it.",
+      "usernameMeta": "Username, cannot be changed",
+      "memberSince": "Member since {{ date }}",
+      "superAdmin": "Super administrator",
+      "loading": "Loading the profile…",
+      "sessionText": "Session open in this browser.",
+      "signOut": "Sign out",
+      "email": "Email",
+      "emailHint": "The address where ArtiFerris can reach you, verified with your invitation or by your identity provider.",
+      "noEmail": "No verified address",
+      "noEmailHint": "ArtiFerris only writes to an address verified with an invitation or by an identity provider."
+    },
+    "save": {
+      "saving": "Saving…",
+      "saved": "Saved",
+      "error": "Not saved"
     },
     "password": {
-      "heading": "Change password",
+      "heading": "Password",
+      "description": "Choose one of at least {{ min }} characters that you use nowhere else. Changing it ends your other sessions.",
       "current": "Current password",
       "new": "New password",
       "confirm": "Confirm the new password",
+      "minLength": "At least {{ min }} characters",
+      "submit": "Change the password",
       "errors": {
-        "mismatch": "The passwords do not match.",
+        "mismatch": "The new passwords do not match.",
         "tooShort": "The password must be at least 8 characters long.",
-        "change": "Incorrect current password or invalid new password."
-      }
-    },
-    "tokens": {
-      "heading": "API tokens"
-    },
-    "passkeys": {
-      "heading": "Passkeys",
-      "emptyHeading": "No passkeys",
-      "emptyMessage": "Add a passkey to sign in without a password.",
-      "registerNew": "Register a new key",
-      "add": "Add a passkey",
-      "unsupported": "Your browser does not support passkeys.",
-      "errors": {
-        "loadFailed": "Failed to load the passkeys."
+        "change": "The password could not be changed. Try again later.",
+        "wrongCurrent": "Incorrect current password.",
+        "tooMany": "Too many attempts, try again in a few minutes.",
+        "notChanged": "Could not change the password."
       },
-      "registered": "Passkey registered."
-    },
-    "sessions": {
-      "heading": "Sessions",
-      "description": "Revokes all your open sessions, your API tokens and your Docker tokens. Useful if a device is lost or compromised, or if your account uses SSO and has no password to change.",
-      "signOutEverywhere": "Sign out everywhere",
-      "confirmMessage": "All your sessions, API tokens and Docker tokens will be revoked, including this one. You will need to sign in again.",
-      "errors": {
-        "signOutFailed": "Failed to sign out the sessions. Try again."
-      }
+      "changed": "Password changed."
     },
     "language": {
-      "heading": "Language",
       "label": "Interface language",
+      "hint": "Saved to your account: it follows you on all your devices.",
       "saved": "Language saved.",
       "errors": {
         "saveFailed": "Failed to save the language. Try again."
       }
+    },
+    "sessions": {
+      "heading": "Sessions",
+      "description": "Ends all your open sessions, this one included, and revokes your access tokens and Docker tokens. Useful if a device is lost or compromised, or if your account uses SSO and has no password to change.",
+      "signOutEverywhere": "Sign out everywhere",
+      "confirmMessage": "All your sessions will end, this one included, and your access and Docker tokens will be revoked. You will need to sign in again.",
+      "errors": {
+        "signOutFailed": "Could not end the sessions. Try again."
+      }
     }
   },
   "tokens": {
-    "intro": "Use a token to authenticate <code>npm publish</code>/<code>npm install</code> in your <code>.npmrc</code>.",
     "create": {
+      "heading": "New token",
+      "description": "A token authenticates npm publish and npm install from your .npmrc. Name it after the machine or tool that uses it.",
+      "name": "Token name",
+      "namePlaceholder": "e.g. ci-npm-publish",
+      "password": "Password (optional)",
       "labelTooLong": "The name cannot exceed {{ max }} characters.",
       "expiresFull": "This token will expire in {{ days }} days.",
-      "expiresShort": "This token will expire in {{ days }} days: enter your password for 365 days.",
-      "heading": "New API token",
-      "name": "Name (e.g. “my laptop”)",
-      "password": "Password (for a long-lived token)",
-      "submit": "Create"
+      "expiresShort": "This token will expire in {{ days }} days: enter your password for it to last 365 days.",
+      "submit": "Generate"
     },
     "created": {
-      "expires": "It will expire in {{ days }} days.",
-      "heading": "Token created",
-      "copyNow": "Copy this token now — it will never be shown again.",
-      "done": "I have copied the token"
+      "heading": "Token “{{ label }}” generated",
+      "description": "Copy it now and keep it somewhere safe: a secrets manager, a masked CI variable. It will expire in {{ days }} days.",
+      "copy": "Copy the token",
+      "copied": "Copied",
+      "copyFailed": "Copy failed, token selected",
+      "warning": "This token will never be shown again. If it is lost, revoke it and generate another one.",
+      "done": "I have copied the token",
+      "badge": "New",
+      "toast": "Token generated."
+    },
+    "list": {
+      "heading": "Active tokens",
+      "description": "Each one gives access to your account: revoke those you no longer use.",
+      "loading": "Loading the tokens…",
+      "retry": "Try again",
+      "createdAgo": "Created {{ when }}",
+      "createdOn": "Created on {{ date }}",
+      "usedAgo": "Used {{ when }}",
+      "usedOn": "Used on {{ date }}",
+      "neverUsed": "Never used"
     },
     "empty": {
       "heading": "No tokens",
-      "message": "Create a token to authenticate your npm publications and installations."
-    },
-    "new": "New token",
-    "table": {
-      "caption": "API tokens",
-      "name": "Name",
-      "createdAt": "Created on"
+      "message": "Generate one to publish or install npm packages from a script, a CI or another tool."
     },
     "errors": {
       "tooMany": "Too many attempts, try again later.",
-      "createFailed": "Failed to create the token.",
+      "createFailed": "Could not generate the token.",
       "wrongPassword": "Incorrect password.",
-      "loadFailed": "Could not load the tokens.",
-      "revokeFailed": "Failed to revoke the token \"{{ label }}\"."
+      "loadFailed": "The tokens could not be loaded.",
+      "revokeFailed": "Could not revoke this token."
     },
     "revoke": {
       "heading": "Revoke the token",
       "confirm": "Revoke",
-      "message": "Revoke the token \"{{ label }}\"? Any npm integration using it will stop working."
+      "label": "Revoke the token {{ label }}",
+      "message": "The tools and scripts that use “{{ label }}” will no longer be able to publish or install packages. A revoked token cannot be reactivated.",
+      "done": "Token revoked."
+    },
+    "table": {
+      "caption": "API tokens",
+      "createdAt": "Created on"
     }
   },
   "users": {
     "detail": {
-      "email": "Email: {{ email }}",
-      "info": "Information",
       "grant": "Grant",
       "grantMany": "Grant ({{ count }})",
-      "demoteHint": "Removes all super-administration rights.",
-      "promoteHint": "Gives full access to all organizations and their administration.",
-      "demote": "Demote",
-      "promote": "Promote to super administrator",
-      "promoteConfirm": "Promote \"{{ username }}\" to super administrator?",
-      "demoteConfirm": "Remove the super administrator rank from \"{{ username }}\"?",
-      "promoteHeading": "Promote to super administrator",
-      "demoteHeading": "Remove the super administrator rank",
-      "promoteAction": "Promote",
-      "demoteAction": "Remove",
-      "promoted": "{{ username }} is now a super administrator.",
-      "demoted": "{{ username }} is no longer a super administrator.",
-      "deleteConfirm": "Delete the user \"{{ username }}\"?",
+      "demoteHeading": "Remove super-administrator rights",
+      "demoteAction": "Remove rights",
+      "promoted": "{{ username }} is now a super-administrator.",
+      "demoted": "{{ username }} is no longer a super-administrator.",
+      "deleteConfirm": "{{ username }}'s account will be deleted for good: they will be signed out everywhere, and their API tokens and two-factor authentication will be erased.",
       "deleted": "User “{{ username }}” deleted.",
       "errors": {
         "lastSuperAdmin": "Unable to demote the last super administrator.",
         "superAdminStatus": "Unable to change the super administrator status.",
-        "resendFailed": "Failed to send the invitation. Check the mail server configuration.",
+        "resendFailed": "The invitation could not be resent. Try again later.",
         "updateFailed": "Failed to update the access right.",
         "revokeFailed": "Failed to revoke the access right.",
         "grantFailed": "Failed to grant access on at least one repository.",
-        "deleteFailed": "Failed to delete the user."
+        "deleteFailed": "Failed to delete the user.",
+        "deleteLastSuperAdmin": "The last super-administrator cannot be deleted."
       },
-      "loadFailed": "Failed to load the user.",
-      "pending": "Status: invitation pending activation",
+      "loadFailed": "This user could not be loaded.",
       "resend": "Resend the invitation",
       "permissions": "Access rights",
-      "permissionsCaption": "This user's access rights",
-      "noPermissions": "No access right granted",
+      "noPermissions": "No access rights",
       "repositories": "Repositories",
       "repositoriesPlaceholder": "Choose one or more repositories",
       "role": "Role",
-      "deleteHint": "Permanent deletion of the account.",
       "delete": "Delete the user",
-      "columns": {
-        "repository": "Repository"
-      },
       "updated": "Access right updated.",
       "revoked": "Access right revoked.",
       "granted": "Access right granted.",
-      "resent": "Invitation resent."
+      "loadFailedMessage": "Check your connection, then try again.",
+      "loading": "Loading the user…",
+      "actions": "Actions",
+      "loadingPermissions": "Loading access rights…",
+      "noPermissionsMessage": "{{ username }} cannot reach any repository. Grant them a role with the form below.",
+      "repositoryCount_one": "{{ count }} repository",
+      "repositoryCount_other": "{{ count }} repositories",
+      "permissionMenuLabel": "Actions for {{ repository }}",
+      "changeRole": "Change role",
+      "revokeAction": "Remove access",
+      "revokeHeading": "Remove access",
+      "revokeMessage": "{{ username }} will no longer have access to {{ repository }}.",
+      "grantHeading": "Grant access",
+      "facts": {
+        "repositories": "Repositories"
+      },
+      "rolesHelp": "Roles add up: read lets one browse and download, write also publish, admin also manage the repository, its access and its quotas.",
+      "deletionHeading": "Account deletion",
+      "deletionHelp": "Deleting an account signs it out at once and erases its API tokens, two-factor authentication and preferences. The versions it published remain, without an author name.",
+      "notFoundHeading": "User not found",
+      "notFoundMessage": "This account does not exist, or was deleted.",
+      "backToUsers": "Back to users",
+      "selfHeading": "This is your own account",
+      "selfMessage": "It is not managed from the administration and cannot be deleted from here: its settings are in “My account”.",
+      "myAccount": "My account",
+      "rolesHeading": "Roles"
     },
     "create": {
-      "created": "Invitation sent to {{ email }}.",
-      "heading": "New user",
-      "username": "Username",
+      "heading": "Invite a user",
       "email": "Email address",
-      "superAdmin": "Super administrator",
-      "inviteNote": "An email will be sent to this address so that the user can activate their account and choose their username and password, within 24 hours.",
-      "invite": "Invite",
+      "intro": "An email with an activation link valid for 24 hours is sent to this address. There, the person chooses their username and password.",
+      "superAdmin": "Super-administrator",
+      "superAdminHint": "A super-administrator manages users, organizations and the instance settings.",
+      "send": "Send invitation",
+      "sending": "Sending",
+      "done": "Done",
+      "sentTitle": "Invitation sent to {{ email }}",
+      "sentHelp": "They will find an activation link in it, valid for 24 hours, to choose their username and password.",
       "errors": {
-        "createFailed": "Failed to create the user."
-      }
+        "emailRequired": "Enter the email address",
+        "emailInvalid": "Enter a valid email address, for example name@example.com",
+        "emailTaken": "This email address is already used by an account",
+        "createFailed": "The invitation could not be sent. Try again later."
+      },
+      "username": "Username",
+      "invite": "Invite"
     },
     "list": {
-      "new": "New user",
       "organization": "Organization",
       "emptyHeading": "No users",
-      "emptyMessage": "Created or invited users will appear here.",
-      "noResultsHeading": "No results",
-      "noResultsMessage": "No users in this organization. Change the filter to see others.",
+      "emptyMessage": "Invite the first person: they will receive a link by email to activate their account.",
       "caption": "Users",
       "allOrganizations": "All organizations",
-      "columns": {
-        "username": "Username",
-        "email": "Email",
-        "superAdmin": "Super admin",
-        "invitationPending": "Invitation pending"
-      },
       "errors": {
-        "loadFailed": "Failed to load the users."
+        "loadFailed": "Users could not be loaded."
+      },
+      "invite": "Invite a user",
+      "cardLabel": "Accounts",
+      "loading": "Loading users…",
+      "emptyMessageMember": "Your organization's accounts will appear here.",
+      "filterLabel": "Filter accounts",
+      "searchLabel": "Search for a user",
+      "searchPlaceholder": "Username or email",
+      "sortLabel": "Sort by",
+      "directionLabel": "Reverse the sort order",
+      "sortCreated": "Creation date",
+      "sortUsername": "Username",
+      "tabAll": "All ({{ count }})",
+      "tabPending": "Pending invitations ({{ count }})",
+      "accounts_one": "{{ count }} account",
+      "accounts_other": "{{ count }} accounts",
+      "pendingCount_one": "{{ count }} pending invitation",
+      "pendingCount_other": "{{ count }} pending invitations",
+      "summaryWithPending": "{{ accounts }} · {{ pending }}",
+      "menuLabel": "Actions for {{ name }}",
+      "you": "You",
+      "noPendingMatch": "No pending invitation matches this search",
+      "noPending": "No pending invitations",
+      "noMatch": "No user matches this search",
+      "sending": "Sending",
+      "saving": "Saving",
+      "resent": "Invitation resent to {{ email }}.",
+      "demoteMessage": "{{ username }} will no longer be able to manage users, organizations or the instance settings. You can give these rights back later.",
+      "demoteSelfMessage": "You are about to remove yourself from the super-administrators, {{ username }}: you will lose access to the instance administration at once. Only another super-administrator can give these rights back.",
+      "noneInOrganization": "No users in this organization."
+    },
+    "row": {
+      "createdAgo": "created {{ when }}",
+      "createdOn": "created on {{ date }}",
+      "expiredAgo": "expired {{ when }}",
+      "expiredOn": "expired on {{ date }}",
+      "expires": "expires on {{ date }}"
+    },
+    "state": {
+      "active": "Active",
+      "pending": "Invitation pending",
+      "expired": "Invitation expired"
+    },
+    "mfa": {
+      "on": "Two-factor authentication on",
+      "off": "Not set up"
+    },
+    "superAdmin": "Super-administrator",
+    "actions": {
+      "promote": "Make super-administrator",
+      "demote": "Remove super-administrator rights"
+    },
+    "help": {
+      "invitationsHeading": "Invitations",
+      "invitations": "An invited account is created without a password. An email holds an activation link, valid for 24 hours, to choose a username and a password; “Resend the invitation” generates a new one and voids the old one.",
+      "mfaHeading": "Two-factor authentication",
+      "mfa": "It is required for every account. If someone lost their device and their backup codes, reset it: they are signed out everywhere and set it up again at their next sign-in.",
+      "organizationsHeading": "Organizations",
+      "organizations": "Each account belongs to an organization. Pick one to show only its accounts, or “All organizations” to see them all.",
+      "passwordHeading": "Password",
+      "password": "If someone lost their password, reset it: the old one stops working at once, and an email holds a link valid for 1 hour to choose a new one."
+    },
+    "mfaReset": {
+      "heading": "Reset two-factor authentication",
+      "confirm": "Reset",
+      "resetting": "Resetting",
+      "done": "Two-factor authentication reset.",
+      "message": "{{ username }} will be signed out of every device and will have to set up two-factor authentication again at their next sign-in. Their current authenticator app, passkeys and backup codes will stop working.",
+      "selfMessage": "This is your own account: you will be signed out of every device at once and will have to set up two-factor authentication again at your next sign-in. Your current authenticator app, passkeys and backup codes will stop working.",
+      "errors": {
+        "notEnrolled": "This account no longer has two-factor authentication to reset.",
+        "failed": "Two-factor authentication could not be reset. Try again later."
+      }
+    },
+    "passwordReset": {
+      "heading": "Reset password",
+      "confirm": "Reset",
+      "resetting": "Resetting",
+      "sent": "A link to choose a new password was sent to {{ username }}.",
+      "message": "{{ username }}'s current password will stop working at once, and they will be signed out of every device. A link valid for 1 hour will let them choose a new one: they cannot sign in before using it.",
+      "errors": {
+        "own": "Use My account to change your own password.",
+        "notActivated": "This account is not activated yet: resend the invitation instead.",
+        "identityProvider": "This organization signs in through its identity provider, which manages its passwords.",
+        "failed": "The password could not be reset. Try again later."
       }
     }
   },
@@ -943,8 +976,8 @@
       "activityTruncated": "Based on the {{ count }} most recent events: older days are underestimated.",
       "users": "Users",
       "repositories": "Repositories",
-      "permissions": "Active permissions",
-      "activity": "Activity (last 7 days)",
+      "permissions": "Access rights",
+      "activity": "Activity over the last 7 days",
       "eventsPerDay": "Events per day",
       "day": "Day",
       "noEvents": "No events in the last 7 days.",
@@ -952,18 +985,32 @@
       "noReposByFormat": "No repositories to break down by format.",
       "storageEvolution": "Storage evolution",
       "storageTable": "Total storage per reading",
-      "notEnoughData": "Not enough measurements yet.",
-      "usersAndRepos": "Users and repositories evolution",
+      "notEnoughData": "Not enough readings yet",
+      "usersAndRepos": "Users and repositories",
       "usersAndReposTable": "Users and repositories per reading",
       "recent": "Recent activity",
       "noRecentHeading": "No recent activity",
       "noRecentMessage": "Registry events will appear here as soon as there are some.",
-      "partialFailure": "Failed to load part of the dashboard.",
+      "partialFailure": "Part of the dashboard could not be loaded.",
       "days_one": "{{ count }} day",
       "days_other": "{{ count }} days",
-      "month": "1 month",
       "storage": "Storage",
-      "events": "Events"
+      "events": "Events",
+      "intro": "Overview of the instance: accounts, repositories, access rights and storage",
+      "summary": "Summary",
+      "loadingStats": "Loading statistics…",
+      "lastReading": "last reading",
+      "noReading": "no reading",
+      "storageIn": "Storage ({{ unit }})",
+      "evolution": "Evolution",
+      "period": "Period",
+      "historyFailed": "The history could not be loaded.",
+      "loadingHistory": "Loading the history…",
+      "unit": "in {{ unit }}",
+      "notEnoughDataMessage": "A reading is taken every hour: the line appears from the second one.",
+      "usersAndReposEvolution": "Users and repositories over time",
+      "loadingActivity": "Loading activity…",
+      "activityFailed": "The activity could not be loaded."
     },
     "audit": {
       "events": {
@@ -1018,7 +1065,9 @@
         "PackageVersionDeprecated": "Version deprecated",
         "DistTagChanged": "Dist-tag changed",
         "ImagePushed": "Image published",
-        "ManifestDeleted": "Manifest deleted"
+        "ManifestDeleted": "Manifest deleted",
+        "MfaReset": "Two-factor authentication reset",
+        "PasswordReset": "Password reset"
       },
       "loginMethods": {
         "password": "password",
@@ -1114,21 +1163,37 @@
     "health": {
       "responseTime": "Response time",
       "milliseconds": "{{ count }} ms",
-      "days": "{{ count }} d",
-      "hours": "{{ count }} h",
-      "minutes": "{{ count }} min",
-      "loadFailed": "Failed to load the system status.",
+      "loadFailed": "The health status could not be loaded. Try again later.",
       "database": "Database",
-      "connections": "Connections",
-      "warning": "Warning",
-      "critical": "Critical",
+      "connections": "Active connections",
+      "warning": "almost full",
+      "critical": "saturated",
       "storage": "Storage",
-      "usedSpace": "Space used",
-      "server": "Server",
-      "status": "Status",
-      "postgresVersion": "PostgreSQL version",
-      "freeSpace": "Free space",
-      "uptime": "Up for"
+      "usedSpace": "Used space",
+      "uptime": "Uptime",
+      "intro": "State of the instance's services",
+      "checkedAt": "checked at",
+      "refresh": "Refresh",
+      "checking": "Checking the services…",
+      "down": "Unavailable",
+      "up": "Operational",
+      "upFeminine": "Operational",
+      "allUp": "All services are operational",
+      "degraded": "Degraded service",
+      "unreachable": "Unreachable",
+      "unreachableHeading": "API or database unreachable.",
+      "unreachableMessage": "The state of the services could not be checked. Refresh once the server is back.",
+      "version": "Version",
+      "postgres": "PostgreSQL {{ version }}",
+      "unknownVersion": "Unknown",
+      "ratio": "{{ value }} of {{ max }}",
+      "used": "Used",
+      "free": "Free",
+      "total": "Total",
+      "storageRatio": "{{ used }} of {{ total }} · {{ percent }}",
+      "startedAt": "Started on {{ date }}",
+      "checksHeading": "Checks",
+      "checksHelp": "This page does not update itself: “Refresh” queries the database and the storage again."
     },
     "usage": {
       "others": "Others ({{ count }})",
@@ -1291,7 +1356,22 @@
   },
   "notFound": {
     "heading": "Page not found",
-    "message": "This address does not match any page.",
-    "backHome": "Back to home"
+    "message": "Check the address. If this page is private, sign in to see it.",
+    "backHome": "Back to home",
+    "signIn": "Sign in"
+  },
+  "invitationMail": {
+    "title": "The mail could not be sent",
+    "notConfigured": "No mail server is configured for this organization.",
+    "sendFailed": "The mail server did not accept the message.",
+    "help": "Pass this link on to {{ name }}: it is valid for 24 hours. It will not be shown again — “Resend the invitation” generates a new one.",
+    "copy": "Copy the activation link",
+    "copied": "Copied",
+    "copyFailed": "Could not copy, link selected",
+    "noLink": "Use “Resend the invitation” to get {{ name }}'s activation link.",
+    "noAddress": "This account has no verified email address.",
+    "resetHelp": "Pass this link on to {{ name }}: it is valid for 1 hour. It will not be shown again — “Reset password” generates a new one.",
+    "resetCopy": "Copy the reset link",
+    "resetNoLink": "Use “Reset password” again to get a link for {{ name }}."
   }
 }

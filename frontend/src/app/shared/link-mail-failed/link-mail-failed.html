@@ -1,0 +1,28 @@
+<gbt-alert
+  variant="warning"
+  [dismissible]="dismissible()"
+  [closeLabel]="'common.close' | transloco"
+  (dismissed)="dismissed.emit()"
+>
+  <div #region class="link-mail-failed" tabindex="-1">
+    <p class="link-mail-failed__title">{{ 'invitationMail.title' | transloco }}</p>
+    @if (reason(); as text) {
+      <p class="link-mail-failed__reason">{{ text }}</p>
+    }
+    @if (link(); as url) {
+      <p class="link-mail-failed__help">
+        {{ wording().help | transloco: { name: name() } }}
+      </p>
+      <gbt-copy-field
+        [value]="url"
+        [copyLabel]="wording().copy | transloco"
+        [copiedText]="'invitationMail.copied' | transloco"
+        [failedText]="'invitationMail.copyFailed' | transloco"
+      />
+    } @else {
+      <p class="link-mail-failed__help">
+        {{ wording().noLink | transloco: { name: name() } }}
+      </p>
+    }
+  </div>
+</gbt-alert>

@@ -1,0 +1,74 @@
+.create-user,
+.create-user__result {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: min(30rem, 100%);
+}
+
+.create-user__intro {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.create-user__admin {
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--gbt-hairline);
+  border-radius: var(--site-border-radius-sm);
+  background: var(--bg-hover);
+}
+
+.create-user__alert {
+  margin: 0;
+}
+
+.create-user__result:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: var(--site-border-radius-sm);
+}
+
+// Gabarit centres the icon on the alert; with several lines it belongs next to the title.
+.create-user__result ::ng-deep gbt-alert .gbt-alert {
+  align-items: flex-start;
+}
+
+.create-user__sent-title {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.create-user__sent-help {
+  margin: 0.125rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 599px) {
+  .create-user ::ng-deep .gbt-input .gbt-input__wrapper input {
+    height: 2.75rem;
+  }
+
+  // One line, sending or not: the buttons share the width instead of wrapping. This is the footer's own actions row,
+  // whose `flex-wrap: wrap` has higher specificity, hence `:host div`.
+  :host div.create-user__actions[modal-footer] {
+    flex-wrap: nowrap;
+
+    ::ng-deep gbt-button {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    ::ng-deep .gbt-button {
+      width: 100%;
+      min-height: 44px;
+    }
+  }
+
+  .create-user__admin ::ng-deep .gbt-switch {
+    min-height: 44px;
+  }
+}

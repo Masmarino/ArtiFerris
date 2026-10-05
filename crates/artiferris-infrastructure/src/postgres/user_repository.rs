@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use artiferris_domain::audit::{AdminAuditRecord, AuditRecord, SecurityAuditRecord};
+use artiferris_domain::audit::{AdminAuditRecord, AuditRecord};
 use artiferris_domain::error::DomainError;
 use crate::error_ext::InfraErr;
 use artiferris_domain::user::{User, UserRepositoryPort, UserSecurityPort, Username};
@@ -289,10 +289,10 @@ impl UserRepositoryPort for PostgresUserRepository {
 
 #[async_trait]
 impl UserSecurityPort for PostgresUserRepository {
-    async fn revoke_sessions(&self, id: Uuid, audit: Option<&SecurityAuditRecord>) -> Result<(), DomainError> {
+    async fn revoke_sessions(&self, id: Uuid, audit: Option<&AuditRecord>) -> Result<(), DomainError> {
         let mut tx = self.pool.begin().await.infra_err()?;
         sqlx::query!("UPDATE users SET tokens_valid_after = $1 WHERE id = $2", chrono::Utc::now(), id).execute(&mut *tx).await.infra_err()?;
-        crate::postgres::event_publisher::insert_security_audit(&mut tx, audit).await?;
+        crate::postgres::event_publisher::insert_audit(&mut tx, audit).await?;
         tx.commit().await.infra_err()?;
         Ok(())
     }

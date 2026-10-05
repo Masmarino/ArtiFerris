@@ -5,6 +5,7 @@ import { of, throwError } from 'rxjs'
 import { ApiTokensList } from './api-tokens-list'
 import { ApiTokensApplicationService } from '../application/api-tokens.application-service'
 import { ConfirmService } from '../../shared/confirm.service'
+import { ToastService } from '../../shared/toast.service'
 import type { ApiToken } from '../domain/api-token.entity'
 
 const LAPTOP: ApiToken = {
@@ -57,7 +58,8 @@ export const Default: Story = {
     const canvas = within(canvasElement)
     expect(await canvas.findByText('mon laptop')).toBeInTheDocument()
     expect(canvas.getByText('CI runner')).toBeInTheDocument()
-    expect(canvas.getByRole('button', { name: 'Nouveau token' })).toBeEnabled()
+    expect(canvas.getByText('Jamais utilisé')).toBeInTheDocument()
+    expect(canvas.getByRole('button', { name: 'Générer' })).toBeDisabled()
   },
 }
 
@@ -65,32 +67,27 @@ export const Empty: Story = {
   decorators: [withTokens(fakeTokens({ list: () => of([]) }))],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    expect(await canvas.findByText('Aucun token')).toBeInTheDocument()
-    expect(canvas.getByRole('button', { name: 'Nouveau token' })).toBeEnabled()
-    expect(canvas.queryByRole('table')).not.toBeInTheDocument()
+    expect(await canvas.findByText('Aucun jeton')).toBeInTheDocument()
+    expect(canvas.queryByRole('list', { name: 'Jetons actifs' })).not.toBeInTheDocument()
   },
 }
 
-export const CreateFormRequiresALabel: Story = {
+export const LoadFailed: Story = {
+  decorators: [withTokens(fakeTokens({ list: () => throwError(() => new Error('500')) }))],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('button', { name: 'Nouveau token' }))
-    const create = await canvas.findByRole('button', { name: 'Créer' })
-    expect(create).toBeDisabled()
-    await userEvent.type(canvas.getByLabelText(/Nom \(ex\. « mon laptop »\)/), 'CI runner')
-    await waitFor(() => expect(create).toBeEnabled())
+    expect(await canvas.findByText("Les jetons n'ont pas pu être chargés.")).toBeInTheDocument()
+    expect(canvas.getByRole('button', { name: 'Réessayer' })).toBeEnabled()
   },
 }
 
-export const CancellingTheCreateForm: Story = {
+export const GeneratingNeedsAName: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('button', { name: 'Nouveau token' }))
-    expect(await canvas.findByRole('heading', { name: 'Nouveau token API' })).toBeInTheDocument()
-    await userEvent.click(canvas.getByRole('button', { name: 'Fermer' }))
-    await waitFor(() =>
-      expect(canvas.queryByRole('heading', { name: 'Nouveau token API' })).not.toBeInTheDocument(),
-    )
+    const generate = await canvas.findByRole('button', { name: 'Générer' })
+    expect(generate).toBeDisabled()
+    await userEvent.type(canvas.getByLabelText('Nom du jeton'), 'CI runner')
+    await waitFor(() => expect(generate).toBeEnabled())
   },
 }
 
@@ -104,19 +101,18 @@ export const CreatingAToken: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('button', { name: 'Nouveau token' }))
-    await userEvent.type(await canvas.findByLabelText(/Nom \(ex\. « mon laptop »\)/), 'CI runner')
-    listAfterCreate = [LAPTOP, CI]
-    await userEvent.click(canvas.getByRole('button', { name: 'Créer' }))
+    await userEvent.type(await canvas.findByLabelText('Nom du jeton'), 'CI runner')
+    listAfterCreate = [LAPTOP, { ...CI, id: 't3' }]
+    await userEvent.click(canvas.getByRole('button', { name: 'Générer' }))
 
     expect(await canvas.findByText('artiferris_pat_abc123')).toBeInTheDocument()
     expect(createTokens.create).toHaveBeenCalledWith('CI runner', null)
-    expect(canvas.getByRole('heading', { name: 'Token créé' })).toBeInTheDocument()
-    expect(canvas.getByText('Il expirera dans 7 jours.')).toBeInTheDocument()
-    expect(canvas.getByText('CI runner')).toBeInTheDocument()
-    expect(canvas.queryByRole('heading', { name: 'Nouveau token API' })).not.toBeInTheDocument()
+    expect(canvas.getByRole('heading', { name: 'Jeton « CI runner » généré' })).toBeInTheDocument()
+    expect(canvas.getByText(/Il expirera dans 7 jours\./)).toBeInTheDocument()
+    expect(canvas.getByText('Nouveau')).toBeInTheDocument()
+    expect(canvas.getByLabelText('Nom du jeton')).toHaveValue('')
 
-    await userEvent.click(canvas.getByRole('button', { name: "J'ai copié le token" }))
+    await userEvent.click(canvas.getByRole('button', { name: "J'ai copié le jeton" }))
     await waitFor(() => expect(canvas.queryByText('artiferris_pat_abc123')).not.toBeInTheDocument())
   },
 }
@@ -127,17 +123,13 @@ export const CreatingALongLivedToken: Story = {
   decorators: [withTokens(passwordTokens)],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('button', { name: 'Nouveau token' }))
-    await userEvent.type(await canvas.findByLabelText(/Nom \(ex\. « mon laptop »\)/), 'CI runner')
+    await userEvent.type(await canvas.findByLabelText('Nom du jeton'), 'CI runner')
     expect(canvas.getByText(/expirera dans 7 jours/)).toBeInTheDocument()
-    await userEvent.type(
-      canvas.getByLabelText('Mot de passe (pour un jeton de longue durée)'),
-      'hunter2',
-    )
-    expect(await canvas.findByText('Ce token expirera dans 365 jours.')).toBeInTheDocument()
-    await userEvent.click(canvas.getByRole('button', { name: 'Créer' }))
+    await userEvent.type(canvas.getByLabelText('Mot de passe (facultatif)'), 'hunter2')
+    expect(await canvas.findByText('Ce jeton expirera dans 365 jours.')).toBeInTheDocument()
+    await userEvent.click(canvas.getByRole('button', { name: 'Générer' }))
 
-    expect(await canvas.findByText('Il expirera dans 365 jours.')).toBeInTheDocument()
+    expect(await canvas.findByText(/Il expirera dans 365 jours\./)).toBeInTheDocument()
     expect(passwordTokens.create).toHaveBeenCalledWith('CI runner', 'hunter2')
   },
 }
@@ -145,7 +137,11 @@ export const CreatingALongLivedToken: Story = {
 const wrongPasswordTokens = fakeTokens({
   create: fn(() =>
     throwError(
-      () => new HttpErrorResponse({ status: 400, error: { error: 'invalid credentials' } }),
+      () =>
+        new HttpErrorResponse({
+          status: 400,
+          error: { error: 'invalid credentials', code: 'invalid_credentials' },
+        }),
     ),
   ),
 })
@@ -154,16 +150,13 @@ export const WrongPasswordForALongLivedToken: Story = {
   decorators: [withTokens(wrongPasswordTokens)],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('button', { name: 'Nouveau token' }))
-    await userEvent.type(await canvas.findByLabelText(/Nom \(ex\. « mon laptop »\)/), 'CI runner')
-    await userEvent.type(
-      canvas.getByLabelText('Mot de passe (pour un jeton de longue durée)'),
-      'nope',
-    )
-    await userEvent.click(canvas.getByRole('button', { name: 'Créer' }))
+    await userEvent.type(await canvas.findByLabelText('Nom du jeton'), 'CI runner')
+    await userEvent.type(canvas.getByLabelText('Mot de passe (facultatif)'), 'nope')
+    await userEvent.click(canvas.getByRole('button', { name: 'Générer' }))
 
-    expect(await canvas.findByRole('alert')).toHaveTextContent('Mot de passe incorrect.')
-    expect(canvas.getByRole('heading', { name: 'Nouveau token API' })).toBeInTheDocument()
+    expect(await canvas.findByText('Mot de passe incorrect.')).toBeInTheDocument()
+    expect(canvas.getByLabelText('Nom du jeton')).toHaveValue('CI runner')
+    expect(canvas.getByLabelText('Mot de passe (facultatif)')).toHaveValue('')
   },
 }
 
@@ -173,15 +166,13 @@ export const CreateFailed: Story = {
   decorators: [withTokens(createFailsTokens)],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('button', { name: 'Nouveau token' }))
-    await userEvent.type(await canvas.findByLabelText(/Nom \(ex\. « mon laptop »\)/), 'CI runner')
-    await userEvent.click(canvas.getByRole('button', { name: 'Créer' }))
+    await userEvent.type(await canvas.findByLabelText('Nom du jeton'), 'CI runner')
+    await userEvent.click(canvas.getByRole('button', { name: 'Générer' }))
 
     await waitFor(() => expect(createFailsTokens.create).toHaveBeenCalledWith('CI runner', null))
-    expect(await canvas.findByRole('alert')).toHaveTextContent('Échec de la création du token.')
-    await waitFor(() => expect(canvas.getByRole('button', { name: 'Créer' })).toBeEnabled())
-    expect(canvas.getByRole('heading', { name: 'Nouveau token API' })).toBeInTheDocument()
-    expect(canvas.queryByRole('heading', { name: 'Token créé' })).not.toBeInTheDocument()
+    expect(await canvas.findByText('Impossible de générer le jeton.')).toBeInTheDocument()
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Générer' })).toBeEnabled())
+    expect(canvas.queryByText('artiferris_pat_abc123')).not.toBeInTheDocument()
   },
 }
 
@@ -196,15 +187,15 @@ export const RevokingAToken: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const row = await canvas.findByText('CI runner')
+    const revoke = await canvas.findByRole('button', { name: 'Révoquer le jeton CI runner' })
     listAfterRevoke = [LAPTOP]
-    await userEvent.click(row)
+    await userEvent.click(revoke)
 
     await waitFor(() => expect(canvas.queryByText('CI runner')).not.toBeInTheDocument())
     expect(acceptingConfirm.ask).toHaveBeenCalledWith(
       expect.objectContaining({
-        heading: 'Révoquer le token',
-        message: expect.stringContaining('"CI runner"'),
+        heading: 'Révoquer le jeton',
+        message: expect.stringContaining('« CI runner »'),
       }),
     )
     expect(revokeTokens.revoke).toHaveBeenCalledWith('t2')
@@ -219,25 +210,31 @@ export const DecliningTheRevocation: Story = {
   decorators: [withTokens(decliningTokens, decliningConfirm)],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByText('CI runner'))
+    await userEvent.click(
+      await canvas.findByRole('button', { name: 'Révoquer le jeton CI runner' }),
+    )
     await waitFor(() => expect(decliningConfirm.ask).toHaveBeenCalled())
     expect(decliningTokens.revoke).not.toHaveBeenCalled()
     expect(canvas.getByText('CI runner')).toBeInTheDocument()
-    expect(canvas.queryByRole('alert')).not.toBeInTheDocument()
   },
 }
+
+const revokeFailedToasts = { success: fn(), error: fn() }
 
 export const RevokeFailed: Story = {
   decorators: [
     withTokens(fakeTokens({ revoke: () => throwError(() => new Error('500')) }), {
       ask: fn(() => Promise.resolve(true)),
     }),
+    moduleMetadata({ providers: [{ provide: ToastService, useValue: revokeFailedToasts }] }),
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByText('CI runner'))
-    expect(await canvas.findByRole('alert')).toHaveTextContent(
-      'Échec de la révocation du token "CI runner".',
+    await userEvent.click(
+      await canvas.findByRole('button', { name: 'Révoquer le jeton CI runner' }),
+    )
+    await waitFor(() =>
+      expect(revokeFailedToasts.error).toHaveBeenCalledWith('Impossible de révoquer ce jeton.'),
     )
     expect(canvas.getByText('CI runner')).toBeInTheDocument()
   },

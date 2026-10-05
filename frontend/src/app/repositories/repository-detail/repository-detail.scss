@@ -62,7 +62,7 @@ gbt-button {
     padding: 0.125rem 0.375rem;
     background: var(--bg-hover);
     border-radius: var(--site-border-radius-sm);
-    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-family: var(--gbt-font-mono);
     font-size: 0.8125rem;
   }
 }

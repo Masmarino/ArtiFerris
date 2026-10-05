@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::auth_middleware::AuthUser;
 use crate::authz::{require_organization_admin, require_super_admin};
-use crate::dto::{application_error_response, ErrorResponse};
+use crate::dto::{application_error_response, ErrorResponse, InvitationMailResponse, PasswordResetMailResponse};
 use crate::organization_middleware::ResolvedOrganization;
 use crate::state::AppState;
 
@@ -18,6 +18,8 @@ pub fn router() -> Router<AppState> {
         .route("/api/users/{id}", get(get_user).delete(delete_user))
         .route("/api/users/{id}/super-admin", axum::routing::put(set_super_admin))
         .route("/api/users/{id}/resend-invitation", axum::routing::post(resend_invitation))
+        .route("/api/users/{id}/mfa", axum::routing::delete(reset_mfa))
+        .route("/api/users/{id}/reset-password", axum::routing::post(reset_password))
         .route("/api/users/lookup", get(lookup_user))
         .route("/api/users/search", get(search_users))
         .route("/api/users/{id}/permissions", get(list_user_permissions))
@@ -40,6 +42,49 @@ struct UserResponse {
     email: Option<String>,
     /// `true` until the invitation link is used to set a real password.
     invitation_pending: bool,
+    created_at: chrono::DateTime<chrono::Utc>,
+    /// When the pending invitation's link stops working (already past for an expired one); `null` without one.
+    invitation_expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Whether the account has a second factor: a confirmed authenticator app or a passkey.
+    mfa_enabled: bool,
+}
+
+/// The invited account, and what became of its activation mail.
+#[derive(Serialize)]
+struct InvitedUserResponse {
+    #[serde(flatten)]
+    user: UserResponse,
+    #[serde(flatten)]
+    mail: InvitationMailResponse,
+}
+
+type ApiError = (StatusCode, Json<ErrorResponse>);
+
+fn internal_error() -> ApiError {
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string())))
+}
+
+/// What the admin lists show of each account, its invitation and its second factor read in one batch per kind (no
+/// query, and no secret read, per account).
+async fn user_responses(state: &AppState, users: Vec<artiferris_domain::user::User>) -> Result<Vec<UserResponse>, ApiError> {
+    let ids: Vec<Uuid> = users.iter().map(|u| u.id).collect();
+    let expiries = state.user_invitations.invitation_expiries(&ids).await.map_err(|_| internal_error())?;
+    let with_app = state.totp_credentials.confirmed_among(&ids).await.map_err(|_| internal_error())?;
+    let with_passkey = state.webauthn_credentials.holders_among(&ids).await.map_err(|_| internal_error())?;
+    Ok(users
+        .into_iter()
+        .map(|u| UserResponse {
+            invitation_pending: expiries.contains_key(&u.id),
+            invitation_expires_at: expiries.get(&u.id).copied(),
+            mfa_enabled: with_app.contains(&u.id) || with_passkey.contains(&u.id),
+            created_at: u.created_at,
+            id: u.id,
+            username: u.username.as_str().to_string(),
+            is_super_admin: u.is_super_admin,
+            organization_id: u.organization_id,
+            email: u.email,
+        })
+        .collect())
 }
 
 /// An organization admin only sees their own organization's users, not everyone's.
@@ -49,23 +94,7 @@ async fn list_users(State(state): State<AppState>, user: AuthUser) -> Result<Jso
     }
     let users = state.users.list_all().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
     let users: Vec<_> = if user.is_super_admin { users } else { users.into_iter().filter(|u| u.organization_id == user.organization_id).collect() };
-    let user_ids: Vec<Uuid> = users.iter().map(|u| u.id).collect();
-    let pending = state
-        .user_invitations
-        .list_pending_user_ids(&user_ids)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
-    let result = users
-        .into_iter()
-        .map(|u| UserResponse {
-            invitation_pending: pending.contains(&u.id),
-            id: u.id,
-            username: u.username.as_str().to_string(),
-            is_super_admin: u.is_super_admin,
-            organization_id: u.organization_id,
-            email: u.email,
-        })
-        .collect();
+    let result = user_responses(&state, users).await?;
     Ok(Json(result))
 }
 
@@ -78,20 +107,8 @@ async fn get_user(State(state): State<AppState>, user: AuthUser, Path(id): Path<
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
         .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("user not found".to_string()))))?;
     require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
-    let invitation_pending = state
-        .user_invitations
-        .find_by_user_id(target.id)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
-        .is_some();
-    Ok(Json(UserResponse {
-        id: target.id,
-        username: target.username.as_str().to_string(),
-        is_super_admin: target.is_super_admin,
-        organization_id: target.organization_id,
-        email: target.email,
-        invitation_pending,
-    }))
+    let mut responses = user_responses(&state, vec![target]).await?;
+    Ok(Json(responses.remove(0)))
 }
 
 async fn create_user(
@@ -99,29 +116,20 @@ async fn create_user(
     user: AuthUser,
     resolved_org: ResolvedOrganization,
     Json(body): Json<CreateUserRequest>,
-) -> Result<(StatusCode, Json<UserResponse>), (StatusCode, Json<ErrorResponse>)> {
+) -> Result<(StatusCode, Json<InvitedUserResponse>), (StatusCode, Json<ErrorResponse>)> {
     require_super_admin(&user).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
-    let id = state
+    let delivery = state
         .invite_user
         .execute(resolved_org.0.id, body.is_organization_admin, &body.email, body.is_super_admin, user.id)
         .await
         .map_err(|e| application_error_response("failed to invite user", e))?;
-    let invited = state.users.find_by_id(id).await.ok().flatten().ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
-    Ok((
-        StatusCode::CREATED,
-        Json(UserResponse {
-            id,
-            username: invited.username.as_str().to_string(),
-            is_super_admin: body.is_super_admin,
-            organization_id: resolved_org.0.id,
-            email: Some(body.email),
-            invitation_pending: true,
-        }),
-    ))
+    let invited = state.users.find_by_id(delivery.user_id).await.ok().flatten().ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?;
+    let mut responses = user_responses(&state, vec![invited]).await?;
+    Ok((StatusCode::CREATED, Json(InvitedUserResponse { user: responses.remove(0), mail: delivery.undelivered.into() })))
 }
 
 /// Same reach as get_user, but an organization admin can never act on a super-admin account even in their own org — that's a global privilege, not theirs to touch.
-async fn resend_invitation(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+async fn resend_invitation(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<Json<InvitationMailResponse>, (StatusCode, Json<ErrorResponse>)> {
     let target = state
         .users
         .find_by_id(id)
@@ -134,8 +142,8 @@ async fn resend_invitation(State(state): State<AppState>, user: AuthUser, Path(i
             return Err((StatusCode::FORBIDDEN, Json(ErrorResponse::message("forbidden".to_string()))));
         }
     }
-    state.resend_invitation.execute(id, user.id).await.map_err(|e| application_error_response("failed to resend invitation", e))?;
-    Ok(StatusCode::NO_CONTENT)
+    let delivery = state.resend_invitation.execute(id, user.id).await.map_err(|e| application_error_response("failed to resend invitation", e))?;
+    Ok(Json(delivery.undelivered.into()))
 }
 
 /// Same super-admin-target carve-out as resend_invitation.
@@ -158,6 +166,45 @@ async fn delete_user(State(state): State<AppState>, user: AuthUser, Path(id): Pa
     });
     state.delete_user.execute(id, audit.as_ref()).await.map_err(|e| application_error_response("failed to delete user", e))?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// For someone who lost every second factor: removes them all and signs the account out everywhere; they set one up
+/// again at their next sign-in. Same reach as delete_user, super-admin targets included.
+async fn reset_mfa(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    let target = state
+        .users
+        .find_by_id(id)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("user not found".to_string()))))?;
+    if !user.is_super_admin {
+        require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
+        if target.is_super_admin {
+            return Err((StatusCode::FORBIDDEN, Json(ErrorResponse::message("forbidden".to_string()))));
+        }
+    }
+    state.reset_mfa.execute(target.id, target.organization_id, user.id).await.map_err(|e| application_error_response("failed to reset second factors", e))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Voids the account's password, signs it out everywhere and mails a link valid for one hour; when the mail cannot go
+/// out, the link comes back. Same reach as reset_mfa. Refused for one's own account, an account still invited, and an
+/// organization whose identity provider manages its passwords.
+async fn reset_password(State(state): State<AppState>, user: AuthUser, Path(id): Path<Uuid>) -> Result<Json<PasswordResetMailResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let target = state
+        .users
+        .find_by_id(id)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse::message("internal error".to_string()))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorResponse::message("user not found".to_string()))))?;
+    if !user.is_super_admin {
+        require_organization_admin(&user, target.organization_id).map_err(|status| (status, Json(ErrorResponse::message("forbidden".to_string()))))?;
+        if target.is_super_admin {
+            return Err((StatusCode::FORBIDDEN, Json(ErrorResponse::message("forbidden".to_string()))));
+        }
+    }
+    let undelivered = state.reset_password.execute(target.id, user.id).await.map_err(|e| application_error_response("failed to reset password", e))?;
+    Ok(Json(undelivered.into()))
 }
 
 #[derive(Deserialize)]
@@ -379,9 +426,297 @@ mod tests {
         assert_eq!(invitee["invitation_pending"], true);
         let admin = json.as_array().unwrap().iter().find(|u| u["username"] == "admin").unwrap();
         assert_eq!(admin["invitation_pending"], false, "a user created outside the invitation flow must not show as pending");
+        // The list says when each account was created, when an invitation expires, and whether a second factor is set.
+        let expires = chrono::DateTime::parse_from_rfc3339(invitee["invitation_expires_at"].as_str().unwrap()).unwrap();
+        assert!(expires > chrono::Utc::now() + chrono::Duration::hours(23), "an invitation lasts 24 hours");
+        assert_eq!(admin["invitation_expires_at"], serde_json::Value::Null);
+        assert!(chrono::DateTime::parse_from_rfc3339(admin["created_at"].as_str().unwrap()).is_ok());
+        assert_eq!(admin["mfa_enabled"], false);
     }
 
-    /// No SMTP configured, so this 500s — verifies authorization is reached, not 403.
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn the_user_list_says_who_has_a_second_factor(pool: sqlx::PgPool) {
+        let state = AppState::build(pool.clone(), &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        state.create_user.execute(public, "admin", "sup3r-s3cret!", true).await.unwrap();
+        state.create_user.execute(public, "with-app", "sup3r-s3cret!", false).await.unwrap();
+        state.create_user.execute(public, "half-done", "sup3r-s3cret!", false).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        for (username, confirmed) in [("with-app", true), ("half-done", false)] {
+            sqlx::query(
+                "INSERT INTO totp_credentials (user_id, encrypted_secret, secret_nonce, confirmed, created_at) \
+                 SELECT id, '\\x00'::bytea, '\\x00'::bytea, $2, now() FROM users WHERE username = $1",
+            )
+            .bind(username)
+            .bind(confirmed)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let response = app
+            .oneshot(Request::builder().uri("/api/users").header("authorization", format!("Bearer {admin_token}")).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        let mfa = |name: &str| json.as_array().unwrap().iter().find(|u| u["username"] == name).unwrap()["mfa_enabled"].clone();
+
+        assert_eq!(mfa("with-app"), true);
+        assert_eq!(mfa("half-done"), false, "an enrolment never confirmed is no second factor");
+        assert_eq!(mfa("admin"), false);
+    }
+
+    async fn send_delete(app: &axum::Router, uri: &str, token: &str) -> (axum::http::StatusCode, serde_json::Value) {
+        let response = app.clone().oneshot(Request::builder().method("DELETE").uri(uri).header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap()).await.unwrap();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (status, serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null))
+    }
+
+    async fn give_second_factors(pool: &sqlx::PgPool, username: &str) {
+        sqlx::query(
+            "INSERT INTO totp_credentials (user_id, encrypted_secret, secret_nonce, confirmed, created_at) \
+             SELECT id, '\\x00'::bytea, '\\x00'::bytea, true, now() FROM users WHERE username = $1",
+        )
+        .bind(username)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO webauthn_credentials (id, user_id, name, passkey_data, created_at) SELECT $1, id, 'key', '\\x00'::bytea, now() FROM users WHERE username = $2")
+            .bind(Uuid::new_v4())
+            .bind(username)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    async fn send_json(app: &axum::Router, method: &str, uri: &str, token: Option<&str>, body: serde_json::Value) -> (axum::http::StatusCode, serde_json::Value) {
+        let mut request = Request::builder().method(method).uri(uri).header("content-type", "application/json");
+        if let Some(token) = token {
+            request = request.header("authorization", format!("Bearer {token}"));
+        }
+        let response = app.clone().oneshot(request.body(Body::from(body.to_string())).unwrap()).await.unwrap();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (status, serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null))
+    }
+
+    fn token_of(reset_url: &str) -> String {
+        reset_url.split("#token=").nth(1).unwrap().to_string()
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_password_reset_voids_the_old_password_and_its_link_sets_a_new_one(pool: sqlx::PgPool) {
+        let state = AppState::build(pool.clone(), &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        state.create_user.execute(public, "admin", "sup3r-s3cret!", true).await.unwrap();
+        let target = state.create_user.execute(public, "forgetful", "old-s3cret!", false).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state.clone());
+
+        let (status, body) = send_json(&app, "POST", &format!("/api/users/{target}/reset-password"), Some(&admin_token), serde_json::json!({})).await;
+
+        assert_eq!(status, axum::http::StatusCode::OK);
+        // No verified address to mail it to: the link comes back for the administrator.
+        assert_eq!(body["email_sent"], false);
+        assert_eq!(body["email_error"], "email_no_address");
+        let reset_url = body["reset_url"].as_str().unwrap();
+        assert!(reset_url.contains("/reset-password#token="));
+        assert!(state.authenticate_user.execute("forgetful", "old-s3cret!").await.is_err(), "the old password stops working at once");
+
+        let token = token_of(reset_url);
+        let (status, _) = send_json(&app, "POST", "/api/auth/reset-password", None, serde_json::json!({ "token": token, "new_password": "n3w-s3cret!" })).await;
+        assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+        assert!(state.authenticate_user.execute("forgetful", "n3w-s3cret!").await.is_ok());
+
+        let (status, body) = send_json(&app, "POST", "/api/auth/reset-password", None, serde_json::json!({ "token": token, "new_password": "an0ther-s3cret!" })).await;
+        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "a link works once");
+        assert_eq!(body["code"], "password_reset_link_invalid");
+        let audited: i64 = sqlx::query_scalar("SELECT count(*) FROM domain_events WHERE event_type = 'PasswordReset'").fetch_one(&pool).await.unwrap();
+        assert_eq!(audited, 1);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_reset_for_a_verified_address_says_why_the_mail_did_not_go_out(pool: sqlx::PgPool) {
+        let state = AppState::build(pool.clone(), &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        state.create_user.execute(public, "admin", "sup3r-s3cret!", true).await.unwrap();
+        let target = state.create_user.execute(public, "forgetful", "old-s3cret!", false).await.unwrap();
+        sqlx::query("UPDATE users SET email = 'forgetful@example.com', email_verified = true WHERE id = $1").bind(target).execute(&pool).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+
+        let (_, body) = send_json(&app, "POST", &format!("/api/users/{target}/reset-password"), Some(&admin_token), serde_json::json!({})).await;
+
+        assert_eq!(body["email_error"], "email_not_configured");
+        assert!(body["reset_url"].is_string());
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_password_reset_link_refuses_a_too_short_password_without_being_used(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        state.create_user.execute(public, "admin", "sup3r-s3cret!", true).await.unwrap();
+        let target = state.create_user.execute(public, "forgetful", "old-s3cret!", false).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        let (_, body) = send_json(&app, "POST", &format!("/api/users/{target}/reset-password"), Some(&admin_token), serde_json::json!({})).await;
+        let token = token_of(body["reset_url"].as_str().unwrap());
+
+        let (status, _) = send_json(&app, "POST", "/api/auth/reset-password", None, serde_json::json!({ "token": token, "new_password": "short" })).await;
+        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+
+        let (status, _) = send_json(&app, "POST", "/api/auth/reset-password", None, serde_json::json!({ "token": token, "new_password": "l0nger-s3cret!" })).await;
+        assert_eq!(status, axum::http::StatusCode::NO_CONTENT, "the refused password did not burn the link");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_malformed_or_unknown_reset_link_is_refused_alike(pool: sqlx::PgPool) {
+        let app = build_router(AppState::build(pool, &test_config()));
+
+        for token in ["not-a-token", &"a".repeat(64)] {
+            let (status, body) = send_json(&app, "POST", "/api/auth/reset-password", None, serde_json::json!({ "token": token, "new_password": "l0nger-s3cret!" })).await;
+            assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+            assert_eq!(body["code"], "password_reset_link_invalid");
+        }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_password_reset_is_refused_for_ones_own_account_and_for_an_invitation(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let admin = state.create_user.execute(public, "admin", "sup3r-s3cret!", true).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let invited = state.invite_user.execute(public, false, "invitee@example.com", false, admin).await.unwrap().user_id;
+        let app = build_router(state);
+
+        let (status, body) = send_json(&app, "POST", &format!("/api/users/{admin}/reset-password"), Some(&admin_token), serde_json::json!({})).await;
+        assert_eq!((status, body["code"].clone()), (axum::http::StatusCode::BAD_REQUEST, serde_json::json!("own_password_reset")));
+
+        let (status, body) = send_json(&app, "POST", &format!("/api/users/{invited}/reset-password"), Some(&admin_token), serde_json::json!({})).await;
+        assert_eq!((status, body["code"].clone()), (axum::http::StatusCode::BAD_REQUEST, serde_json::json!("account_not_activated")));
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_password_reset_is_refused_where_an_identity_provider_manages_passwords(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        state.create_user.execute(public, "admin", "sup3r-s3cret!", true).await.unwrap();
+        let target = state.create_user.execute(public, "directory-user", "old-s3cret!", false).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        state
+            .identity_providers
+            .set(
+                public,
+                &artiferris_domain::sso::IdentityProviderConfig::Ldap(artiferris_domain::sso::LdapConfig {
+                    server_url: "ldap://dc.corp.example:389".to_string(),
+                    bind_dn: "cn=service,dc=corp,dc=example".to_string(),
+                    bind_password: "s3cret!".to_string(),
+                    user_search_base: "ou=people,dc=corp,dc=example".to_string(),
+                    user_search_filter: "(uid={username})".to_string(),
+                    email_attribute: "mail".to_string(),
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+        let app = build_router(state.clone());
+
+        let (status, body) = send_json(&app, "POST", &format!("/api/users/{target}/reset-password"), Some(&admin_token), serde_json::json!({})).await;
+
+        assert_eq!((status, body["code"].clone()), (axum::http::StatusCode::BAD_REQUEST, serde_json::json!("password_managed_by_identity_provider")));
+        assert!(state.authenticate_user.execute("directory-user", "old-s3cret!").await.is_ok(), "nothing changed");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_organization_admin_cannot_reset_a_super_admins_password(pool: sqlx::PgPool) {
+        let state = AppState::build(pool.clone(), &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let super_admin = state.create_user.execute(public, "root", "sup3r-s3cret!", true).await.unwrap();
+        let org_admin = state.create_user.execute(public, "org-admin", "sup3r-s3cret!", false).await.unwrap();
+        sqlx::query("UPDATE users SET is_organization_admin = true WHERE id = $1").bind(org_admin).execute(&pool).await.unwrap();
+        let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state.clone());
+
+        let (status, _) = send_json(&app, "POST", &format!("/api/users/{super_admin}/reset-password"), Some(&org_admin_token), serde_json::json!({})).await;
+
+        assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
+        assert!(state.authenticate_user.execute("root", "sup3r-s3cret!").await.is_ok(), "nothing changed");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn resetting_the_second_factors_removes_them_and_signs_the_account_out(pool: sqlx::PgPool) {
+        let state = AppState::build(pool.clone(), &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        state.create_user.execute(public, "admin", "sup3r-s3cret!", true).await.unwrap();
+        let target = state.create_user.execute(public, "lost-phone", "sup3r-s3cret!", false).await.unwrap();
+        give_second_factors(&pool, "lost-phone").await;
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let target_token = state.authenticate_user.execute("lost-phone", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        // Past `iat`'s whole-second precision, or the ordering against the revocation is ambiguous.
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+        let (status, _) = send_delete(&app, &format!("/api/users/{target}/mfa"), &admin_token).await;
+
+        assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+        let factors: i64 = sqlx::query_scalar("SELECT (SELECT count(*) FROM totp_credentials WHERE user_id = $1) + (SELECT count(*) FROM webauthn_credentials WHERE user_id = $1)")
+            .bind(target)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(factors, 0);
+        let me = app.clone().oneshot(Request::builder().uri("/api/me").header("authorization", format!("Bearer {target_token}")).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(me.status(), axum::http::StatusCode::UNAUTHORIZED, "signed out everywhere");
+        let audited: i64 = sqlx::query_scalar("SELECT count(*) FROM domain_events WHERE event_type = 'MfaReset' AND actor_id IS NOT NULL").fetch_one(&pool).await.unwrap();
+        assert_eq!(audited, 1);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn resetting_an_account_without_a_second_factor_is_refused(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        state.create_user.execute(public, "admin", "sup3r-s3cret!", true).await.unwrap();
+        let target = state.create_user.execute(public, "no-factor", "sup3r-s3cret!", false).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+
+        let (status, body) = send_delete(&app, &format!("/api/users/{target}/mfa"), &admin_token).await;
+
+        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "mfa_not_enrolled");
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_organization_admin_cannot_reset_a_super_admins_second_factors(pool: sqlx::PgPool) {
+        let state = AppState::build(pool.clone(), &test_config());
+        let public = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let super_admin = state.create_user.execute(public, "root", "sup3r-s3cret!", true).await.unwrap();
+        let org_admin = state.create_user.execute(public, "org-admin", "sup3r-s3cret!", false).await.unwrap();
+        sqlx::query("UPDATE users SET is_organization_admin = true WHERE id = $1").bind(org_admin).execute(&pool).await.unwrap();
+        give_second_factors(&pool, "root").await;
+        let org_admin_token = state.authenticate_user.execute("org-admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+
+        let (status, _) = send_delete(&app, &format!("/api/users/{super_admin}/mfa"), &org_admin_token).await;
+
+        assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn resetting_the_second_factors_of_an_unknown_account_is_not_found(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+
+        let (status, _) = send_delete(&app, &format!("/api/users/{}/mfa", Uuid::new_v4()), &admin_token).await;
+
+        assert_eq!(status, axum::http::StatusCode::NOT_FOUND);
+    }
+
+    /// No SMTP configured: the new token replaced the old one, so its link comes back for the administrator to pass on.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn super_admin_can_resend_an_invitation(pool: sqlx::PgPool) {
         let state = AppState::build(pool, &test_config());
@@ -418,7 +753,40 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert_eq!(body["email_sent"], false);
+        assert_eq!(body["email_error"], "email_not_configured");
+        assert!(body["activation_url"].as_str().unwrap().contains("/activate#token="));
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_invitation_whose_mail_could_not_go_out_carries_its_activation_link(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "admin", "sup3r-s3cret!", true).await.unwrap();
+        let admin_token = state.authenticate_user.execute("admin", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/users")
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {admin_token}"))
+                    .body(Body::from(r#"{"email":"invitee@example.com","is_super_admin":false}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::CREATED);
+        let body: serde_json::Value = serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert_eq!(body["email"], "invitee@example.com");
+        assert_eq!(body["invitation_pending"], true);
+        assert_eq!(body["email_sent"], false);
+        assert_eq!(body["email_error"], "email_not_configured");
+        assert!(body["activation_url"].as_str().unwrap().contains("/activate#token="));
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

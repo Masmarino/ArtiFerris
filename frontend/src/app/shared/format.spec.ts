@@ -18,9 +18,9 @@ describe('formatBytes', () => {
   })
 
   it('renders larger values with the closest unit and one decimal', () => {
-    expect(formatBytes(1024)).toBe('1.0 Ko')
-    expect(formatBytes(1536)).toBe('1.5 Ko')
-    expect(formatBytes(1024 * 1024 * 3)).toBe('3.0 Mo')
+    expect(formatBytes(1024)).toBe('1,0 Ko')
+    expect(formatBytes(1536)).toBe('1,5 Ko')
+    expect(formatBytes(1024 * 1024 * 3)).toBe('3,0 Mo')
   })
 })
 

@@ -10,11 +10,9 @@ app-readme-view {
 
 .readme-view__title {
   margin: 0 0 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .readme-view__content {
@@ -90,7 +88,7 @@ app-readme-view {
     padding: 0.125rem 0.375rem;
     background: var(--bg-hover);
     border-radius: var(--site-border-radius-sm);
-    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-family: var(--gbt-font-mono);
     font-size: 0.85em;
     overflow-wrap: anywhere;
   }

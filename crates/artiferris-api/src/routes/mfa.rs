@@ -164,11 +164,18 @@ struct PasskeySummaryResponse {
     id: uuid::Uuid,
     name: String,
     created_at: chrono::DateTime<chrono::Utc>,
+    last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<artiferris_application::use_cases::webauthn::PasskeySummary> for PasskeySummaryResponse {
+    fn from(p: artiferris_application::use_cases::webauthn::PasskeySummary) -> Self {
+        Self { id: p.id, name: p.name, created_at: p.created_at, last_used_at: p.last_used_at }
+    }
 }
 
 async fn list_passkeys(State(state): State<AppState>, user: AuthUser) -> Result<Json<Vec<PasskeySummaryResponse>>, (StatusCode, Json<ErrorResponse>)> {
     let passkeys = state.list_passkeys.execute(user.id).await.map_err(|e| application_error_response("failed to list passkeys", e))?;
-    Ok(Json(passkeys.into_iter().map(|p| PasskeySummaryResponse { id: p.id, name: p.name, created_at: p.created_at }).collect()))
+    Ok(Json(passkeys.into_iter().map(PasskeySummaryResponse::from).collect()))
 }
 
 #[derive(Serialize)]
@@ -207,17 +214,26 @@ struct PasskeyRegistrationFinishRequest {
     name: String,
 }
 
+/// 201 with the new passkey, as the list shows it.
 async fn finish_passkey_registration(
     State(state): State<AppState>,
     user: AuthUser,
     Json(body): Json<PasskeyRegistrationFinishRequest>,
-) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    state
+) -> Result<(StatusCode, Json<PasskeySummaryResponse>), (StatusCode, Json<ErrorResponse>)> {
+    let id = state
         .finish_passkey_registration
         .execute(user.id, user.organization_id, body.challenge_id, &body.credential, &body.name)
         .await
         .map_err(|e| application_error_response("failed to finish passkey registration", e))?;
-    Ok(StatusCode::CREATED)
+    let created = state
+        .list_passkeys
+        .execute(user.id)
+        .await
+        .map_err(|e| application_error_response("failed to list passkeys", e))?
+        .into_iter()
+        .find(|p| p.id == id)
+        .ok_or_else(|| application_error_response("the new passkey is missing", artiferris_domain::error::DomainError::Infrastructure("passkey not found after registration".to_string()).into()))?;
+    Ok((StatusCode::CREATED, Json(PasskeySummaryResponse::from(created))))
 }
 
 async fn delete_passkey(
@@ -672,7 +688,7 @@ mod tests {
         let passkey_id = Uuid::new_v4();
         state
             .webauthn_credentials
-            .insert(&artiferris_domain::webauthn::WebauthnCredential { id: passkey_id, user_id, name: "MacBook".to_string(), passkey_data: b"opaque".to_vec(), created_at: chrono::Utc::now() }, None)
+            .insert(&artiferris_domain::webauthn::WebauthnCredential { id: passkey_id, user_id, name: "MacBook".to_string(), passkey_data: b"opaque".to_vec(), created_at: chrono::Utc::now(), last_used_at: None }, None)
             .await
             .unwrap();
         let app = build_router(state.clone());

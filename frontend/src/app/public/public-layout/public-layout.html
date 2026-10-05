@@ -5,8 +5,9 @@
       [attr.aria-label]="'catalog.explorer.heading' | transloco"
       class="public-layout__home"
     >
+      <!-- The light version of the logo, drawn for the graphite bar. -->
       <img
-        src="/api/branding/logo"
+        src="/Logo_horizontal.png"
         [alt]="'auth.login.logoAlt' | transloco"
         class="public-layout__logo"
       />
@@ -25,17 +26,53 @@
         (search)="search($event)"
       />
     </div>
-    @if (isAuthenticated()) {
-      <a routerLink="/repositories" class="public-layout__login-link">{{
-        'catalog.layout.myRepositories' | transloco
-      }}</a>
-    } @else {
-      <a routerLink="/login" class="public-layout__login-link">{{
-        'catalog.layout.login' | transloco
-      }}</a>
-    }
+    <div class="public-layout__end">
+      <a
+        gbtButton
+        class="public-layout__link"
+        variant="ghost"
+        size="small"
+        iconName="github"
+        [href]="repositoryUrl"
+        target="_blank"
+        rel="noopener"
+        [attr.aria-label]="'catalog.layout.githubLabel' | transloco"
+        ><span class="public-layout__link-label">GitHub</span></a
+      >
+      <a
+        gbtButton
+        class="public-layout__link"
+        variant="ghost"
+        size="small"
+        iconName="book-open"
+        routerLink="/docs"
+        routerLinkActive
+        ariaCurrentWhenActive="page"
+        ><span class="public-layout__link-label">{{ 'catalog.layout.docs' | transloco }}</span></a
+      >
+      @if (isAuthenticated()) {
+        <a
+          gbtButton
+          class="public-layout__account"
+          variant="secondary"
+          size="small"
+          routerLink="/repositories"
+          >{{ 'catalog.layout.myRepositories' | transloco }}</a
+        >
+      } @else {
+        <a
+          gbtButton
+          class="public-layout__account"
+          variant="primary"
+          size="small"
+          routerLink="/login"
+          [queryParams]="loginParams()"
+          >{{ 'catalog.layout.login' | transloco }}</a
+        >
+      }
+    </div>
   </header>
-  <main class="public-layout__content">
+  <main class="public-layout__content" [class.public-layout__content--full]="fullWidth()">
     <ng-content />
   </main>
 </div>

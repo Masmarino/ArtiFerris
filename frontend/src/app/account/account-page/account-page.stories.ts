@@ -1,33 +1,38 @@
-import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite'
-import { signal } from '@angular/core'
+import {
+  applicationConfig,
+  moduleMetadata,
+  type Meta,
+  type StoryObj,
+} from '@storybook/angular-vite'
+import { Component, inject, provideAppInitializer, signal } from '@angular/core'
+import { provideLocationMocks } from '@angular/common/testing'
+import { Router, provideRouter } from '@angular/router'
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test'
 import { of } from 'rxjs'
 import { AccountPage } from './account-page'
 import { MeService } from '../../shell/application/me.service'
-import { MfaService } from '../application/mfa.service'
+import type { MfaPort, MfaStatus } from '@masmarino/gabarit/auth'
+import { fakeAuthPort, withAuthPort } from '../../auth/kit/auth-story-helpers'
+import { KitMfaAdapter } from '../../auth/kit/kit-mfa.adapter'
 import { AuthService } from '../../auth/application/auth.service'
 import { SessionRevocationService } from '../../auth/application/session-revocation.service'
 import { ApiTokensApplicationService } from '../../tokens/application/api-tokens.application-service'
-import type { MfaStatus, PasskeySummary } from '../domain/mfa.types'
 import type { ApiToken } from '../../tokens/domain/api-token.entity'
 
-const DISABLED_STATUS: MfaStatus = {
-  totp_enabled: false,
-  backup_codes_remaining: 0,
-  passkey_count: 0,
+const PASSKEY_ONLY: MfaStatus = {
+  totpEnabled: false,
+  backupCodesRemaining: 10,
+  passkeys: [
+    {
+      id: 'pk1',
+      name: 'MacBook Touch ID',
+      createdAt: '2026-06-01T00:00:00Z',
+      lastUsedAt: '2026-10-01T08:00:00Z',
+    },
+  ],
 }
 
-const ENABLED_STATUS: MfaStatus = {
-  totp_enabled: true,
-  backup_codes_remaining: 6,
-  passkey_count: 1,
-}
-
-const PASSKEY: PasskeySummary = {
-  id: 'pk1',
-  name: 'MacBook Touch ID',
-  created_at: '2026-06-01T00:00:00Z',
-}
+const APP_AND_PASSKEY: MfaStatus = { ...PASSKEY_ONLY, totpEnabled: true, backupCodesRemaining: 6 }
 
 const TOKEN: ApiToken = {
   id: 't1',
@@ -41,17 +46,17 @@ function fakeMe(isSuperAdmin = false): Partial<MeService> {
     username: signal('florian'),
     isSuperAdmin: signal(isSuperAdmin),
     createdAt: signal('2026-01-01T00:00:00Z'),
+    email: signal<string | null>('florian@corp.example'),
     changePassword: () => of(undefined),
   }
 }
 
-function fakeMfa(overrides: Partial<MfaService> = {}): Partial<MfaService> {
-  return {
-    getStatus: () => of(DISABLED_STATUS),
-    listPasskeys: () => of([]),
-    ...overrides,
-  }
+/** Gabarit's MFA port, as KitMfaAdapter serves it from our API. */
+function fakeMfa(overrides: Partial<MfaPort> = {}): Partial<MfaPort> {
+  return { status: () => of(PASSKEY_ONLY), ...overrides }
 }
+
+const withMfa = (port: Partial<MfaPort>) => ({ provide: KitMfaAdapter, useValue: port })
 
 function fakeTokens(
   overrides: Partial<ApiTokensApplicationService> = {},
@@ -61,17 +66,41 @@ function fakeTokens(
 
 const signOutAndRedirect = fn()
 
+@Component({ standalone: true, template: '' })
+class Blank {}
+
+// In-memory navigation: the section links are relative to the route, so a click goes to `/?section=<key>`.
+const withRouter = applicationConfig({
+  providers: [provideRouter([{ path: '**', component: Blank }]), provideLocationMocks()],
+})
+const startAt = (url: string) =>
+  applicationConfig({
+    providers: [provideAppInitializer(() => inject(Router).navigateByUrl(url))],
+  })
+
+/** The section the side menu marks as the current one. */
+async function expectSection(canvasElement: HTMLElement, name: string): Promise<void> {
+  const nav = within(canvasElement).getByRole('navigation', { name: 'Réglages du compte' })
+  await waitFor(() =>
+    expect(within(nav).getByRole('link', { name })).toHaveAttribute('aria-current', 'page'),
+  )
+}
+
 const meta: Meta<AccountPage> = {
   title: 'Account/AccountPage',
   component: AccountPage,
+  parameters: { layout: 'fullscreen' },
   decorators: [
+    withRouter,
+    // The settings read the organisation's sign-in settings through KitAuthAdapter, provided at the root.
+    applicationConfig({ providers: [withAuthPort(fakeAuthPort())] }),
     moduleMetadata({
       providers: [
         { provide: MeService, useValue: fakeMe() },
-        { provide: MfaService, useValue: fakeMfa() },
+        withMfa(fakeMfa()),
+        { provide: AuthService, useValue: { logoutEverywhere: () => of(undefined) } },
         { provide: ApiTokensApplicationService, useValue: fakeTokens() },
         { provide: SessionRevocationService, useValue: { signOutAndRedirect } },
-        { provide: AuthService, useValue: { logoutEverywhere: () => of(undefined) } },
       ],
     }),
   ],
@@ -84,8 +113,11 @@ type Story = StoryObj<AccountPage>
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await waitFor(() => expect(canvas.getByText("Nom d'utilisateur : florian")).toBeInTheDocument())
-    expect(canvas.queryByText('Statut : Super-administrateur')).not.toBeInTheDocument()
+    await waitFor(() => expect(canvas.getByText('florian')).toBeInTheDocument())
+    await expectSection(canvasElement, 'Profil')
+    expect(canvas.getByText("Nom d'utilisateur, non modifiable")).toBeInTheDocument()
+    expect(canvas.queryByText('Super-administrateur')).not.toBeInTheDocument()
+    expect(canvas.getByRole('button', { name: 'Déconnexion' })).toBeInTheDocument()
   },
 }
 
@@ -93,100 +125,91 @@ export const AsSuperAdmin: Story = {
   decorators: [moduleMetadata({ providers: [{ provide: MeService, useValue: fakeMe(true) }] })],
   play: async ({ canvasElement }) => {
     await waitFor(() =>
-      expect(within(canvasElement).getByText('Statut : Super-administrateur')).toBeInTheDocument(),
+      expect(within(canvasElement).getByText('Super-administrateur')).toBeInTheDocument(),
     )
   },
 }
 
-export const PasswordMismatch: Story = {
+/** The side menu opens a section, and the address keeps it. */
+export const OpeningASection: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(canvas.getByLabelText(/Nouveau mot de passe/), 'correct-horse-1')
+    await userEvent.click(await canvas.findByRole('link', { name: 'Mot de passe' }))
+    await expectSection(canvasElement, 'Mot de passe')
+    expect(await canvas.findByLabelText('Mot de passe actuel *')).toBeInTheDocument()
+  },
+}
+
+export const Password: Story = {
+  decorators: [startAt('/?section=password')],
+  play: async ({ canvasElement }) => {
+    await expectSection(canvasElement, 'Mot de passe')
+    expect(within(canvasElement).getByText('8 caractères minimum')).toBeInTheDocument()
+  },
+}
+
+export const PasswordMismatch: Story = {
+  decorators: [startAt('/?section=password')],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await userEvent.type(await canvas.findByLabelText(/Nouveau mot de passe/), 'correct-horse-1')
     await userEvent.type(canvas.getByLabelText(/Confirmer le nouveau mot de passe/), 'different')
     await userEvent.tab()
     await waitFor(() =>
-      expect(canvas.getByText('Les mots de passe ne correspondent pas.')).toBeInTheDocument(),
+      expect(
+        canvas.getByText('Les nouveaux mots de passe ne correspondent pas.'),
+      ).toBeInTheDocument(),
     )
   },
 }
 
 export const ChangingPassword: Story = {
+  decorators: [startAt('/?section=password')],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.type(canvas.getByLabelText('Mot de passe actuel *'), 'old-password')
+    await userEvent.type(await canvas.findByLabelText('Mot de passe actuel *'), 'old-password')
     await userEvent.type(canvas.getByLabelText(/Nouveau mot de passe/), 'correct-horse-1')
     await userEvent.type(
       canvas.getByLabelText(/Confirmer le nouveau mot de passe/),
       'correct-horse-1',
     )
     await userEvent.click(canvas.getByRole('button', { name: 'Changer le mot de passe' }))
-    await waitFor(() => expect(signOutAndRedirect).toHaveBeenCalledTimes(1))
+    // The other sessions end; this one goes on.
+    expect(await canvas.findByText('Mot de passe modifié.')).toBeInTheDocument()
+    expect(signOutAndRedirect).not.toHaveBeenCalled()
     expect(canvas.getByLabelText('Mot de passe actuel *')).toHaveValue('')
   },
 }
 
-export const SwitchingToTheSecurityTab: Story = {
+/** A passkey alone: its backup codes, and the app offered as an optional second way in. */
+export const Security: Story = {
+  decorators: [startAt('/?section=security')],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('tab', { name: 'Sécurité' }))
     await waitFor(() =>
-      expect(
-        canvas.getByText("La double authentification n'est pas activée sur ce compte."),
-      ).toBeInTheDocument(),
+      expect(canvas.getByText('Aucune application configurée')).toBeInTheDocument(),
     )
-    expect(canvas.getByText("Aucune clé d'accès")).toBeInTheDocument()
-  },
-}
-
-export const EnrollingInTotp: Story = {
-  decorators: [
-    moduleMetadata({
-      providers: [
-        {
-          provide: MfaService,
-          useValue: fakeMfa({
-            enrollTotp: () =>
-              of({ secret: 'ABCD EFGH IJKL', otpauth_url: 'otpauth://totp/ArtiFerris:florian' }),
-          }),
-        },
-      ],
-    }),
-  ],
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('tab', { name: 'Sécurité' }))
-    await userEvent.click(await canvas.findByRole('button', { name: 'Activer' }))
-    await waitFor(() => expect(canvas.getByText('ABCD EFGH IJKL')).toBeInTheDocument())
-    expect(canvas.getByRole('img', { name: "QR code d'activation" })).toBeInTheDocument()
+    expect(canvas.getByText('10 codes de secours restants.')).toBeInTheDocument()
+    expect(canvas.getByText('MacBook Touch ID')).toBeInTheDocument()
+    expect(canvas.getByRole('button', { name: 'Se déconnecter partout' })).toBeInTheDocument()
   },
 }
 
 export const AsMfaEnabledUser: Story = {
   decorators: [
-    moduleMetadata({
-      providers: [
-        {
-          provide: MfaService,
-          useValue: fakeMfa({
-            getStatus: () => of(ENABLED_STATUS),
-            listPasskeys: () => of([PASSKEY]),
-          }),
-        },
-      ],
-    }),
+    startAt('/?section=security'),
+    moduleMetadata({ providers: [withMfa(fakeMfa({ status: () => of(APP_AND_PASSKEY) }))] }),
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('tab', { name: 'Sécurité' }))
-    await waitFor(() =>
-      expect(canvas.getByText('Codes de secours restants : 6')).toBeInTheDocument(),
-    )
-    expect(canvas.getByText('MacBook Touch ID')).toBeInTheDocument()
+    await waitFor(() => expect(canvas.getByText('Application configurée')).toBeInTheDocument())
+    expect(canvas.getByText('6 codes de secours restants.')).toBeInTheDocument()
   },
 }
 
 export const CreatingAnApiToken: Story = {
   decorators: [
+    startAt('/?section=tokens'),
     moduleMetadata({
       providers: [
         {
@@ -201,11 +224,9 @@ export const CreatingAnApiToken: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await userEvent.click(await canvas.findByRole('tab', { name: 'Jetons API' }))
     await waitFor(() => expect(canvas.getByText('mon laptop')).toBeInTheDocument())
-    await userEvent.click(canvas.getByRole('button', { name: 'Nouveau token' }))
-    await userEvent.type(await canvas.findByLabelText(/Nom \(ex\. « mon laptop »\)/), 'CI runner')
-    await userEvent.click(canvas.getByRole('button', { name: 'Créer' }))
+    await userEvent.type(canvas.getByLabelText('Nom du jeton'), 'CI runner')
+    await userEvent.click(canvas.getByRole('button', { name: 'Générer' }))
     await waitFor(() => expect(canvas.getByText('artiferris_pat_abc123')).toBeInTheDocument())
   },
 }

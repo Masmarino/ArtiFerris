@@ -9,7 +9,7 @@ import {
   input,
   signal,
 } from '@angular/core'
-import { Button } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
 
 const COPIED_FEEDBACK_MS = 2000
 

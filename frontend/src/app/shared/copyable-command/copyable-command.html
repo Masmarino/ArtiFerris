@@ -1,5 +1,10 @@
 <div class="copyable-command">
-  <pre><code>{{ command() }}</code></pre>
+  <!-- A long command scrolls sideways, which the keyboard can only do once the block takes focus (WCAG 2.1.1). -->
+  <pre
+    tabindex="0"
+    role="region"
+    [attr.aria-label]="'common.command' | transloco"
+  ><code>{{ command() }}</code></pre>
   <gbt-button
     variant="secondary"
     size="small"

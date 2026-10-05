@@ -1,10 +1,158 @@
-gbt-description-list {
-  display: block;
-  max-width: 480px;
-  margin-bottom: 1rem;
+@use '../../../styles/list-page';
+
+:host {
+  @include list-page.page-host;
 }
 
-hg-gauge-bar {
+.health__intro {
+  margin: 0;
+}
+
+.health__checked {
+  white-space: nowrap;
+}
+
+.health__cards-frame {
+  container: health-cards / inline-size;
+}
+
+.health__cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  transition: opacity var(--site-transition-fast);
+
+  &[aria-busy='true'] {
+    opacity: 0.6;
+  }
+}
+
+@container health-cards (min-width: 640px) {
+  .health__cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+}
+
+.health__card,
+.health__skeleton {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+
+  ::ng-deep .gbt-card {
+    flex: 1 1 auto;
+  }
+}
+
+// Gabarit gap: the card sets its own root text; the page's reads better here.
+gbt-card ::ng-deep .gbt-card {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.health__card-status {
+  flex: none;
+}
+
+.health__card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+}
+
+// Gabarit's inline list stacks terms and values on narrow viewports (768px media query), but here the card's width is
+// what counts and two columns always fit. The dl selector beats Gabarit's rules, media query included.
+.health__facts {
   display: block;
-  max-width: 320px;
+
+  ::ng-deep dl.gbt-description-list[data-layout='inline'] {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: 1.5rem;
+    row-gap: 0.5rem;
+  }
+
+  ::ng-deep dl.gbt-description-list[data-layout='inline'] .gbt-description-list__value {
+    margin-bottom: 0;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+}
+
+.health__gauge {
+  ::ng-deep .gbt-gauge-bar__header {
+    flex-wrap: wrap;
+    font-size: 0.8125rem;
+  }
+
+  ::ng-deep .gbt-gauge-bar__label {
+    font-weight: 600;
+  }
+
+  ::ng-deep .gbt-gauge-bar__track {
+    height: 0.625rem;
+    // A visible track in both themes (Gabarit's --bg-hover is barely there on the card).
+    background: color-mix(in srgb, var(--border-color) 25%, transparent);
+  }
+}
+
+.health__detail {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--site-border-radius-sm);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-family: var(--gbt-font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.health__detail--down {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+}
+
+.health__skeleton .health__card-body {
+  gap: 0.75rem;
+}
+
+.health__uptime-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.375rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 2rem;
+  white-space: nowrap;
+
+  gbt-icon {
+    flex: none;
+    color: var(--text-secondary);
+    font-size: 1rem;
+  }
+}
+
+.health__uptime-since,
+.health__note {
+  margin: 0.125rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.health__note {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .health__cards {
+    transition: none;
+  }
 }

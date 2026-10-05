@@ -1,26 +1,81 @@
-<gbt-modal
-  [isOpen]="true"
-  [heading]="'users.create.heading' | transloco"
-  [closeLabel]="'common.close' | transloco"
-  (closed)="cancelled.emit()"
->
-  <form class="stack" [formGroup]="form" (ngSubmit)="submit()">
-    <p class="gbt-form-required-note">{{ 'common.requiredNote' | transloco }}</p>
-    <gbt-input
-      [label]="'users.create.email' | transloco"
-      formControlName="email"
-      [required]="true"
-    />
-    <p>
-      {{ 'users.create.inviteNote' | transloco }}
-    </p>
-    <gbt-checkbox [label]="'users.create.superAdmin' | transloco" formControlName="isSuperAdmin" />
-    <gbt-button
-      [text]="'users.create.invite' | transloco"
-      type="submit"
-      [disabled]="form.invalid"
-      [loading]="creating()"
-      [loadingLabel]="'common.loadingLabel' | transloco"
-    />
-  </form>
-</gbt-modal>
+<!-- The form wraps the whole dialog because the submit button is in the footer slot, outside the body. -->
+<form novalidate (submit)="$event.preventDefault(); submit()">
+  <!-- While it sends, Escape, the backdrop and the close button can't close the dialog, so its outcome isn't lost. -->
+  <gbt-modal
+    [isOpen]="true"
+    [heading]="'users.create.heading' | transloco"
+    [closeLabel]="'common.close' | transloco"
+    [busy]="sending()"
+    [busyLabel]="'users.create.sending' | transloco"
+    (closed)="closed.emit()"
+  >
+    @if (result(); as r) {
+      <div #resultRegion class="create-user__result" tabindex="-1">
+        @if (r.user.email_sent) {
+          <gbt-alert variant="success">
+            <p class="create-user__sent-title">
+              {{ 'users.create.sentTitle' | transloco: { email: r.email } }}
+            </p>
+            <p class="create-user__sent-help">{{ 'users.create.sentHelp' | transloco }}</p>
+          </gbt-alert>
+        } @else {
+          <app-link-mail-failed [name]="r.email" [mail]="r.user" />
+        }
+      </div>
+    } @else {
+      <div class="create-user">
+        <p class="create-user__intro">{{ 'users.create.intro' | transloco }}</p>
+
+        <gbt-input
+          name="email"
+          type="email"
+          autocomplete="off"
+          [label]="'users.create.email' | transloco"
+          [errorMessage]="emailError()"
+          [ngModel]="email()"
+          (ngModelChange)="onEmailChange($event)"
+        />
+
+        <div class="create-user__admin">
+          <gbt-switch
+            name="isSuperAdmin"
+            [label]="'users.create.superAdmin' | transloco"
+            [hint]="'users.create.superAdminHint' | transloco"
+            [ngModel]="isSuperAdmin()"
+            (ngModelChange)="isSuperAdmin.set($event)"
+          />
+        </div>
+
+        @if (formError(); as message) {
+          <gbt-alert variant="error">
+            <p class="create-user__alert">{{ message }}</p>
+          </gbt-alert>
+        }
+      </div>
+    }
+
+    <!-- One block per step, each with a single root element so Angular can project it into the slot. -->
+    @if (result()) {
+      <div modal-footer class="create-user__actions">
+        <gbt-button [text]="'users.create.done' | transloco" (clicked)="closed.emit()" />
+      </div>
+    }
+    @if (!result()) {
+      <div modal-footer class="create-user__actions">
+        <gbt-button
+          variant="secondary"
+          [text]="'common.cancel' | transloco"
+          [disabled]="sending()"
+          (clicked)="closed.emit()"
+        />
+        <gbt-button
+          type="submit"
+          [iconName]="sending() ? null : 'send'"
+          [text]="'users.create.send' | transloco"
+          [loading]="sending()"
+          [loadingLabel]="'users.create.sending' | transloco"
+        />
+      </div>
+    }
+  </gbt-modal>
+</form>

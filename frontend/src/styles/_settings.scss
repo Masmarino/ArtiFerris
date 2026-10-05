@@ -1,0 +1,125 @@
+// Content of the account settings sections inside their `gbt-card`s: forms, rows, footers. Each section keeps its own
+// BEM selectors and includes these; narrow rules go in its `@container settings-card (…)` blocks. The same layout as
+// FerrisGit's account page, so the family's settings read alike.
+
+$inner-radius: calc(var(--site-border-radius) - 1px);
+
+// Gabarit gap: `gbt-card` isn't a size container, so each section makes its cards one for its
+// `@container settings-card (…)` rules. Style and inline-size containment only, so select popups still open over the
+// page. The card also sets its own root text and tints its count pill at 8%, invisible in dark mode: both fall back to
+// the page's.
+@mixin card-container {
+  gbt-card {
+    min-width: 0;
+    container: settings-card / inline-size;
+
+    ::ng-deep .gbt-card {
+      color: inherit;
+      font-size: inherit;
+      line-height: inherit;
+    }
+
+    ::ng-deep .gbt-card__count {
+      background: color-mix(in srgb, var(--border-color) 22%, transparent);
+    }
+  }
+}
+
+// A section's host: stacked cards.
+@mixin section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+
+  @include card-container;
+}
+
+@mixin form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin: 0;
+}
+
+@mixin field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+@mixin field-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  min-height: 1.25rem;
+}
+
+@mixin hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+// Fields side by side; the section's `@container settings-card` block stacks them when the card is narrow.
+@mixin field-row($columns) {
+  display: grid;
+  grid-template-columns: $columns;
+  align-items: start;
+  gap: 1rem;
+}
+
+// The form's footer: the action on the right, an optional `form-summary` on the left, a hairline above.
+@mixin form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--gbt-hairline);
+}
+
+@mixin form-summary {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+@mixin rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  > li:last-child ::ng-deep .gbt-list-row {
+    border-radius: 0 0 $inner-radius $inner-radius;
+  }
+
+  // Gabarit gap: `gbt-list-row` has no rule for an icon-only button (38px) in the trailing column, so negative block
+  // margins keep the row's 24px title line.
+  > li ::ng-deep .gbt-list-row__trailing > gbt-button:has(.gbt-button--icon-only) {
+    margin-block: -0.4375rem;
+  }
+}
+
+// A non-link row title, truncated on one line (`gbt-list-row` only truncates links). The doubled class beats the
+// row's own `> *` rule, which would stop it shrinking.
+@mixin row-title-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@mixin mono {
+  font-family: var(--gbt-font-mono);
+  font-size: 0.8125rem;
+}

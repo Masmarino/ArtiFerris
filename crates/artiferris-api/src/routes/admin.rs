@@ -2000,7 +2000,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+        // Nothing to fix on the server: the administrator is told what to configure.
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+        let body: serde_json::Value = serde_json::from_slice(&axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert_eq!(body["code"], "email_not_configured");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]

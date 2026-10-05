@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core'
 import { HttpClient } from '@angular/common/http'
 import { Observable } from 'rxjs'
-import { OrganizationMember } from '../domain/organization-member.entity'
+import { InvitedMember, OrganizationMember } from '../domain/organization-member.entity'
 import { OrganizationMembersPort } from '../application/organization-members.port'
 import { apiPath } from '../../shared/api-path'
 
@@ -17,8 +17,8 @@ export class HttpOrganizationMembersAdapter implements OrganizationMembersPort {
     organizationId: string,
     email: string,
     isOrganizationAdmin: boolean,
-  ): Observable<OrganizationMember> {
-    return this.http.post<OrganizationMember>(apiPath`/api/organizations/${organizationId}/users`, {
+  ): Observable<InvitedMember> {
+    return this.http.post<InvitedMember>(apiPath`/api/organizations/${organizationId}/users`, {
       email,
       is_organization_admin: isOrganizationAdmin,
     })

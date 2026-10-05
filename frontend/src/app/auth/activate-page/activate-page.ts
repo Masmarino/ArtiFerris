@@ -1,70 +1,42 @@
-import { t } from '../../shared/i18n/translator'
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
+import { Router, RouterLink } from '@angular/router'
+import { AuthFooterLink } from '@masmarino/gabarit/auth'
+import { AuthActivate } from '@masmarino/gabarit/auth-activate'
+import { Button } from '@masmarino/gabarit/button'
 import { TranslocoPipe } from '@jsverse/transloco'
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms'
-import { ActivatedRoute, Router } from '@angular/router'
-import { Button, GbtInput, Alert } from '@masmarino/gabarit'
-import { AuthService } from '../application/auth.service'
-import { errorCode, overloadMessage } from '../../shared/api-error'
+import { provideAuthKit } from '../kit/auth-kit'
+import { consumeLinkToken } from '../kit/link-token'
+import { GitField } from '@masmarino/gabarit/git-field'
 
+/**
+ * Owns the `/activate#token=…` URL of an invitation mail around Gabarit's activation. The
+ * administrator invites by e-mail only, so the invitee chooses their username here, with their
+ * password. The token is read once, then dropped from the address bar; a missing or malformed one
+ * shows the kit's dead-link view without any request.
+ */
 @Component({
   selector: 'app-activate-page',
   standalone: true,
-  imports: [TranslocoPipe, ReactiveFormsModule, GbtInput, Button, Alert],
-  templateUrl: './activate-page.html',
-  styleUrl: '../login-page/login-page.scss',
+  imports: [GitField, AuthActivate, AuthFooterLink, Button, RouterLink, TranslocoPipe],
+  providers: [provideAuthKit()],
+  host: { class: 'auth-layout' },
+  template: `
+    <gbt-auth-activate [token]="token" [chooseUsername]="true" (signIn)="toSignIn()">
+      <gbt-git-field auth-backdrop />
+      <img auth-logo src="/api/branding/logo" [alt]="'auth.login.logoAlt' | transloco" />
+      <a gbtButton variant="link" gbtAuthFooterLink routerLink="/login">{{
+        'auth.login.submit' | transloco
+      }}</a>
+    </gbt-auth-activate>
+  `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ActivatePage {
-  private readonly auth = inject(AuthService)
-  private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
 
-  private readonly token = this.route.snapshot.queryParamMap.get('token') ?? ''
-  readonly tokenMissing = this.token === ''
+  protected readonly token = consumeLinkToken('/activate')
 
-  readonly form = new FormGroup({
-    username: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-    newPassword: new FormControl('', {
-      nonNullable: true,
-      validators: [Validators.required, Validators.minLength(8)],
-    }),
-    confirmPassword: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-  })
-
-  readonly errorMessage = signal<string | null>(null)
-  readonly submitting = signal(false)
-
-  get passwordMismatch(): boolean {
-    const { newPassword, confirmPassword } = this.form.getRawValue()
-    return confirmPassword !== '' && newPassword !== confirmPassword
-  }
-
-  submit(): void {
-    if (this.form.invalid || this.passwordMismatch || this.submitting()) {
-      return
-    }
-    this.submitting.set(true)
-    this.errorMessage.set(null)
-    const { username, newPassword } = this.form.getRawValue()
-    this.auth.activate(this.token, username.trim(), newPassword).subscribe({
-      next: () => this.router.navigateByUrl('/login'),
-      error: (error: unknown) => {
-        this.submitting.set(false)
-        this.errorMessage.set(overloadMessage(error) ?? this.messageFor(errorCode(error)))
-      },
-    })
-  }
-
-  private messageFor(code: string | null): string {
-    switch (code) {
-      case 'username_taken':
-        return t('auth.activate.errors.usernameTaken')
-      case 'invalid_username':
-      case 'reserved_name':
-        return t('auth.activate.errors.invalidUsername')
-      default:
-        return t('auth.activate.errors.invalidLink')
-    }
+  protected toSignIn(): void {
+    void this.router.navigateByUrl('/login')
   }
 }

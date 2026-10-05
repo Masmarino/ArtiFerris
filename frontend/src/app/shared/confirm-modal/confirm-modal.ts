@@ -1,7 +1,8 @@
 import { t } from '../i18n/translator'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core'
-import { Button, Modal } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Modal } from '@masmarino/gabarit/modal'
 
 @Component({
   selector: 'app-confirm-modal',

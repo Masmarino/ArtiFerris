@@ -1,4 +1,12 @@
 <div class="stack">
+  @if (mailFailure(); as failure) {
+    <app-link-mail-failed
+      dismissible
+      [name]="failure.name"
+      [mail]="failure.mail"
+      (dismissed)="mailFailure.set(null)"
+    />
+  }
   @if (loading()) {
     <gbt-spinner [label]="'common.loading' | transloco" />
   } @else if (members().length === 0) {

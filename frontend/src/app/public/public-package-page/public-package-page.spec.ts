@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing'
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router'
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs'
 import { By } from '@angular/platform-browser'
-import { Tab } from '@masmarino/gabarit'
+import { Tab } from '@masmarino/gabarit/tabs'
 import { HttpErrorResponse } from '@angular/common/http'
 import { AuthService } from '../../auth/application/auth.service'
 import { NO_SUGGESTIONS } from '../catalog/testing/no-suggestions'
@@ -406,7 +406,7 @@ describe('PublicPackagePage', () => {
     const sizes = Array.from(el.querySelectorAll('tbody tr')).map(
       (row) => row.querySelectorAll('td')[2].textContent,
     )
-    expect(sizes).toEqual(['5.0 Mo', '—'])
+    expect(sizes).toEqual(['5,0 Mo', '—'])
   })
 
   it('shows a not-found message when the owning repository cannot be resolved', async () => {

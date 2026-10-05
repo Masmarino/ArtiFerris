@@ -549,7 +549,7 @@ describe('CatalogSearch', () => {
 
     function key(el: HTMLElement, key: string) {
       el.querySelector('input')!.dispatchEvent(
-        new KeyboardEvent('keydown', { key, cancelable: true }),
+        new KeyboardEvent('keydown', { key, cancelable: true, bubbles: true }),
       )
     }
 

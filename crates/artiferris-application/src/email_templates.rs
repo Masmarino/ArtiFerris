@@ -91,6 +91,15 @@ struct Words {
     password_no_action: &'static str,
     password_warning_text: &'static str,
     password_warning_html: &'static str,
+    // password reset by an administrator
+    reset_subject: &'static str,
+    reset_preheader: &'static str,
+    reset_intro: &'static str,
+    reset_text: &'static str,
+    reset_html: &'static str,
+    reset_button: &'static str,
+    reset_deadline_html: &'static str,
+    reset_warning: &'static str,
     // second factor added
     mfa_subject: &'static str,
     mfa_preheader: &'static str,
@@ -117,6 +126,14 @@ const FR: Words = Words {
     password_no_action: "Si vous êtes à l'origine de ce changement, aucune action n'est nécessaire.",
     password_warning_text: "Si vous n'êtes pas à l'origine de ce changement, contactez immédiatement un administrateur de votre instance ArtiFerris.",
     password_warning_html: "Si vous n'êtes <strong>pas</strong> à l'origine de ce changement, contactez immédiatement un administrateur de votre instance ArtiFerris.",
+    reset_subject: "Réinitialisation de votre mot de passe ArtiFerris",
+    reset_preheader: "Choisissez un nouveau mot de passe",
+    reset_intro: "Un administrateur de votre instance ArtiFerris a réinitialisé le mot de passe de votre compte. Votre mot de passe actuel ne fonctionne plus et vos sessions en cours ont été fermées.",
+    reset_text: "Pour choisir un nouveau mot de passe, cliquez sur le lien suivant dans l'heure qui vient :",
+    reset_html: "Pour choisir un nouveau mot de passe, cliquez sur le bouton ci-dessous.",
+    reset_button: "Choisir un nouveau mot de passe",
+    reset_deadline_html: "Ce lien expire dans 1 heure. Passé ce délai, demandez à un administrateur de recommencer.",
+    reset_warning: "Si vous ne vous attendiez pas à ce changement, contactez un administrateur.",
     mfa_subject: "Nouvelle méthode de double authentification ajoutée",
     mfa_preheader: "Nouvelle méthode de double authentification",
     mfa_added: "Une nouvelle méthode de double authentification vient d'être ajoutée à votre compte ArtiFerris : {method}.",
@@ -142,6 +159,14 @@ const EN: Words = Words {
     password_no_action: "If you made this change, no action is needed.",
     password_warning_text: "If you did not make this change, contact an administrator of your ArtiFerris instance immediately.",
     password_warning_html: "If you did <strong>not</strong> make this change, contact an administrator of your ArtiFerris instance immediately.",
+    reset_subject: "Resetting your ArtiFerris password",
+    reset_preheader: "Choose a new password",
+    reset_intro: "An administrator of your ArtiFerris instance reset the password of your account. Your current password no longer works and your open sessions have been closed.",
+    reset_text: "To choose a new password, follow this link within the next hour:",
+    reset_html: "To choose a new password, click the button below.",
+    reset_button: "Choose a new password",
+    reset_deadline_html: "This link expires in 1 hour. After that, ask an administrator to start again.",
+    reset_warning: "If you did not expect this change, contact an administrator.",
     mfa_subject: "New two-factor authentication method added",
     mfa_preheader: "New two-factor authentication method",
     mfa_added: "A new two-factor authentication method has just been added to your ArtiFerris account: {method}.",
@@ -167,6 +192,14 @@ const ES: Words = Words {
     password_no_action: "Si usted hizo este cambio, no es necesaria ninguna acción.",
     password_warning_text: "Si usted no hizo este cambio, póngase en contacto de inmediato con un administrador de su instancia de ArtiFerris.",
     password_warning_html: "Si usted <strong>no</strong> hizo este cambio, póngase en contacto de inmediato con un administrador de su instancia de ArtiFerris.",
+    reset_subject: "Restablecimiento de su contraseña de ArtiFerris",
+    reset_preheader: "Elija una nueva contraseña",
+    reset_intro: "Un administrador de su instancia de ArtiFerris ha restablecido la contraseña de su cuenta. Su contraseña actual ya no funciona y sus sesiones abiertas se han cerrado.",
+    reset_text: "Para elegir una nueva contraseña, siga este enlace en la próxima hora:",
+    reset_html: "Para elegir una nueva contraseña, haga clic en el botón de abajo.",
+    reset_button: "Elegir una nueva contraseña",
+    reset_deadline_html: "Este enlace caduca en 1 hora. Pasado ese plazo, pida a un administrador que vuelva a empezar.",
+    reset_warning: "Si no esperaba este cambio, póngase en contacto con un administrador.",
     mfa_subject: "Nuevo método de autenticación de dos factores añadido",
     mfa_preheader: "Nuevo método de autenticación de dos factores",
     mfa_added: "Se acaba de añadir un nuevo método de autenticación de dos factores a su cuenta de ArtiFerris: {method}.",
@@ -192,6 +225,14 @@ const IT: Words = Words {
     password_no_action: "Se sei stato tu a fare questa modifica, non è necessaria alcuna azione.",
     password_warning_text: "Se non sei stato tu a fare questa modifica, contatta subito un amministratore della tua istanza di ArtiFerris.",
     password_warning_html: "Se <strong>non</strong> sei stato tu a fare questa modifica, contatta subito un amministratore della tua istanza di ArtiFerris.",
+    reset_subject: "Reimpostazione della tua password ArtiFerris",
+    reset_preheader: "Scegli una nuova password",
+    reset_intro: "Un amministratore della tua istanza di ArtiFerris ha reimpostato la password del tuo account. La password attuale non funziona più e le sessioni aperte sono state chiuse.",
+    reset_text: "Per scegliere una nuova password, segui questo link entro un'ora:",
+    reset_html: "Per scegliere una nuova password, fai clic sul pulsante qui sotto.",
+    reset_button: "Scegli una nuova password",
+    reset_deadline_html: "Questo link scade tra 1 ora. Trascorso questo termine, chiedi a un amministratore di ricominciare.",
+    reset_warning: "Se non ti aspettavi questa modifica, contatta un amministratore.",
     mfa_subject: "Nuovo metodo di autenticazione a due fattori aggiunto",
     mfa_preheader: "Nuovo metodo di autenticazione a due fattori",
     mfa_added: "Un nuovo metodo di autenticazione a due fattori è stato appena aggiunto al tuo account ArtiFerris: {method}.",
@@ -217,6 +258,14 @@ const DE: Words = Words {
     password_no_action: "Wenn Sie diese Änderung vorgenommen haben, ist keine Aktion erforderlich.",
     password_warning_text: "Wenn Sie diese Änderung nicht vorgenommen haben, wenden Sie sich sofort an einen Administrator Ihrer ArtiFerris-Instanz.",
     password_warning_html: "Wenn Sie diese Änderung <strong>nicht</strong> vorgenommen haben, wenden Sie sich sofort an einen Administrator Ihrer ArtiFerris-Instanz.",
+    reset_subject: "Zurücksetzen Ihres ArtiFerris-Passworts",
+    reset_preheader: "Wählen Sie ein neues Passwort",
+    reset_intro: "Ein Administrator Ihrer ArtiFerris-Instanz hat das Passwort Ihres Kontos zurückgesetzt. Ihr bisheriges Passwort funktioniert nicht mehr und Ihre offenen Sitzungen wurden beendet.",
+    reset_text: "Um ein neues Passwort zu wählen, folgen Sie innerhalb der nächsten Stunde diesem Link:",
+    reset_html: "Um ein neues Passwort zu wählen, klicken Sie auf die Schaltfläche unten.",
+    reset_button: "Neues Passwort wählen",
+    reset_deadline_html: "Dieser Link läuft in 1 Stunde ab. Danach bitten Sie einen Administrator, von vorn zu beginnen.",
+    reset_warning: "Wenn Sie diese Änderung nicht erwartet haben, wenden Sie sich an einen Administrator.",
     mfa_subject: "Neue Zwei-Faktor-Methode hinzugefügt",
     mfa_preheader: "Neue Zwei-Faktor-Methode",
     mfa_added: "Ihrem ArtiFerris-Konto wurde gerade eine neue Zwei-Faktor-Methode hinzugefügt: {method}.",
@@ -265,6 +314,34 @@ pub fn password_changed(language: Language, username: &str) -> EmailContent {
     EmailContent { subject: c.password_subject.to_string(), text, html: shell(language, c.password_preheader, &body_html) }
 }
 
+/// To someone whose password an administrator reset: their old one no longer works, and the link lets them choose a
+/// new one within the hour.
+pub fn password_reset(language: Language, username: &str, reset_url: &str) -> EmailContent {
+    let c = words(language);
+    let hello = c.hello;
+    let text = format!(
+        "{hello} {username},\n\n{intro}\n\n{link_text}\n\n{reset_url}\n\n{deadline}\n\n{warning}",
+        intro = c.reset_intro,
+        link_text = c.reset_text,
+        deadline = strip_tags(c.reset_deadline_html),
+        warning = c.reset_warning,
+    );
+    let body_html = format!(
+        r#"<p style="margin:0 0 16px;">{hello} <strong>{username}</strong>,</p>
+<p style="margin:0 0 16px;">{intro}</p>
+<p style="margin:0 0 16px;">{link_html}</p>
+{button}
+<p style="margin:16px 0; font-size:13px; color:{TEXT_SECONDARY};">{deadline}</p>
+<p style="margin:0; padding:12px 16px; background-color:#fef3c7; border-radius:8px; color:#92400e;">{warning}</p>"#,
+        intro = c.reset_intro,
+        link_html = c.reset_html,
+        button = button(reset_url, c.reset_button),
+        deadline = c.reset_deadline_html,
+        warning = c.reset_warning,
+    );
+    EmailContent { subject: c.reset_subject.to_string(), text, html: shell(language, c.reset_preheader, &body_html) }
+}
+
 pub fn mfa_enrolled(language: Language, username: &str, method: EnrolledMethod) -> EmailContent {
     let c = words(language);
     let hello = c.hello;
@@ -295,7 +372,7 @@ mod tests {
     use super::*;
     use artiferris_domain::user_preferences::SUPPORTED_LANGUAGES;
 
-    const URL: &str = "https://artiferris.example.com/activate?token=abc";
+    const URL: &str = "https://artiferris.example.com/activate#token=abc";
 
     #[test]
     fn account_created_includes_the_activation_link_in_both_bodies() {
@@ -305,6 +382,19 @@ mod tests {
             assert!(content.html.contains(URL), "{language:?}");
             assert!(content.html.starts_with("<!doctype html>"));
         }
+    }
+
+    #[test]
+    fn password_reset_carries_its_link_and_says_it_lasts_one_hour() {
+        let reset_url = "https://artiferris.example.com/reset-password#token=abc";
+        for language in SUPPORTED_LANGUAGES {
+            let content = password_reset(language, "florian", reset_url);
+            assert!(content.text.contains(reset_url), "{language:?}");
+            assert!(content.html.contains(reset_url), "{language:?}");
+            assert!(content.text.contains('1'), "{language:?}");
+        }
+        assert_eq!(password_reset(Language::Fr, "florian", reset_url).subject, "Réinitialisation de votre mot de passe ArtiFerris");
+        assert!(password_reset(Language::Fr, "florian", reset_url).text.contains("dans l'heure qui vient"));
     }
 
     #[test]

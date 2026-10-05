@@ -1,10 +1,10 @@
-import { TestBed } from '@angular/core/testing'
+import { ComponentFixture, TestBed } from '@angular/core/testing'
 import { By } from '@angular/platform-browser'
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { provideHttpClient } from '@angular/common/http'
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router'
 import { LoginPage } from './login-page'
-import { MfaEnrollmentPage } from '../mfa-enrollment/mfa-enrollment'
+import { AuthLogin } from '@masmarino/gabarit/auth-login'
 import { authProviders } from '../infrastructure/auth.providers'
 import { AuthService } from '../application/auth.service'
 
@@ -24,8 +24,9 @@ describe('LoginPage', () => {
     httpMock = TestBed.inject(HttpTestingController)
   })
 
-  // ngOnInit fires GET /api/auth/sso/config: flush it with { type: null } (local login) unless a
-  // test wants LDAP or OIDC.
+  // Opening the page fires GET /api/auth/sso/config: flush it with { type: null } (local login)
+  // unless a test wants LDAP or OIDC.
+  // The page and the kit's form share this one request.
   function flushSsoConfig(type: 'ldap' | 'oidc' | null = null, registrationEnabled = true): void {
     httpMock
       .expectOne('/api/auth/sso/config')
@@ -71,6 +72,26 @@ describe('LoginPage', () => {
     const fixture = TestBed.createComponent(LoginPage)
     expect(fixture.componentInstance).toBeTruthy()
   })
+
+  /** Fills and submits the kit's form, as a user would. */
+  function signIn(
+    fixture: ComponentFixture<LoginPage>,
+    username = 'florian',
+    password = 's3cret!',
+  ) {
+    const form = fixture.debugElement.query(By.directive(AuthLogin)).componentInstance as AuthLogin
+    form.username.set(username)
+    form['password'].set(password)
+    form.submit()
+  }
+
+  function clickOidcLink(fixture: ComponentFixture<LoginPage>): void {
+    const link: HTMLAnchorElement = fixture.nativeElement.querySelector(
+      'a[href="/api/auth/sso/oidc/login"]',
+    )
+    link.addEventListener('click', (event) => event.preventDefault())
+    link.click()
+  }
 
   function withReturnUrl(returnUrl: string | null): void {
     const route = TestBed.inject(ActivatedRoute)
@@ -159,11 +180,7 @@ describe('LoginPage', () => {
     flushSsoConfig('oidc')
     fixture.detectChanges()
 
-    const link: HTMLAnchorElement = fixture.nativeElement.querySelector(
-      'a[href="/api/auth/sso/oidc/login"]',
-    )
-    link.addEventListener('click', (event) => event.preventDefault())
-    link.click()
+    clickOidcLink(fixture)
 
     expect(sessionStorage.getItem('artiferris_sso_pending')).not.toBeNull()
   })
@@ -184,8 +201,7 @@ describe('LoginPage', () => {
     function loginAs(fixture: ReturnType<typeof TestBed.createComponent<LoginPage>>): void {
       fixture.detectChanges()
       flushSsoConfig()
-      fixture.componentInstance.form.setValue({ username: 'florian', password: 's3cret!' })
-      fixture.componentInstance.submit()
+      signIn(fixture)
       httpMock.expectOne('/api/auth/login').flush({
         token: 'a-jwt-token',
         mfa_token: null,
@@ -228,7 +244,8 @@ describe('LoginPage', () => {
       const fixture = TestBed.createComponent(LoginPage)
       fixture.detectChanges()
       flushSsoConfig('oidc')
-      fixture.componentInstance.startSso()
+      fixture.detectChanges()
+      clickOidcLink(fixture)
 
       window.location.hash = '#token=abc'
       const router = TestBed.inject(Router)
@@ -256,7 +273,7 @@ describe('LoginPage', () => {
     expect(router.navigateByUrl).not.toHaveBeenCalled()
   })
 
-  it('shows the "Créer un compte" link when registration is enabled', () => {
+  it('shows the "Créer un compte" link when registration is enabled', async () => {
     const fixture = TestBed.createComponent(LoginPage)
     fixture.detectChanges()
     flushSsoConfig(null, true)
@@ -274,7 +291,7 @@ describe('LoginPage', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Créer un compte')
   })
 
-  it('links to the public explorer', () => {
+  it('links to the public explorer, outside the panel', () => {
     const fixture = TestBed.createComponent(LoginPage)
     fixture.detectChanges()
     flushSsoConfig()
@@ -282,38 +299,31 @@ describe('LoginPage', () => {
 
     const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a[href="/explorer"]')
     expect(link.textContent).toContain('Explorer les paquets publics')
+    expect(link.closest('gbt-auth-login')).toBeNull()
   })
 
-  it('does not send a second login request when submit is called again while one is in flight', () => {
+  it('shows the notices first in the form', () => {
+    const route = TestBed.inject(ActivatedRoute)
+    route.snapshot = {
+      queryParamMap: convertToParamMap({ reason: 'sessions-revoked' }),
+    } as ActivatedRoute['snapshot']
     const fixture = TestBed.createComponent(LoginPage)
-    const component = fixture.componentInstance
     fixture.detectChanges()
     flushSsoConfig()
-    component.form.setValue({ username: 'florian', password: 's3cret!' })
+    fixture.detectChanges()
 
-    component.submit()
-    expect(component.submitting()).toBe(true)
-
-    // A second submit while the first is pending is a no-op (or expectOne would find two requests).
-    component.submit()
-
-    // If the guard didn't work, a second matching request would exist here and
-    // httpMock.expectOne would throw "matches multiple requests".
-    const req = httpMock.expectOne('/api/auth/login')
-    expect(req.request.method).toBe('POST')
+    const form: HTMLFormElement = fixture.nativeElement.querySelector('form')
+    expect(form.firstElementChild?.matches('[auth-notice]')).toBe(true)
   })
 
   it('posts to the LDAP endpoint when the organization uses LDAP', () => {
     const fixture = TestBed.createComponent(LoginPage)
-    const component = fixture.componentInstance
     fixture.detectChanges()
     flushSsoConfig('ldap')
-    component.form.setValue({ username: 'florian', password: 's3cret!' })
 
-    component.submit()
+    signIn(fixture)
 
     const req = httpMock.expectOne('/api/auth/sso/ldap')
-    expect(req.request.method).toBe('POST')
     expect(req.request.body).toEqual({ username: 'florian', password: 's3cret!' })
     req.flush({
       token: 'a-jwt-token',
@@ -324,7 +334,7 @@ describe('LoginPage', () => {
     })
   })
 
-  it('shows the OIDC redirect link when the organization uses OIDC', () => {
+  it('shows the OIDC redirect link, and no form, when the organization uses OIDC', () => {
     const fixture = TestBed.createComponent(LoginPage)
     fixture.detectChanges()
     flushSsoConfig('oidc')
@@ -333,86 +343,35 @@ describe('LoginPage', () => {
     const link: HTMLAnchorElement = fixture.nativeElement.querySelector(
       'a[href="/api/auth/sso/oidc/login"]',
     )
-    expect(link).toBeTruthy()
+    expect(link.textContent).toContain("Se connecter avec le fournisseur d'identité")
     expect(fixture.nativeElement.querySelector('form')).toBeNull()
+    expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Connexion')
   })
 
-  it('switches to the MFA code form when the login response requires a second factor', () => {
-    const fixture = TestBed.createComponent(LoginPage)
-    const component = fixture.componentInstance
-    fixture.detectChanges()
-    flushSsoConfig()
-    component.form.setValue({ username: 'florian', password: 's3cret!' })
-
-    component.submit()
-
-    httpMock.expectOne('/api/auth/login').flush({
-      token: null,
-      mfa_token: 'pending-token',
-      mfa_setup_required: false,
-      mfa_has_totp: true,
-      mfa_has_passkey: false,
-    })
-    fixture.detectChanges()
-
-    expect(component.mfaToken()).toBe('pending-token')
-  })
-
-  // Regression: a passkey-only account used to see an "enter your code" field, though it has no
-  // such code.
-  it('shows only the passkey button, not the code form, when the account has no TOTP', () => {
-    // passkeysSupported() is read at construction and jsdom has no WebAuthn: set this before
-    // creating the component.
-    Object.defineProperty(navigator, 'credentials', {
-      configurable: true,
-      value: { create: () => Promise.resolve() },
-    })
+  it('says the credentials are wrong on a 401, in French', async () => {
     const fixture = TestBed.createComponent(LoginPage)
     fixture.detectChanges()
     flushSsoConfig()
-    fixture.componentInstance.form.setValue({ username: 'florian', password: 's3cret!' })
-    fixture.componentInstance.submit()
-    httpMock.expectOne('/api/auth/login').flush({
-      token: null,
-      mfa_token: 'pending-token',
-      mfa_setup_required: false,
-      mfa_has_totp: false,
-      mfa_has_passkey: true,
-    })
+
+    signIn(fixture)
+    httpMock
+      .expectOne('/api/auth/login')
+      .flush({ error: 'invalid credentials' }, { status: 401, statusText: 'Unauthorized' })
     fixture.detectChanges()
 
-    expect(fixture.nativeElement.textContent).not.toContain('Code de vérification')
-    expect(fixture.nativeElement.textContent).toContain("Utiliser une clé d'accès")
+    expect(fixture.nativeElement.textContent).toContain(
+      "Nom d'utilisateur ou mot de passe incorrect",
+    )
   })
 
-  it('shows only the code form, not the passkey button, when the account has no passkey', () => {
-    const fixture = TestBed.createComponent(LoginPage)
-    fixture.detectChanges()
-    flushSsoConfig()
-    fixture.componentInstance.form.setValue({ username: 'florian', password: 's3cret!' })
-    fixture.componentInstance.submit()
-    httpMock.expectOne('/api/auth/login').flush({
-      token: null,
-      mfa_token: 'pending-token',
-      mfa_setup_required: false,
-      mfa_has_totp: true,
-      mfa_has_passkey: false,
-    })
-    fixture.detectChanges()
-
-    expect(fixture.nativeElement.textContent).toContain('Code de vérification')
-    expect(fixture.nativeElement.textContent).not.toContain("Utiliser une clé d'accès")
-  })
-
-  it('submits the TOTP code and redirects on success', () => {
-    const fixture = TestBed.createComponent(LoginPage)
-    const component = fixture.componentInstance
+  it('asks for the second factor, then signs in and goes home', () => {
     const router = TestBed.inject(Router)
     vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
+    const fixture = TestBed.createComponent(LoginPage)
     fixture.detectChanges()
     flushSsoConfig()
-    component.form.setValue({ username: 'florian', password: 's3cret!' })
-    component.submit()
+
+    signIn(fixture)
     httpMock.expectOne('/api/auth/login').flush({
       token: null,
       mfa_token: 'pending-token',
@@ -421,17 +380,20 @@ describe('LoginPage', () => {
       mfa_has_passkey: false,
     })
     fixture.detectChanges()
+    expect(fixture.nativeElement.querySelector('h1').textContent).toContain(
+      'Vérification en deux étapes',
+    )
 
-    component.mfaForm.setValue({ code: '123456' })
-    component.submitMfa()
-
-    const req = httpMock.expectOne('/api/auth/mfa/verify')
-    expect(req.request.body).toEqual({
+    const form = fixture.debugElement.query(By.directive(AuthLogin)).componentInstance as AuthLogin
+    form['code'].set('123456')
+    form.verify()
+    const verify = httpMock.expectOne('/api/auth/mfa/verify')
+    expect(verify.request.body).toEqual({
       mfa_token: 'pending-token',
       code: '123456',
       backup_code: undefined,
     })
-    req.flush({
+    verify.flush({
       token: 'a-jwt-token',
       mfa_token: null,
       mfa_setup_required: false,
@@ -439,164 +401,16 @@ describe('LoginPage', () => {
       mfa_has_passkey: false,
     })
 
+    expect(TestBed.inject(AuthService).token()).toBe('a-jwt-token')
     expect(router.navigateByUrl).toHaveBeenCalledWith('/')
   })
 
-  it('submits a backup code instead of a TOTP code once toggled', () => {
+  it('takes an account without a second factor through the enrolment', () => {
     const fixture = TestBed.createComponent(LoginPage)
-    const component = fixture.componentInstance
     fixture.detectChanges()
     flushSsoConfig()
-    component.form.setValue({ username: 'florian', password: 's3cret!' })
-    component.submit()
-    httpMock.expectOne('/api/auth/login').flush({
-      token: null,
-      mfa_token: 'pending-token',
-      mfa_setup_required: false,
-      mfa_has_totp: true,
-      mfa_has_passkey: false,
-    })
-    fixture.detectChanges()
 
-    component.toggleBackupCode()
-    component.mfaForm.setValue({ code: 'abc123' })
-    component.submitMfa()
-
-    const req = httpMock.expectOne('/api/auth/mfa/verify')
-    expect(req.request.body).toEqual({
-      mfa_token: 'pending-token',
-      code: undefined,
-      backup_code: 'abc123',
-    })
-    req.flush({
-      token: 'a-jwt-token',
-      mfa_token: null,
-      mfa_setup_required: false,
-      mfa_has_totp: false,
-      mfa_has_passkey: false,
-    })
-  })
-
-  it('shows an error message when the mfa code is rejected', () => {
-    const fixture = TestBed.createComponent(LoginPage)
-    const component = fixture.componentInstance
-    fixture.detectChanges()
-    flushSsoConfig()
-    component.form.setValue({ username: 'florian', password: 's3cret!' })
-    component.submit()
-    httpMock.expectOne('/api/auth/login').flush({
-      token: null,
-      mfa_token: 'pending-token',
-      mfa_setup_required: false,
-      mfa_has_totp: true,
-      mfa_has_passkey: false,
-    })
-    fixture.detectChanges()
-
-    component.mfaForm.setValue({ code: '000000' })
-    component.submitMfa()
-    httpMock
-      .expectOne('/api/auth/mfa/verify')
-      .flush(null, { status: 401, statusText: 'Unauthorized' })
-    fixture.detectChanges()
-
-    expect(fixture.nativeElement.textContent).toContain('Code invalide.')
-  })
-
-  it.each([
-    [503, 'Service momentanément occupé, réessayez'],
-    [429, 'Trop de tentatives, réessayez plus tard.'],
-    [401, 'Identifiants invalides'],
-  ])('shows the right message when the login answers a %i', (status, message) => {
-    const fixture = TestBed.createComponent(LoginPage)
-    const component = fixture.componentInstance
-    fixture.detectChanges()
-    flushSsoConfig()
-    component.form.setValue({ username: 'florian', password: 's3cret!' })
-
-    component.submit()
-    httpMock.expectOne('/api/auth/login').flush({ error: 'x' }, { status, statusText: 'x' })
-    fixture.detectChanges()
-
-    expect(fixture.nativeElement.textContent).toContain(message)
-    expect(component.submitting()).toBe(false)
-  })
-
-  it('logs in with a passkey when the second factor is a passkey', async () => {
-    Object.defineProperty(navigator, 'credentials', {
-      configurable: true,
-      value: {
-        get: () =>
-          Promise.resolve({
-            id: 'cred-1',
-            type: 'public-key',
-            rawId: new Uint8Array([1, 2, 3]).buffer,
-            response: {
-              authenticatorData: new Uint8Array([4, 5, 6]).buffer,
-              clientDataJSON: new Uint8Array([7, 8, 9]).buffer,
-              signature: new Uint8Array([10, 11, 12]).buffer,
-              userHandle: null,
-            },
-          }),
-      },
-    })
-    const fixture = TestBed.createComponent(LoginPage)
-    const component = fixture.componentInstance
-    const router = TestBed.inject(Router)
-    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
-    fixture.detectChanges()
-    flushSsoConfig()
-    component.form.setValue({ username: 'florian', password: 's3cret!' })
-    component.submit()
-    httpMock.expectOne('/api/auth/login').flush({
-      token: null,
-      mfa_token: 'pending-token',
-      mfa_setup_required: false,
-      mfa_has_totp: false,
-      mfa_has_passkey: true,
-    })
-    fixture.detectChanges()
-
-    const loginPromise = component.submitPasskey()
-
-    const startReq = httpMock.expectOne('/api/auth/mfa/passkey/start')
-    expect(startReq.request.body).toEqual({ mfa_token: 'pending-token' })
-    startReq.flush({
-      challenge_id: 'challenge-1',
-      public_key: {
-        challenge: 'AQID',
-        rpId: 'x',
-        allowCredentials: [],
-        userVerification: 'required',
-      },
-    })
-    await new Promise((resolve) => setTimeout(resolve, 0))
-
-    const finishReq = httpMock.expectOne('/api/auth/mfa/passkey/finish')
-    expect(finishReq.request.body.mfa_token).toBe('pending-token')
-    expect(finishReq.request.body.challenge_id).toBe('challenge-1')
-    finishReq.flush({
-      token: 'a-jwt-token',
-      mfa_token: null,
-      mfa_setup_required: false,
-      mfa_has_totp: false,
-      mfa_has_passkey: false,
-    })
-    await loginPromise
-
-    expect(router.navigateByUrl).toHaveBeenCalledWith('/')
-
-    Object.defineProperty(navigator, 'credentials', { configurable: true, value: undefined })
-  })
-
-  it('renders app-mfa-enrollment with the pending mfa token when the account has no second factor enrolled yet', () => {
-    const fixture = TestBed.createComponent(LoginPage)
-    const component = fixture.componentInstance
-    fixture.detectChanges()
-    flushSsoConfig()
-    component.form.setValue({ username: 'florian', password: 's3cret!' })
-
-    component.submit()
+    signIn(fixture)
     httpMock.expectOne('/api/auth/login').flush({
       token: null,
       mfa_token: 'pending-token',
@@ -606,22 +420,7 @@ describe('LoginPage', () => {
     })
     fixture.detectChanges()
 
-    expect(component.mfaSetupRequired()).toBe(true)
-    const enrollment = fixture.debugElement.query(By.directive(MfaEnrollmentPage))
-    expect(enrollment).toBeTruthy()
-    expect((enrollment.componentInstance as MfaEnrollmentPage).mfaToken()).toBe('pending-token')
-  })
-
-  it('redirects home when the extracted enrollment component reports completion', () => {
-    const fixture = TestBed.createComponent(LoginPage)
-    const component = fixture.componentInstance
-    const router = TestBed.inject(Router)
-    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
-    fixture.detectChanges()
-    flushSsoConfig()
-
-    component.onEnrollmentCompleted()
-
-    expect(router.navigateByUrl).toHaveBeenCalledWith('/')
+    expect(fixture.nativeElement.querySelector('gbt-mfa-enrollment')).not.toBeNull()
+    expect(TestBed.inject(AuthService).token()).toBeNull()
   })
 })

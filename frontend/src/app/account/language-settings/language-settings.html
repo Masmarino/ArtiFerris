@@ -1,8 +1,18 @@
-<gbt-card [heading]="'account.language.heading' | transloco" icon="globe">
+<div class="language-settings__field">
   <gbt-select
     [label]="'account.language.label' | transloco"
     [options]="options"
     [ngModel]="current()"
     (ngModelChange)="choose($event)"
   />
-</gbt-card>
+  <div class="language-settings__footer">
+    <p class="language-settings__hint">{{ 'account.language.hint' | transloco }}</p>
+    <!-- Always in the DOM: a live region only announces changes if it already exists. -->
+    <gbt-save-status
+      [state]="state()"
+      [savingLabel]="'account.save.saving' | transloco"
+      [savedLabel]="'account.save.saved' | transloco"
+      [errorLabel]="'account.save.error' | transloco"
+    />
+  </div>
+</div>

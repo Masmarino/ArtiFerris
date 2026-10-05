@@ -6,4 +6,6 @@ export interface MeResponse {
   organization_id: string
   created_at: string
   language?: string | null
+  /** The address ArtiFerris writes to, once verified; `null` otherwise (`undefined` from an older server). */
+  email?: string | null
 }

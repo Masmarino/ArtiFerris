@@ -4,7 +4,8 @@ import { MeResponse } from '../domain/me.entity'
 
 export interface MePort {
   load(): Observable<MeResponse>
-  changePassword(currentPassword: string, newPassword: string): Observable<void>
+  /** The change ends every session, the caller's included: the answer is a fresh one for the caller. */
+  changePassword(currentPassword: string, newPassword: string): Observable<{ token: string }>
   setLanguage(language: string): Observable<void>
 }
 

@@ -32,6 +32,17 @@ impl std::fmt::Debug for TotpCredential {
 #[async_trait]
 pub trait TotpCredentialPort: Send + Sync {
     async fn get(&self, user_id: Uuid) -> Result<Option<TotpCredential>, DomainError>;
+    /// Batched, for a list of accounts: which of these users have a confirmed authenticator app. No secret is read.
+    /// One lookup per user by default; a store overrides it with a single query.
+    async fn confirmed_among(&self, user_ids: &[Uuid]) -> Result<std::collections::HashSet<Uuid>, DomainError> {
+        let mut confirmed = std::collections::HashSet::new();
+        for &user_id in user_ids {
+            if self.get(user_id).await?.is_some_and(|credential| credential.confirmed) {
+                confirmed.insert(user_id);
+            }
+        }
+        Ok(confirmed)
+    }
     /// Stores an unconfirmed credential, replacing an earlier unconfirmed one. `false` when the user already has a confirmed one.
     async fn begin_enrollment(&self, user_id: Uuid, secret: &str, created_at: DateTime<Utc>) -> Result<bool, DomainError>;
     /// Confirms the attempt started at `enrollment_created_at` and records `step` as used. `false` if a newer attempt replaced it or it's already confirmed.

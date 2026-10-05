@@ -41,6 +41,7 @@ describe('OrganizationMembersService', () => {
         email: 'florian@example.com',
         is_organization_admin: false,
         invitation_pending: true,
+        email_sent: true,
       }),
     )
     const service = setup({ list, invite })

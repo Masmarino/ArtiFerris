@@ -11,16 +11,13 @@ import {
 } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { forkJoin } from 'rxjs'
-import {
-  Alert,
-  Button,
-  Card,
-  GbtInput,
-  Select,
-  SelectOption,
-  Spinner,
-  Tooltip,
-} from '@masmarino/gabarit'
+import { Alert } from '@masmarino/gabarit/alert'
+import { Button } from '@masmarino/gabarit/button'
+import { Card } from '@masmarino/gabarit/card'
+import { GbtInput } from '@masmarino/gabarit/input'
+import { Select, SelectOption } from '@masmarino/gabarit/select'
+import { Spinner } from '@masmarino/gabarit/spinner'
+import { Tooltip } from '@masmarino/gabarit/tooltip'
 import { PageTitleService } from '../../shell/page-title.service'
 import { OrganizationsService } from '../application/organizations.service'
 import { IdentityProviderSummary, OrganizationSummary } from '../domain/organization.entity'

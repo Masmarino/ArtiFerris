@@ -4,6 +4,7 @@ import {
   Component,
   booleanAttribute,
   computed,
+  effect,
   inject,
   input,
   model,
@@ -11,7 +12,9 @@ import {
   signal,
 } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
+import { FormControl, ReactiveFormsModule } from '@angular/forms'
 import { Router } from '@angular/router'
+import { GbtInput, type InputCombobox } from '@masmarino/gabarit/input'
 import { Observable, Subject, catchError, of, switchMap, timer } from 'rxjs'
 import { formatSuggestionsAnnouncement } from '../../../shared/format'
 import { CatalogService } from '../application/catalog.service'
@@ -33,7 +36,7 @@ let nextId = 0
  * emits `search`.
  */
 @Component({
-  imports: [TranslocoPipe],
+  imports: [TranslocoPipe, GbtInput, ReactiveFormsModule],
   selector: 'app-suggest-search-box',
   standalone: true,
   templateUrl: './suggest-search-box.html',
@@ -61,6 +64,8 @@ export class SuggestSearchBox {
 
   readonly inputId = `suggest-search-${nextId++}`
   readonly listboxId = `${this.inputId}-listbox`
+  /** Gabarit's field, kept in step with `value` both ways. */
+  protected readonly field = new FormControl('', { nonNullable: true })
 
   private readonly results = signal<CatalogSuggestion[] | null>(null)
   /** The server limited the last request, so an empty list is not "no match". */
@@ -76,6 +81,11 @@ export class SuggestSearchBox {
   readonly activeDescendant = computed(() =>
     this.expanded() && this.activeIndex() >= 0 ? this.optionId(this.activeIndex()) : null,
   )
+  readonly combobox = computed<InputCombobox>(() => ({
+    expanded: this.expanded(),
+    controls: this.listboxId,
+    activeDescendant: this.activeDescendant(),
+  }))
   readonly announcement = computed(() => {
     if (!this.open()) {
       return ''
@@ -84,6 +94,13 @@ export class SuggestSearchBox {
   })
 
   constructor() {
+    effect(() => {
+      const value = this.value()
+      if (value !== this.field.value) {
+        this.field.setValue(value, { emitEvent: false })
+      }
+    })
+    this.field.valueChanges.pipe(takeUntilDestroyed()).subscribe((text) => this.onInput(text))
     this.typed
       .pipe(
         switchMap((text) => this.fetch(text)),
@@ -100,8 +117,7 @@ export class SuggestSearchBox {
     return CATALOGS.find((catalog) => catalog.format === kind)?.label ?? kind
   }
 
-  onInput(event: Event): void {
-    const text = (event.target as HTMLInputElement).value
+  onInput(text: string): void {
     this.value.set(text)
     this.dismissed = false
     this.stale = true

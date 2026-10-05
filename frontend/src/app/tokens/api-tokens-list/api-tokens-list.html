@@ -1,88 +1,175 @@
-<p [innerHTML]="'tokens.intro' | transloco"></p>
-
-@if (tokens().length === 0) {
-  <gbt-empty-state
-    illustration="star"
-    [heading]="'tokens.empty.heading' | transloco"
-    [message]="'tokens.empty.message' | transloco"
-  >
-    <gbt-button [text]="'tokens.new' | transloco" (clicked)="showCreateForm.set(true)" />
-  </gbt-empty-state>
-} @else {
-  <gbt-button [text]="'tokens.new' | transloco" (clicked)="showCreateForm.set(true)" />
-  <gbt-table
-    [caption]="'tokens.table.caption' | transloco"
-    [clickableRows]="true"
-    [data]="tokens()"
-    [columns]="columns"
-    [trackBy]="rowId"
-    (rowClick)="revokeToken($event)"
-  />
-}
-@if (loadError(); as message) {
-  <p class="gbt-form-error" role="alert">{{ message }}</p>
-}
-@if (revokeError(); as message) {
-  <p class="gbt-form-error" role="alert">{{ message }}</p>
-}
-
-@if (showCreateForm()) {
-  <gbt-modal
-    [isOpen]="true"
-    [heading]="'tokens.create.heading' | transloco"
-    [closeLabel]="'common.close' | transloco"
-    (closed)="closeCreateForm()"
-  >
-    <p class="gbt-form-required-note">{{ 'common.requiredNote' | transloco }}</p>
-    <gbt-input
-      [label]="'tokens.create.name' | transloco"
-      [formControl]="newLabel"
-      [required]="true"
-    />
-    @if (newLabel.hasError('maxlength')) {
-      <p class="gbt-form-error" role="alert">
-        {{ 'tokens.create.labelTooLong' | transloco: { max: maxLabelLength } }}
-      </p>
-    }
-    <gbt-input
-      [label]="'tokens.create.password' | transloco"
-      type="password"
-      autocomplete="current-password"
-      [showPasswordLabel]="'common.showPassword' | transloco"
-      [hidePasswordLabel]="'common.hidePassword' | transloco"
-      [formControl]="newPassword"
-    />
+<gbt-card
+  variant="outlined"
+  icon="plus"
+  [heading]="'tokens.create.heading' | transloco"
+  [description]="'tokens.create.description' | transloco"
+>
+  <form class="api-tokens-list__form" (submit)="$event.preventDefault(); createToken()">
+    <div class="api-tokens-list__fields">
+      <gbt-input
+        #nameField
+        class="api-tokens-list__name"
+        [label]="'tokens.create.name' | transloco"
+        mono
+        [placeholder]="'tokens.create.namePlaceholder' | transloco"
+        autocomplete="off"
+        [formControl]="newLabel"
+        [errorMessage]="labelError()"
+      />
+      <gbt-input
+        class="api-tokens-list__password"
+        [label]="'tokens.create.password' | transloco"
+        type="password"
+        autocomplete="current-password"
+        [showPasswordLabel]="'common.showPassword' | transloco"
+        [hidePasswordLabel]="'common.hidePassword' | transloco"
+        [formControl]="newPassword"
+      />
+      <gbt-button
+        class="api-tokens-list__submit"
+        type="submit"
+        iconName="key"
+        [text]="'tokens.create.submit' | transloco"
+        [loadingLabel]="'common.loadingLabel' | transloco"
+        [disabled]="!typedLabel().trim()"
+        [loading]="creatingToken()"
+      />
+    </div>
     <p class="api-tokens-list__hint">
       {{
-        (lifetimeDays() === 365 ? 'tokens.create.expiresFull' : 'tokens.create.expiresShort')
-          | transloco: { days: lifetimeDays() }
+        (lifetimeDays() === longLifetime
+          ? 'tokens.create.expiresFull'
+          : 'tokens.create.expiresShort'
+        ) | transloco: { days: lifetimeDays() }
       }}
     </p>
     @if (createError(); as message) {
-      <p class="gbt-form-error" role="alert">{{ message }}</p>
+      <gbt-alert variant="error" appearance="subtle">{{ message }}</gbt-alert>
     }
-    <gbt-button
-      [text]="'tokens.create.submit' | transloco"
-      (clicked)="createToken()"
-      [disabled]="newLabel.invalid"
-      [loading]="creatingToken()"
-      [loadingLabel]="'common.loadingLabel' | transloco"
-    />
-  </gbt-modal>
+  </form>
+</gbt-card>
+
+@if (created(); as token) {
+  <gbt-card
+    #revealCard
+    class="api-tokens-list__revealed"
+    variant="outlined"
+    tone="success"
+    icon="check"
+    [heading]="'tokens.created.heading' | transloco: { label: token.label }"
+    [description]="'tokens.created.description' | transloco: { days: token.days }"
+  >
+    <div class="api-tokens-list__reveal">
+      <gbt-copy-field
+        class="api-tokens-list__token"
+        [value]="token.token"
+        [copyLabel]="'tokens.created.copy' | transloco"
+        [copiedText]="'tokens.created.copied' | transloco"
+        [failedText]="'tokens.created.copyFailed' | transloco"
+      />
+      <div class="api-tokens-list__reveal-footer">
+        <gbt-alert class="api-tokens-list__warning" variant="warning">{{
+          'tokens.created.warning' | transloco
+        }}</gbt-alert>
+        <gbt-button
+          variant="secondary"
+          size="small"
+          iconName="check"
+          [text]="'tokens.created.done' | transloco"
+          (clicked)="dismissCreatedToken()"
+        />
+      </div>
+    </div>
+  </gbt-card>
 }
 
-@if (createdToken(); as token) {
-  <gbt-modal
-    [isOpen]="true"
-    [heading]="'tokens.created.heading' | transloco"
-    [closeLabel]="'common.close' | transloco"
-    (closed)="dismissCreatedToken()"
-  >
-    <p>{{ 'tokens.created.copyNow' | transloco }}</p>
-    <p class="api-tokens-list__hint">
-      {{ 'tokens.created.expires' | transloco: { days: createdTokenDays() } }}
-    </p>
-    <pre>{{ token }}</pre>
-    <gbt-button [text]="'tokens.created.done' | transloco" (clicked)="dismissCreatedToken()" />
-  </gbt-modal>
-}
+<gbt-card
+  #listCard
+  variant="outlined"
+  icon="key"
+  [heading]="'tokens.list.heading' | transloco"
+  [description]="'tokens.list.description' | transloco"
+  [count]="listState() === 'loaded' ? tokens().length : null"
+  [flush]="listState() !== 'failed'"
+>
+  @switch (listState()) {
+    @case ('loading') {
+      <gbt-skeleton-list
+        [rows]="2"
+        leadingSize="1rem"
+        [loadingLabel]="'tokens.list.loading' | transloco"
+      />
+    }
+    @case ('failed') {
+      <gbt-alert variant="error" appearance="subtle" live="off">
+        {{ 'tokens.errors.loadFailed' | transloco }}
+        <gbt-button
+          alert-actions
+          variant="secondary"
+          size="small"
+          [text]="'tokens.list.retry' | transloco"
+          (clicked)="retry()"
+        />
+      </gbt-alert>
+    }
+    @default {
+      @if (tokens().length === 0) {
+        <gbt-empty-state
+          size="compact"
+          icon="key"
+          [heading]="'tokens.empty.heading' | transloco"
+          [message]="'tokens.empty.message' | transloco"
+        />
+      } @else {
+        <ul class="api-tokens-list__rows" [attr.aria-label]="'tokens.list.heading' | transloco">
+          @for (token of tokens(); track token.id) {
+            <li>
+              <gbt-list-row>
+                <gbt-icon row-leading name="key" aria-hidden="true" />
+                <span class="api-tokens-list__token-name" [title]="token.label">{{
+                  token.label
+                }}</span>
+                @if (token.id === created()?.id) {
+                  <gbt-badge variant="info" icon="sparkles">{{
+                    'tokens.created.badge' | transloco
+                  }}</gbt-badge>
+                }
+                <span row-meta class="api-tokens-list__meta">
+                  <time
+                    class="api-tokens-list__created"
+                    [attr.datetime]="token.created_at"
+                    [title]="token.created_at | date: 'medium'"
+                    >{{ createdLabel(token) }}</time
+                  >
+                  @if (token.last_used_at; as lastUsed) {
+                    <time
+                      class="api-tokens-list__last-used"
+                      [attr.datetime]="lastUsed"
+                      [title]="lastUsed | date: 'medium'"
+                      >{{ lastUsedLabel(lastUsed) }}</time
+                    >
+                  } @else {
+                    <span class="api-tokens-list__last-used api-tokens-list__last-used--never">{{
+                      'tokens.list.neverUsed' | transloco
+                    }}</span>
+                  }
+                </span>
+                <gbt-button
+                  row-trailing
+                  class="api-tokens-list__revoke"
+                  variant="ghost-danger"
+                  size="medium"
+                  [iconOnly]="true"
+                  iconName="trash-2"
+                  [title]="'tokens.revoke.confirm' | transloco"
+                  [ariaLabel]="'tokens.revoke.label' | transloco: { label: token.label }"
+                  (clicked)="revokeToken(token)"
+                />
+              </gbt-list-row>
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+</gbt-card>

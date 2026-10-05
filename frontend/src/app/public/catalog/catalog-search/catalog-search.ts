@@ -15,13 +15,10 @@ import {
 } from '@angular/core'
 import { rxResource, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Params, Router } from '@angular/router'
-import {
-  Button,
-  EmptyState,
-  SegmentedControl,
-  SegmentedControlOption,
-  Spinner,
-} from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { EmptyState } from '@masmarino/gabarit/empty-state'
+import { SegmentedControl, SegmentedControlOption } from '@masmarino/gabarit/segmented-control'
+import { Spinner } from '@masmarino/gabarit/spinner'
 import { formatResultsAnnouncement } from '../../../shared/format'
 import { CatalogService } from '../application/catalog.service'
 import { CATALOG_OVERLOAD } from '../domain/catalog-overload'

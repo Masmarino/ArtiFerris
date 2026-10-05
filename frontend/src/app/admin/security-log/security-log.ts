@@ -13,16 +13,12 @@ import {
 import { formatLocalizedDate } from '../../shared/i18n/localized-date'
 import { HttpErrorResponse } from '@angular/common/http'
 import { Subscription, last, tap } from 'rxjs'
-import {
-  Button,
-  Card,
-  DimensionCard,
-  type DimensionRow,
-  EmptyState,
-  Spinner,
-  Table,
-  TableColumn,
-} from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
+import { Card } from '@masmarino/gabarit/card'
+import { DimensionCard, type DimensionRow } from '@masmarino/gabarit/dimension-card'
+import { EmptyState } from '@masmarino/gabarit/empty-state'
+import { Spinner } from '@masmarino/gabarit/spinner'
+import { Table, TableColumn } from '@masmarino/gabarit/table'
 import { AuditService } from '../application/audit.service'
 import { AuditEntry, BlockedAccount } from '../domain/audit.entity'
 import { describeBlockedAccount } from '../domain/blocked-account'

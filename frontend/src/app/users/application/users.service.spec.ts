@@ -64,9 +64,22 @@ describe('UsersService', () => {
     expect(list).toHaveBeenCalledTimes(2)
   })
 
+  it('resetMfa() clears the cached list, which shows who has a second factor', () => {
+    const list = vi.fn().mockReturnValue(of([]))
+    const resetMfa = vi.fn().mockReturnValue(of(undefined))
+    const service = setup({ list, resetMfa })
+
+    service.list().subscribe()
+    service.resetMfa('user-1').subscribe()
+    service.list().subscribe()
+
+    expect(resetMfa).toHaveBeenCalledWith('user-1')
+    expect(list).toHaveBeenCalledTimes(2)
+  })
+
   it('resendInvitation() does not clear the cached list (it does not change list-visible fields)', () => {
     const list = vi.fn().mockReturnValue(of([]))
-    const resendInvitation = vi.fn().mockReturnValue(of(undefined))
+    const resendInvitation = vi.fn().mockReturnValue(of({ email_sent: true }))
     const service = setup({ list, resendInvitation })
 
     service.list().subscribe()
@@ -98,7 +111,7 @@ describe('UsersService', () => {
   })
 
   it('delegates resendInvitation() to the port', () => {
-    const resendInvitation = vi.fn().mockReturnValue(of(undefined))
+    const resendInvitation = vi.fn().mockReturnValue(of({ email_sent: true }))
     setup({ resendInvitation }).resendInvitation('user-1')
 
     expect(resendInvitation).toHaveBeenCalledWith('user-1')

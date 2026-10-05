@@ -4,7 +4,7 @@ describe('FormatBytesPipe', () => {
   const pipe = new FormatBytesPipe()
 
   it('formats a size', () => {
-    expect(pipe.transform(1536)).toBe('1.5 Ko')
+    expect(pipe.transform(1536)).toBe('1,5 Ko')
   })
 
   it('shows a dash when the size is unknown', () => {

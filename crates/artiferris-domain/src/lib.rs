@@ -28,4 +28,5 @@ pub mod email;
 pub mod invitation;
 pub mod metrics_snapshot;
 pub mod mfa;
+pub mod password_reset;
 pub mod system_settings;

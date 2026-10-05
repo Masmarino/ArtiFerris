@@ -1,6 +1,6 @@
 import { t } from './i18n/translator'
 import { Pipe, PipeTransform } from '@angular/core'
-import type { SelectOption } from '@masmarino/gabarit'
+import type { SelectOption } from '@masmarino/gabarit/select'
 
 // Case-insensitive, and "medium" is "moderate" (npm vs Trivy).
 const SEVERITY_RANK: Record<string, number> = {

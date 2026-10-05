@@ -1,46 +1,217 @@
-@if (isSuperAdmin()) {
-  <div class="toolbar">
-    <gbt-button [text]="'users.list.new' | transloco" (clicked)="showCreateModal.set(true)" />
-    <gbt-select
-      [label]="'users.list.organization' | transloco"
-      [placeholder]="'common.select' | transloco"
-      [options]="organizationOptions()"
-      [ngModel]="selectedOrganizationId()"
-      (ngModelChange)="selectedOrganizationId.set($event)"
+<app-page-heading>
+  <!-- Always rendered, blank until the counts arrive, so the page doesn't shift. -->
+  <p header-meta class="users-list__summary">{{ summary() ?? ' ' }}</p>
+  @if (isSuperAdmin()) {
+    <gbt-button
+      header-actions
+      class="users-list__invite"
+      iconName="user-plus"
+      [text]="'users.list.invite' | transloco"
+      (clicked)="showCreateModal.set(true)"
     />
-  </div>
-}
-@if (loading()) {
-  <div class="loading-state"><gbt-spinner [label]="'common.loading' | transloco" /></div>
-} @else if (error(); as message) {
-  <p class="gbt-form-error" role="alert">{{ message }}</p>
-  <gbt-button [text]="'common.retry' | transloco" (clicked)="reload()" />
-} @else if (users().length === 0) {
-  <gbt-empty-state
-    illustration="folder"
-    [heading]="'users.list.emptyHeading' | transloco"
-    [message]="'users.list.emptyMessage' | transloco"
-  >
-    @if (isSuperAdmin()) {
-      <gbt-button [text]="'users.list.new' | transloco" (clicked)="showCreateModal.set(true)" />
+  }
+</app-page-heading>
+
+<gbt-page-layout width="wide" asideWidth="sm">
+  <div class="users-list__main">
+    @if (mailFailure(); as failure) {
+      <app-link-mail-failed
+        dismissible
+        [name]="failure.name"
+        [mail]="failure.mail"
+        [kind]="failure.kind"
+        (dismissed)="mailFailure.set(null)"
+      />
     }
-  </gbt-empty-state>
-} @else if (filteredUsers().length === 0) {
-  <gbt-empty-state
-    illustration="folder"
-    [heading]="'users.list.noResultsHeading' | transloco"
-    [message]="'users.list.noResultsMessage' | transloco"
-  />
-} @else {
-  <gbt-table
-    [caption]="'users.list.caption' | transloco"
-    [clickableRows]="true"
-    [data]="filteredUsers()"
-    [columns]="columns()"
-    [trackBy]="rowId"
-    (rowClick)="openDetail($event)"
-  />
-}
+    @if (toolbarShown() || isSuperAdmin()) {
+      <div class="users-list__filters">
+        @if (toolbarShown()) {
+          <gbt-list-toolbar
+            class="users-list__toolbar"
+            [class.users-list__toolbar--idle]="!toolbarActive()"
+            [attr.inert]="toolbarActive() ? null : ''"
+            [searchLabel]="'users.list.searchLabel' | transloco"
+            [searchPlaceholder]="'users.list.searchPlaceholder' | transloco"
+            [sortLabel]="'users.list.sortLabel' | transloco"
+            [directionLabel]="'users.list.directionLabel' | transloco"
+            [searchValue]="search()"
+            [sortOptions]="sortOptions"
+            [sortValue]="sortValue()"
+            [sortDirection]="direction()"
+            (searchValueChange)="search.set($event)"
+            (sortValueChange)="sortValue.set($event)"
+            (sortDirectionChange)="direction.set($event)"
+          />
+        }
+        @if (isSuperAdmin()) {
+          <gbt-select
+            class="users-list__organization"
+            [label]="'users.list.organization' | transloco"
+            [options]="organizationOptions()"
+            [ngModel]="selectedOrganizationId()"
+            (ngModelChange)="selectedOrganizationId.set($event)"
+          />
+        }
+      </div>
+    }
+
+    <gbt-list-card
+      [ariaLabel]="'users.list.cardLabel' | transloco"
+      [state]="cardState()"
+      [loadingLabel]="'users.list.loading' | transloco"
+      [failedHeading]="'users.list.errors.loadFailed' | transloco"
+      [retryLabel]="'common.retry' | transloco"
+      emptyIllustration="checklist"
+      [emptyHeading]="'users.list.emptyHeading' | transloco"
+      [emptyMessage]="
+        (isSuperAdmin() ? 'users.list.emptyMessage' : 'users.list.emptyMessageMember') | transloco
+      "
+      (retry)="retryLoad()"
+    >
+      <gbt-segmented-control
+        list-card-header
+        class="users-list__tabs"
+        [ariaLabel]="'users.list.filterLabel' | transloco"
+        tinted
+        [options]="filterOptions()"
+        [value]="filter()"
+        (valueChange)="filter.set($event)"
+      />
+
+      @if (hasNoResults()) {
+        <p list-card-message>{{ noResultsText() }}</p>
+      } @else {
+        <ul class="users-list__rows" [attr.aria-label]="'users.list.caption' | transloco">
+          @for (row of rows(); track row.user.id) {
+            <li [attr.data-user-id]="row.user.id" tabindex="-1">
+              <gbt-list-row [attr.aria-busy]="row.busy ? 'true' : null">
+                @if (row.link; as link) {
+                  <a class="users-list__user-link" [routerLink]="link"
+                    ><gbt-user-chip [name]="row.name"
+                  /></a>
+                } @else {
+                  <gbt-user-chip [name]="row.name" />
+                }
+                @if (row.user.is_super_admin) {
+                  <gbt-badge [variant]="superAdmin().variant" [icon]="superAdmin().icon">{{
+                    superAdmin().label
+                  }}</gbt-badge>
+                }
+                @if (row.isSelf) {
+                  <gbt-badge variant="neutral">{{ 'users.list.you' | transloco }}</gbt-badge>
+                }
+
+                <span row-meta class="users-list__meta">
+                  <!-- An invitation is named by its address already: the chip shows it. -->
+                  @if (row.user.email && !row.user.invitation_pending) {
+                    <span class="users-list__email" [title]="row.user.email">{{
+                      row.user.email
+                    }}</span>
+                  }
+                  @if (row.organization; as organization) {
+                    <span class="users-list__segment">{{ organization }}</span>
+                  }
+                  <span class="users-list__segment users-list__created"
+                    ><time [attr.datetime]="row.created.iso" [title]="row.created.title">{{
+                      row.created.label
+                    }}</time></span
+                  >
+                  @if (row.expiry; as expiry) {
+                    <span class="users-list__segment users-list__expiry"
+                      ><time [attr.datetime]="expiry.iso" [title]="expiry.title">{{
+                        expiry.label
+                      }}</time></span
+                    >
+                  }
+                </span>
+
+                <span row-trailing class="users-list__trailing">
+                  <span class="users-list__badges">
+                    <gbt-badge [variant]="row.state.variant" [icon]="row.state.icon">{{
+                      row.state.label
+                    }}</gbt-badge>
+                    @if (row.mfa; as mfa) {
+                      <gbt-badge [variant]="mfa.variant" [icon]="mfa.icon">{{
+                        mfa.label
+                      }}</gbt-badge>
+                    }
+                  </span>
+                  <!-- Every row keeps its actions column (a menu, a spinner, or the room for them) so all rows end on the same edge. -->
+                  @if (row.busy; as busyLabel) {
+                    <span class="users-list__busy"
+                      ><gbt-spinner size="sm" [label]="busyLabel"
+                    /></span>
+                  } @else if (
+                    row.canResend || row.canResetPassword || row.canResetMfa || row.adminAction
+                  ) {
+                    <gbt-menu
+                      class="users-list__menu"
+                      [label]="row.menuLabel"
+                      triggerIcon="ellipsis-vertical"
+                      align="end"
+                    >
+                      @if (row.canResend) {
+                        <button gbtMenuItem icon="send" (click)="resend(row)">
+                          {{ 'users.detail.resend' | transloco }}
+                        </button>
+                      }
+                      @if (row.canResetPassword) {
+                        <button gbtMenuItem icon="key" (click)="resetPassword(row)">
+                          {{ 'users.passwordReset.heading' | transloco }}
+                        </button>
+                      }
+                      @if (row.canResetMfa) {
+                        <button gbtMenuItem icon="shield-alert" (click)="resetMfa(row)">
+                          {{ 'users.mfaReset.heading' | transloco }}
+                        </button>
+                      }
+                      @if (row.adminAction; as action) {
+                        <button gbtMenuItem [icon]="action.icon" (click)="toggleSuperAdmin(row)">
+                          {{ action.label }}
+                        </button>
+                      }
+                    </gbt-menu>
+                  } @else {
+                    <span class="users-list__busy" aria-hidden="true"></span>
+                  }
+                </span>
+              </gbt-list-row>
+            </li>
+          }
+        </ul>
+      }
+
+      @if (isSuperAdmin()) {
+        <gbt-button
+          list-card-empty
+          variant="secondary"
+          iconName="user-plus"
+          [text]="'users.list.invite' | transloco"
+          (clicked)="showCreateModal.set(true)"
+        />
+      }
+    </gbt-list-card>
+  </div>
+
+  <div page-aside class="users-list__aside">
+    <gbt-panel [heading]="'users.help.invitationsHeading' | transloco" [headingLevel]="2">
+      <p class="users-list__help">{{ 'users.help.invitations' | transloco }}</p>
+    </gbt-panel>
+    <gbt-panel [heading]="'users.help.passwordHeading' | transloco" [headingLevel]="2">
+      <p class="users-list__help">{{ 'users.help.password' | transloco }}</p>
+    </gbt-panel>
+    <gbt-panel [heading]="'users.help.mfaHeading' | transloco" [headingLevel]="2">
+      <p class="users-list__help">{{ 'users.help.mfa' | transloco }}</p>
+    </gbt-panel>
+    @if (isSuperAdmin()) {
+      <gbt-panel [heading]="'users.help.organizationsHeading' | transloco" [headingLevel]="2">
+        <p class="users-list__help">{{ 'users.help.organizations' | transloco }}</p>
+      </gbt-panel>
+    }
+  </div>
+</gbt-page-layout>
+
+<!-- Rebuilt on every opening so a closed dialog never keeps a draft. -->
 @if (showCreateModal()) {
-  <app-create-user-modal (created)="onUserCreated()" (cancelled)="showCreateModal.set(false)" />
+  <app-create-user-modal (invited)="reload()" (closed)="showCreateModal.set(false)" />
 }

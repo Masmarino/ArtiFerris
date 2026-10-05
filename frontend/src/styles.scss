@@ -1,4 +1,9 @@
-@use './styles/tokens';
+// The Ferris family's design comes with Gabarit: its tokens, and IBM Plex served from its fonts folder
+// (see the assets in angular.json).
+@use '@masmarino/gabarit/fonts' with (
+  $path: '/fonts/ibm-plex/'
+);
+@use '@masmarino/gabarit/tokens';
 @use './styles/layout';
 
 * {
@@ -12,12 +17,16 @@ body {
   height: 100%;
 }
 
+@include tokens.document-base;
+
 body {
-  font-family: var(--font-family);
-  background-color: var(--bg-principal);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+// The public pages and the sign-in pages open on the graphite of the shell's frame.
+.public-layout__header,
+.auth-layout.auth-layout {
+  @include tokens.frame-tokens;
 }
 
 // Fallback for components that do not handle reduced motion themselves (RGAA 10.11).
@@ -30,4 +39,82 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+// A step of the trail with no page of its own: not a link, so not styled as one.
+.app-shell__crumb {
+  color: var(--text-secondary);
+}
+
+// The bar's breadcrumb, as in FerrisGit: what is above the page, in mono, on one line in the bar, which has a fixed
+// height. Gabarit's breadcrumb classes, hence global.
+.app-shell__breadcrumb {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--gbt-font-mono);
+  font-size: 0.8125rem;
+
+  // The focus ring of a link must not be cut by the overflow above.
+  padding: 3px;
+  margin: -3px;
+
+  .gbt-breadcrumb__list {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .gbt-breadcrumb__list > li {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  // The page is named by its own title just below, so the bar names only what is above it: the current page stays in
+  // the markup for assistive technology but is not shown twice, and the path ends without a trailing separator.
+  .gbt-breadcrumb__list > .gbt-breadcrumb__current {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .gbt-breadcrumb__list > li:nth-last-child(2)::after {
+    content: none;
+  }
+}
+
+// Sign-in pages (login, register, activate): Gabarit's auth panel, with the family's animated commit graph
+// (gbt-git-field) in its [auth-backdrop] slot. The panel stays light in both themes: the instance's logo on it is drawn
+// for a light page. The doubled class beats the kit's own rules.
+.auth-layout.auth-layout {
+  position: relative;
+  display: block;
+  min-height: 100dvh;
+  background: var(--bg-panel);
+}
+
+.auth-layout .gbt-auth-panel__panel.gbt-auth-panel__panel {
+  @include tokens.light-tokens;
+  color-scheme: light;
+  color: var(--text-primary);
+  border: 1px solid var(--slate-400);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+}
+
+// The way to the public packages sits under the panel, in its bottom padding, so it never covers the form.
+.auth-layout.auth-layout > .auth-layout__footer {
+  position: absolute;
+  right: 0;
+  bottom: 0.25rem;
+  left: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.login-page__notices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }

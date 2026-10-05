@@ -1,3 +1,4 @@
+import { signal } from '@angular/core'
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite'
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test'
 import { NEVER, of, throwError } from 'rxjs'
@@ -8,6 +9,7 @@ import { RepositoriesService } from '../../repositories/application/repositories
 import type { AdminStats, MetricsSnapshot } from '../domain/metrics.entity'
 import type { AuditEntry } from '../domain/audit.entity'
 import type { RepositorySummary } from '../../repositories/domain/repository.entity'
+import { PageTitleService } from '../../shell/page-title.service'
 
 const STATS: AdminStats = {
   total_users: 12,
@@ -78,7 +80,7 @@ const ACTIVITY: AuditEntry[] = [
   {
     aggregate_type: 'User',
     aggregate_id: 'u2',
-    event_type: 'Registered',
+    event_type: 'UserActivated',
     payload: {},
     occurred_at: new Date().toISOString(),
     actor_id: null,
@@ -121,6 +123,8 @@ const meta: Meta<AdminDashboard> = {
         { provide: AdminMetricsService, useValue: fakeMetrics() },
         { provide: AuditService, useValue: fakeAudit() },
         { provide: RepositoriesService, useValue: fakeRepositories() },
+        // The shell sets the title from the route.
+        { provide: PageTitleService, useValue: { title: signal('Tableau de bord') } },
       ],
     }),
   ],
@@ -129,20 +133,15 @@ export default meta
 
 type Story = StoryObj<AdminDashboard>
 
-// The total can also appear in a chart's data table or legend: scope to the stat card by its
-// heading
-// (gbt-card, the host, rather than .gbt-card, an inner box).
-function statCardValue(canvas: ReturnType<typeof within>, heading: string): string | null {
-  const card = canvas.getByRole('heading', { name: heading }).closest('gbt-card')
-  return card ? (within(card as HTMLElement).getByText(/^\d+$/).textContent ?? null) : null
-}
+const tileValue = (canvasElement: HTMLElement, key: string) =>
+  canvasElement.querySelector(`[data-key="${key}"]`)?.textContent ?? ''
 
 export const Default: Story = {
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    await waitFor(() => expect(statCardValue(canvas, 'Utilisateurs')).toBe('12'))
-    expect(statCardValue(canvas, 'Dépôts')).toBe('5')
-    expect(statCardValue(canvas, 'Permissions actives')).toBe('18')
+    await waitFor(() => expect(tileValue(canvasElement, 'users')).toContain('12'))
+    expect(tileValue(canvasElement, 'repositories')).toContain('5')
+    expect(tileValue(canvasElement, 'permissions')).toContain('18')
+    expect(tileValue(canvasElement, 'storage')).toContain('dernier relevé')
   },
 }
 
@@ -167,7 +166,10 @@ export const Empty: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await waitFor(() => expect(canvas.getByText('Aucune activité récente')).toBeInTheDocument())
+    expect(await canvas.findByText('Aucune activité récente')).toBeInTheDocument()
+    expect(canvas.getByText('Aucun dépôt à répartir par format.')).toBeInTheDocument()
+    expect(canvas.getAllByText('Pas encore assez de mesures')).toHaveLength(2)
+    expect(tileValue(canvasElement, 'storage')).toContain('aucun relevé')
   },
 }
 
@@ -184,20 +186,10 @@ export const LoadFailed: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    expect(await canvas.findByRole('alert')).toHaveTextContent(
-      "Échec du chargement d'une partie du tableau de bord.",
-    )
-    expect(canvas.getByRole('button', { name: 'Réessayer' })).toBeEnabled()
-  },
-}
-
-export const ChangingTheStorageEvolutionWindow: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    await waitFor(() => expect(statCardValue(canvas, 'Utilisateurs')).toBe('12'))
-    const comboboxes = canvas.getAllByRole('combobox')
-    await userEvent.click(comboboxes[0])
-    await userEvent.click(await canvas.findByRole('option', { name: '1 mois' }))
+    expect(
+      await canvas.findByText("Une partie du tableau de bord n'a pas pu être chargée."),
+    ).toBeInTheDocument()
+    expect(canvas.getAllByRole('button', { name: 'Réessayer' })[0]).toBeEnabled()
   },
 }
 
@@ -216,27 +208,7 @@ export const Loading: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    expect(await canvas.findByText('Aucune activité récente')).toBeInTheDocument()
-    expect(canvas.queryByRole('heading', { name: 'Utilisateurs' })).not.toBeInTheDocument()
-    expect(canvas.queryByRole('heading', { name: 'Permissions actives' })).not.toBeInTheDocument()
-    expect(canvas.getByText('Aucun dépôt à répartir par format.')).toBeInTheDocument()
-    expect(canvas.getAllByText('Pas encore assez de mesures.')).toHaveLength(2)
-  },
-}
-
-export const StatsStillLoading: Story = {
-  decorators: [
-    moduleMetadata({
-      providers: [{ provide: AdminMetricsService, useValue: fakeMetrics({ stats: () => NEVER }) }],
-    }),
-  ],
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    await waitFor(() =>
-      expect(canvas.getByText(/PackageRepository · Dépôt créé/)).toBeInTheDocument(),
-    )
-    expect(canvas.queryByRole('heading', { name: 'Utilisateurs' })).not.toBeInTheDocument()
-    expect(canvas.queryByText('Aucune activité récente')).not.toBeInTheDocument()
+    expect(await canvas.findByText("Chargement de l'historique…")).toBeInTheDocument()
   },
 }
 
@@ -261,11 +233,9 @@ export const RecentActivityIsCappedAtTen: Story = {
     }),
   ],
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    await waitFor(() => expect(canvas.getByText(/Package · Published0$/)).toBeInTheDocument())
-    expect(canvas.getByText(/Package · Published9$/)).toBeInTheDocument()
-    expect(canvas.queryByText(/Package · Published10$/)).not.toBeInTheDocument()
-    expect(canvas.queryByText(/Package · Published11$/)).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(canvasElement.querySelectorAll('.admin-dashboard__recent li')).toHaveLength(10),
+    )
   },
 }
 
@@ -288,50 +258,22 @@ export const ActivityChartIsPartial: Story = {
   },
 }
 
-const storageHistory = fn<AdminMetricsService['history']>(() => of(HISTORY))
-const countsHistory = fn<AdminMetricsService['history']>(() => of(HISTORY))
+const history = fn<AdminMetricsService['history']>(() => of(HISTORY))
 
-export const StorageWindowRefetchesItsHistory: Story = {
+export const ChangingThePeriod: Story = {
   beforeEach: () => {
-    storageHistory.mockClear()
+    history.mockClear()
   },
   decorators: [
     moduleMetadata({
-      providers: [
-        { provide: AdminMetricsService, useValue: fakeMetrics({ history: storageHistory }) },
-      ],
+      providers: [{ provide: AdminMetricsService, useValue: fakeMetrics({ history }) }],
     }),
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await waitFor(() => expect(statCardValue(canvas, 'Utilisateurs')).toBe('12'))
-    expect(storageHistory).toHaveBeenCalledTimes(2)
-    expect(storageHistory).toHaveBeenNthCalledWith(1, 1)
-    expect(storageHistory).toHaveBeenNthCalledWith(2, 1)
-
-    await userEvent.click(canvas.getAllByRole('combobox')[0])
-    await userEvent.click(await canvas.findByRole('option', { name: '1 mois' }))
-    await waitFor(() => expect(storageHistory).toHaveBeenCalledTimes(3))
-    expect(storageHistory).toHaveBeenLastCalledWith(30)
-  },
-}
-
-export const CountsWindowRefetchesItsHistory: Story = {
-  decorators: [
-    moduleMetadata({
-      providers: [
-        { provide: AdminMetricsService, useValue: fakeMetrics({ history: countsHistory }) },
-      ],
-    }),
-  ],
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    await waitFor(() => expect(statCardValue(canvas, 'Utilisateurs')).toBe('12'))
-    countsHistory.mockClear()
-
-    await userEvent.click(canvas.getAllByRole('combobox')[1])
-    await userEvent.click(await canvas.findByRole('option', { name: '3 jours' }))
-    await waitFor(() => expect(countsHistory).toHaveBeenCalledTimes(1))
-    expect(countsHistory).toHaveBeenCalledWith(3)
+    await waitFor(() => expect(history).toHaveBeenCalledWith(30))
+    await userEvent.click(await canvas.findByRole('radio', { name: '3 jours' }))
+    await waitFor(() => expect(history).toHaveBeenLastCalledWith(3))
+    expect(history).toHaveBeenCalledTimes(2)
   },
 }

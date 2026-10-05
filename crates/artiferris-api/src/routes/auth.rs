@@ -17,7 +17,7 @@ use artiferris_domain::user::TokenIssuerPort;
 
 use crate::auth_middleware::AuthUser;
 use crate::dto::{
-    application_error_response, ActivateAccountRequest, ChangePasswordRequest, ErrorResponse, LdapLoginRequest, LoginRequest, LoginResponse, MeResponse, SetLanguageRequest, MfaVerifyRequest, RegisterRequest,
+    application_error_response, ActivateAccountRequest, ResetPasswordRequest, ChangePasswordRequest, ChangePasswordResponse, ErrorResponse, LdapLoginRequest, LoginRequest, LoginResponse, MeResponse, SetLanguageRequest, MfaVerifyRequest, RegisterRequest,
     SsoConfigResponse, SsoProviderType,
 };
 use crate::organization_middleware::ResolvedOrganization;
@@ -33,6 +33,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/sso/oidc/callback", get(sso_oidc_callback))
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/activate", post(activate_account))
+        .route("/api/auth/reset-password", post(reset_password))
         .route("/api/auth/mfa/verify", post(verify_mfa))
         .route("/api/auth/mfa/passkey/start", post(start_mfa_passkey))
         .route("/api/auth/mfa/passkey/finish", post(finish_mfa_passkey))
@@ -770,12 +771,14 @@ struct MfaSetupPasskeyFinishRequest {
     name: String,
 }
 
+/// The first passkey comes with the backup codes, like a confirmed authenticator app, and the session. A leftover
+/// unconfirmed app enrolment goes first: whoever knows its secret could confirm it later with just a session.
 async fn setup_mfa_passkey_finish(
     State(state): State<AppState>,
     headers: HeaderMap,
     connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>,
     Json(body): Json<MfaSetupPasskeyFinishRequest>,
-) -> Result<Json<LoginResponse>, ApiError> {
+) -> Result<Json<MfaSetupCompleteResponse>, ApiError> {
     let user = user_for_mfa_token(&state, &body.mfa_token).await?;
 
     let (max_attempts, window) = throttle_limits_for_organization(&state, user.organization_id).await;
@@ -785,14 +788,23 @@ async fn setup_mfa_passkey_finish(
     }
 
     require_no_factor(&state, user.id).await?;
+    state.totp_credentials.delete(user.id).await.map_err(|e| application_error_response("failed to drop an unconfirmed app enrolment", e.into()))?;
     match state.finish_passkey_registration.execute(user.id, user.organization_id, body.challenge_id, &body.credential, &body.name).await {
-        Ok(_) => {
+        Ok(passkey_id) => {
+            let backup_codes = match state.issue_backup_codes.execute(user.id).await {
+                Ok(codes) => codes,
+                Err(e) => {
+                    // Best effort: without its codes the passkey goes too, and the setup can start again.
+                    let _ = state.webauthn_credentials.delete(passkey_id, user.id, None).await;
+                    return Err(application_error_response("failed to issue backup codes during mandatory setup", e));
+                }
+            };
             consume_mfa_token(&state, user.id, &body.mfa_token)?;
             state.login_throttle.clear(&throttle_key);
             state.login_throttle.release(&passkey_start_key(&state, &headers, connect_info));
             let token = issue_session_token(&state, &user).await?;
             record_login(&state, &user, MfaMethod::Passkey).await;
-            Ok(Json(session_login_response(token)))
+            Ok(Json(MfaSetupCompleteResponse { token, backup_codes }))
         }
         Err(e) => Err(application_error_response("failed to finish passkey registration during mandatory setup", e)),
     }
@@ -816,8 +828,15 @@ async fn activate_account(State(state): State<AppState>, Json(body): Json<Activa
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Unauthenticated by design, like activation: the link's token is the credential. No session is issued.
+async fn reset_password(State(state): State<AppState>, Json(body): Json<ResetPasswordRequest>) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    state.consume_password_reset.execute(&body.token, &body.new_password).await.map_err(|e| application_error_response("failed to reset password", e))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn me(State(state): State<AppState>, user: AuthUser) -> Result<Json<MeResponse>, (StatusCode, Json<ErrorResponse>)> {
     let language = state.user_preferences.language(user.id).await.map_err(|e| application_error_response("failed to read the user's language", e.into()))?;
+    let email = state.get_verified_email.execute(user.id).await.map_err(|e| application_error_response("failed to read the user's email", e))?;
     Ok(Json(MeResponse {
         id: user.id,
         username: user.username,
@@ -826,6 +845,7 @@ async fn me(State(state): State<AppState>, user: AuthUser) -> Result<Json<MeResp
         organization_id: user.organization_id,
         created_at: user.created_at,
         language: language.map(|language| language.as_str().to_string()),
+        email,
     }))
 }
 
@@ -842,7 +862,7 @@ async fn change_password(
     headers: HeaderMap,
     connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>,
     Json(body): Json<ChangePasswordRequest>,
-) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<ChangePasswordResponse>, (StatusCode, Json<ErrorResponse>)> {
     let (max_attempts, window) = throttle_limits_for_organization(&state, user.organization_id).await;
     if !state.login_throttle.reserve(&user.username, max_attempts, window) {
         return Err(too_many_attempts());
@@ -852,7 +872,11 @@ async fn change_password(
     match state.change_password.execute(user.id, &body.current_password, &body.new_password, Some(&audit)).await {
         Ok(()) => {
             state.login_throttle.clear(&user.username);
-            Ok(StatusCode::NO_CONTENT)
+            // The change ended every session, this one included: a fresh one keeps the caller signed in, the others
+            // stay ended. Minted after the revocation, it passes (the check is to the second).
+            let account = state.users.find_by_id(user.id).await.ok().flatten().ok_or_else(internal_error)?;
+            let token = issue_session_token(&state, &account).await?;
+            Ok(Json(ChangePasswordResponse { token }))
         }
         Err(e) => {
             if matches!(e, ApplicationError::InvalidCredentials) {
@@ -940,6 +964,7 @@ mod tests {
                 name: "Test key".to_string(),
                 passkey_data: vec![0u8; 8],
                 created_at: chrono::Utc::now(),
+                last_used_at: None,
             }, None)
             .await
             .unwrap();
@@ -1318,7 +1343,7 @@ mod tests {
         let user_id = state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
         state
             .webauthn_credentials
-            .insert(&artiferris_domain::webauthn::WebauthnCredential { id: uuid::Uuid::new_v4(), user_id, name: "YubiKey".to_string(), passkey_data: b"opaque".to_vec(), created_at: chrono::Utc::now() }, None)
+            .insert(&artiferris_domain::webauthn::WebauthnCredential { id: uuid::Uuid::new_v4(), user_id, name: "YubiKey".to_string(), passkey_data: b"opaque".to_vec(), created_at: chrono::Utc::now(), last_used_at: None }, None)
             .await
             .unwrap();
         let mfa_token = state.mfa_pending_token_issuer.issue(user_id, chrono::Duration::minutes(5)).unwrap();
@@ -1662,7 +1687,7 @@ mod tests {
     }
 
     async fn invite_with_known_token(state: &AppState, organization_id: Uuid, email: &str, token: &str) -> Uuid {
-        let user_id = state.invite_user.execute(organization_id, false, email, false, Uuid::new_v4()).await.unwrap();
+        let user_id = state.invite_user.execute(organization_id, false, email, false, Uuid::new_v4()).await.unwrap().user_id;
         state
             .user_invitations
             .upsert(&artiferris_domain::invitation::UserInvitation {
@@ -2594,10 +2619,46 @@ mod tests {
         let app = build_router(state);
 
         let response = app.clone().oneshot(change_password_request(&token, "old-s3cret!", "new-s3cret!")).await.unwrap();
-        assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
 
         let login_response = app.oneshot(login_request("florian", "new-s3cret!")).await.unwrap();
         assert_eq!(login_response.status(), axum::http::StatusCode::OK);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_password_change_keeps_the_caller_signed_in_and_ends_the_other_sessions(pool: sqlx::PgPool) {
+        let state = AppState::build(pool, &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "old-s3cret!", false).await.unwrap();
+        let this_browser = state.authenticate_user.execute("florian", "old-s3cret!").await.unwrap();
+        let other_device = state.authenticate_user.execute("florian", "old-s3cret!").await.unwrap();
+        let app = build_router(state);
+        // The revocation is checked to the second: let the sessions above be strictly older than the change.
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+        let response = app.clone().oneshot(change_password_request(&this_browser, "old-s3cret!", "new-s3cret!")).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(&axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        let fresh = body["token"].as_str().expect("a fresh session token");
+
+        assert_eq!(me_json(&app, fresh).await["username"], "florian");
+        for old in [&this_browser, &other_device] {
+            let response = app.clone().oneshot(Request::builder().uri("/api/me").header("authorization", format!("Bearer {old}")).body(Body::empty()).unwrap()).await.unwrap();
+            assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED, "a session from before the change must end");
+        }
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn me_shows_the_email_only_once_it_is_verified(pool: sqlx::PgPool) {
+        let state = AppState::build(pool.clone(), &test_config());
+        state.create_user.execute(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), "florian", "sup3r-s3cret!", false).await.unwrap();
+        let token = state.authenticate_user.execute("florian", "sup3r-s3cret!").await.unwrap();
+        let app = build_router(state);
+        sqlx::query("UPDATE users SET email = 'florian@corp.example' WHERE username = 'florian'").execute(&pool).await.unwrap();
+
+        assert_eq!(me_json(&app, &token).await["email"], serde_json::Value::Null, "an unverified address is not one ArtiFerris writes to");
+
+        sqlx::query("UPDATE users SET email_verified = true WHERE username = 'florian'").execute(&pool).await.unwrap();
+        assert_eq!(me_json(&app, &token).await["email"], "florian@corp.example");
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -2674,7 +2735,7 @@ mod tests {
         }
 
         let response = app.oneshot(change_password_request(&token, "old-s3cret!", "new-s3cret!")).await.unwrap();
-        assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -2725,7 +2786,7 @@ mod tests {
         assert!(password_change_failure_ips(&state).await.is_empty());
 
         let response = app.oneshot(change_password_request(&token, "old-s3cret!", "new-s3cret!")).await.unwrap();
-        assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -2740,7 +2801,7 @@ mod tests {
             app.clone().oneshot(change_password_request(&token, "wrong", "new-s3cret!")).await.unwrap();
         }
         let response = app.clone().oneshot(change_password_request(&token, "old-s3cret!", "new-s3cret!")).await.unwrap();
-        assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
 
         let token = login_and_get_token(&app, &state, user_id, "new-s3cret!").await;
         let response = app.clone().oneshot(login_request("florian", "wrong")).await.unwrap();
@@ -3882,7 +3943,7 @@ mod tests {
         assert!(security_events_of_type(&state, "PasswordChanged").await.is_empty());
 
         let accepted = app.oneshot(change_password_request(&token, "old-s3cret!", "new-s3cret!")).await.unwrap();
-        assert_eq!(accepted.status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(accepted.status(), axum::http::StatusCode::OK);
 
         let recorded = security_events_of_type(&state, "PasswordChanged").await;
         assert_eq!(recorded.len(), 1);

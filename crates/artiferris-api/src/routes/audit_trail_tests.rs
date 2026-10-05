@@ -381,7 +381,7 @@ async fn totp_disable_and_passkey_removal_are_recorded(pool: sqlx::PgPool) {
     let passkey_id = Uuid::new_v4();
     f.state
         .webauthn_credentials
-        .insert(&artiferris_domain::webauthn::WebauthnCredential { id: passkey_id, user_id: member_id, name: "key".to_string(), passkey_data: vec![0u8; 8], created_at: chrono::Utc::now() }, None)
+        .insert(&artiferris_domain::webauthn::WebauthnCredential { id: passkey_id, user_id: member_id, name: "key".to_string(), passkey_data: vec![0u8; 8], created_at: chrono::Utc::now(), last_used_at: None }, None)
         .await
         .unwrap();
 
@@ -839,7 +839,7 @@ async fn new_backup_codes_and_a_passkey_removal_are_rolled_back_when_their_audit
     let passkey_id = Uuid::new_v4();
     f.state
         .webauthn_credentials
-        .insert(&artiferris_domain::webauthn::WebauthnCredential { id: passkey_id, user_id: member_id, name: "key".to_string(), passkey_data: vec![0u8; 8], created_at: chrono::Utc::now() }, None)
+        .insert(&artiferris_domain::webauthn::WebauthnCredential { id: passkey_id, user_id: member_id, name: "key".to_string(), passkey_data: vec![0u8; 8], created_at: chrono::Utc::now(), last_used_at: None }, None)
         .await
         .unwrap();
     let hashes_before: Vec<String> = sqlx::query_scalar("SELECT code_hash FROM mfa_backup_codes WHERE user_id = $1 ORDER BY code_hash").bind(member_id).fetch_all(&pool).await.unwrap();
@@ -941,7 +941,7 @@ async fn regenerating_backup_codes_and_resending_an_invitation_are_recorded(pool
     let (status, invited) = send(&f.app, "POST", "/api/users", &f.admin_token, Some(serde_json::json!({ "email": "invitee@example.com", "is_super_admin": false, "is_organization_admin": false }))).await;
     assert_eq!(status, StatusCode::CREATED);
     let invitee = invited["id"].as_str().unwrap();
-    assert_eq!(send(&f.app, "POST", &format!("/api/users/{invitee}/resend-invitation"), &f.admin_token, None).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(send(&f.app, "POST", &format!("/api/users/{invitee}/resend-invitation"), &f.admin_token, None).await.0, StatusCode::OK);
     let resent = the_only(&f.state, "InvitationResent").await;
     assert_eq!((resent.actor_id, resent.organization_id), (Some(f.admin_id), Some(public_org())));
     assert_eq!(resent.payload["user_id"], invitee);

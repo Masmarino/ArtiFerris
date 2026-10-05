@@ -39,6 +39,9 @@ pub enum DomainError {
     AlreadyDeleted,
     #[error("infrastructure failure: {0}")]
     Infrastructure(String),
+    /// The organization has no mail server: nothing was attempted. Its own case so an administrator can be told what to fix.
+    #[error("SMTP is not configured")]
+    EmailNotConfigured,
     /// A stored secret that this server's keys cannot open (rotated or wrong `SECRETS_ENCRYPTION_KEY`, corrupted value).
     #[error("stored secret cannot be read: {0}")]
     SecretUnreadable(String),
@@ -118,6 +121,7 @@ impl DomainError {
             Self::NothingToRevoke => "nothing_to_revoke",
             Self::AlreadyDeleted => "already_deleted",
             Self::Infrastructure(..) => "infrastructure_failure",
+            Self::EmailNotConfigured => "email_not_configured",
             Self::SecretUnreadable(..) => "secret_unreadable",
             Self::Busy(..) => "busy",
             Self::ChunkOffsetMismatch { .. } => "chunk_offset_mismatch",

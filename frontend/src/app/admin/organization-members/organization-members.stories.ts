@@ -35,7 +35,7 @@ function fakeMembers(
 ): Partial<OrganizationMembersService> {
   return {
     list: fn(() => of(MEMBERS)),
-    invite: fn(() => of(CAROL)),
+    invite: fn(() => of({ ...CAROL, email_sent: true })),
     setOrganizationAdmin: fn(() => of(undefined)),
     ...overrides,
   }

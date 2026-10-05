@@ -1284,7 +1284,7 @@ describe('PackageDetailPage', () => {
       const sizes = Array.from(el.querySelectorAll('tbody tr')).map((row) =>
         row.querySelectorAll('td')[4].textContent!.trim(),
       )
-      expect(sizes).toEqual(['1.5 Mo', '—'])
+      expect(sizes).toEqual(['1,5 Mo', '—'])
     })
   })
 

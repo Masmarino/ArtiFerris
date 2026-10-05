@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing'
 import { By } from '@angular/platform-browser'
-import { Button } from '@masmarino/gabarit'
+import { Button } from '@masmarino/gabarit/button'
 import { ConfirmService, type ConfirmOptions } from '../confirm.service'
 import { ConfirmHost } from './confirm-host'
 

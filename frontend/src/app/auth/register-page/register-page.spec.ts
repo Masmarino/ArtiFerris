@@ -1,177 +1,109 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing'
-import { provideRouter } from '@angular/router'
-import { HttpErrorResponse } from '@angular/common/http'
-import { of, throwError } from 'rxjs'
+import { TestBed } from '@angular/core/testing'
+import { By } from '@angular/platform-browser'
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
+import { provideHttpClient } from '@angular/common/http'
+import { Router, provideRouter } from '@angular/router'
+import { AuthRegister } from '@masmarino/gabarit/auth-register'
 import { RegisterPage } from './register-page'
-import { AuthService } from '../application/auth.service'
+import { authProviders } from '../infrastructure/auth.providers'
 
 describe('RegisterPage', () => {
-  let fixture: ComponentFixture<RegisterPage>
-  let component: RegisterPage
-  let authServiceSpy: { register: ReturnType<typeof vi.fn> }
-
-  beforeEach(() => {
-    authServiceSpy = {
-      register: vi.fn(),
-    }
-
+  function render(registrationEnabled = true) {
     TestBed.configureTestingModule({
       imports: [RegisterPage],
-      providers: [provideRouter([]), { provide: AuthService, useValue: authServiceSpy }],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        ...authProviders,
+      ],
     })
-    fixture = TestBed.createComponent(RegisterPage)
-    component = fixture.componentInstance
+    const fixture = TestBed.createComponent(RegisterPage)
+    const httpMock = TestBed.inject(HttpTestingController)
     fixture.detectChanges()
+    httpMock
+      .expectOne('/api/auth/sso/config')
+      .flush({ type: null, registration_enabled: registrationEnabled })
+    fixture.detectChanges()
+    const form = fixture.debugElement.query(By.directive(AuthRegister))
+      .componentInstance as AuthRegister
+    return { fixture, httpMock, form, el: fixture.nativeElement as HTMLElement }
+  }
+
+  function fill(form: AuthRegister): void {
+    form['username'].set('marie')
+    form['email'].set('marie@example.com')
+    form['password'].set('sup3r-s3cret!')
+  }
+
+  afterEach(() => {
+    TestBed.inject(HttpTestingController).verify()
+    sessionStorage.clear()
   })
 
-  it('does not submit an invalid form', () => {
-    component.submit()
-    expect(authServiceSpy.register).not.toHaveBeenCalled()
+  it('shows the form, in French, on the graphite page', () => {
+    const { el } = render()
+
+    expect(el.classList).toContain('auth-layout')
+    expect(el.querySelector('h1')?.textContent).toContain('Créer un compte')
+    expect(el.querySelector('main.gbt-auth-panel > gbt-git-field')).not.toBeNull()
   })
 
-  it('routes to mandatory enrollment on a successful registration', () => {
-    authServiceSpy.register.mockReturnValue(
-      of({ mfaRequired: true, mfaToken: 'mfa-token-123', mfaSetupRequired: true }),
-    )
-    component.form.setValue({
-      username: 'florian',
-      email: 'florian@example.com',
+  it('says registration is closed when the organization does not accept it', () => {
+    const { el } = render(false)
+
+    expect(el.querySelector('h1')?.textContent).toContain('Les inscriptions sont fermées')
+    expect(el.querySelector('form')).toBeNull()
+  })
+
+  it('creates the account, then takes it through the mandatory enrolment', () => {
+    const { fixture, httpMock, form, el } = render()
+    fill(form)
+
+    form.submit()
+    const req = httpMock.expectOne('/api/auth/register')
+    expect(req.request.body).toEqual({
+      username: 'marie',
+      email: 'marie@example.com',
       password: 'sup3r-s3cret!',
     })
+    req.flush({
+      token: null,
+      mfa_token: 'pending-token',
+      mfa_setup_required: true,
+      mfa_has_totp: false,
+      mfa_has_passkey: false,
+    })
+    fixture.detectChanges()
 
-    component.submit()
-
-    expect(authServiceSpy.register).toHaveBeenCalledWith(
-      'florian',
-      'florian@example.com',
-      'sup3r-s3cret!',
-    )
-    expect(component.mfaToken()).toBe('mfa-token-123')
+    expect(el.querySelector('gbt-mfa-enrollment')).not.toBeNull()
   })
 
-  it('surfaces a duplicate-username error', () => {
-    authServiceSpy.register.mockReturnValue(
-      throwError(
-        () =>
-          new HttpErrorResponse({
-            status: 400,
-            error: { error: 'username already in use', code: 'username_taken' },
-          }),
-      ),
+  it('points at the username when it is already taken', () => {
+    const { fixture, httpMock, form, el } = render()
+    fill(form)
+
+    form.submit()
+    httpMock
+      .expectOne('/api/auth/register')
+      .flush(
+        { error: 'username already taken', code: 'username_taken' },
+        { status: 400, statusText: 'Bad Request' },
+      )
+    fixture.detectChanges()
+
+    expect(el.textContent).toContain(
+      "Ce nom d'utilisateur ou cette adresse e-mail est déjà utilisé",
     )
-    component.form.setValue({
-      username: 'florian',
-      email: 'florian@example.com',
-      password: 'sup3r-s3cret!',
-    })
-
-    component.submit()
-
-    expect(component.errorMessage()).toContain('nom d’utilisateur')
   })
 
-  it('surfaces a registration-disabled error', () => {
-    authServiceSpy.register.mockReturnValue(
-      throwError(
-        () =>
-          new HttpErrorResponse({
-            status: 400,
-            error: {
-              error: 'public self-registration is not available on this organization',
-              code: 'registration_unavailable',
-            },
-          }),
-      ),
-    )
-    component.form.setValue({
-      username: 'florian',
-      email: 'florian@example.com',
-      password: 'sup3r-s3cret!',
-    })
+  it('goes home once the new account is signed in', () => {
+    const { form } = render()
+    const router = TestBed.inject(Router)
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true)
 
-    component.submit()
+    form.registered.emit()
 
-    expect(component.errorMessage()).toContain('pas disponible sur cette organisation')
-  })
-
-  it('surfaces an admin-disabled registration error distinctly from the org-level one', () => {
-    authServiceSpy.register.mockReturnValue(
-      throwError(
-        () =>
-          new HttpErrorResponse({
-            status: 400,
-            error: {
-              error: 'public self-registration is currently disabled',
-              code: 'registration_disabled',
-            },
-          }),
-      ),
-    )
-    component.form.setValue({
-      username: 'florian',
-      email: 'florian@example.com',
-      password: 'sup3r-s3cret!',
-    })
-
-    component.submit()
-
-    expect(component.errorMessage()).toContain("désactivée par l'administrateur")
-  })
-
-  it('surfaces an invalid-username error', () => {
-    authServiceSpy.register.mockReturnValue(
-      throwError(
-        () =>
-          new HttpErrorResponse({
-            status: 400,
-            error: { error: 'invalid username: 1a', code: 'invalid_username' },
-          }),
-      ),
-    )
-    component.form.setValue({
-      username: 'florian',
-      email: 'florian@example.com',
-      password: 'sup3r-s3cret!',
-    })
-
-    component.submit()
-
-    expect(component.errorMessage()).toContain("Nom d'utilisateur invalide")
-  })
-
-  it('says the server is busy on a 503', () => {
-    authServiceSpy.register.mockReturnValue(
-      throwError(() => new HttpErrorResponse({ status: 503, error: { error: 'busy' } })),
-    )
-    component.form.setValue({
-      username: 'florian',
-      email: 'florian@example.com',
-      password: 'sup3r-s3cret!',
-    })
-
-    component.submit()
-
-    expect(component.errorMessage()).toBe('Service momentanément occupé')
-  })
-
-  it('never shows the raw server text of a 500', () => {
-    authServiceSpy.register.mockReturnValue(
-      throwError(
-        () =>
-          new HttpErrorResponse({
-            status: 500,
-            error: { error: 'invalid username: db exploded' },
-          }),
-      ),
-    )
-    component.form.setValue({
-      username: 'florian',
-      email: 'florian@example.com',
-      password: 'sup3r-s3cret!',
-    })
-
-    component.submit()
-
-    expect(component.errorMessage()).toBe('Impossible de créer le compte. Réessayez.')
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/')
   })
 })

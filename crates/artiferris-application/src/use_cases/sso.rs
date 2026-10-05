@@ -141,7 +141,7 @@ mod tests {
 
     #[async_trait]
     impl UserSecurityPort for FakeUsers {
-        async fn revoke_sessions(&self, id: Uuid, _audit: Option<&artiferris_domain::audit::SecurityAuditRecord>) -> Result<(), DomainError> {
+        async fn revoke_sessions(&self, id: Uuid, _audit: Option<&artiferris_domain::audit::AuditRecord>) -> Result<(), DomainError> {
             if let Some(user) = self.users.lock().unwrap().get_mut(&id) {
                 user.tokens_valid_after = chrono::Utc::now();
             }
