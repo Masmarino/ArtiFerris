@@ -1,0 +1,15 @@
+<a class="shot" [href]="fullHref()" target="_blank" rel="noopener">
+  <picture>
+    <source [srcset]="darkSrc()" [attr.media]="darkMedia()" type="image/webp" />
+    <img
+      [src]="lightSrc()"
+      [width]="size().width"
+      [height]="size().height"
+      [alt]="altKey() | transloco"
+      [attr.loading]="eager() ? 'eager' : 'lazy'"
+      [attr.fetchpriority]="eager() ? 'high' : null"
+      decoding="async"
+    />
+  </picture>
+  <span class="shot__open">{{ 'screens.open' | transloco }}</span>
+</a>

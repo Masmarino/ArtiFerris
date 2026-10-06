@@ -1,0 +1,692 @@
+{
+  "meta": {
+    "home": {
+      "title": "ArtiFerris : un registre npm et Docker auto-hébergé, en un seul binaire Rust",
+      "description": "Un registre npm et un registre Docker/OCI derrière une seule console : dépôts hébergés, proxys et groupes, quotas, rétention, audit des dépendances, scan Trivy des images et organisations par sous-domaine. Un binaire Rust et un PostgreSQL."
+    },
+    "features": {
+      "title": "Produit | ArtiFerris",
+      "description": "Ce qu'ArtiFerris fait aujourd'hui : dépôts npm et Docker, pages de paquets, analyse des artefacts, organisations, catalogue public, double authentification obligatoire et administration. Et ce qui n'existe pas encore."
+    },
+    "registries": {
+      "title": "Registres npm et Docker | ArtiFerris",
+      "description": "npm, pnpm, yarn, docker et podman parlent à ArtiFerris comme à leur registre habituel. Dépôts hébergés, proxys devant un registre amont et groupes derrière une seule adresse, avec quotas et rétention."
+    },
+    "install": {
+      "title": "Installation | ArtiFerris",
+      "description": "Installer ArtiFerris avec Docker Compose, avec le chart Helm sur Kubernetes ou depuis les sources : commandes, prérequis et ce qui se passe au premier démarrage."
+    },
+    "security": {
+      "title": "Sécurité | ArtiFerris",
+      "description": "Double authentification obligatoire, mots de passe hachés avec Argon2, droits vérifiés sur chaque route, secrets chiffrés en AES-256-GCM, jetons hachés, journaux d'audit et de sécurité, et données conservées sur votre serveur."
+    },
+    "roadmap": {
+      "title": "Feuille de route | ArtiFerris",
+      "description": "La direction d'ArtiFerris : d'autres formats de paquets, un stockage objet pour plusieurs réplicas, SAML, des espaces de noms par utilisateur et la provenance des paquets. Rien de tout cela n'existe encore."
+    },
+    "imageAlt": "ArtiFerris : un registre npm et Docker en un seul binaire Rust, à côté d'un dessin de son architecture"
+  },
+  "a11y": {
+    "skipToContent": "Aller au contenu"
+  },
+  "nav": {
+    "label": "Principale",
+    "homeLabel": "ArtiFerris, page d'accueil",
+    "product": "Produit",
+    "registries": "Registres",
+    "install": "Installation",
+    "security": "Sécurité",
+    "roadmap": "Feuille de route",
+    "docs": "Docs",
+    "github": "GitHub",
+    "openApp": "Ouvrir ArtiFerris",
+    "openMenu": "Ouvrir le menu",
+    "closeMenu": "Fermer le menu"
+  },
+  "language": {
+    "label": "Langue"
+  },
+  "theme": {
+    "switchToLight": "Passer au thème clair",
+    "switchToDark": "Passer au thème sombre"
+  },
+  "footer": {
+    "tagline": "Un registre npm et Docker auto-hébergé, écrit en Rust, que vous exploitez sur votre propre serveur.",
+    "product": "Site",
+    "docs": "Documentation",
+    "project": "Projet",
+    "links": {
+      "install": "Installation",
+      "configuration": "Configuration",
+      "npm": "Registre npm",
+      "docker": "Registre Docker",
+      "organisations": "Organisations et utilisateurs",
+      "api": "API publique",
+      "changelog": "Journal des versions"
+    },
+    "license": "Licence",
+    "licensed": "Distribué sous licence Apache 2.0. La documentation est en français.",
+    "noTracking": "Aucun cookie, aucun pistage, aucune ressource tierce sur ce site."
+  },
+  "plan": {
+    "title": "Architecture d'une instance ArtiFerris",
+    "description": "Dessin isométrique. Un client npm ou Docker et un navigateur parlent à un seul binaire Rust, artiferris-api, composé des crates api, npm, docker, application, domain et infrastructure. Le binaire range ses données dans PostgreSQL et ses archives et ses blobs sur disque, consulte les annuaires LDAP et OIDC et le serveur SMTP, et ses proxys puisent dans des registres amont. Une ligne orange suit une installation jusqu'au registre amont. Sept cercles numérotés mènent aux tuiles de la page.",
+    "caption": "Une instance. La ligne orange suit une installation, du client jusqu'au registre amont qu'un proxy interroge.",
+    "scroll": "Dessin isométrique de l'architecture, défilable",
+    "client": {
+      "name": "Client npm ou Docker",
+      "l1": "HTTPS, jeton API",
+      "l2": "npm, pnpm, yarn, docker, podman"
+    },
+    "browser": {
+      "name": "Navigateur",
+      "l1": "console connectée",
+      "l2": "ou catalogue public"
+    },
+    "api": {
+      "l1": "API REST, protocoles des",
+      "l2": "registres, interface web"
+    },
+    "domain": {
+      "l1": "entités et ports, sans E/S"
+    },
+    "application": {
+      "l1": "cas d'usage"
+    },
+    "infrastructure": {
+      "l1": "adaptateurs : PostgreSQL,",
+      "l2": "fichiers, SMTP, LDAP,",
+      "l3": "OIDC, Trivy, proxys"
+    },
+    "postgres": {
+      "l1": "comptes, dépôts,",
+      "l2": "droits, audit ;",
+      "l3": "migrations au",
+      "l4": "démarrage"
+    },
+    "storage": {
+      "name": "Stockage",
+      "l1": "archives npm et",
+      "l2": "blobs Docker, sur disque"
+    },
+    "upstream": {
+      "name": "Registres amont",
+      "l1": "registry.npmjs.org,",
+      "l2": "Docker Hub… : un proxy",
+      "l3": "y puise et garde"
+    },
+    "identity": {
+      "name": "Annuaires et e-mail",
+      "l1": "LDAP, OIDC, SMTP"
+    },
+    "flow": {
+      "request": "npm install",
+      "group": "groupe, puis proxy",
+      "upstream": "amont"
+    },
+    "views": {
+      "1": "Droits",
+      "2": "Types de dépôts",
+      "3": "Pages de paquets",
+      "4": "Analyse des images",
+      "5": "Recherche",
+      "6": "Organisations",
+      "7": "Quota et rétention"
+    },
+    "fig": "Fig. 1",
+    "pan": "Faites glisser pour parcourir le dessin",
+    "viewsLabel": "Ce que désignent les numéros",
+    "dimBinary": "artiferris-api : un seul binaire",
+    "key": {
+      "label": "Légende du dessin",
+      "request": "requête ou stockage",
+      "push": "une installation, jusqu'à l'amont",
+      "poll": "annuaire consulté à la connexion",
+      "detail": "une tuile numérotée de cette page"
+    }
+  },
+  "screens": {
+    "repositories": "ArtiFerris : la liste des dépôts npm et Docker, avec leur format et leur type",
+    "package": "ArtiFerris : la page d'un paquet npm, avec son README, sa commande d'installation et ses versions",
+    "scan": "ArtiFerris : la page d'une image Docker, avec les vulnérabilités trouvées par Trivy",
+    "organizations": "ArtiFerris : l'administration d'une organisation, avec ses membres et ses réglages",
+    "explore": "ArtiFerris : le catalogue public des paquets et des images, lisible sans compte",
+    "docs": "ArtiFerris : une page de la documentation intégrée, avec son arborescence",
+    "open": "Voir l'écran complet"
+  },
+  "registries": {
+    "codeLabel": "Exemple de .npmrc pointé sur un groupe, puis une installation",
+    "status": {
+      "received": "Requête reçue par npm-all",
+      "servedUpstream": "Paquet servi par npmjs-proxy, depuis l'amont",
+      "servedCache": "Paquet servi par npmjs-proxy, depuis son cache"
+    },
+    "replay": "Rejouer",
+    "graphLabel": "Ce que fait le groupe de l'exemple",
+    "type": {
+      "hosted": "hébergé",
+      "proxy": "proxy"
+    },
+    "member": {
+      "idle": "en attente",
+      "checking": "consulté",
+      "miss": "ne l'a pas",
+      "upstream": "interroge l'amont",
+      "served": "a répondu",
+      "cached": "a répondu depuis son cache"
+    },
+    "upstreamName": "amont",
+    "upstream": {
+      "idle": "non sollicité",
+      "fetching": "envoie le paquet",
+      "done": "a répondu"
+    },
+    "warmSwitch": "Demander le même paquet une seconde fois",
+    "noteCold": "npm-hosted ne contient pas left-pad : le groupe passe au membre suivant. Le proxy va chercher le paquet sur registry.npmjs.org, le garde, puis le sert.",
+    "noteWarm": "Le proxy a gardé left-pad à la première demande : il le sert depuis ArtiFerris, sans solliciter registry.npmjs.org."
+  },
+  "caps": {
+    "carousel": {
+      "label": "Extraits de l'interface",
+      "track": "Fonctionnalités, défilement horizontal",
+      "previous": "Fonctionnalité précédente",
+      "next": "Fonctionnalité suivante",
+      "slideRole": "diapositive",
+      "of": "sur",
+      "feature": "Fonctionnalité"
+    },
+    "roles": {
+      "title": "Trois droits par dépôt",
+      "text": "read, write ou admin, accordés utilisateur par utilisateur. Le serveur les vérifie sur chaque route, ils ne sont pas seulement masqués dans l'interface.",
+      "action": "Action",
+      "rows": {
+        "read": "Installer et tirer",
+        "write": "Publier et pousser",
+        "admin": "Régler le dépôt et ses droits"
+      }
+    },
+    "types": {
+      "title": "Hébergé, proxy ou groupe",
+      "text": "Vos paquets dans un dépôt hébergé, un cache devant un registre amont dans un proxy, et plusieurs dépôts derrière une seule adresse dans un groupe.",
+      "group": "Une adresse pour les deux dépôts ci-dessous, consultés dans cet ordre.",
+      "hosted": "Les paquets publiés par l'équipe.",
+      "proxy": "Un cache devant registry.npmjs.org."
+    },
+    "package": {
+      "title": "Une page par paquet",
+      "text": "Le README, nettoyé côté serveur, la commande d'installation, les versions et les étiquettes, et les téléchargements des sept derniers jours.",
+      "versions": "Versions",
+      "downloads": "Téléchargements, 7 jours",
+      "command": "Commande d'installation",
+      "copy": "Copier",
+      "copied": "Copiée",
+      "reset": "Annuler"
+    },
+    "scan": {
+      "title": "Chaque image est analysée",
+      "text": "Trivy analyse une image à chaque push, et le scan se relance à la main. Les dépendances d'un paquet npm sont auditées à chaque publication.",
+      "critical": "Critique",
+      "high": "Élevée",
+      "medium": "Moyenne"
+    },
+    "search": {
+      "title": "Une recherche qui tolère les fautes",
+      "text": "Paquets, images et dépôts, pendant la frappe. Dès trois caractères, une faute de frappe trouve encore le bon paquet, classé après les correspondances exactes.",
+      "npm": "Paquets npm",
+      "docker": "Images Docker",
+      "repos": "Dépôts",
+      "npmHit": "left-pad",
+      "dockerHit": "images / left-pad-ci",
+      "reposHit": "npm-hosted"
+    },
+    "tenants": {
+      "title": "Une organisation par sous-domaine",
+      "text": "Chaque organisation a ses dépôts, ses utilisateurs, sa marque et son fournisseur d'identité. Ses administrateurs n'agissent que sur elle."
+    },
+    "retention": {
+      "title": "Quota et rétention",
+      "text": "Une publication qui dépasserait le quota est refusée. La rétention ne garde que les N dernières versions ou étiquettes ; latest n'est jamais purgé.",
+      "quota": "Quota",
+      "quotaValue": "3,1 Gio sur 10 Gio",
+      "keep": "Rétention",
+      "keepValue": "10 dernières versions",
+      "latest": "jamais purgé"
+    },
+    "mfa": {
+      "title": "Double authentification, pour tout le monde",
+      "text": "Aucun compte ne peut s'en passer : application d'authentification ou clé d'accès, avec dix codes de secours. Les comptes peuvent aussi venir de LDAP ou d'OIDC.",
+      "totp": "Application d'authentification",
+      "passkey": "Clé d'accès",
+      "backup": "Codes de secours",
+      "enrolled": "Activée",
+      "backupLeft": "8 sur 10 restants"
+    }
+  },
+  "install": {
+    "tabsLabel": "Façons de lancer ArtiFerris",
+    "tabs": {
+      "compose": "Docker Compose",
+      "helm": "Chart Helm",
+      "source": "Depuis les sources"
+    },
+    "labels": {
+      "compose": "Démarrer la pile avec Docker Compose",
+      "helm": "Installer le chart sur Kubernetes",
+      "source": "Lancer le backend et l'application web en local"
+    },
+    "regions": {
+      "compose": "Commandes pour démarrer ArtiFerris avec Docker Compose",
+      "helm": "Commandes pour installer ArtiFerris sur Kubernetes avec Helm",
+      "source": "Commandes pour lancer ArtiFerris depuis son code source"
+    },
+    "notes": {
+      "compose": "Compose construit l'image depuis les sources, Trivy compris. Générez les secrets avec `openssl rand -base64 48`, et `POSTGRES_PASSWORD` avec `openssl rand -hex 24`, puisqu'il finit dans une URL.",
+      "helm": "Le chart génère le mot de passe de la base, `JWT_SECRET` et `SECRETS_ENCRYPTION_KEY` et les retrouve d'un déploiement à l'autre. Avec `helm template`, Argo CD ou Flux, fixez-les vous-même. Le domaine de base sert aux sous-domaines des organisations.",
+      "source": "Il faut `rustup`, Node.js 26 et Docker avec Compose. Le script démarre PostgreSQL, applique les migrations et lance le backend sur le port 8081 et le serveur de développement Angular sur le port 4200."
+    },
+    "docLink": {
+      "compose": "Guide d'installation",
+      "helm": "Guide d'installation",
+      "source": "Guide d'installation"
+    },
+    "copy": "Copier",
+    "copied": "Copié",
+    "copyFailed": "Échec de la copie",
+    "then": {
+      "title": "Ce qui se passe ensuite",
+      "secrets": "Le serveur refuse de démarrer si `JWT_SECRET` ou `SECRETS_ENCRYPTION_KEY` fait moins de 32 octets ou commence par `change-me`, si le mot de passe du premier administrateur est encore celui de l'exemple, ou si `PUBLIC_URL` pointe sur `0.0.0.0`.",
+      "start": "Il se connecte à PostgreSQL, applique ses migrations, crée le premier administrateur si la table des utilisateurs est vide, et écoute sur le port 8080.",
+      "signin": "La première connexion vous guide pour enrôler une application d'authentification ou une clé d'accès, et affiche vos dix codes de secours. Il n'y a pas de moyen de passer outre."
+    },
+    "needs": {
+      "title": "Ce qu'il vous faut",
+      "docker": "Docker avec le plugin Compose, ou un cluster Kubernetes avec Traefik pour l'ingress.",
+      "postgres": "PostgreSQL 18 : la pile Compose et le chart apportent le leur.",
+      "storage": "Un volume persistant pour les archives npm et les blobs Docker : le stockage est un système de fichiers local, servi par un seul réplica.",
+      "https": "Un nom de domaine, un sous-domaine par organisation, et TLS devant, par un reverse proxy. Les clés d'accès ne fonctionnent que sur une origine sécurisée."
+    }
+  },
+  "home": {
+    "hero": {
+      "title": "Vos paquets npm et vos images Docker, sur un registre que vous hébergez.",
+      "subtitle": "Dépôts hébergés, proxys et groupes, quotas, rétention, audit des dépendances et scan des images : un binaire Rust et un PostgreSQL. En production, le serveur et sa base occupent ensemble une cinquantaine de Mio de mémoire.",
+      "copy": "Copier la commande",
+      "copied": "Copié",
+      "copyFailed": "Échec de la copie",
+      "assurance": "Aucun compte chez un tiers, aucune télémétrie transmise.",
+      "planLink": "Voir l'architecture.",
+      "proof": {
+        "caption": "L'instance de production, version 0.6.1, sur un cluster Kubernetes (amd64), mesurée le 6 octobre 2026, quelques minutes après le redémarrage du serveur.",
+        "label": "Sortie du terminal : mémoire utilisée par ArtiFerris et PostgreSQL"
+      }
+    },
+    "why": {
+      "title": "Cas d'usage",
+      "text": "Quatre situations types, et la réponse qu'ArtiFerris y apporte.",
+      "proxy": {
+        "situation": "Vos builds téléchargent leurs dépendances sur un registre public, à chaque fois.",
+        "answer": "Un dépôt proxy se place devant `registry.npmjs.org` ou Docker Hub : la première demande va chercher le paquet en amont, les suivantes le servent depuis ArtiFerris. Un groupe réunit ce proxy et vos paquets derrière une seule adresse."
+      },
+      "tenants": {
+        "situation": "Vous hébergez les paquets de plusieurs équipes ou de plusieurs clients sur une même instance.",
+        "answer": "Chaque organisation a son sous-domaine, ses dépôts, ses utilisateurs, sa marque et son fournisseur d'identité. Ses administrateurs n'agissent que sur elle ; un super-administrateur les voit toutes."
+      },
+      "scan": {
+        "situation": "Vous voulez savoir ce que contiennent les images et les paquets que vous distribuez.",
+        "answer": "Trivy analyse chaque image poussée, et le scan se relance à la main. Les dépendances d'un paquet npm sont auditées à chaque publication. Les résultats s'affichent sur la page de l'image ou du paquet."
+      },
+      "access": {
+        "situation": "Vous voulez que la double authentification ne dépende pas de la vigilance de chacun.",
+        "answer": "Elle est obligatoire pour tous les comptes, qu'ils soient locaux ou viennent de LDAP ou d'OIDC. Les outils en ligne de commande s'authentifient avec un jeton API, que l'administration peut lister et révoquer."
+      }
+    },
+    "caps": {
+      "title": "Aperçu du produit",
+      "text": "Des extraits de l'interface réelle, non des maquettes. L'interface existe en français, anglais, espagnol, italien et allemand.",
+      "more": "La liste complète des fonctionnalités"
+    },
+    "registries": {
+      "title": "Deux registres, une console",
+      "text": "ArtiFerris parle le protocole du registre npm et celui de Docker/OCI : `npm`, `pnpm`, `yarn`, `docker` et `podman` s'en servent comme de leur registre habituel. Chaque dépôt contient des paquets npm ou des images Docker, jamais les deux.",
+      "npm": {
+        "title": "Un groupe, deux membres",
+        "text": "Le `.npmrc` d'un projet pointe sur un groupe. Le groupe consulte ses membres dans l'ordre que vous fixez, et le premier qui contient le paquet répond. Activez l'interrupteur pour voir ce que change une seconde demande.",
+        "link": "Le registre npm dans la documentation"
+      },
+      "docker": {
+        "title": "Le registre Docker",
+        "text": "Le mot de passe de `docker login` est un jeton API. Chaque push lance un scan Trivy de l'image, dont les résultats s'affichent sur sa page.",
+        "link": "Le registre Docker dans la documentation",
+        "label": "Se connecter, pousser et tirer une image",
+        "region": "Commandes Docker pour un dépôt d'organisation"
+      },
+      "rules": {
+        "title": "Les règles d'un dépôt",
+        "text": "Ce que chaque dépôt garde, refuse et vérifie."
+      },
+      "types": {
+        "title": "Trois types de dépôt",
+        "text": "Hébergé pour vos propres paquets, proxy pour un cache devant un registre amont, groupe pour plusieurs dépôts du même format derrière une seule adresse. Lire à travers un groupe demande `read` sur chacun de ses membres."
+      },
+      "quota": {
+        "title": "Un quota par dépôt",
+        "text": "La place que le dépôt peut occuper. Une publication qui le dépasserait est refusée."
+      },
+      "retention": {
+        "title": "Une rétention par dépôt",
+        "text": "Ne garder que les N dernières versions ou étiquettes. La purge passe toutes les 6 heures, et `latest` n'est jamais purgé. Republier une version npm dépubliée est refusé."
+      },
+      "audit": {
+        "title": "Les dépendances auditées",
+        "text": "À chaque publication, ArtiFerris audite les dépendances du paquet. `npm audit` fonctionne aussi contre ArtiFerris ; les noms et versions audités partent alors vers `registry.npmjs.org`."
+      },
+      "scan": {
+        "title": "Les images analysées",
+        "text": "Trivy, présent dans l'image d'ArtiFerris, analyse chaque image poussée. Un scan se relance à la main depuis la page de l'image."
+      },
+      "public": {
+        "title": "Des dépôts publics",
+        "text": "Un dépôt public se lit sans compte et apparaît dans le catalogue public. Les lectures anonymes ont un budget par client et par minute, 1 200 par défaut."
+      },
+      "docs": "Les dépôts dans la documentation"
+    },
+    "install": {
+      "title": "Installation",
+      "text": "ArtiFerris tient dans une image de conteneur : le serveur, les deux registres, l'interface et Trivy. Il lui faut PostgreSQL et un volume. Trois modes d'installation : Docker Compose, le chart Helm sur Kubernetes, ou depuis les sources."
+    },
+    "made": {
+      "title": "Architecture",
+      "text": "Un processus, six crates, une architecture hexagonale : le domaine ignore tout de la base de données, et chaque protocole de registre a sa propre crate.",
+      "crates": {
+        "domain": "Entités, objets-valeurs et les ports dont le reste dépend. Aucune entrée-sortie.",
+        "application": "Les cas d'usage. Ne dépend que du domaine.",
+        "infrastructure": "Adaptateurs : PostgreSQL (SQLx), fichiers, SMTP, LDAP, OIDC, Trivy, Argon2, JWT.",
+        "api": "Le serveur Axum : routes, assemblage, et le frontend Angular. C'est lui, le binaire.",
+        "npm": "Le protocole du registre npm.",
+        "docker": "Le protocole du registre Docker/OCI."
+      },
+      "link": "Le code source sur GitHub"
+    },
+    "security": {
+      "title": "Sécurité et vos données",
+      "text": "Les mesures qui protègent une instance, décrites précisément. Les données restent sur votre serveur ; seuls les noms et versions des paquets audités partent vers registry.npmjs.org.",
+      "mfa": {
+        "title": "La double authentification est obligatoire",
+        "text": "Application d'authentification ou clé d'accès, avec dix codes de secours. Un jeton distinct et de courte durée représente « mot de passe vérifié, second facteur attendu » ; il ne sert pas de session."
+      },
+      "passwords": {
+        "title": "Mots de passe hachés avec Argon2",
+        "text": "Pour les comptes locaux. Les comptes LDAP et OIDC s'authentifient auprès de leur fournisseur, et les connexions échouées sont limitées."
+      },
+      "rights": {
+        "title": "Des droits vérifiés sur chaque route",
+        "text": "Les droits d'un dépôt sont contrôlés par le serveur, pas seulement masqués dans l'interface. Les corps de requête ne sont lus qu'après ces contrôles."
+      },
+      "secrets": {
+        "title": "Secrets chiffrés en AES-256-GCM",
+        "text": "Mots de passe SMTP, LDAP et OIDC, identifiants des proxys et graines TOTP, sous `SECRETS_ENCRYPTION_KEY`, qui se change sans perte par une rotation."
+      },
+      "tokens": {
+        "title": "Des jetons, stockés hachés",
+        "text": "Les outils en ligne de commande s'authentifient avec un jeton API, que le serveur ne peut pas relire. Les jetons que Docker obtient après `docker login` durent 2 minutes."
+      },
+      "bodies": {
+        "title": "Une mémoire bornée",
+        "text": "Les blobs Docker vont sur disque au fil de l'eau. Les documents gardés en mémoire puisent dans un budget de 1 Gio, et un client n'a que quatre corps en cours."
+      },
+      "anonymous": {
+        "title": "Un budget pour le trafic anonyme",
+        "text": "Pages publiques, API publique et lectures npm et Docker ont un budget par client et par minute, partagé entre réplicas. La base ne reçoit que des empreintes, jamais une adresse."
+      },
+      "audit": {
+        "title": "Des journaux d'audit et de sécurité",
+        "text": "Conservés 365 jours par défaut. Les connexions, les accès refusés et les actions d'administration y sont enregistrés."
+      },
+      "outbound": {
+        "title": "Des connexions sortantes contrôlées",
+        "text": "LDAP, SMTP, OIDC et les proxys ne joignent pas d'adresse privée, sauf les plages que vous autorisez. Un proxy n'envoie ses identifiants qu'au registre amont configuré, en `https`."
+      },
+      "data": {
+        "title": "Vos données, sur votre serveur",
+        "text": "PostgreSQL et un volume, tous deux à vous de sauvegarder. Avec le chart Helm, le pod tourne sans privilège, sur un système de fichiers en lecture seule."
+      },
+      "link": "La section Sécurité du README",
+      "headers": {
+        "title": "Ce que renvoie le serveur",
+        "text": "Les en-têtes de sécurité, tels qu'une instance les envoie.",
+        "label": "En-têtes d'une réponse d'ArtiFerris",
+        "caption": "L'instance de production, version 0.6.1, interrogée sur /healthz le 6 octobre 2026. Le serveur pose la politique de contenu, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy et les politiques Cross-Origin ; ici, Strict-Transport-Security et X-XSS-Protection viennent du reverse proxy."
+      }
+    },
+    "roadmap": {
+      "title": "Perspectives",
+      "text": "Ce qui est prévu, sans version encore. Un point n'est coché que lorsqu'il est livré.",
+      "formats": {
+        "tag": "Formats",
+        "title": "Maven, PyPI, NuGet, Cargo, Go, Helm et dépôts bruts"
+      },
+      "storage": {
+        "tag": "Stockage",
+        "title": "Un stockage objet compatible S3, pour plusieurs réplicas"
+      },
+      "ha": {
+        "tag": "Exploitation",
+        "title": "Haute disponibilité et réplication géographique"
+      },
+      "provenance": {
+        "tag": "Provenance",
+        "title": "Signature et provenance des paquets"
+      },
+      "scopes": {
+        "tag": "npm",
+        "title": "Des espaces de noms par utilisateur dans une organisation"
+      },
+      "saml": {
+        "tag": "Identité",
+        "title": "SAML"
+      },
+      "link": "La feuille de route complète"
+    },
+    "cta": {
+      "title": "Évaluez ArtiFerris, puis déployez votre propre instance.",
+      "text": "L'instance publique permet de découvrir le produit. Votre instance conserve vos paquets.",
+      "install": "Guide d'installation"
+    },
+    "limits": {
+      "title": "Ce qui manque aujourd'hui",
+      "text": "À connaître avant tout déploiement.",
+      "formats": {
+        "title": "Deux formats seulement",
+        "text": "npm et Docker/OCI. Maven, PyPI, NuGet, Cargo, Go, Helm et les dépôts bruts sont sur la feuille de route."
+      },
+      "storage": {
+        "title": "Un seul réplica",
+        "text": "Le stockage est un système de fichiers local : un volume, un réplica. Un stockage compatible S3 est prévu."
+      },
+      "saml": {
+        "title": "Pas de SAML",
+        "text": "Les comptes viennent d'ArtiFerris, de LDAP ou Active Directory, ou d'un fournisseur OIDC."
+      },
+      "provenance": {
+        "title": "Pas de signature des paquets",
+        "text": "La signature et la provenance (Sigstore, npm provenance) sont sur la feuille de route."
+      }
+    }
+  },
+  "features": {
+    "title": "Ce qu'ArtiFerris fait aujourd'hui",
+    "intro": "Tout ce qui figure sur cette page existe aujourd'hui. Ce qui est prévu se trouve dans la feuille de route.",
+    "note": "L'interface de l'application existe en cinq langues ; sa documentation est en français.",
+    "sections": {
+      "repos": {
+        "title": "Dépôts",
+        "text": "Des dépôts npm et Docker, rangés par organisation ou sous votre propre nom.",
+        "bullets": {
+          "b1": "Trois types par format : hébergé, proxy devant un registre amont, et groupe de plusieurs dépôts derrière une seule adresse",
+          "b2": "Droits `read`, `write` et `admin`, accordés utilisateur par utilisateur",
+          "b3": "Un quota de stockage et une rétention par dépôt ; `latest` n'est jamais purgé",
+          "b4": "Des dépôts publics, lisibles sans compte, ou privés",
+          "b5": "Un dépôt personnel sous `/@utilisateur`, à côté des dépôts de l'organisation"
+        }
+      },
+      "packages": {
+        "title": "Paquets et images",
+        "text": "Une page par paquet npm et par image Docker.",
+        "bullets": {
+          "b1": "npm : publish, install, unpublish et dist-tags, avec `npm`, `pnpm` ou `yarn`",
+          "b2": "Docker/OCI : push, pull et suppression de manifest, avec `docker` ou `podman`",
+          "b3": "Le README d'un paquet npm, converti et nettoyé côté serveur, et sa commande d'installation",
+          "b4": "La taille de chaque étiquette d'une image, et les téléchargements des sept derniers jours",
+          "b5": "Republier une version npm dépubliée est refusé"
+        }
+      },
+      "scan": {
+        "title": "Analyse des artefacts",
+        "text": "Ce que contiennent les paquets et les images que vous distribuez.",
+        "bullets": {
+          "b1": "Audit des dépendances d'un paquet npm à chaque publication",
+          "b2": "Scan Trivy de chaque image Docker poussée, relançable à la main",
+          "b3": "Les résultats sur la page du paquet ou de l'image, avec leur sévérité"
+        }
+      },
+      "tenants": {
+        "title": "Organisations",
+        "text": "Plusieurs équipes ou plusieurs clients sur une même instance.",
+        "bullets": {
+          "b1": "Une organisation par sous-domaine, avec ses dépôts et ses utilisateurs",
+          "b2": "Sa marque : logo et favicon",
+          "b3": "Son fournisseur d'identité : comptes locaux, LDAP ou Active Directory, ou OIDC",
+          "b4": "Des administrateurs d'organisation qui n'agissent que sur la leur ; une organisation publique par défaut pour une instance mono-organisation"
+        }
+      },
+      "public": {
+        "title": "Catalogue public",
+        "text": "Donnez accès à des paquets à des personnes qui n'ont pas de compte.",
+        "bullets": {
+          "b1": "Un catalogue par format, une recherche qui tolère les fautes de frappe et des suggestions pendant la frappe",
+          "b2": "Les profils `/@utilisateur` et `/o/organisation`, et la page de chaque paquet public",
+          "b3": "Référencement par les moteurs de recherche, désactivé par défaut et réglable par organisation"
+        }
+      },
+      "docs": {
+        "title": "Documentation",
+        "text": "Intégrée à l'application, à l'adresse `/docs`.",
+        "bullets": {
+          "b1": "Ouverte à tous, connectés ou non",
+          "b2": "Démarrer, utilisation (dépôts, npm, Docker, compte et jetons, catalogue public), administration et API publique",
+          "b3": "En français, avec une recherche"
+        }
+      },
+      "accounts": {
+        "title": "Comptes et accès",
+        "text": "La double authentification est obligatoire.",
+        "bullets": {
+          "b1": "Obligatoire pour tous les comptes : application d'authentification (TOTP) ou clé d'accès, et codes de secours",
+          "b2": "Comptes locaux, LDAP ou Active Directory, et OIDC",
+          "b3": "Invitations par e-mail : l'administrateur ne saisit que l'adresse, l'invité choisit son nom d'utilisateur",
+          "b4": "Jetons API personnels, que les administrateurs peuvent lister et révoquer"
+        }
+      },
+      "admin": {
+        "title": "Administration",
+        "text": "Ce que voit un administrateur.",
+        "bullets": {
+          "b1": "Un tableau de bord, des métriques d'usage et une page de santé",
+          "b2": "Un journal d'audit et un journal de sécurité",
+          "b3": "Les utilisateurs, la réinitialisation de leur mot de passe ou de leur double authentification, et le SMTP avec un e-mail de test",
+          "b4": "L'export et l'import de la configuration"
+        }
+      },
+      "languages": {
+        "title": "Langues",
+        "text": "L'interface en cinq langues.",
+        "bullets": {
+          "b1": "Français, anglais, espagnol, italien et allemand ; la langue du compte prime sur celle du navigateur",
+          "b2": "Les e-mails et les titres des pages publiques suivent la langue du lecteur"
+        }
+      },
+      "tech": {
+        "title": "Aspects techniques",
+        "text": "Ce que vous déployez et ce dont il a besoin.",
+        "bullets": {
+          "b1": "Un seul binaire Rust (Axum) sert l'API, les deux registres et l'application web Angular",
+          "b2": "PostgreSQL 18 pour les données ; les archives et les blobs sur un volume",
+          "b3": "Docker Compose ou un chart Helm pour Kubernetes ; image `masmarino/artiferris`, Trivy inclus",
+          "b4": "Une architecture hexagonale, répartie sur six crates Cargo"
+        }
+      }
+    },
+    "missing": {
+      "title": "Ce qui n'est pas encore disponible",
+      "intro": "Tout cela figure dans la feuille de route. Rien de cela n'existe aujourd'hui.",
+      "items": {
+        "i1": "D'autres formats : Maven et Gradle, PyPI, NuGet, Cargo, Go, Helm et les dépôts bruts",
+        "i2": "Un stockage objet compatible S3, pour faire tourner plusieurs réplicas : aujourd'hui, un volume et un réplica",
+        "i3": "La haute disponibilité et la réplication géographique",
+        "i4": "SAML",
+        "i5": "La signature et la provenance des paquets (Sigstore, npm provenance)",
+        "i6": "Des espaces de noms par utilisateur dans une organisation (scopes `@utilisateur/…`)"
+      },
+      "roadmap": "Voir la feuille de route"
+    },
+    "tabs": {
+      "label": "Fonctionnalités par domaine",
+      "items": {
+        "repos": "Dépôts",
+        "packages": "Paquets et images",
+        "scan": "Analyse",
+        "tenants": "Organisations",
+        "public": "Catalogue public",
+        "docs": "Documentation"
+      }
+    },
+    "sheet": {
+      "title": "Comptes, administration, langues et déploiement"
+    }
+  },
+  "roadmap": {
+    "title": "Feuille de route : rien de ceci n'existe encore",
+    "intro": "La direction d'ArtiFerris, sans version pour l'instant. Les détails changeront à mesure que chaque point sera conçu.",
+    "readme": "Feuille de route du README",
+    "changelog": "Journal des versions",
+    "planned": "Prévu",
+    "groups": {
+      "formats": {
+        "title": "D'autres formats de paquets",
+        "intro": "Pour chaque format, les trois types de dépôt qu'ont npm et Docker aujourd'hui : hébergé, proxy et groupe.",
+        "items": {
+          "i1": "Maven et Gradle, PyPI, NuGet, Cargo, Go, Helm et des dépôts bruts."
+        }
+      },
+      "scale": {
+        "title": "Plusieurs réplicas",
+        "intro": "Aujourd'hui, une instance a un volume et un réplica. Le stockage passe déjà par un port abstrait, `StorageBackendPort`, dont le système de fichiers local est la seule implémentation.",
+        "items": {
+          "i1": "Un stockage objet compatible S3 derrière `StorageBackendPort`, pour faire tourner plusieurs réplicas.",
+          "i2": "La haute disponibilité et la réplication géographique.",
+          "i3": "La distribution des paquets et des images par un CDN."
+        }
+      },
+      "trust": {
+        "title": "Identité et provenance",
+        "items": {
+          "i1": "SAML, à côté de LDAP et d'OIDC.",
+          "i2": "Des espaces de noms par utilisateur dans une organisation (scopes `@utilisateur/…`).",
+          "i3": "La signature et la provenance des paquets (Sigstore, npm provenance)."
+        }
+      }
+    },
+    "ferrisgit": {
+      "title": "Le lien avec FerrisGit",
+      "text": "FerrisGit, la forge Git de la même famille, prévoit de publier vers ArtiFerris un artefact construit par une pipeline, de retracer chaque artefact jusqu'au commit qui l'a produit, et de ramener les résultats d'analyse d'ArtiFerris dans les vérifications de ses demandes de fusion. Une identité partagée entre les deux reste une question ouverte.",
+      "link": "Le site de FerrisGit"
+    },
+    "considering": "À l'étude"
+  },
+  "notFound": {
+    "title": "Page introuvable",
+    "description": "Cette page n'existe pas sur le site d'ArtiFerris.",
+    "text": "L'adresse a peut-être changé, ou la page n'a jamais existé. Choisissez une langue pour aller à la page d'accueil.",
+    "languages": "Pages d'accueil par langue"
+  }
+}

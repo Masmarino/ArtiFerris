@@ -1,0 +1,39 @@
+<div class="git-field__wash git-field__wash--a"></div>
+<div class="git-field__wash git-field__wash--b"></div>
+<svg
+  class="git-field__svg"
+  [attr.viewBox]="'0 0 ' + width + ' ' + height"
+  preserveAspectRatio="xMaxYMid slice"
+  focusable="false"
+>
+  <g class="git-field__track">
+    @for (offset of tiles; track offset) {
+      <g [attr.transform]="'translate(' + offset + ' 0)'">
+        @for (line of drawing.lines; track $index) {
+          <path class="git-field__line" [attr.data-color]="line.color" [attr.d]="line.d" />
+        }
+        @for (pulse of drawing.pulses; track $index) {
+          <path
+            class="git-field__pulse"
+            [attr.data-color]="pulse.color"
+            [attr.d]="pulse.d"
+            pathLength="1000"
+            [style.animation-duration.s]="pulse.duration"
+            [style.animation-delay.s]="pulse.delay"
+          />
+        }
+        @for (commit of drawing.commits; track $index) {
+          <circle
+            class="git-field__commit"
+            [class.is-hollow]="commit.hollow"
+            [attr.data-color]="commit.color"
+            [attr.cx]="commit.x"
+            [attr.cy]="commit.y"
+            r="4.5"
+            [style.animation-delay.s]="commit.delay"
+          />
+        }
+      </g>
+    }
+  </g>
+</svg>

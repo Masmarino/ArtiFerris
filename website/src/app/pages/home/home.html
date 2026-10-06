@@ -1,0 +1,142 @@
+<section class="hero on-dark" aria-labelledby="hero-title">
+  <app-git-field />
+  <div class="container hero__inner">
+    <h1 id="hero-title">{{ 'home.hero.title' | transloco }}</h1>
+    <div class="hero__copy">
+      <p class="lead">{{ 'home.hero.subtitle' | transloco }}</p>
+      <div class="hero__actions">
+        <a gbtButton variant="primary" size="large" [href]="appUrl">{{
+          'nav.openApp' | transloco
+        }}</a>
+        <div class="command">
+          <code class="command__text"><span class="command__prompt">$</span>{{ heroCommand }}</code>
+          <gbt-copy-button
+            class="command__copy"
+            variant="ghost"
+            size="medium"
+            [value]="heroCommand"
+            [ariaLabel]="'home.hero.copy' | transloco"
+            [copiedText]="'home.hero.copied' | transloco"
+            [failedText]="'home.hero.copyFailed' | transloco"
+            feedback="bubble"
+          />
+        </div>
+      </div>
+      <p class="hero__assurance">
+        {{ 'home.hero.assurance' | transloco }}
+        <a class="hero__plan-link" [routerLink]="['/', lang()]" fragment="architecture">{{
+          'home.hero.planLink' | transloco
+        }}</a>
+      </p>
+    </div>
+    <app-terminal
+      class="hero__proof"
+      [text]="proofTerminal"
+      [label]="'home.hero.proof.label' | transloco"
+    >
+      {{ 'home.hero.proof.caption' | transloco }}
+    </app-terminal>
+  </div>
+</section>
+
+<section class="section section--first" id="why" aria-labelledby="why-title">
+  <div class="container">
+    <div class="section__head">
+      <h2 id="why-title">{{ 'home.why.title' | transloco }}</h2>
+      <p>{{ 'home.why.text' | transloco }}</p>
+    </div>
+    <div class="section__body">
+      <dl class="spec why" data-rule appReveal appRevealMode="mark">
+        @for (item of why; track item; let i = $index) {
+          <div class="spec__row why__row" [appReveal]="i">
+            <dt>{{ 'home.why.' + item + '.situation' | transloco }}</dt>
+            <dd [innerHTML]="'home.why.' + item + '.answer' | transloco | inlineCode"></dd>
+          </div>
+        }
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="product" aria-labelledby="caps-title">
+  <div class="container">
+    <div class="section__head">
+      <h2 id="caps-title">{{ 'home.caps.title' | transloco }}</h2>
+      <p>{{ 'home.caps.text' | transloco }}</p>
+      <p class="section__more">
+        <a class="text-link" [routerLink]="['/', lang(), 'features']">{{
+          'home.caps.more' | transloco
+        }}</a>
+      </p>
+    </div>
+    <div class="section__body">
+      <app-capabilities />
+    </div>
+  </div>
+</section>
+
+<section class="section" id="architecture" aria-labelledby="made-title">
+  <div class="container">
+    <div class="section__head">
+      <h2 id="made-title">{{ 'home.made.title' | transloco }}</h2>
+      <p>{{ 'home.made.text' | transloco }}</p>
+      <p class="section__more">
+        <a class="text-link" [href]="githubUrl" target="_blank" rel="noopener">{{
+          'home.made.link' | transloco
+        }}</a>
+      </p>
+    </div>
+    <div class="section__body">
+      <app-plan-figure page="home" />
+      <ol class="crates" data-rule appReveal appRevealMode="mark">
+        @for (crate of crates; track crate; let i = $index) {
+          <li [appReveal]="i">
+            <span class="crates__name mono">artiferris-{{ crate }}</span>
+            <span class="crates__text">{{ 'home.made.crates.' + crate | transloco }}</span>
+          </li>
+        }
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="roadmap" aria-labelledby="roadmap-title">
+  <div class="container">
+    <div class="section__head">
+      <h2 id="roadmap-title">{{ 'home.limits.title' | transloco }}</h2>
+      <p>{{ 'home.limits.text' | transloco }}</p>
+    </div>
+    <div class="section__body">
+      <dl class="spec limits" data-rule appReveal appRevealMode="mark">
+        @for (item of limits; track item; let i = $index) {
+          <div class="spec__row limits__item" [appReveal]="i">
+            <dt>{{ 'home.limits.' + item + '.title' | transloco }}</dt>
+            <dd>{{ 'home.limits.' + item + '.text' | transloco }}</dd>
+          </div>
+        }
+      </dl>
+
+      <h3 class="roadmap__title" id="roadmap-next">{{ 'home.roadmap.title' | transloco }}</h3>
+      <p class="roadmap__text">{{ 'home.roadmap.text' | transloco }}</p>
+      <ol class="strip" data-rule appReveal appRevealMode="mark">
+        @for (item of nextItems; track item; let i = $index) {
+          <li class="strip__item" [appReveal]="i">
+            <span class="strip__tag mono">{{ 'home.roadmap.' + item + '.tag' | transloco }}</span>
+            <span class="strip__title">{{ 'home.roadmap.' + item + '.title' | transloco }}</span>
+            <span class="status">{{ 'roadmap.planned' | transloco }}</span>
+          </li>
+        }
+      </ol>
+      <div class="actions">
+        <a class="text-link" [routerLink]="['/', lang(), 'roadmap']">{{
+          'home.roadmap.link' | transloco
+        }}</a>
+        <a class="text-link" [href]="readmeRoadmapUrl" target="_blank" rel="noopener">{{
+          'roadmap.readme' | transloco
+        }}</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<app-cta />

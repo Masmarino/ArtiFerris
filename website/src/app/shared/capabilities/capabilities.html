@@ -1,0 +1,365 @@
+<div
+  class="carousel"
+  role="region"
+  aria-roledescription="carousel"
+  [attr.aria-label]="'caps.carousel.label' | transloco"
+>
+  <div
+    class="carousel__viewport"
+    [class.has-before]="current() > 0"
+    [class.has-after]="current() < slides.length - 1"
+  >
+    <div
+      #track
+      class="carousel__track"
+      tabindex="0"
+      [attr.aria-label]="'caps.carousel.track' | transloco"
+      (scroll)="onScroll()"
+      (keydown.arrowRight)="step(1, $event)"
+      (keydown.arrowLeft)="step(-1, $event)"
+    >
+      <!-- Rights: who can do what on a repository. -->
+      <article
+        class="tile tile--roles"
+        [appReveal]="0"
+        role="group"
+        [attr.aria-roledescription]="'caps.carousel.slideRole' | transloco"
+        [attr.aria-label]="'1 ' + ('caps.carousel.of' | transloco) + ' 8'"
+        id="d1"
+        [class.is-linked]="plan.active() === 1"
+        [appPlanPoint]="1"
+      >
+        <div class="frag frag--roles">
+          <table class="roles">
+            <thead>
+              <tr>
+                <th scope="col">
+                  <span class="sr-only">{{ 'caps.roles.action' | transloco }}</span>
+                </th>
+                <th scope="col" class="mono">read</th>
+                <th scope="col" class="mono">write</th>
+                <th scope="col" class="mono">admin</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of roleRows; track row.id) {
+                <tr>
+                  <th scope="row">{{ 'caps.roles.rows.' + row.id | transloco }}</th>
+                  <td><span class="roles__mark" [class.is-on]="row.read"></span></td>
+                  <td><span class="roles__mark" [class.is-on]="row.write"></span></td>
+                  <td><span class="roles__mark is-on"></span></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="tile__text">
+          <h3>
+            <span class="tile__no" aria-hidden="true">1</span>{{ 'caps.roles.title' | transloco }}
+          </h3>
+          <p>{{ 'caps.roles.text' | transloco }}</p>
+        </div>
+      </article>
+      <!-- The three types of repository. -->
+      <article
+        class="tile tile--types"
+        [appReveal]="1"
+        role="group"
+        [attr.aria-roledescription]="'caps.carousel.slideRole' | transloco"
+        [attr.aria-label]="'2 ' + ('caps.carousel.of' | transloco) + ' 8'"
+        id="d2"
+        [class.is-linked]="plan.active() === 2"
+        [appPlanPoint]="2"
+      >
+        <div class="frag frag--catalog" aria-hidden="true">
+          <ul class="repos">
+            <li>
+              <p class="repos__name">npm-all <span class="chip chip--indigo">group</span></p>
+              <p class="repos__desc">{{ 'caps.types.group' | transloco }}</p>
+            </li>
+            <li>
+              <p class="repos__name">npm-hosted <span class="chip">hosted</span></p>
+              <p class="repos__desc">{{ 'caps.types.hosted' | transloco }}</p>
+            </li>
+            <li>
+              <p class="repos__name">npmjs-proxy <span class="chip chip--ok">proxy</span></p>
+              <p class="repos__desc">{{ 'caps.types.proxy' | transloco }}</p>
+            </li>
+          </ul>
+        </div>
+        <div class="tile__text">
+          <h3>
+            <span class="tile__no" aria-hidden="true">2</span>{{ 'caps.types.title' | transloco }}
+          </h3>
+          <p>{{ 'caps.types.text' | transloco }}</p>
+        </div>
+      </article>
+      <!-- A package page: its install command, versions and downloads. -->
+      <article
+        class="tile tile--package"
+        [appReveal]="2"
+        role="group"
+        [attr.aria-roledescription]="'caps.carousel.slideRole' | transloco"
+        [attr.aria-label]="'3 ' + ('caps.carousel.of' | transloco) + ' 8'"
+        id="d3"
+        [class.is-linked]="plan.active() === 3"
+        [appPlanPoint]="3"
+      >
+        <div class="frag frag--review" [class.is-applied]="copied()">
+          <p class="frag__path">
+            <span class="mono">left-pad</span>
+            <span class="chip">latest 1.3.0</span>
+          </p>
+          <div class="diff" aria-hidden="true">
+            <p class="diff__line"><span class="diff__ln">$</span>npm install left-pad</p>
+          </div>
+          <ul class="factors" aria-hidden="true">
+            <li class="factor">
+              <span class="factor__name">{{ 'caps.package.versions' | transloco }}</span>
+              <span class="factor__state">12</span>
+            </li>
+            <li class="factor">
+              <span class="factor__name">{{ 'caps.package.downloads' | transloco }}</span>
+              <span class="factor__state">1 284</span>
+            </li>
+          </ul>
+          <div class="suggest">
+            <span class="suggest__label">{{ 'caps.package.command' | transloco }}</span>
+            @if (copied()) {
+              <span class="applied">
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                  <path d="M3 8.5 6.5 12 13 4" />
+                </svg>
+                {{ 'caps.package.copied' | transloco }}
+              </span>
+              <button type="button" class="frag__reset" (click)="reset()">
+                {{ 'caps.package.reset' | transloco }}
+              </button>
+            } @else {
+              <button type="button" class="frag__button" (click)="copy()">
+                {{ 'caps.package.copy' | transloco }}
+              </button>
+            }
+          </div>
+        </div>
+        <div class="tile__text">
+          <h3>
+            <span class="tile__no" aria-hidden="true">3</span>{{ 'caps.package.title' | transloco }}
+          </h3>
+          <p>{{ 'caps.package.text' | transloco }}</p>
+        </div>
+      </article>
+      <!-- The Trivy scan of an image. -->
+      <article
+        class="tile tile--scan"
+        [appReveal]="3"
+        role="group"
+        [attr.aria-roledescription]="'caps.carousel.slideRole' | transloco"
+        [attr.aria-label]="'4 ' + ('caps.carousel.of' | transloco) + ' 8'"
+        id="d4"
+        [class.is-linked]="plan.active() === 4"
+        [appPlanPoint]="4"
+      >
+        <div class="frag frag--kanban" aria-hidden="true">
+          <p class="frag__path">
+            <span class="mono">images/api:1.4.0</span>
+            <span class="chip">Trivy</span>
+          </p>
+          <ul class="factors">
+            <li class="factor">
+              <span class="factor__name"
+                ><span class="chip chip--bug">{{ 'caps.scan.critical' | transloco }}</span></span
+              >
+              <span class="factor__state">1</span>
+            </li>
+            <li class="factor">
+              <span class="factor__name"
+                ><span class="chip chip--warn">{{ 'caps.scan.high' | transloco }}</span></span
+              >
+              <span class="factor__state">3</span>
+            </li>
+            <li class="factor">
+              <span class="factor__name"
+                ><span class="chip">{{ 'caps.scan.medium' | transloco }}</span></span
+              >
+              <span class="factor__state">7</span>
+            </li>
+          </ul>
+        </div>
+        <div class="tile__text">
+          <h3>
+            <span class="tile__no" aria-hidden="true">4</span>{{ 'caps.scan.title' | transloco }}
+          </h3>
+          <p>{{ 'caps.scan.text' | transloco }}</p>
+        </div>
+      </article>
+      <!-- Search, typos included. -->
+      <article
+        class="tile tile--search"
+        [appReveal]="4"
+        role="group"
+        [attr.aria-roledescription]="'caps.carousel.slideRole' | transloco"
+        [attr.aria-label]="'5 ' + ('caps.carousel.of' | transloco) + ' 8'"
+        id="d5"
+        [class.is-linked]="plan.active() === 5"
+        [appPlanPoint]="5"
+      >
+        <div class="frag frag--search" aria-hidden="true">
+          <p class="search__field">
+            <svg viewBox="0 0 24 24" width="16" height="16">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <span>lfet-pad<span class="search__caret"></span></span>
+          </p>
+          <ul class="search__results">
+            @for (group of searchGroups; track group) {
+              <li>
+                <span class="search__group">{{ 'caps.search.' + group | transloco }}</span>
+                <span class="search__hit">{{ 'caps.search.' + group + 'Hit' | transloco }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+        <div class="tile__text">
+          <h3>
+            <span class="tile__no" aria-hidden="true">5</span>{{ 'caps.search.title' | transloco }}
+          </h3>
+          <p>{{ 'caps.search.text' | transloco }}</p>
+        </div>
+      </article>
+      <!-- One organisation per subdomain. -->
+      <article
+        class="tile tile--tenants"
+        [appReveal]="5"
+        role="group"
+        [attr.aria-roledescription]="'caps.carousel.slideRole' | transloco"
+        [attr.aria-label]="'6 ' + ('caps.carousel.of' | transloco) + ' 8'"
+        id="d6"
+        [class.is-linked]="plan.active() === 6"
+        [appPlanPoint]="6"
+      >
+        <div class="frag frag--webhook" aria-hidden="true">
+          <pre class="http"><span class="http__verb">$</span> npm config get registry
+https://<span class="http__sig">acme</span>.artiferris.pro/npm/npm-all/
+
+<span class="http__verb">$</span> docker login <span class="http__sig">globex</span>.artiferris.pro
+<span class="http__key">Login Succeeded</span></pre>
+        </div>
+        <div class="tile__text">
+          <h3>
+            <span class="tile__no" aria-hidden="true">6</span>{{ 'caps.tenants.title' | transloco }}
+          </h3>
+          <p>{{ 'caps.tenants.text' | transloco }}</p>
+        </div>
+      </article>
+      <!-- Quota and retention of a repository. -->
+      <article
+        class="tile tile--retention"
+        [appReveal]="6"
+        role="group"
+        [attr.aria-roledescription]="'caps.carousel.slideRole' | transloco"
+        [attr.aria-label]="'7 ' + ('caps.carousel.of' | transloco) + ' 8'"
+        id="d7"
+        [class.is-linked]="plan.active() === 7"
+        [appPlanPoint]="7"
+      >
+        <div class="frag frag--mfa" aria-hidden="true">
+          <ul class="factors">
+            <li class="factor is-on">
+              <span class="factor__name">{{ 'caps.retention.quota' | transloco }}</span>
+              <span class="factor__state">{{ 'caps.retention.quotaValue' | transloco }}</span>
+            </li>
+            <li class="factor is-on">
+              <span class="factor__name">{{ 'caps.retention.keep' | transloco }}</span>
+              <span class="factor__state">{{ 'caps.retention.keepValue' | transloco }}</span>
+            </li>
+            <li class="factor">
+              <span class="factor__name"><span class="mono">latest</span></span>
+              <span class="factor__state">{{ 'caps.retention.latest' | transloco }}</span>
+            </li>
+          </ul>
+        </div>
+        <div class="tile__text">
+          <h3>
+            <span class="tile__no" aria-hidden="true">7</span
+            >{{ 'caps.retention.title' | transloco }}
+          </h3>
+          <p>{{ 'caps.retention.text' | transloco }}</p>
+        </div>
+      </article>
+      <!-- MFA: the factors of an account. -->
+      <article
+        class="tile tile--mfa"
+        [appReveal]="7"
+        role="group"
+        [attr.aria-roledescription]="'caps.carousel.slideRole' | transloco"
+        [attr.aria-label]="'8 ' + ('caps.carousel.of' | transloco) + ' 8'"
+      >
+        <div class="frag frag--mfa" aria-hidden="true">
+          <ul class="factors">
+            <li class="factor is-on">
+              <span class="factor__name">{{ 'caps.mfa.totp' | transloco }}</span>
+              <span class="factor__state">{{ 'caps.mfa.enrolled' | transloco }}</span>
+            </li>
+            <li class="factor is-on">
+              <span class="factor__name">{{ 'caps.mfa.passkey' | transloco }}</span>
+              <span class="factor__state">{{ 'caps.mfa.enrolled' | transloco }}</span>
+            </li>
+            <li class="factor">
+              <span class="factor__name">{{ 'caps.mfa.backup' | transloco }}</span>
+              <span class="factor__state">{{ 'caps.mfa.backupLeft' | transloco }}</span>
+            </li>
+          </ul>
+        </div>
+        <div class="tile__text">
+          <h3>{{ 'caps.mfa.title' | transloco }}</h3>
+          <p>{{ 'caps.mfa.text' | transloco }}</p>
+        </div>
+      </article>
+    </div>
+  </div>
+
+  <div class="carousel__controls">
+    <button
+      type="button"
+      class="carousel__nav"
+      [disabled]="current() === 0"
+      [attr.aria-label]="'caps.carousel.previous' | transloco"
+      (click)="step(-1)"
+    >
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <path d="M10 3 5 8l5 5" />
+      </svg>
+    </button>
+    <ol class="carousel__dots">
+      @for (slide of slides; track slide; let i = $index) {
+        <li>
+          <button
+            type="button"
+            class="carousel__dot"
+            [class.is-current]="current() === i"
+            [attr.aria-current]="current() === i ? 'true' : null"
+            [attr.aria-label]="'caps.' + slide + '.title' | transloco"
+            (click)="goTo(i)"
+          ></button>
+        </li>
+      }
+    </ol>
+    <button
+      type="button"
+      class="carousel__nav"
+      [disabled]="current() === slides.length - 1"
+      [attr.aria-label]="'caps.carousel.next' | transloco"
+      (click)="step(1)"
+    >
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <path d="m6 3 5 5-5 5" />
+      </svg>
+    </button>
+    <p class="carousel__count" aria-live="polite">
+      {{ 'caps.carousel.feature' | transloco }} {{ current() + 1 }}
+      {{ 'caps.carousel.of' | transloco }} {{ slides.length }}
+    </p>
+  </div>
+</div>

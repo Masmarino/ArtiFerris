@@ -19,6 +19,7 @@ A hexagonal Rust backend, with an Angular 22 frontend served by the same binary.
 - [Search engines (SEO)](#search-engines-seo)
 - [Public API](#public-api)
 - [Roadmap](#roadmap)
+- [Website](#website)
 - [License](#license)
 
 ## Features
@@ -308,6 +309,50 @@ long, its content remaining protected.
 - [ ] Per-user namespaces inside an organization (`@user/…` scopes).
 - [ ] Rate limiting of anonymous traffic; CDN distribution.
 - [x] Public package search and discovery.
+
+## Website
+
+The public site, <https://www.artiferris.pro>, lives in [`website/`](website). It is an Angular project of its own (it shares
+nothing with `frontend/`), prerendered to static files and served by nginx. The application is at
+<https://app.artiferris.pro>; `artiferris.pro` redirects to `www`.
+
+- **Pages and languages.** Home, Product, Registries, Installation, Security and Roadmap, in English (the default), French,
+  Italian, Spanish and German: thirty prerendered pages under `/<lang>/`. The root `/` is not a page: nginx redirects it to the
+  language of the visitor's `Accept-Language` header, or to `/en/`.
+- **Local development.** Node 26:
+
+  ```bash
+  cd website
+  npm ci
+  npm start        # development server on http://localhost:4200
+  npm run lint
+  npm test
+  npm run build    # prerendered site in dist/artiferris-website/browser, then scripts/check-dist.mjs checks it
+  ```
+
+- **Generated assets.** These are committed, so a normal build does not regenerate them (commands run from `website/`):
+  - `npm run images`: the logos, favicon, Apple touch icon and the social previews, one per language, from
+    `frontend/public/Logo.png`;
+  - `npm run plan`: the architecture drawing, `src/app/shared/architecture-plan/architecture-plan.html`;
+  - `node scripts/capture-screens.mjs`: the product screenshots in `public/images/screens/`, from the application's
+    Storybook; the instructions are at the top of that script.
+- **Image.** `website/Dockerfile` builds the site and serves it with nginx as an unprivileged user on port 8080 (read-only
+  root filesystem, `/tmp` only). The Content-Security-Policy is generated from the built pages. The image is
+  `masmarino/artiferris-website`:
+
+  ```bash
+  docker build -t artiferris-website website/
+  docker run --rm --read-only --tmpfs /tmp -p 8080:8080 artiferris-website   # http://localhost:8080
+  ```
+
+- **Chart.** [`website/helm/artiferris-website`](website/helm/artiferris-website) deploys one stateless pod, a `Service`, an
+  `Ingress` for `www.artiferris.pro` and `artiferris.pro` and a `NetworkPolicy`. The certificate comes by default from the
+  cert-manager issuer `artiferris-dns01-issuer` (DNS-01), the application's; the `Ingress` carries a Traefik priority that
+  wins over the application's `*.artiferris.pro` wildcard, without which `www` would be taken for an organization.
+- **Deployment.** Only with version tags, together with the application: the release is `artiferris-website`, in the
+  namespace `artiferris-website`.
+- **DNS.** `www.artiferris.pro` and `artiferris.pro` must point at the cluster's Traefik load balancer only.
+- **No tracking.** The site sets no cookie and loads nothing from another origin.
 
 ## License
 

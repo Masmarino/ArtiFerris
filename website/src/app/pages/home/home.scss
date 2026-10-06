@@ -1,0 +1,215 @@
+@use '../../../breakpoints' as bp;
+@use '../../../mixins' as m;
+
+:host {
+  display: block;
+}
+
+// Hero: the claim on the left, what it means and how to start on the right, and under both the measurement that backs
+// it, wide enough to print every column. A dark band, like the bar above it and the footer.
+.hero {
+  position: relative;
+  padding-block: clamp(2.5rem, 2rem + 4vw, 5rem);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+// The content sits over the animated background (app-git-field).
+.hero__inner {
+  position: relative;
+  z-index: 1;
+}
+
+.hero__inner {
+  display: grid;
+  gap: var(--s-7);
+}
+
+.hero h1 {
+  max-width: 26ch;
+}
+
+@media (min-width: 64rem) {
+  .hero__inner {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    grid-template-areas:
+      'title copy'
+      'proof proof';
+    gap: var(--s-8) var(--s-8);
+    align-items: start;
+  }
+
+  .hero h1 {
+    grid-area: title;
+    max-width: none;
+    margin: 0;
+  }
+
+  // The lead starts on the line of the title's cap height, not above it.
+  .hero__copy {
+    padding-top: 0.5rem;
+  }
+
+  .hero__copy {
+    grid-area: copy;
+  }
+
+  .hero__proof {
+    grid-area: proof;
+  }
+}
+
+.hero__copy {
+  min-width: 0;
+
+  .lead {
+    margin-bottom: var(--s-5);
+    font-size: var(--t-16);
+  }
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: center;
+}
+
+// The install command as a second action: the prompt, the command, a copy button.
+.command {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+  max-width: 100%;
+  min-height: var(--tap);
+  padding: 0 0.25rem 0 0.875rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+}
+
+.command__text {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--text);
+  font: 500 var(--t-14) var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: none;
+  border: 0;
+}
+
+.command__prompt {
+  margin-inline-end: 0.5rem;
+  color: var(--text-3);
+}
+
+.hero__assurance {
+  margin: var(--s-5) 0 0;
+  color: var(--text-3);
+  font-size: var(--t-14);
+}
+
+.hero__plan-link {
+  color: var(--indigo);
+}
+
+// What is missing, said plainly and before the roadmap.
+.limits {
+  margin-bottom: var(--s-8);
+}
+
+.roadmap__title {
+  margin-bottom: var(--s-2);
+}
+
+.roadmap__text {
+  max-width: 60ch;
+  margin-bottom: var(--s-5);
+  color: var(--text-2);
+}
+
+// The five crates, one row each under the architecture plan.
+.crates {
+  @include m.drawn-rule;
+  display: grid;
+  padding: 0;
+  margin: var(--s-6) 0 0;
+  list-style: none;
+
+  li {
+    display: grid;
+    gap: 0.25rem var(--s-6);
+    padding-block: var(--s-4);
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+.crates__name {
+  color: var(--text);
+  font-size: var(--t-14);
+  font-weight: 500;
+}
+
+.crates__text {
+  color: var(--text-2);
+  font-size: var(--t-15);
+  line-height: 1.5;
+}
+
+@media (min-width: bp.$md) {
+  .crates li {
+    grid-template-columns: minmax(0, 14rem) minmax(0, 1fr);
+    align-items: baseline;
+  }
+}
+
+// The planned versions as the rows of a table: the number, what it brings, its status.
+.strip {
+  @include m.drawn-rule;
+  display: grid;
+  padding: 0;
+  margin: 0 0 var(--s-5);
+  list-style: none;
+}
+
+.strip__item {
+  display: grid;
+  gap: 0.25rem var(--s-5);
+  padding-block: var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.strip__tag {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.strip__title {
+  line-height: 1.4;
+}
+
+@media (min-width: bp.$md) {
+  .strip__item {
+    // Wide enough for the longest subject of the five languages (Almacenamiento).
+    grid-template-columns: 9.5rem minmax(0, 1fr) auto;
+    align-items: baseline;
+  }
+}
+
+// The page opens in sequence: the title, then the text and the actions, then the measurement, which prints its lines
+// (app-terminal). Opacity only; the text is all in the page from the start, so nothing depends on this running.
+.hero h1 {
+  animation: fade-in var(--dur-4) var(--ease-out) both;
+}
+
+.hero__copy > * {
+  animation: fade-in var(--dur-4) var(--ease-out) both;
+
+  @for $n from 1 through 4 {
+    &:nth-child(#{$n}) {
+      animation-delay: #{150 + $n * 110}ms;
+    }
+  }
+}

@@ -1,0 +1,8 @@
+<a class="skip-link" href="#main-content" (click)="skipToContent($event)">{{
+  'a11y.skipToContent' | transloco
+}}</a>
+<app-header />
+<main id="main-content" tabindex="-1">
+  <router-outlet />
+</main>
+<app-footer />

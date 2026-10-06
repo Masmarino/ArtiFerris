@@ -1,0 +1,22 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "artiferris-website.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "artiferris-website.selectorLabels" . | nindent 6 }}
+  # An empty egress list blocks every outgoing connection.
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - ports:
+        - port: 8080
+      {{- with .Values.networkPolicy.ingressFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  egress: []
+{{- end }}

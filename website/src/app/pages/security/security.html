@@ -1,0 +1,49 @@
+<app-page-head [section]="'nav.security' | transloco">
+  <h1>{{ 'home.security.title' | transloco }}</h1>
+  <p class="lead">{{ 'home.security.text' | transloco }}</p>
+</app-page-head>
+
+<section class="section section--first" aria-labelledby="headers-title">
+  <div class="container">
+    <div class="section__head">
+      <h2 id="headers-title">{{ 'home.security.headers.title' | transloco }}</h2>
+      <p>{{ 'home.security.headers.text' | transloco }}</p>
+    </div>
+    <div class="section__body">
+      <app-terminal
+        [text]="headers"
+        [label]="'home.security.headers.label' | transloco"
+        [wrap]="true"
+      >
+        {{ 'home.security.headers.caption' | transloco }}
+      </app-terminal>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="security" aria-label="{{ 'home.security.title' | transloco }}">
+  <div class="container">
+    <div class="section__body">
+      <dl class="spec sec" data-rule appReveal appRevealMode="mark">
+        @for (fact of facts; track fact; let i = $index) {
+          <div class="spec__row sec__row" [appReveal]="i">
+            <dt>{{ 'home.security.' + fact + '.title' | transloco }}</dt>
+            <dd [innerHTML]="'home.security.' + fact + '.text' | transloco | inlineCode"></dd>
+          </div>
+        }
+      </dl>
+      <p class="section__more">
+        <a
+          class="text-link"
+          [href]="readmeSecurityUrl"
+          hreflang="fr"
+          target="_blank"
+          rel="noopener"
+          >{{ 'home.security.link' | transloco }}</a
+        >
+      </p>
+    </div>
+  </div>
+</section>
+
+<app-cta />

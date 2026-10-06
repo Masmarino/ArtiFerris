@@ -1,0 +1,22 @@
+<details #details class="lang">
+  <summary #summary class="lang__summary">
+    <span class="sr-only">{{ 'language.label' | transloco }}</span>
+    <span class="lang__code">{{ activeLang().toUpperCase() }}</span>
+    <gbt-icon class="lang__chevron" name="chevron-down" aria-hidden="true" />
+  </summary>
+  <ul class="lang__list">
+    @for (lang of langs; track lang) {
+      <li>
+        <a
+          [routerLink]="commands(lang)"
+          [lang]="lang"
+          [attr.hreflang]="lang"
+          [attr.data-code]="lang.toUpperCase()"
+          [attr.aria-current]="lang === activeLang() ? 'true' : null"
+          (click)="close()"
+          >{{ names[lang] }}</a
+        >
+      </li>
+    }
+  </ul>
+</details>

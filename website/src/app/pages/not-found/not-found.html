@@ -1,0 +1,37 @@
+<header class="not-found__bar on-dark">
+  <div class="container">
+    <a class="not-found__brand" [routerLink]="['/', 'en']" aria-label="ArtiFerris">
+      <img src="images/logo-128.png" width="36" height="36" alt="" />
+      <span aria-hidden="true">ArtiFerris</span>
+    </a>
+  </div>
+</header>
+<main id="main-content">
+  <div class="page-band on-dark">
+    <app-git-field variant="band" />
+    <header class="page-head container">
+      <p class="not-found__code">404</p>
+      <h1>{{ 'notFound.title' | transloco }}</h1>
+      <p class="lead">{{ 'notFound.text' | transloco }}</p>
+    </header>
+  </div>
+  <div class="not-found container">
+    <nav [attr.aria-label]="'notFound.languages' | transloco">
+      <ul class="not-found__langs">
+        @for (lang of langs; track lang) {
+          <li>
+            <a
+              gbtButton
+              variant="secondary"
+              size="large"
+              [routerLink]="['/', lang]"
+              [lang]="lang"
+              >{{ names[lang] }}</a
+            >
+          </li>
+        }
+      </ul>
+    </nav>
+  </div>
+</main>
+<app-footer />

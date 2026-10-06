@@ -1,0 +1,25 @@
+:host {
+  display: block;
+}
+
+// One section per version, in the same two columns as everywhere else: the version, its title and its status in the
+// rail, the intro and the list beside them. No timeline, nothing drawn: a reader can see what is planned, and that
+// none of it is done.
+.group__header {
+  h2 {
+    margin-bottom: var(--s-3);
+  }
+}
+
+.group__tag {
+  margin: 0 0 var(--s-2);
+  color: var(--text);
+  font-size: var(--t-20);
+  font-weight: 500;
+}
+
+.group__intro {
+  max-width: 66ch;
+  margin-bottom: var(--s-5);
+  color: var(--text-2);
+}

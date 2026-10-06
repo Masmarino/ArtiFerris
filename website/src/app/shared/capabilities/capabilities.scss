@@ -1,0 +1,848 @@
+@use '../../../breakpoints' as bp;
+@use '../../../mixins' as m;
+
+:host {
+  display: block;
+}
+
+.carousel {
+  position: relative;
+}
+
+// The tile cut by the edge fades into the page instead of stopping on a hard line, on the side where there is more to
+// see. Drawn over the track, so the track's focus ring is not clipped.
+.carousel__viewport {
+  position: relative;
+
+  &::before,
+  &::after {
+    position: absolute;
+    inset-block: 0 var(--s-2);
+    z-index: 1;
+    width: 3rem;
+    pointer-events: none;
+    content: '';
+    opacity: 0;
+    transition: opacity var(--dur-2) var(--ease);
+  }
+
+  &::before {
+    inset-inline-start: 0;
+    background: linear-gradient(90deg, var(--bg), transparent);
+  }
+
+  &::after {
+    inset-inline-end: 0;
+    background: linear-gradient(270deg, var(--bg), transparent);
+  }
+
+  &.has-before::before,
+  &.has-after::after {
+    opacity: 1;
+  }
+}
+
+// A track of tiles that scrolls sideways and snaps to the start of a tile. Each tile is a little under the width of the
+// track on a phone, and a fixed width from there, so the next one shows at the edge and says there is more.
+.carousel__track {
+  position: relative;
+  display: flex;
+  gap: var(--s-4);
+  padding-bottom: var(--s-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 4px;
+    border-radius: var(--r-tile);
+  }
+
+  .tile {
+    flex: 0 0 min(88%, 33rem);
+    scroll-snap-align: start;
+  }
+}
+
+.carousel__controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+}
+
+.carousel__nav {
+  display: inline-grid;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  transition:
+    background-color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+
+  svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-2);
+    border-color: var(--text-2);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+}
+
+.carousel__dots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  @include m.reset-list;
+
+  li {
+    display: flex;
+  }
+}
+
+// A dot is small to look at and a comfortable target: the padding around it takes the touch.
+.carousel__dot {
+  position: relative;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  background: none;
+  border: 0;
+
+  &::before {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 0.5rem;
+    height: 0.5rem;
+    content: '';
+    background: var(--line-strong);
+    border-radius: 50%;
+    transition:
+      width var(--dur-2) var(--ease),
+      background-color var(--dur-1) var(--ease);
+  }
+
+  &.is-current::before {
+    width: 1.25rem;
+    background: var(--brand);
+    border-radius: var(--r-pill);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 1px;
+    border-radius: var(--r-pill);
+  }
+}
+
+// The position, for those who cannot see the dots: spoken when it changes, hidden from view.
+.carousel__count {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carousel__dot::before {
+    transition: none;
+  }
+}
+
+.tile__text {
+  padding: var(--s-4) var(--s-5) var(--s-5);
+
+  h3 {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.375rem;
+  }
+
+  p {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--t-15);
+    line-height: 1.5;
+  }
+}
+
+// The fragment: a piece of interface on the raised surface, cut by the tile's top edge.
+.frag {
+  flex: 1;
+  min-height: 11rem;
+  padding: var(--s-4) var(--s-5) 0;
+  overflow: hidden;
+  font-size: var(--t-13);
+  line-height: 1.45;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+
+  p {
+    margin: 0;
+  }
+}
+
+// The number of the circle of the plan that leads to this tile; filled while either is pointed at.
+.tile__no {
+  display: inline-grid;
+  flex: none;
+  width: 1.375rem;
+  height: 1.375rem;
+  place-items: center;
+  color: var(--text);
+  font: 600 0.6875rem / 1 var(--sans);
+  background: var(--surface);
+  border: 2px solid var(--brand);
+  border-radius: 50%;
+  transition:
+    background-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+
+.tile.is-linked .tile__no,
+.tile:hover .tile__no {
+  color: var(--on-brand);
+  background: var(--brand);
+}
+
+.tile {
+  scroll-margin-top: calc(var(--header-h) + 1.5rem);
+}
+
+// A tile lit from the plan shows its ring without a pointer.
+.tile.is-linked::after {
+  opacity: 1;
+}
+
+// Small parts shared by several fragments.
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 1.25rem;
+  padding-inline: 0.45rem;
+  color: var(--text-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background: var(--surface-3);
+  border-radius: var(--r-chip);
+}
+
+.chip--ok {
+  color: var(--patina);
+  background: var(--patina-soft);
+}
+
+.chip--bug {
+  color: var(--del);
+  background: var(--del-soft);
+}
+
+.chip--warn {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+.chip--indigo {
+  color: var(--indigo);
+  background: var(--indigo-soft);
+}
+
+.avatar {
+  display: inline-grid;
+  flex: none;
+  width: 1.625rem;
+  height: 1.625rem;
+  place-items: center;
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background: #44476a;
+  border-radius: 50%;
+}
+
+.avatar--sm {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-inline-start: auto;
+  font-size: 0.5625rem;
+}
+
+.mono {
+  font-size: 0.8125rem;
+}
+
+// Review fragment.
+
+.frag--review {
+  display: grid;
+  gap: 0.625rem;
+  padding-bottom: var(--s-4);
+}
+
+.frag__path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.625rem;
+  align-items: center;
+  color: var(--text);
+}
+
+.diff {
+  overflow: hidden;
+  font: 400 0.75rem / 1.65 var(--mono);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+}
+
+.diff__line {
+  display: flex;
+  gap: 0.75rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.diff__ln {
+  flex: none;
+  width: 2.25rem;
+  color: var(--text-3);
+  text-align: right;
+}
+
+.diff__line--del {
+  background: var(--del-soft);
+}
+
+.diff__line--add {
+  background: var(--patina-soft);
+}
+
+// Once the suggestion is applied, the removed line is struck through.
+.is-applied .diff__line--del {
+  color: var(--text-3);
+  text-decoration: line-through;
+  background: none;
+}
+
+.comment {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+}
+
+.comment__meta {
+  color: var(--text-2);
+  font-size: 0.75rem;
+
+  b {
+    color: var(--text);
+    font-weight: 600;
+  }
+}
+
+.comment__text {
+  color: var(--text);
+}
+
+.suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  color: var(--text-2);
+}
+
+.suggest__label {
+  margin-inline-end: auto;
+}
+
+.frag__button,
+.frag__reset,
+.applied {
+  display: inline-flex;
+  gap: 0.375rem;
+  align-items: center;
+  min-height: 1.875rem;
+  padding-inline: 0.625rem;
+  font: 600 0.8125rem var(--sans);
+  border-radius: var(--r-chip);
+}
+
+.frag__button {
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  transition:
+    border-color var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease);
+
+  &:hover {
+    border-color: var(--text-3);
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+.frag__reset {
+  min-height: 1.5rem;
+  padding-inline: 0.25rem;
+  color: var(--text-3);
+  font-weight: 500;
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+.applied {
+  color: var(--patina);
+  background: var(--patina-soft);
+  animation: pop var(--dur-3) var(--ease-out) both;
+
+  svg {
+    @include m.stroke-icon;
+  }
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.92);
+  }
+}
+
+// Pipeline fragment.
+
+.frag--pipeline {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.stepper {
+  display: flex;
+  @include m.reset-list;
+}
+
+.stepper__stage {
+  position: relative;
+  display: grid;
+  flex: 1;
+  gap: 0.375rem;
+  justify-items: center;
+
+  // The line between two stages.
+  & + &::before {
+    position: absolute;
+    top: 0.8125rem;
+    right: 50%;
+    left: -50%;
+    z-index: 0;
+    height: 2px;
+    content: '';
+    background: var(--line-strong);
+  }
+
+  &.is-current::before {
+    background: var(--patina);
+  }
+}
+
+.stepper__dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 1.625rem;
+  height: 1.625rem;
+  place-items: center;
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--surface);
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+
+  gbt-job-status {
+    font-size: 1rem;
+  }
+
+  .is-done & {
+    color: var(--patina);
+    border-color: var(--patina);
+  }
+
+  .is-current & {
+    color: var(--indigo);
+    border-color: var(--indigo);
+  }
+}
+
+.stepper__name {
+  font: 500 0.75rem var(--mono);
+}
+
+.jobs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.job {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  height: 1.875rem;
+  padding-inline: 0.625rem;
+  overflow: hidden;
+  font: 500 0.75rem var(--mono);
+  white-space: nowrap;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-chip);
+
+  gbt-job-status {
+    font-size: 0.875rem;
+  }
+
+  @include m.job-state-borders;
+
+  &[data-state='pending'] {
+    color: var(--text-3);
+  }
+}
+
+// Kanban fragment.
+
+.frag--kanban {
+  padding-inline: var(--s-4);
+}
+
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+  height: 100%;
+}
+
+.kanban__col {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+  padding: 0.5rem;
+  background: var(--surface-3);
+  border-top: 3px solid var(--line-strong);
+  border-radius: var(--r-control) var(--r-control) 0 0;
+}
+
+.kanban__col--active {
+  border-top-color: var(--indigo);
+}
+
+.kanban__head {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+  padding-inline: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.kanban__count {
+  display: inline-grid;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding-inline: 0.3rem;
+  place-items: center;
+  color: var(--text-2);
+  font-size: 0.6875rem;
+  background: var(--surface);
+  border-radius: var(--r-pill);
+}
+
+.card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem 0.625rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+}
+
+.card__title {
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
+
+  .mono {
+    color: var(--text-3);
+    font-size: 0.6875rem;
+  }
+}
+
+.card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+// Roles fragment.
+
+.roles {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-13);
+
+  th,
+  td {
+    padding: 0.5rem 0.25rem;
+    text-align: center;
+    border-bottom: 1px solid var(--line);
+  }
+
+  thead th {
+    color: var(--text-3);
+    font: 500 0.6875rem var(--mono);
+  }
+
+  tbody th {
+    color: var(--text);
+    font-weight: 500;
+    text-align: left;
+  }
+
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+}
+
+.roles__mark {
+  display: inline-block;
+  width: 0.625rem;
+  height: 0.625rem;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+
+  &.is-on {
+    background: var(--patina);
+    border-color: var(--patina);
+  }
+}
+
+// Webhook fragment.
+
+.http {
+  margin: 0;
+  color: var(--text-2);
+  font: 400 0.75rem / 1.65 var(--mono);
+  white-space: pre;
+  overflow: hidden;
+}
+
+.http__verb {
+  color: var(--indigo);
+  font-weight: 500;
+}
+
+.http__key {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.http__sig {
+  color: var(--brand-text);
+}
+
+@media (max-width: bp.$xs) {
+  .http {
+    font-size: 0.6875rem;
+  }
+}
+
+// Catalogue fragment.
+
+.repos {
+  display: grid;
+  gap: 0.5rem;
+  @include m.reset-list;
+
+  li {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.625rem 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-control);
+  }
+}
+
+.repos__name {
+  font-size: var(--t-14);
+  font-weight: 600;
+}
+
+.repos__owner {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.repos__desc {
+  overflow: hidden;
+  color: var(--text-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.repos__meta {
+  display: flex;
+  gap: 0.75rem;
+  color: var(--text-3);
+  font-size: 0.75rem;
+}
+
+.repos__star {
+  color: var(--warn);
+}
+
+// MFA fragment.
+
+.factors {
+  display: grid;
+  gap: 0.5rem;
+  @include m.reset-list;
+}
+
+.factor {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+}
+
+.factor__name {
+  font-weight: 500;
+}
+
+.factor__state {
+  color: var(--text-3);
+  font-size: 0.75rem;
+}
+
+.factor.is-on .factor__state {
+  color: var(--patina);
+}
+
+// Search fragment.
+
+.search__field {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  height: 2.125rem;
+  padding-inline: 0.625rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--indigo);
+  border-radius: var(--r-control);
+
+  svg {
+    fill: none;
+    stroke: var(--text-3);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+}
+
+.search__caret {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-inline-start: 1px;
+  vertical-align: -0.15em;
+  background: var(--text);
+  animation: caret 1s steps(2) infinite;
+}
+
+@keyframes caret {
+  to {
+    opacity: 0;
+  }
+}
+
+.search__results {
+  display: grid;
+  padding: 0.25rem 0;
+  margin: 0.375rem 0 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+
+  li {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    min-width: 0;
+    padding: 0.375rem 0.75rem;
+  }
+}
+
+.search__group {
+  flex: none;
+  width: 5.5rem;
+  color: var(--text-3);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.search__hit {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

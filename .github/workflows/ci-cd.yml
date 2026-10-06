@@ -27,6 +27,7 @@ env:
   RUST_VERSION: "1.98.1"
   NODE_VERSION: "26"
   DOCKER_IMAGE: masmarino/artiferris
+  WEBSITE_DOCKER_IMAGE: masmarino/artiferris-website
 
 jobs:
   # Build and test
@@ -90,9 +91,132 @@ jobs:
       - name: Test
         run: npm test -- --watch=false
 
+
+  # The site builds and deploys on its own: changes outside website/ don't rebuild it, and a broken site doesn't block the
+  # app. A version tag always counts as a change, since the tag is what deploys the site.
+  changes:
+    name: Detect website changes
+    runs-on: ubuntu-latest
+    outputs:
+      website: ${{ steps.diff.outputs.website }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Compare with the base of this run
+        id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          website=true
+          base=""
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "A version tag deploys the site: no comparison."
+          elif [[ "$EVENT_NAME" == pull_request ]]; then
+            git fetch --no-tags origin "$BASE_REF"
+            base="origin/$BASE_REF"
+          elif [[ "$EVENT_NAME" == push && "$BEFORE" =~ [1-9a-f] ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            base="$BEFORE"
+          else
+            echo "No base to compare with ($EVENT_NAME, before=$BEFORE): assuming the site changed."
+          fi
+          if [[ -n "$base" ]]; then
+            # Three dots: only what this branch changed, not what the base gained since.
+            if files=$(git diff --name-only "$base...HEAD" 2>/dev/null || git diff --name-only "$base" HEAD); then
+              if grep -qE '^(website/|\.github/workflows/ci-cd\.yml$)' <<< "$files"; then
+                echo "The site or this workflow changed."
+              else
+                website=false
+                echo "Nothing under website/ changed."
+              fi
+            fi
+          fi
+          echo "website=$website" >> "$GITHUB_OUTPUT"
+
+  website-checks:
+    name: Website lint, build & chart
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.website == 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install
+        working-directory: website
+        run: npm ci
+
+      - name: Lint
+        working-directory: website
+        run: npm run lint
+
+      - name: Test
+        working-directory: website
+        run: npm test
+
+      # Prerenders the pages and the sitemap; check-dist verifies them afterwards (postbuild).
+      - name: Build
+        working-directory: website
+        run: npm run build
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+
+      # The chart won't render without an image tag, so give it a throwaway one. The deploy job passes the real one.
+      - name: helm lint & template
+        run: |
+          chart=./website/helm/artiferris-website
+          args=(--set image.tag=0.0.0-ci)
+          render() { helm template artiferris-website "$chart" --namespace artiferris-website "${args[@]}" "$@"; }
+          helm lint --strict "$chart" "${args[@]}"
+
+          # Defaults: the cluster's DNS-01 issuer, the priority over the application's wildcard, Traefik's middlewares and
+          # TLSOption, both hosts and the /healthz probes.
+          render > "$RUNNER_TEMP/website-default.yaml"
+          grep -q 'cert-manager.io/cluster-issuer: "artiferris-dns01-issuer"' "$RUNNER_TEMP/website-default.yaml"
+          grep -q 'router.priority: "1000"' "$RUNNER_TEMP/website-default.yaml"
+          grep -q 'router.tls.options: "traefik-mintls13@kubernetes' "$RUNNER_TEMP/website-default.yaml"
+          grep -q 'router.middlewares: "traefik-https@kubernetescrd,traefik-headers@kubernetescrd"' "$RUNNER_TEMP/website-default.yaml"
+          grep -q 'host: "www.artiferris.pro"' "$RUNNER_TEMP/website-default.yaml"
+          grep -q 'host: "artiferris.pro"' "$RUNNER_TEMP/website-default.yaml"
+          grep -q 'path: /healthz' "$RUNNER_TEMP/website-default.yaml"
+          grep -q 'router.tls.certresolver' "$RUNNER_TEMP/website-default.yaml" && { echo "::error::resolver annotation in the default render"; exit 1; }
+
+          # Traefik's resolver instead of cert-manager.
+          render --set ingress.clusterIssuer= --set ingress.certResolver=letsencrypt-http > "$RUNNER_TEMP/website-resolver.yaml"
+          grep -q 'router.tls.certresolver: "letsencrypt-http"' "$RUNNER_TEMP/website-resolver.yaml"
+          grep -q 'cert-manager.io/cluster-issuer' "$RUNNER_TEMP/website-resolver.yaml" && { echo "::error::cert-manager annotation next to the resolver"; exit 1; }
+
+          # Both at once must fail, and say why.
+          if render --set ingress.certResolver=letsencrypt-http > /dev/null 2> "$RUNNER_TEMP/website-both.err"; then
+            echo "::error::the chart rendered with both ingress.certResolver and ingress.clusterIssuer set"; exit 1
+          fi
+          grep -q 'are both set' "$RUNNER_TEMP/website-both.err"
+
+          # Without a tag it must fail too, and say why.
+          if helm template artiferris-website "$chart" > /dev/null 2> "$RUNNER_TEMP/website-notag.err"; then
+            echo "::error::the chart rendered without image.tag"; exit 1
+          fi
+          grep -q 'image.tag must be set' "$RUNNER_TEMP/website-notag.err"
+
+          # The other switches still render.
+          render --set ingress.tlsOptions= --set ingress.middlewares= > /dev/null
+          render --set ingress.enabled=false > /dev/null
+          render --set networkPolicy.enabled=false > /dev/null
+          render --set image.digest=sha256:0000000000000000000000000000000000000000000000000000000000000000 > /dev/null
+
+  # Every pull request, plus pushes to main, develop, release/** and tags. Feature and fix branches only get the build and
+  # tests until they have a pull request.
+
   # Source and dependency scan. Runs on every PR and on pushes to develop, main, release* and tags; other branches only
   # build and test until they have a PR.
-
   security-scan-source:
     name: Security scan (source & dependencies)
     runs-on: ubuntu-latest
@@ -401,3 +525,162 @@ jobs:
             --set image.tag="$IMAGE_TAG" \
             --set image.digest="$IMAGE_DIGEST" \
             --atomic --cleanup-on-fail --timeout 10m
+
+  # The website image, built from website/ on version tags only. Same flow as the app image: built once, scanned, pushed as
+  # is, and only if the Docker Hub secrets exist. The tagged commit must be on main (verify-tag).
+  website-image:
+    name: Build, scan & push website image
+    runs-on: ubuntu-latest
+    needs: [website-checks, verify-tag]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      IS_PUBLISHABLE: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      image_digest: ${{ steps.digest.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Docker metadata (tags)
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.WEBSITE_DOCKER_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image (local, not pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: website
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # Own cache scope so it doesn't evict the app image's layers.
+          cache-from: type=gha,scope=website
+          cache-to: type=gha,mode=max,scope=website
+
+      - name: Trivy image scan
+        id: trivy-image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: sarif
+          output: trivy-website-image-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          limit-severities-for-sarif: true
+
+      - name: Upload Trivy image SARIF
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy-website-image-results.sarif
+          category: trivy-website-image
+
+      - name: Grype image scan
+        id: grype-image
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        continue-on-error: true
+        with:
+          image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          fail-build: true
+          severity-cutoff: high
+          output-format: sarif
+          only-fixed: true
+
+      - name: Upload Grype image SARIF
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: ${{ steps.grype-image.outputs.sarif }}
+          category: grype-website-image
+
+      - name: Fail if the built image has HIGH/CRITICAL vulnerabilities
+        if: steps.trivy-image.outcome == 'failure' || steps.grype-image.outcome == 'failure'
+        run: |
+          echo "Trivy and/or Grype found HIGH/CRITICAL vulnerabilities in the built website image."
+          echo "See the Security tab for details. Not pushing to Docker Hub."
+          exit 1
+
+      - name: Log in to Docker Hub
+        if: env.IS_PUBLISHABLE == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push the scanned image under all its tags
+        if: env.IS_PUBLISHABLE == 'true'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && docker push "$tag"
+          done <<< "$TAGS"
+
+      # The deploy job pins this digest, so moving the tag later changes nothing.
+      - name: Resolve the pushed image digest
+        id: digest
+        if: env.IS_PUBLISHABLE == 'true'
+        env:
+          FIRST_TAG: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          digest=$(docker buildx imagetools inspect "$FIRST_TAG" --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "unexpected digest: $digest"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+  # Upgrades the website release to the pushed image, by digest, in its own namespace, with the app's kubeconfig. Version
+  # tags only; it neither waits for nor blocks the app's deploy.
+  website-deploy:
+    name: Deploy website to Kubernetes
+    runs-on: ubuntu-latest
+    needs: website-image
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production
+    # A second deploy waits for the first, and a helm upgrade is never cancelled midway.
+    concurrency:
+      group: deploy-production-website
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Otherwise anyone who can push a tag could ship any commit to production.
+      - name: Require the tagged commit to be on main
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$GITHUB_REF_NAME is not on main, refusing to deploy it"; exit 1; }
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+
+      - name: Write kubeconfig
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          install -m 600 /dev/null "$RUNNER_TEMP/kubeconfig.yaml"
+          printf '%s' "$KUBE_CONFIG" | base64 -d > "$RUNNER_TEMP/kubeconfig.yaml"
+
+      - name: helm upgrade --install
+        env:
+          KUBECONFIG: ${{ runner.temp }}/kubeconfig.yaml
+          IMAGE_TAG: ${{ needs.website-image.outputs.image_tag }}
+          IMAGE_DIGEST: ${{ needs.website-image.outputs.image_digest }}
+        run: |
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no image digest from the website image job"; exit 1; }
+          helm upgrade --install artiferris-website ./website/helm/artiferris-website \
+            --namespace artiferris-website --create-namespace \
+            --set image.repository="$WEBSITE_DOCKER_IMAGE" \
+            --set image.tag="$IMAGE_TAG" \
+            --set image.digest="$IMAGE_DIGEST" \
+            --atomic --cleanup-on-fail --timeout 5m

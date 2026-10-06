@@ -1,0 +1,91 @@
+<header class="header on-dark" [class.is-scrolled]="scrolled()">
+  <div class="header__inner container">
+    <a
+      class="header__brand"
+      [routerLink]="['/', lang()]"
+      [attr.aria-label]="'nav.homeLabel' | transloco"
+    >
+      <img src="images/logo-128.png" width="32" height="32" alt="" />
+      <span class="header__brand-name" aria-hidden="true">ArtiFerris</span>
+    </a>
+
+    <button
+      type="button"
+      class="header__toggle"
+      aria-controls="site-menu"
+      [attr.aria-expanded]="menuOpen()"
+      [attr.aria-label]="(menuOpen() ? 'nav.closeMenu' : 'nav.openMenu') | transloco"
+      (click)="toggleMenu()"
+    >
+      <gbt-icon [name]="menuOpen() ? 'x' : 'menu'" />
+    </button>
+
+    <div class="header__panel" id="site-menu" [class.is-open]="menuOpen()">
+      <nav class="header__nav" [attr.aria-label]="'nav.label' | transloco">
+        <ul>
+          <li>
+            <a
+              [routerLink]="['/', lang(), 'features']"
+              routerLinkActive="is-active"
+              ariaCurrentWhenActive="page"
+              >{{ 'nav.product' | transloco }}</a
+            >
+          </li>
+          <li>
+            <a
+              [routerLink]="['/', lang(), 'registries']"
+              routerLinkActive="is-active"
+              ariaCurrentWhenActive="page"
+              >{{ 'nav.registries' | transloco }}</a
+            >
+          </li>
+          <li>
+            <a
+              [routerLink]="['/', lang(), 'install']"
+              routerLinkActive="is-active"
+              ariaCurrentWhenActive="page"
+              >{{ 'nav.install' | transloco }}</a
+            >
+          </li>
+          <li>
+            <a
+              [routerLink]="['/', lang(), 'security']"
+              routerLinkActive="is-active"
+              ariaCurrentWhenActive="page"
+              >{{ 'nav.security' | transloco }}</a
+            >
+          </li>
+          <li>
+            <a
+              [routerLink]="['/', lang(), 'roadmap']"
+              routerLinkActive="is-active"
+              ariaCurrentWhenActive="page"
+              >{{ 'nav.roadmap' | transloco }}</a
+            >
+          </li>
+          <li>
+            <a [href]="docsUrl" hreflang="fr">{{ 'nav.docs' | transloco }}</a>
+          </li>
+        </ul>
+      </nav>
+
+      <div class="header__utility">
+        <app-language-switcher />
+        <app-theme-toggle />
+        <a
+          class="header__github"
+          [href]="githubUrl"
+          target="_blank"
+          rel="noopener"
+          [attr.aria-label]="'nav.github' | transloco"
+        >
+          <gbt-icon name="github" />
+          <span class="header__github-text">{{ 'nav.github' | transloco }}</span>
+        </a>
+        <a gbtButton variant="primary" size="medium" class="header__cta" [href]="appUrl">{{
+          'nav.openApp' | transloco
+        }}</a>
+      </div>
+    </div>
+  </div>
+</header>

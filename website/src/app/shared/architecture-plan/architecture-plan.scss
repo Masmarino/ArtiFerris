@@ -1,0 +1,306 @@
+// The drawing is static by default. The build animation (strokes drawn, then hatching and text, then the orange flow
+// of a push, which runs twice and stops) only exists under `html.js`, once the figure around the drawing has been
+// revealed (Reveal directive in "mark" mode adds `is-revealed`), and never with reduced motion. Without scripts, or
+// when the visitor asked for less motion, the finished plan shows at once. Only stroke-dashoffset, opacity and
+// fill-opacity change.
+//
+// The plan has its own small palette, mapped on the site's tokens: a cyanotype in the dark theme (pale ink on the
+// deep surface), dark ink on white faces in the light one.
+
+$draw-ease: cubic-bezier(0.45, 0, 0.2, 1);
+
+:host {
+  --pl-ink: var(--text);
+  --pl-ink-2: var(--text-2);
+  --pl-face: var(--surface);
+  --pl-top: var(--surface-2);
+  --pl-slab: var(--bg-2);
+  --pl-core: color-mix(in srgb, var(--brand) 18%, var(--surface-2));
+  --pl-paper: var(--bg);
+  --pl-hatch: 0.32;
+
+  display: block;
+}
+
+:root[data-theme='light'] :host,
+:host-context(:root[data-theme='light']) {
+  --pl-top: #ffffff;
+  --pl-hatch: 0.4;
+}
+
+.plan {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.ln {
+  fill: none;
+  stroke: var(--pl-ink);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.thin {
+  fill: none;
+  stroke: var(--pl-ink-2);
+  stroke-width: 0.8;
+}
+
+.f {
+  fill: var(--pl-face);
+}
+
+.top {
+  fill: var(--pl-top);
+}
+
+.hat {
+  stroke: none;
+  pointer-events: none;
+}
+
+.hl {
+  fill: url(#plan-hl);
+}
+
+.hr {
+  fill: url(#plan-hr);
+}
+
+.hatchline {
+  stroke: var(--pl-ink);
+  stroke-width: 0.7;
+  opacity: var(--pl-hatch);
+}
+
+.core .top,
+.pod .top,
+.cont .top {
+  fill: var(--pl-top);
+}
+
+.core .top {
+  fill: var(--pl-core);
+}
+
+.ghost {
+  opacity: 0.45;
+}
+
+.dash {
+  stroke-dasharray: 5 4;
+}
+
+.k8 {
+  stroke-width: 1;
+}
+
+.slab > .f {
+  fill: var(--pl-slab);
+}
+
+.acc {
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ahead {
+  fill: var(--brand);
+  stroke: none;
+}
+
+.ahead.ln {
+  fill: var(--pl-ink);
+}
+
+.pulse {
+  fill: none;
+  stroke: var(--brand-2);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-dasharray: 0.035 0.965;
+  opacity: 0;
+}
+
+.tx {
+  font: 400 13px/1 var(--mono);
+  fill: var(--pl-ink);
+  paint-order: stroke;
+  stroke: var(--pl-paper);
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
+}
+
+.lbl {
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.note {
+  fill: var(--pl-ink-2);
+  font-size: 12.5px;
+}
+
+.crate {
+  font-size: 11.5px;
+  font-weight: 500;
+  stroke: none;
+}
+
+.crate.small {
+  font-size: 9.5px;
+}
+
+.acct {
+  fill: var(--brand-text);
+  font-weight: 500;
+}
+
+.dimtx {
+  fill: var(--pl-ink-2);
+  font-size: 12px;
+}
+
+.ld {
+  fill: none;
+  stroke: var(--pl-ink-2);
+  stroke-width: 0.8;
+}
+
+.dot {
+  fill: var(--pl-ink);
+}
+
+.dot.big {
+  fill: var(--brand);
+  stroke: var(--pl-paper);
+  stroke-width: 1.5;
+}
+
+// The numbered circles: a ring in the brand colour, filled when its tile is pointed at.
+.bub {
+  cursor: pointer;
+  outline: none;
+
+  circle {
+    fill: var(--pl-paper);
+    stroke: var(--brand);
+    stroke-width: 2;
+    transition: fill var(--dur-1) var(--ease);
+  }
+
+  text {
+    fill: var(--pl-ink);
+    font: 600 13px var(--sans);
+    text-anchor: middle;
+    transition: fill var(--dur-1) var(--ease);
+  }
+
+  &:hover circle,
+  &.on circle {
+    fill: var(--brand);
+  }
+
+  &:hover text,
+  &.on text {
+    fill: var(--on-brand);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :host-context(html.js .is-revealed) {
+    .dr {
+      stroke-dasharray: 1;
+      stroke-dashoffset: 1;
+      animation: plan-draw var(--t, 1.2s) $draw-ease var(--d, 0s) forwards;
+    }
+
+    .f.dr {
+      fill-opacity: 0;
+      animation:
+        plan-draw 1.1s $draw-ease var(--d, 0s) forwards,
+        plan-fill 0.5s ease-out calc(var(--d, 0s) + 0.9s) forwards;
+    }
+
+    .fade,
+    .hat,
+    .dot,
+    .bub,
+    .ahead,
+    .tx {
+      opacity: 0;
+      animation: plan-fade 0.7s ease-out var(--d, 0s) forwards;
+    }
+
+    .ahead {
+      animation-duration: 0.3s;
+    }
+
+    .bub {
+      animation-duration: 0.5s;
+    }
+
+    .dot {
+      animation-duration: 0.3s;
+    }
+
+    .fade {
+      animation-duration: 0.6s;
+    }
+
+    .ghost .f {
+      opacity: 1;
+    }
+
+    .pulse {
+      animation: plan-pulse 2.1s linear var(--d, 0s) 2 forwards;
+    }
+  }
+
+  // Before the reveal, under scripts, the drawing waits unseen.
+  :host-context(html.js [data-reveal-mark]:not(.is-revealed)) .plan {
+    opacity: 0;
+  }
+}
+
+@keyframes plan-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes plan-fill {
+  to {
+    fill-opacity: 1;
+  }
+}
+
+@keyframes plan-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes plan-pulse {
+  0% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+
+  92% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    stroke-dashoffset: -1;
+  }
+}

@@ -1,0 +1,163 @@
+@use '../../../breakpoints' as bp;
+
+:host {
+  display: block;
+}
+
+.page-head__note {
+  max-width: 58ch;
+  margin: var(--s-3) 0 0;
+  color: var(--text-3);
+  font-size: var(--t-14);
+  line-height: 1.5;
+}
+
+// Tabs: a bar sticky under the header, underlined like the install tabs. Without JavaScript the bar is hidden and the
+// panels follow one another.
+.tabs__bar {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 5;
+  background: var(--bg);
+  border-block: 1px solid var(--line);
+}
+
+:host-context(html:not(.js)) .tabs__bar {
+  display: none;
+}
+
+.tabs__list {
+  display: flex;
+  gap: var(--s-6);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs__tab {
+  position: relative;
+  flex: none;
+  min-height: 3rem;
+  padding: 0;
+  margin-bottom: -1px;
+  color: var(--text-2);
+  font: 500 var(--t-15) var(--sans);
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-bottom: 0;
+  transition: color var(--dur-1) var(--ease);
+
+  &:hover {
+    color: var(--text);
+  }
+
+  // The rule under the active tab grows from the left when it is chosen, and shortens when another is.
+  &::after {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 2px;
+    content: '';
+    background: var(--text);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--dur-2) var(--ease-out);
+  }
+
+  &.is-active {
+    color: var(--text);
+  }
+
+  &.is-active::after {
+    transform: scaleX(1);
+  }
+}
+
+.tabs__panel {
+  padding-block: var(--s-8) var(--section);
+}
+
+:host-context(html.js) .tabs__panel:not(.is-active) {
+  display: none;
+}
+
+:host-context(html:not(.js)) .tabs__panel + .tabs__panel {
+  margin-top: var(--s-8);
+  border-top: 1px solid var(--line);
+}
+
+.tabs__panel:focus-visible {
+  outline-offset: -3px;
+}
+
+.feature__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-6);
+  align-items: start;
+}
+
+.feature__text {
+  min-width: 0;
+
+  h2 {
+    margin-bottom: var(--s-3);
+  }
+
+  .lead {
+    margin-bottom: var(--s-5);
+    font-size: var(--t-16);
+  }
+
+  .check-list {
+    margin-bottom: 0;
+  }
+}
+
+.feature__media,
+.feature__code {
+  min-width: 0;
+}
+
+@media (min-width: bp.$lg) {
+  .feature__grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: var(--s-8);
+  }
+
+  .feature__code {
+    grid-column: 1 / -1;
+  }
+}
+
+// The other domains, as the rows of a table: the name, then what it does and what it comes with.
+.more {
+  border-top: 1px solid var(--line-strong);
+}
+
+.more__item {
+  align-items: start;
+
+  h3 {
+    font-size: var(--t-20);
+  }
+}
+
+.more__body {
+  min-width: 0;
+
+  .check-list {
+    margin-bottom: 0;
+    font-size: var(--t-15);
+  }
+}
+
+.more__lead {
+  margin-bottom: var(--s-3);
+  color: var(--text-2);
+}
+
+// A panel that comes into view fades in, so a change of tab reads as a change of content.
+.tabs__panel.is-active .feature__grid {
+  animation: fade-in var(--dur-3) var(--ease-out) both;
+}

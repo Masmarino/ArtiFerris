@@ -1,0 +1,17 @@
+# Compiled output
+/dist
+/out-tsc
+/.angular
+/node_modules
+npm-debug.log
+
+# Generated at build time by scripts/build-sitemap.mjs
+/public/sitemap.xml
+
+# Editors and system files
+.idea/
+.vscode/
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+/coverage

@@ -1,0 +1,69 @@
+<app-page-head [section]="'nav.roadmap' | transloco">
+  <h1>{{ 'roadmap.title' | transloco }}</h1>
+  <p class="lead">{{ 'roadmap.intro' | transloco }}</p>
+  <div class="actions">
+    <a gbtButton variant="primary" size="large" [href]="readmeUrl" target="_blank" rel="noopener">{{
+      'roadmap.readme' | transloco
+    }}</a>
+    <a
+      gbtButton
+      variant="secondary"
+      size="large"
+      [href]="changelogUrl"
+      target="_blank"
+      rel="noopener"
+      >{{ 'roadmap.changelog' | transloco }}</a
+    >
+  </div>
+</app-page-head>
+
+@for (group of groups; track group.id; let first = $first) {
+  <section
+    class="section group"
+    [class.section--first]="first"
+    [attr.aria-labelledby]="'group-' + group.id"
+  >
+    <div class="container">
+      <header class="section__head group__header">
+        @if (group.tag) {
+          <p class="group__tag mono" aria-hidden="true">{{ group.tag }}</p>
+        }
+        <h2 [id]="'group-' + group.id">
+          {{ 'roadmap.groups.' + group.id + '.title' | transloco }}
+        </h2>
+        <span class="status" [class.status--idea]="group.status === 'considering'">{{
+          'roadmap.' + group.status | transloco
+        }}</span>
+      </header>
+      <div class="section__body" appReveal>
+        @if (group.hasIntro) {
+          <p
+            class="group__intro"
+            [innerHTML]="'roadmap.groups.' + group.id + '.intro' | transloco | inlineCode"
+          ></p>
+        }
+        <ul class="planned-list planned-list--ruled" data-rule appReveal appRevealMode="mark">
+          @for (n of group.numbers; track n) {
+            <li
+              [innerHTML]="'roadmap.groups.' + group.id + '.items.i' + n | transloco | inlineCode"
+            ></li>
+          }
+        </ul>
+      </div>
+    </div>
+  </section>
+}
+
+<section class="section group" aria-labelledby="group-ferrisgit">
+  <div class="container">
+    <header class="section__head group__header">
+      <h2 id="group-ferrisgit">{{ 'roadmap.ferrisgit.title' | transloco }}</h2>
+    </header>
+    <div class="section__body">
+      <p class="group__intro">{{ 'roadmap.ferrisgit.text' | transloco }}</p>
+      <a class="text-link" [href]="ferrisgitUrl" target="_blank" rel="noopener">{{
+        'roadmap.ferrisgit.link' | transloco
+      }}</a>
+    </div>
+  </div>
+</section>

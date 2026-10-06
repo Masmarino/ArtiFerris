@@ -1,0 +1,126 @@
+<app-page-head [section]="'nav.product' | transloco">
+  <h1>{{ 'features.title' | transloco }}</h1>
+  <p class="lead">{{ 'features.intro' | transloco }}</p>
+  <p class="page-head__note">{{ 'features.note' | transloco }}</p>
+</app-page-head>
+
+<div class="tabs">
+  <div class="tabs__bar">
+    <div
+      class="container tabs__list"
+      [attr.role]="enhanced() ? 'tablist' : null"
+      [attr.aria-label]="'features.tabs.label' | transloco"
+    >
+      @for (tab of tabs; track tab.id; let index = $index) {
+        <button
+          type="button"
+          class="tabs__tab"
+          [class.is-active]="index === active()"
+          [id]="'tab-' + tab.id"
+          [attr.role]="enhanced() ? 'tab' : null"
+          [attr.aria-selected]="enhanced() ? index === active() : null"
+          [attr.aria-controls]="enhanced() ? 'panel-' + tab.id : null"
+          [attr.tabindex]="enhanced() && index !== active() ? -1 : null"
+          (click)="select(index)"
+          (keydown)="onKeydown($event, index)"
+        >
+          {{ 'features.tabs.items.' + tab.id | transloco }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @for (section of tabs; track section.id; let index = $index) {
+    <section
+      class="tabs__panel"
+      [class.is-active]="index === active()"
+      [id]="'panel-' + section.id"
+      [attr.role]="enhanced() ? 'tabpanel' : null"
+      [attr.aria-labelledby]="enhanced() ? 'tab-' + section.id : 'feature-' + section.id"
+      [attr.tabindex]="enhanced() && index === active() ? 0 : null"
+    >
+      <div class="container feature__grid">
+        <div class="feature__text">
+          <h2 [id]="'feature-' + section.id">
+            {{ 'features.sections.' + section.id + '.title' | transloco }}
+          </h2>
+          <p
+            class="lead"
+            [innerHTML]="'features.sections.' + section.id + '.text' | transloco | inlineCode"
+          ></p>
+          <ul class="check-list">
+            @for (n of bulletKeys(section); track n) {
+              <li
+                [innerHTML]="
+                  'features.sections.' + section.id + '.bullets.b' + n | transloco | inlineCode
+                "
+              ></li>
+            }
+          </ul>
+        </div>
+        @if (section.screen; as screen) {
+          <app-window class="feature__media" [url]="section.url ?? 'app.artiferris.pro'">
+            <app-screenshot [name]="screen" [eager]="index === 0" />
+          </app-window>
+        }
+      </div>
+    </section>
+  }
+</div>
+
+<section class="section" id="more" aria-labelledby="more-title">
+  <div class="container">
+    <div class="section__head">
+      <h2 id="more-title">{{ 'features.sheet.title' | transloco }}</h2>
+    </div>
+    <div class="section__body">
+      <div class="spec more" data-rule appReveal appRevealMode="mark">
+        @for (section of more; track section.id; let i = $index) {
+          <article class="spec__row more__item" [appReveal]="i">
+            <h3 [id]="'feature-' + section.id">
+              {{ 'features.sections.' + section.id + '.title' | transloco }}
+            </h3>
+            <div class="more__body">
+              <p
+                class="more__lead"
+                [innerHTML]="'features.sections.' + section.id + '.text' | transloco | inlineCode"
+              ></p>
+              <ul class="check-list">
+                @for (n of bulletKeys(section); track n) {
+                  <li
+                    [innerHTML]="
+                      'features.sections.' + section.id + '.bullets.b' + n | transloco | inlineCode
+                    "
+                  ></li>
+                }
+              </ul>
+            </div>
+          </article>
+        }
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="missing" aria-labelledby="missing-title">
+  <div class="container">
+    <div class="section__head">
+      <h2 id="missing-title">{{ 'features.missing.title' | transloco }}</h2>
+      <p>{{ 'features.missing.intro' | transloco }}</p>
+      <p class="section__more">
+        <a class="text-link" [routerLink]="['/', lang(), 'roadmap']">{{
+          'features.missing.roadmap' | transloco
+        }}</a>
+      </p>
+    </div>
+    <div class="section__body">
+      <ul class="planned-list planned-list--ruled" data-rule appReveal appRevealMode="mark">
+        @for (n of missingItems; track n) {
+          <li [innerHTML]="'features.missing.items.i' + n | transloco | inlineCode"></li>
+        }
+      </ul>
+    </div>
+  </div>
+</section>
+
+<app-cta />

@@ -1,0 +1,58 @@
+@use '../../../../breakpoints' as bp;
+
+// The crop is shown at the width of its frame: the text keeps the size it was captured for. The whole screen opens
+// from the link underneath.
+:host {
+  display: block;
+  background: var(--surface);
+}
+
+.shot {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+picture {
+  display: block;
+}
+
+img {
+  display: block;
+  width: 100%;
+  height: auto;
+  // A missing file shows its alt text in the reserved box instead of collapsing the layout.
+  color: var(--text-2);
+  font-size: var(--t-14);
+}
+
+.shot__open {
+  display: block;
+  padding: var(--s-2) var(--s-4);
+  color: var(--text-3);
+  font-size: var(--t-13);
+  font-weight: 500;
+  text-align: right;
+  border-top: 1px solid var(--line);
+}
+
+.shot:hover .shot__open,
+.shot:focus-visible .shot__open {
+  color: var(--brand-text);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+// On a phone the crop keeps a readable size and pans inside its frame, instead of shrinking until its text is
+// unreadable. The link underneath opens the whole screen.
+@media (max-width: bp.$phone) {
+  picture {
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  img {
+    width: 34rem;
+    max-width: none;
+  }
+}

@@ -1,0 +1,46 @@
+The ArtiFerris website {{ .Values.image.tag }} is deploying to {{ .Release.Namespace }}.
+
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ .Release.Name }}
+{{- if .Values.ingress.enabled }}
+
+Public URL: https://{{ first .Values.ingress.hosts }}
+{{- if gt (len .Values.ingress.hosts) 1 }}
+Also routed to the same service: {{ join ", " (rest .Values.ingress.hosts) }} (the image redirects artiferris.pro to https://www.artiferris.pro).
+{{- end }}
+Every host needs a DNS A record pointing at the Traefik load balancer before its certificate can be issued.
+{{- if .Values.ingress.certResolver }}
+
+The certificates come from Traefik's resolver {{ .Values.ingress.certResolver }} (HTTP-01; the first one takes a minute or two). There is no
+Certificate object to look at: check the Ingress and the Traefik logs.
+  kubectl get ingress {{ .Release.Name }} -n {{ .Release.Namespace }}
+  kubectl logs -n traefik <the Traefik pod> | grep -i acme
+{{- else if .Values.ingress.clusterIssuer }}
+
+The certificate (a minute or two on first install) is requested from the cert-manager ClusterIssuer {{ .Values.ingress.clusterIssuer }}, into the Secret {{ include "artiferris-website.tlsSecretName" . }}:
+  kubectl get certificate -n {{ .Release.Namespace }}
+{{- else }}
+
+No certificate is requested (ingress.certResolver and ingress.clusterIssuer are both empty): the Secret
+{{ include "artiferris-website.tlsSecretName" . }} must already hold one.
+{{- end }}
+{{- if eq .Values.ingress.className "traefik" }}
+{{- if or .Values.ingress.middlewares .Values.ingress.tlsOptions }}
+
+The ingress expects these Traefik resources to exist already (a missing one makes Traefik drop the route):
+{{- if .Values.ingress.middlewares }}
+  middlewares: {{ .Values.ingress.middlewares }}
+{{- end }}
+{{- if .Values.ingress.tlsOptions }}
+  TLSOption:   {{ .Values.ingress.tlsOptions }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- else }}
+
+The ingress is disabled: reach the site through the Service {{ .Release.Name }} on port {{ .Values.service.port }}, for example
+  kubectl -n {{ .Release.Namespace }} port-forward service/{{ .Release.Name }} 8080:{{ .Values.service.port }}
+{{- end }}
+{{- if .Values.networkPolicy.enabled }}
+
+The pod accepts port 8080 only and makes no outgoing connection (networkPolicy.enabled).
+{{- end }}

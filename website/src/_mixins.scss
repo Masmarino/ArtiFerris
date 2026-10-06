@@ -1,0 +1,43 @@
+// A list without bullets or default spacing.
+@mixin reset-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+// The line style of the small inline icons: drawn with the text colour, round ends.
+@mixin stroke-icon($width: 2) {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: $width;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+// Border of a job box by state, as in the product's pipeline page. Include it inside the box's rule.
+@mixin job-state-borders {
+  &[data-state='running'] {
+    border-color: var(--indigo);
+  }
+
+  &[data-state='success'] {
+    border-color: color-mix(in srgb, var(--patina) 60%, transparent);
+  }
+}
+
+// A rule along the top of a list that is drawn from the left when the list comes into view (the Reveal directive in
+// `mark` mode, with a data-rule attribute on the element). Without scripts it is simply there.
+@mixin drawn-rule($color: var(--line-strong)) {
+  position: relative;
+
+  &::before {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 1px;
+    content: '';
+    background: $color;
+    transform-origin: left;
+    transition: transform var(--dur-4) var(--ease-out);
+  }
+}

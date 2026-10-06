@@ -1,0 +1,88 @@
+<footer class="footer on-dark">
+  <div class="footer__inner container">
+    <div class="footer__brand">
+      <img src="images/logo-128.png" width="36" height="36" alt="" />
+      <div>
+        <p class="footer__name">ArtiFerris</p>
+        <p class="footer__tagline">{{ 'footer.tagline' | transloco }}</p>
+      </div>
+    </div>
+
+    <nav class="footer__col" [attr.aria-label]="'footer.product' | transloco">
+      <p class="footer__title">{{ 'footer.product' | transloco }}</p>
+      <ul>
+        <li>
+          <a [routerLink]="['/', lang(), 'features']">{{ 'nav.product' | transloco }}</a>
+        </li>
+        <li>
+          <a [routerLink]="['/', lang(), 'registries']">{{ 'nav.registries' | transloco }}</a>
+        </li>
+        <li>
+          <a [routerLink]="['/', lang(), 'install']">{{ 'nav.install' | transloco }}</a>
+        </li>
+        <li>
+          <a [routerLink]="['/', lang(), 'security']">{{ 'nav.security' | transloco }}</a>
+        </li>
+        <li>
+          <a [routerLink]="['/', lang(), 'roadmap']">{{ 'nav.roadmap' | transloco }}</a>
+        </li>
+        <li>
+          <a [href]="appUrl">{{ 'nav.openApp' | transloco }}</a>
+        </li>
+      </ul>
+    </nav>
+
+    <nav class="footer__col" [attr.aria-label]="'footer.docs' | transloco">
+      <p class="footer__title">{{ 'footer.docs' | transloco }}</p>
+      <ul>
+        <li>
+          <a [href]="docs.install" hreflang="fr">{{ 'footer.links.install' | transloco }}</a>
+        </li>
+        <li>
+          <a [href]="docs.configuration" hreflang="fr">{{
+            'footer.links.configuration' | transloco
+          }}</a>
+        </li>
+        <li>
+          <a [href]="docs.npm" hreflang="fr">{{ 'footer.links.npm' | transloco }}</a>
+        </li>
+        <li>
+          <a [href]="docs.docker" hreflang="fr">{{ 'footer.links.docker' | transloco }}</a>
+        </li>
+        <li>
+          <a [href]="docs.api" hreflang="fr">{{ 'footer.links.api' | transloco }}</a>
+        </li>
+        <li>
+          <a [href]="docs.organisations" hreflang="fr">{{
+            'footer.links.organisations' | transloco
+          }}</a>
+        </li>
+      </ul>
+    </nav>
+
+    <nav class="footer__col" [attr.aria-label]="'footer.project' | transloco">
+      <p class="footer__title">{{ 'footer.project' | transloco }}</p>
+      <ul>
+        <li><a [href]="githubUrl" target="_blank" rel="noopener">GitHub</a></li>
+        <li>
+          <a [href]="changelogUrl" target="_blank" rel="noopener">{{
+            'footer.links.changelog' | transloco
+          }}</a>
+        </li>
+        <li><a [href]="ferrisgitUrl" target="_blank" rel="noopener">FerrisGit</a></li>
+        <li>
+          <a [href]="licenseUrl" target="_blank" rel="noopener">{{
+            'footer.license' | transloco
+          }}</a>
+        </li>
+      </ul>
+    </nav>
+  </div>
+
+  <div class="container">
+    <div class="footer__legal">
+      <p>{{ 'footer.licensed' | transloco }}</p>
+      <p>{{ 'footer.noTracking' | transloco }}</p>
+    </div>
+  </div>
+</footer>

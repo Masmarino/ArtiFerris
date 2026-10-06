@@ -1,0 +1,72 @@
+<app-page-head [section]="'nav.registries' | transloco">
+  <h1>{{ 'home.registries.title' | transloco }}</h1>
+  <p class="lead" [innerHTML]="'home.registries.text' | transloco | inlineCode"></p>
+</app-page-head>
+
+<section class="section section--first" id="npm" aria-labelledby="npm-title">
+  <div class="container">
+    <div class="section__head">
+      <h2 id="npm-title">{{ 'home.registries.npm.title' | transloco }}</h2>
+      <p [innerHTML]="'home.registries.npm.text' | transloco | inlineCode"></p>
+      <p class="section__more">
+        <a class="text-link" [href]="docs.npm" hreflang="fr">{{
+          'home.registries.npm.link' | transloco
+        }}</a>
+      </p>
+    </div>
+    <div class="section__body">
+      <app-group-sim />
+    </div>
+  </div>
+</section>
+
+<section class="section" id="docker" aria-labelledby="docker-title">
+  <div class="container">
+    <div class="section__head">
+      <h2 id="docker-title">{{ 'home.registries.docker.title' | transloco }}</h2>
+      <p [innerHTML]="'home.registries.docker.text' | transloco | inlineCode"></p>
+      <p class="section__more">
+        <a class="text-link" [href]="docs.docker" hreflang="fr">{{
+          'home.registries.docker.link' | transloco
+        }}</a>
+      </p>
+    </div>
+    <div class="section__body">
+      <app-code-block
+        language="bash"
+        [code]="dockerCommands"
+        [label]="'home.registries.docker.label' | transloco"
+        [region]="'home.registries.docker.region' | transloco"
+        [copyLabel]="'install.copy' | transloco"
+        [copiedText]="'install.copied' | transloco"
+        [failedText]="'install.copyFailed' | transloco"
+      />
+    </div>
+  </div>
+</section>
+
+<section class="section" id="rules" aria-labelledby="rules-title">
+  <div class="container">
+    <div class="section__head">
+      <h2 id="rules-title">{{ 'home.registries.rules.title' | transloco }}</h2>
+      <p>{{ 'home.registries.rules.text' | transloco }}</p>
+    </div>
+    <div class="section__body">
+      <dl class="spec" data-rule appReveal appRevealMode="mark">
+        @for (fact of facts; track fact; let i = $index) {
+          <div class="spec__row" [appReveal]="i">
+            <dt>{{ 'home.registries.' + fact + '.title' | transloco }}</dt>
+            <dd [innerHTML]="'home.registries.' + fact + '.text' | transloco | inlineCode"></dd>
+          </div>
+        }
+      </dl>
+      <p class="section__more">
+        <a class="text-link" [href]="docs.repositories" hreflang="fr">{{
+          'home.registries.docs' | transloco
+        }}</a>
+      </p>
+    </div>
+  </div>
+</section>
+
+<app-cta />

@@ -1,0 +1,62 @@
+<figure class="fig" appReveal appRevealMode="mark" data-reveal-mark>
+  <p class="fig__pan" aria-hidden="true">{{ 'plan.pan' | transloco }}</p>
+  <div class="fig__sheet">
+    <div
+      class="fig__scroll"
+      tabindex="0"
+      role="group"
+      [attr.aria-label]="'plan.scroll' | transloco"
+    >
+      <app-architecture-plan />
+    </div>
+  </div>
+  <figcaption class="fig__caption">
+    <p class="fig__text">
+      <b>{{ 'plan.fig' | transloco }}</b> {{ 'plan.caption' | transloco }}
+    </p>
+    <ul class="fig__key" [attr.aria-label]="'plan.key.label' | transloco">
+      <li>
+        <svg viewBox="0 0 38 14" aria-hidden="true">
+          <path d="M1 7h30" class="k-ink" />
+          <path d="M27 3.5 33 7l-6 3.5" class="k-ink-fill" />
+        </svg>
+        {{ 'plan.key.request' | transloco }}
+      </li>
+      <li>
+        <svg viewBox="0 0 38 14" aria-hidden="true">
+          <path d="M1 7h30" class="k-acc" />
+          <path d="M26 2.5 34 7l-8 4.5z" class="k-acc-fill" />
+        </svg>
+        {{ 'plan.key.push' | transloco }}
+      </li>
+      <li>
+        <svg viewBox="0 0 38 14" aria-hidden="true">
+          <path d="M1 7h30" class="k-ink" stroke-dasharray="5 4" />
+        </svg>
+        {{ 'plan.key.poll' | transloco }}
+      </li>
+      <li>
+        <svg viewBox="0 0 38 14" aria-hidden="true">
+          <circle cx="19" cy="7" r="6" class="k-ring" />
+        </svg>
+        {{ 'plan.key.detail' | transloco }}
+      </li>
+    </ul>
+    <nav class="fig__views" [attr.aria-label]="'plan.viewsLabel' | transloco">
+      <ol>
+        @for (n of numbers; track n) {
+          <li>
+            <a
+              [routerLink]="commands()"
+              [fragment]="fragment(n)"
+              [class.is-linked]="plan.active() === n"
+              [appPlanPoint]="n"
+              ><span class="no" aria-hidden="true">{{ n }}</span
+              >{{ 'plan.views.' + n | transloco }}</a
+            >
+          </li>
+        }
+      </ol>
+    </nav>
+  </figcaption>
+</figure>

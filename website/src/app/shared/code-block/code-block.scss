@@ -1,0 +1,120 @@
+// Code sits on the deepest surface of the theme, with a title bar. Syntax is ink, text-2 and the brand's amber.
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.code {
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-window);
+}
+
+.code__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.5rem;
+  padding: 0 0.375rem 0 1rem;
+  color: var(--text-2);
+  font: 500 var(--t-13) / 1.2 var(--mono);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.code__label {
+  overflow-wrap: anywhere;
+}
+
+.code__scroll {
+  overflow-x: auto;
+
+  &:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: -4px;
+  }
+}
+
+pre {
+  margin: 0;
+  padding: 0.875rem 0;
+}
+
+code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  color: var(--text);
+  font: 400 var(--t-13) / 1.7 var(--mono);
+  tab-size: 2;
+  background: none;
+}
+
+// highlight.js emits these classes inside [innerHTML], which component styles cannot reach without ::ng-deep.
+:host ::ng-deep {
+  .code__line {
+    display: block;
+    padding-inline: 1rem;
+    border-inline-start: 2px solid transparent;
+    transition: background-color var(--dur-2) var(--ease);
+  }
+
+  .code__line.is-marked {
+    background: var(--del-soft);
+    border-inline-start-color: var(--del);
+  }
+
+  .hljs-attr,
+  .hljs-keyword,
+  .hljs-built_in {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .hljs-string {
+    color: var(--brand-text);
+  }
+
+  .hljs-bullet,
+  .hljs-meta,
+  .hljs-literal,
+  .hljs-number,
+  .hljs-variable,
+  .hljs-template-variable {
+    color: var(--text-2);
+  }
+
+  .hljs-comment {
+    color: var(--text-3);
+    font-style: italic;
+  }
+}
+
+// Shell lines wrap, the rest of a line indented under its start. Copying still takes the command as written.
+:host(.is-wrapping) {
+  code {
+    width: auto;
+  }
+
+  ::ng-deep .code__line {
+    padding-inline-start: 2.25rem;
+    text-indent: -1.25rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+// With `print`, the lines arrive one after the other. They are all in the page from the start: only their opacity and a
+// small shift animate, and the delay is capped so a long file does not take long.
+:host(.is-printing) ::ng-deep .code__line {
+  animation: line-in var(--dur-2) var(--ease-out) both;
+
+  @for $n from 1 through 14 {
+    &:nth-child(#{$n}) {
+      animation-delay: #{$n * 55}ms;
+    }
+  }
+}

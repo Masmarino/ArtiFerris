@@ -1,0 +1,8 @@
+// Media-query widths, in rem so that they follow the visitor's font size. A component pulls them in with
+// `@use '../../../breakpoints' as bp` and writes `@media (min-width: bp.$lg)`.
+$xs: 26rem; // max-width: the scene and the HTTP sample tighten up on the narrowest phones
+$phone: 45rem; // max-width: the screenshots and the plan pan inside their frame
+$sm: 40rem;
+$md: 48rem;
+$lg: 62rem; // two-column layouts
+$xl: 70rem; // the header becomes a bar; the widest grids

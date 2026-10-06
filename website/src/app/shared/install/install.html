@@ -1,0 +1,74 @@
+<div class="install">
+  <div class="install__code">
+    <div
+      class="install__tabs"
+      [attr.role]="enhanced() ? 'tablist' : null"
+      [attr.aria-label]="'install.tabsLabel' | transloco"
+    >
+      @for (tab of tabs; track tab.id; let index = $index) {
+        <button
+          type="button"
+          class="install__tab"
+          [class.is-active]="index === active()"
+          [id]="'install-tab-' + tab.id"
+          [attr.role]="enhanced() ? 'tab' : null"
+          [attr.aria-selected]="enhanced() ? index === active() : null"
+          [attr.aria-controls]="enhanced() ? 'install-panel-' + tab.id : null"
+          [attr.tabindex]="enhanced() && index !== active() ? -1 : null"
+          (click)="select(index)"
+          (keydown)="onKeydown($event, index)"
+        >
+          {{ 'install.tabs.' + tab.id | transloco }}
+        </button>
+      }
+    </div>
+
+    @for (tab of tabs; track tab.id; let index = $index) {
+      <section
+        class="install__panel"
+        [class.is-active]="index === active()"
+        [id]="'install-panel-' + tab.id"
+        [attr.role]="enhanced() ? 'tabpanel' : null"
+        [attr.aria-labelledby]="'install-tab-' + tab.id"
+        [attr.tabindex]="enhanced() && index === active() ? 0 : null"
+      >
+        <h3 class="install__panel-title">{{ 'install.tabs.' + tab.id | transloco }}</h3>
+        <app-code-block
+          [print]="true"
+          [language]="tab.language"
+          [label]="'install.labels.' + tab.id | transloco"
+          [region]="'install.regions.' + tab.id | transloco"
+          [code]="tab.code"
+          [copyLabel]="'install.copy' | transloco"
+          [copiedText]="'install.copied' | transloco"
+          [failedText]="'install.copyFailed' | transloco"
+        />
+        <p
+          class="install__panel-note"
+          [innerHTML]="'install.notes.' + tab.id | transloco | inlineCode"
+        ></p>
+        <a class="text-link" [href]="tab.doc" hreflang="fr">{{
+          'install.docLink.' + tab.id | transloco
+        }}</a>
+      </section>
+    }
+  </div>
+
+  <aside class="install__aside">
+    <h3>{{ 'install.then.title' | transloco }}</h3>
+    <ol class="install__steps">
+      @for (step of steps; track step; let n = $index) {
+        <li [appReveal]="n">
+          <span class="install__n">{{ n + 1 }}</span>
+          <p [innerHTML]="'install.then.' + step | transloco | inlineCode"></p>
+        </li>
+      }
+    </ol>
+    <h3>{{ 'install.needs.title' | transloco }}</h3>
+    <ul class="install__needs">
+      @for (need of needs; track need) {
+        <li [innerHTML]="'install.needs.' + need | transloco | inlineCode"></li>
+      }
+    </ul>
+  </aside>
+</div>

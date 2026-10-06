@@ -1,0 +1,18 @@
+<figure class="code">
+  <figcaption class="code__bar">
+    <span class="code__label">{{ label() }}</span>
+    @if (copyLabel(); as copy) {
+      <gbt-copy-button
+        variant="ghost"
+        size="large"
+        [value]="code()"
+        [text]="copy"
+        [copiedText]="copiedText()"
+        [failedText]="failedText()"
+      />
+    }
+  </figcaption>
+  <div class="code__scroll" role="region" tabindex="0" [attr.aria-label]="region()">
+    <pre><code class="hljs" [innerHTML]="html()"></code></pre>
+  </div>
+</figure>

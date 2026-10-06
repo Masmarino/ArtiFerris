@@ -1,0 +1,13 @@
+<button
+  type="button"
+  class="theme-toggle"
+  [attr.aria-label]="
+    (theme.effective() === 'dark' ? 'theme.switchToLight' : 'theme.switchToDark') | transloco
+  "
+  (click)="theme.toggle()"
+>
+  <!-- Both icons are rendered and styles.scss shows the right one, so the prerendered page is already correct for a
+       dark-mode visitor before any script runs. -->
+  <gbt-icon class="theme-toggle__sun" name="sun" />
+  <gbt-icon class="theme-toggle__moon" name="moon" />
+</button>

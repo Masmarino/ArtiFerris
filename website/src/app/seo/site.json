@@ -1,0 +1,13 @@
+{
+  "siteUrl": "https://www.artiferris.pro",
+  "defaultLang": "en",
+  "langs": ["en", "fr", "it", "es", "de"],
+  "pages": {
+    "home": "",
+    "features": "features",
+    "registries": "registries",
+    "install": "install",
+    "security": "security",
+    "roadmap": "roadmap"
+  }
+}

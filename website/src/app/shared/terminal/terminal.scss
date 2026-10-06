@@ -1,0 +1,101 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.proof {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  background: var(--term-bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+}
+
+.proof__terminal {
+  margin: 0;
+  padding: var(--s-4) var(--s-5);
+  overflow-x: auto;
+  color: var(--term-ink);
+  font: 400 0.75rem / 1.8 var(--mono);
+  white-space: pre;
+  background: none;
+  border: 0;
+
+  code {
+    display: block;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    background: none;
+    border: 0;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: -4px;
+  }
+}
+
+// A wrapped line goes on under its own start, so a header that runs long still reads as one.
+.proof__line {
+  display: block;
+}
+
+.proof__terminal.is-wrapping .proof__line {
+  padding-inline-start: 1.5rem;
+  text-indent: -1.5rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+figcaption {
+  padding: var(--s-3) var(--s-5);
+  color: var(--text-3);
+  font-size: var(--t-13);
+  line-height: 1.5;
+  border-top: 1px solid var(--line);
+}
+
+:host ::ng-deep figcaption .text-link {
+  display: inline;
+  min-height: 0;
+}
+
+// The lines come in one step each, then the prompt blinks. Opacity and a clip only: the text is in the page from the
+// start, so nothing depends on this running.
+.proof__terminal code {
+  animation: terminal-print 1s steps(var(--lines, 4), end) 600ms both;
+}
+
+.proof__terminal::after {
+  display: block;
+  color: var(--term-ink);
+  content: '$ \2588' / '';
+  animation: terminal-cursor 1.1s steps(1, end) 1.7s infinite both;
+}
+
+figcaption {
+  animation: fade-in var(--dur-4) var(--ease-out) 1.6s both;
+}
+
+@keyframes terminal-print {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes terminal-cursor {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}

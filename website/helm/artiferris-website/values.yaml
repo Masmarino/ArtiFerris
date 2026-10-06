@@ -1,0 +1,81 @@
+image:
+  repository: masmarino/artiferris-website
+  # Required: a release tag such as 0.2.0 (CI passes the one it just pushed). `latest` works but is always pulled.
+  tag: ''
+  # Optional sha256:... digest: the pod then runs exactly that image, whatever the tag points to later.
+  digest: ''
+  pullPolicy: IfNotPresent
+
+# Names of existing docker-registry Secrets, for a private registry.
+imagePullSecrets: []
+
+# The site is stateless and static: one replica is enough, and a second one would only matter for a node failure.
+replicaCount: 1
+
+service:
+  port: 8080
+
+# nginx finishes the requests in flight on SIGQUIT. The preStop sleep gives the ingress controller time to drop the pod
+# from its endpoints first, so a rollout doesn't cut a request.
+terminationGracePeriodSeconds: 20
+preStopSleepSeconds: 5
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    memory: 64Mi
+
+# 101 is the id of the `nginx` user and group of the image (see website/Dockerfile).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  runAsGroup: 101
+  seccompProfile:
+    type: RuntimeDefault
+
+# nginx only writes to /tmp (an emptyDir): its temporary directories and its PID file.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ['ALL']
+
+ingress:
+  enabled: true
+  className: traefik
+  # The first host is the address of the site. The others reach the same service; the image itself redirects
+  # artiferris.pro to https://www.artiferris.pro (website/docker/nginx.conf), whatever the hosts here.
+  hosts:
+    - www.artiferris.pro
+    - artiferris.pro
+  # Certificate from cert-manager: the ClusterIssuer that already serves the application's *.artiferris.pro answers DNS-01
+  # challenges, so it works before the DNS records point at the cluster. The certificate lands in the Secret
+  # tlsSecretName. Alternative: Traefik's own ACME resolver (HTTP-01), e.g. certResolver letsencrypt-http with
+  # clusterIssuer set to "" (setting both is an error); it needs an A record from every host to the Traefik load balancer
+  # and className traefik. With neither, no certificate is requested and tlsSecretName must already hold one.
+  certResolver: ''
+  clusterIssuer: artiferris-dns01-issuer
+  tlsSecretName: '' # empty = <release>-tls (cert-manager mode, or an existing Secret); unused with certResolver
+  # Traefik Middlewares (namespace-name@kubernetescrd, comma-separated). They must already exist, or Traefik drops the
+  # route: `https` (redirect to HTTPS) and `headers` (security headers), both in the `traefik` namespace. "" uses none.
+  middlewares: 'traefik-https@kubernetescrd,traefik-headers@kubernetescrd'
+  # Traefik TLSOption (name@kubernetescrd), which must already exist: `mintls13` in the `traefik` namespace, TLS 1.3 minimum.
+  # "" uses Traefik's defaults.
+  tlsOptions: 'traefik-mintls13@kubernetescrd'
+  # The application's ingress takes *.artiferris.pro (one subdomain per organization). Traefik ranks routers by the
+  # length of their rule and the wildcard's is the longer, so www would reach the application without this priority.
+  annotations:
+    traefik.ingress.kubernetes.io/router.priority: '1000'
+
+networkPolicy:
+  # The pod accepts port 8080 and nothing else, and makes no outgoing connection at all (nginx needs none, not even DNS).
+  # Needs a CNI that enforces NetworkPolicy.
+  enabled: true
+  # Who may reach the pod, as NetworkPolicy peers. Empty means anyone. An ingress controller in another namespace can be
+  # named here, for example:
+  #   - namespaceSelector:
+  #       matchLabels:
+  #         kubernetes.io/metadata.name: traefik
+  ingressFrom: []

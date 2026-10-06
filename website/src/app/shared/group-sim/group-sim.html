@@ -1,0 +1,78 @@
+<div class="sim">
+  <app-code-block
+    class="sim__code"
+    language="bash"
+    label=".npmrc"
+    [region]="'registries.codeLabel' | transloco"
+    [code]="code"
+  />
+
+  <div class="sim__graph">
+    <div class="sim__head">
+      <p
+        class="sim__status"
+        [attr.data-state]="state().status === 'received' ? 'running' : 'success'"
+      >
+        <gbt-job-status [status]="statusGlyph()" />
+        {{ 'registries.status.' + state().status | transloco }}
+      </p>
+      <button
+        type="button"
+        class="sim__replay"
+        [attr.aria-label]="'registries.replay' | transloco"
+        (click)="play()"
+      >
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path d="M3 12a9 9 0 1 0 3-6.7" />
+          <path d="M3 4v5h5" />
+        </svg>
+        <span>{{ 'registries.replay' | transloco }}</span>
+      </button>
+    </div>
+
+    <div class="sim__stages" [attr.aria-label]="'registries.graphLabel' | transloco" role="group">
+      <div class="sim__stage">
+        <p class="sim__stage-name">npm-all</p>
+        @for (member of members(); track member.name) {
+          <div class="sim__job" [attr.data-state]="member.state">
+            <gbt-job-status [status]="member.glyph" />
+            <span class="sim__job-name">{{ member.name }}</span>
+            <span class="sim__job-state"
+              >{{ 'registries.type.' + member.type | transloco }},
+              {{ 'registries.member.' + member.phase | transloco }}</span
+            >
+          </div>
+        }
+      </div>
+      <svg class="sim__links" viewBox="0 0 48 120" width="48" height="120" aria-hidden="true">
+        <path pathLength="100" [attr.data-state]="link()" d="M0 84H48" />
+      </svg>
+      <div class="sim__stage sim__stage--upstream">
+        <p class="sim__stage-name">{{ 'registries.upstreamName' | transloco }}</p>
+        <div class="sim__job" [attr.data-state]="upstream().state">
+          <gbt-job-status [status]="upstream().glyph" />
+          <span class="sim__job-name">registry.npmjs.org</span>
+          <span class="sim__job-state">{{
+            'registries.upstream.' + upstream().phase | transloco
+          }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sim__controls">
+      <button
+        type="button"
+        class="sim__switch"
+        role="switch"
+        [attr.aria-checked]="warm()"
+        (click)="toggle()"
+      >
+        <span class="sim__track" aria-hidden="true"><span class="sim__thumb"></span></span>
+        <span>{{ 'registries.warmSwitch' | transloco }}</span>
+      </button>
+      <p class="sim__note" aria-live="polite">
+        {{ (warm() ? 'registries.noteWarm' : 'registries.noteCold') | transloco }}
+      </p>
+    </div>
+  </div>
+</div>

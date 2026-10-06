@@ -4,6 +4,15 @@ Toutes les évolutions notables d'ArtiFerris. Le format suit [Keep a Changelog](
 versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de texte à la release GitHub du même numéro : voir
 « Publier une version » plus bas.
 
+## [Non publié]
+
+### Ajouté
+
+- **Site public** sur `www.artiferris.pro` (`website/`), sur le modèle de celui de FerrisGit : accueil, produit, registres,
+  installation, sécurité et feuille de route, dans les cinq langues, avec des captures tirées du Storybook de l'application,
+  un schéma de l'architecture et une démonstration d'un groupe npm. Il se construit, s'analyse et se déploie avec les tags de
+  version (release `artiferris-website`), à côté de l'application.
+
 ## [0.6.1] - 2026-10-06
 
 ### Ajouté

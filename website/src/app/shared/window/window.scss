@@ -1,0 +1,43 @@
+// The frame around a screenshot or a demo: a hairline, and above it the address of the page it shows, in mono. Nothing
+// that imitates a window's chrome.
+:host {
+  display: block;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-window);
+}
+
+.window__bar {
+  display: flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding-inline: var(--s-4);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.window__dots,
+.window__spacer {
+  display: none;
+}
+
+.window__url {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font: 400 var(--t-13) / 1 var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  b {
+    color: var(--text-2);
+    font-weight: 400;
+  }
+}
+
+.window__body {
+  display: block;
+  min-width: 0;
+}

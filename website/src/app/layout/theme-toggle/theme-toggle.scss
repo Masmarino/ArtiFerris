@@ -1,0 +1,18 @@
+// A quiet icon button: no outline at rest, a tint on hover.
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  color: var(--text);
+  font-size: 1.25rem;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-control);
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}

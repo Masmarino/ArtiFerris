@@ -1,0 +1,62 @@
+{{- if .Values.ingress.enabled }}
+{{- if not .Values.ingress.hosts }}
+{{- fail "ingress.hosts is empty: list at least the host of the site, or set ingress.enabled to false." }}
+{{- end }}
+{{- if and .Values.ingress.certResolver .Values.ingress.clusterIssuer }}
+{{- fail "ingress.certResolver and ingress.clusterIssuer are both set: choose Traefik's resolver or a cert-manager ClusterIssuer, not both (set the other to an empty string, e.g. --set ingress.certResolver=)." }}
+{{- end }}
+{{- if and .Values.ingress.certResolver (ne .Values.ingress.className "traefik") }}
+{{- fail (printf "ingress.certResolver is a Traefik feature and ingress.className is %q: set ingress.certResolver to an empty string and use ingress.clusterIssuer, or an existing TLS Secret." .Values.ingress.className) }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "artiferris-website.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer | quote }}
+    {{- end }}
+    {{- if eq .Values.ingress.className "traefik" }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    {{- with .Values.ingress.certResolver }}
+    traefik.ingress.kubernetes.io/router.tls.certresolver: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.ingress.tlsOptions }}
+    traefik.ingress.kubernetes.io/router.tls.options: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.ingress.middlewares }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ . | quote }}
+    {{- end }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Release.Name }}
+                port:
+                  name: http
+    {{- end }}
+  tls:
+    - hosts:
+        {{- range .Values.ingress.hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- if not .Values.ingress.certResolver }}
+      secretName: {{ include "artiferris-website.tlsSecretName" . }}
+      {{- end }}
+{{- end }}

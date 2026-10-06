@@ -1,0 +1,167 @@
+@use '../../../breakpoints' as bp;
+
+:host {
+  position: relative;
+  display: block;
+}
+
+// A small control that reads as a select: the code of the language in mono, a chevron, a hairline around it.
+.lang__summary {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  height: 2.25rem;
+  padding: 0 0.625rem 0 0.75rem;
+  color: var(--text);
+  list-style: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  cursor: pointer;
+  user-select: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &:hover,
+  .lang[open] & {
+    background: var(--surface-2);
+    border-color: var(--text-3);
+  }
+}
+
+.lang__code {
+  font: 500 var(--t-13) / 1 var(--mono);
+  letter-spacing: 0.04em;
+}
+
+.lang__chevron {
+  font-size: 0.75rem;
+  color: var(--text-2);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+
+.lang[open] .lang__chevron {
+  transform: rotate(180deg);
+}
+
+// The list is a ruled panel: each language on its own row, the code in mono before its name. It unrolls from the top
+// when it opens and its rows follow one after the other; a row answers the pointer with a fill and a rule that grows.
+.lang__list {
+  min-width: 11rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+
+  li + li {
+    border-top: 1px solid var(--line);
+  }
+
+  a {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    min-height: var(--tap);
+    padding: 0 0.875rem;
+    color: var(--text);
+    font-size: var(--t-15);
+    text-decoration: none;
+
+    // The code is decoration for the eye: the name says the same, so it has no spoken text.
+    &::before {
+      width: 1.5rem;
+      color: var(--text-3);
+      font: 500 var(--t-13) / 1 var(--mono);
+      letter-spacing: 0.04em;
+      content: attr(data-code) / '';
+    }
+
+    &:hover {
+      background: var(--surface-2);
+    }
+
+    &:hover::before {
+      color: var(--text);
+    }
+
+    &[aria-current='true'] {
+      font-weight: 600;
+
+      &::before {
+        color: var(--text);
+      }
+    }
+  }
+
+  a {
+    position: relative;
+    transition: background-color var(--dur-1) var(--ease);
+  }
+
+  // The rule on the leading edge: always there for the current language, grows from the middle on the others.
+  a::after {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 2px;
+    content: '';
+    background: var(--text);
+    transform: scaleY(0);
+    transition: transform var(--dur-2) var(--ease-out);
+  }
+
+  a:hover::after,
+  a[aria-current='true']::after {
+    transform: scaleY(1);
+  }
+}
+
+.lang[open] .lang__list {
+  animation: lang-unroll var(--dur-2) var(--ease-out) both;
+
+  li {
+    animation: lang-row var(--dur-2) var(--ease-out) both;
+  }
+
+  @for $n from 1 through 5 {
+    li:nth-child(#{$n}) {
+      animation-delay: #{$n * 35}ms;
+    }
+  }
+}
+
+@keyframes lang-unroll {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes lang-row {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+// In the mobile menu the list stays in the flow, because the scrolling panel would clip a floating one. On the
+// desktop bar it floats under the button and opens towards the left to stay in the viewport.
+@media (min-width: bp.$xl) {
+  .lang__list {
+    position: absolute;
+    inset-inline-end: 0;
+    top: 100%;
+    z-index: 10;
+  }
+}

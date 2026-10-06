@@ -1,0 +1,7 @@
+dist/
+.angular/
+node_modules/
+package-lock.json
+
+# Go-template syntax in Helm chart templates isn't valid standalone YAML
+helm/artiferris-website/templates/

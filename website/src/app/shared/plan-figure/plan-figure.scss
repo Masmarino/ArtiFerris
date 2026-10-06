@@ -1,0 +1,170 @@
+@use '../../../breakpoints' as bp;
+@use '../../../mixins' as m;
+
+:host {
+  display: block;
+}
+
+.fig {
+  margin: 0;
+}
+
+// The sheet: faint grid paper in a hairline frame, the drawing laid on it with air around.
+.fig__sheet {
+  padding: clamp(1rem, 0.5rem + 2vw, 2.5rem) clamp(1rem, 0.5rem + 3vw, 3.5rem);
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid-ink) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-ink) 1px, transparent 1px);
+  background-size: 32px 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-tile);
+}
+
+.fig__scroll {
+  overflow: visible;
+  border-radius: var(--r-control);
+}
+
+.fig__pan {
+  display: none;
+  margin: 0 0 0.5rem;
+  color: var(--text-3);
+  font-size: var(--t-14);
+}
+
+.fig__caption {
+  display: grid;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+  color: var(--text-2);
+  font-size: var(--t-15);
+  line-height: 1.5;
+}
+
+.fig__text {
+  max-width: 70ch;
+  margin: 0;
+
+  b {
+    color: var(--text);
+    font-weight: 600;
+  }
+}
+
+.fig__key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  padding: 0;
+  margin: 0;
+  font-size: var(--t-14);
+  list-style: none;
+
+  li {
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+  }
+
+  svg {
+    flex: none;
+    width: 38px;
+    height: 14px;
+    overflow: visible;
+  }
+
+  .k-ink {
+    fill: none;
+    stroke: var(--text);
+    stroke-width: 1.4;
+  }
+
+  .k-ink-fill {
+    fill: var(--text);
+  }
+
+  .k-acc {
+    fill: none;
+    stroke: var(--brand);
+    stroke-width: 2.6;
+  }
+
+  .k-acc-fill {
+    fill: var(--brand);
+  }
+
+  .k-ring {
+    fill: none;
+    stroke: var(--brand);
+    stroke-width: 2;
+  }
+}
+
+// The same seven numbers as on the drawing, as links: for the keyboard, for small screens, and for anyone who
+// does not want to aim at a circle.
+.fig__views ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0 var(--s-4);
+  @include m.reset-list;
+}
+
+.fig__views a {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--text);
+  font-size: var(--t-14);
+  font-weight: 500;
+  text-decoration: none;
+
+  &:hover,
+  &.is-linked {
+    color: var(--brand-text);
+  }
+}
+
+.no {
+  display: inline-grid;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  color: var(--text);
+  font: 600 0.75rem / 1 var(--sans);
+  background: var(--bg);
+  border: 2px solid var(--brand);
+  border-radius: 50%;
+  transition:
+    background-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+
+.fig__views a:hover .no,
+.fig__views a.is-linked .no {
+  color: var(--on-brand);
+  background: var(--brand);
+}
+
+@media (max-width: bp.$phone) {
+  .fig__pan {
+    display: block;
+  }
+
+  // The drawing keeps a readable size and pans inside its sheet; the page itself never scrolls sideways.
+  .fig__sheet {
+    padding: 1rem 0;
+  }
+
+  .fig__scroll {
+    padding-inline: 1rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+
+    app-architecture-plan {
+      min-width: 56rem;
+    }
+  }
+}

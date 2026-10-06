@@ -1,0 +1,63 @@
+@use '../../../mixins' as m;
+
+:host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.not-found__bar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.not-found__bar .container {
+  display: flex;
+  align-items: center;
+  min-height: var(--header-h);
+}
+
+.not-found__brand {
+  display: inline-flex;
+  gap: 0.55rem;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--text);
+  text-decoration: none;
+
+  img {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  span {
+    font-size: 1.125rem;
+    font-weight: 650;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+}
+
+main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.not-found {
+  flex: 1;
+  padding-block: var(--s-7) var(--section);
+}
+
+.not-found__code {
+  margin: 0 0 var(--s-4);
+  color: var(--brand-text);
+  font: 500 var(--t-15) var(--mono);
+}
+
+.not-found__langs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  @include m.reset-list;
+}

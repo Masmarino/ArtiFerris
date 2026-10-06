@@ -1,0 +1,988 @@
+@use '@masmarino/gabarit/tokens';
+@use 'mixins' as m;
+
+// Fonts are self-hosted and subset to what the five languages need (scripts/subset-fonts.py). IBM Plex is the one family:
+// Sans for the text and the interface, Sans Condensed for headings, Mono for code, paths, hashes and figures.
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-600.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-condensed-600.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-500.woff2') format('woff2');
+}
+
+// Theme: white paper and near-black ink for light, a cool graphite for dark. Neutrals carry the page; the crab's rust is
+// kept for the few marks that are the brand's own (the flow of a push, a status, a focus ring). The product's blue marks
+// a running job inside the demos and patina green marks success. Gabarit follows prefers-color-scheme by itself. The
+// mapping below puts its components on our tokens and honours an explicit light choice on a dark system, which
+// Gabarit doesn't.
+
+@mixin theme-dark {
+  --bg: #11161c;
+  --bg-2: #151b22;
+  --surface: #181f27;
+  --surface-2: #1f2730;
+  --surface-3: #28323d;
+  --line: rgba(205, 215, 230, 0.12);
+  --line-strong: rgba(205, 215, 230, 0.26);
+  --text: #e7ebf1;
+  --text-2: #aab3c0;
+  --text-3: #8a94a3;
+  --ink-action: #e7ebf1;
+  --on-ink: #0c1015;
+  --brand: #f0622a;
+  --brand-2: #f5b13d;
+  --brand-text: #ff9469;
+  --brand-soft: rgba(240, 98, 42, 0.14);
+  --on-brand: #1a0f07;
+  --indigo: #8b9bff;
+  --indigo-soft: rgba(139, 155, 255, 0.16);
+  --patina: #3fbf95;
+  --patina-soft: rgba(63, 191, 149, 0.16);
+  --del: #f2857d;
+  --del-soft: rgba(242, 133, 125, 0.16);
+  --warn: #f5b13d;
+  --window-shadow: 0 0 0 1px var(--line-strong);
+  --grid-ink: rgba(205, 215, 230, 0.05);
+  --term-bg: #070a0e;
+  --term-ink: #e7ebf1;
+}
+
+@mixin theme-light {
+  --bg: #eff2f5;
+  --bg-2: #e6eaef;
+  --surface: #ffffff;
+  --surface-2: #e9edf1;
+  --surface-3: #dce2e9;
+  --line: #d3d9e1;
+  --line-strong: #a9b3c0;
+  --text: #10151c;
+  --text-2: #434c58;
+  --text-3: #596372;
+  --ink-action: #10151c;
+  --on-ink: #ffffff;
+  --brand: #c2410c;
+  --brand-2: #f0a52c;
+  --brand-text: #a8360a;
+  --brand-soft: rgba(194, 65, 12, 0.08);
+  --on-brand: #ffffff;
+  --indigo: #2f49c9;
+  --indigo-soft: rgba(47, 73, 201, 0.09);
+  --patina: #15805d;
+  --patina-soft: rgba(21, 128, 93, 0.12);
+  --del: #c23a32;
+  --del-soft: rgba(194, 58, 50, 0.1);
+  --warn: #9a5b04;
+  --window-shadow: 0 0 0 1px var(--line-strong);
+  --grid-ink: rgba(16, 21, 28, 0.045);
+  --term-bg: #10151c;
+  --term-ink: #e7ebf1;
+}
+
+// Gabarit's token names, set from ours, so its components (button, icon, copy button, job status) match.
+@mixin gabarit-map {
+  --bg-principal: var(--surface);
+  --bg-panel: var(--surface-2);
+  --bg-hover: color-mix(in srgb, var(--text) 7%, transparent);
+  --border-color: var(--line-strong);
+  --gbt-hairline: var(--line);
+  --gbt-card-border: var(--line);
+  --text-primary: var(--text);
+  --text-secondary: var(--text-2);
+  --text-discret: var(--text-3);
+  --primary: var(--ink-action);
+  --primary-hover: var(--ink-action);
+  --text-on-primary: var(--on-ink);
+  --color-success-text: var(--patina);
+  --color-success-vivid-base: var(--patina);
+  --color-error-text: var(--del);
+  --color-info-bg: var(--surface-2);
+  --color-info-bg-text: var(--text);
+  --site-border-radius: 4px;
+  --site-border-radius-sm: 3px;
+  --site-border-radius-lg: 6px;
+  --site-shadow-sm: none;
+  --site-shadow-md: 0 0 0 1px var(--line-strong);
+  --site-shadow-lg: var(--window-shadow);
+}
+
+// Gabarit's light values for the tokens we don't map. Its dark block applies under prefers-color-scheme whatever
+// data-theme says, so a "light" choice on a dark system needs them back.
+@mixin gabarit-light-rest {
+  --bg-track: var(--grey-200);
+  --text-on-color: #ffffff;
+  --text-on-error: #ffffff;
+  --color-success-base: var(--green-500);
+  --color-success-bg: var(--green-100);
+  --color-success-bg-text: var(--green-800);
+  --color-warning-base: #c38927;
+  --color-warning-text: #6f4d16;
+  --color-warning-bg: var(--amber-100);
+  --color-warning-bg-text: var(--amber-800);
+  --color-error-base: var(--red-500);
+  --color-error-fill: #a82727;
+  --color-error-hover: #8f2121;
+  --color-error-bg: var(--red-100);
+  --color-error-bg-text: var(--red-800);
+  --bg-inverse: var(--grey-900);
+}
+
+:root {
+  color-scheme: light;
+  --sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  --display: 'IBM Plex Sans Condensed', 'IBM Plex Sans', 'Arial Narrow', Arial, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-family: var(--sans);
+  --gbt-font-mono: var(--mono);
+
+  // Type scale, in rem on a 16px root.
+  --t-13: 0.8125rem;
+  --t-14: 0.875rem;
+  --t-15: 0.9375rem;
+  --t-16: 1rem;
+  --t-17: 1.0625rem;
+  --t-20: 1.25rem;
+  --t-24: 1.5rem;
+  --t-30: 1.875rem;
+  --t-h2: clamp(1.625rem, 1.25rem + 1.3vw, 2.25rem);
+  --t-h1: clamp(2.25rem, 1.5rem + 3.2vw, 3.75rem);
+
+  // 8pt spacing scale.
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2rem;
+  --s-7: 3rem;
+  --s-8: 4rem;
+  --s-9: 6rem;
+  --section: clamp(3rem, 2rem + 3.5vw, 5rem);
+
+  // Radii by role.
+  --r-control: 3px;
+  --r-chip: 2px;
+  --r-pill: 999px;
+  --r-tile: 4px;
+  --r-window: 4px;
+
+  --header-h: 3.5rem;
+  --container: 74rem;
+  --gutter: clamp(16px, 1rem + 2vw, 40px);
+  --tap: 2.75rem;
+
+  // Every animation takes its duration and curve from these.
+  --dur-1: 150ms;
+  --dur-2: 250ms;
+  --dur-3: 450ms;
+  --dur-4: 700ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --stagger: 70ms;
+
+  @include theme-light;
+  @include gabarit-map;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    @include theme-dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  @include theme-dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  @include gabarit-light-rest;
+  @include theme-light;
+}
+
+// The bands that frame a page (the bar, the title block, the footer) are dark in both themes: graphite, a little deeper
+// than the dark theme's own ground. The tokens are set again inside, so everything in them follows, Gabarit's included.
+.on-dark {
+  @include theme-dark;
+  @include gabarit-map;
+  --bg: #0b0f14;
+  --bg-2: #0f141a;
+  --term-bg: #05070a;
+  color: var(--text);
+  background: var(--bg);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-padding-top: calc(var(--header-h) + 1.5rem);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  margin: 0;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--t-16);
+  line-height: 1.6;
+  background: var(--bg);
+  font-feature-settings: 'kern', 'liga';
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
+}
+
+app-root {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+main:focus {
+  outline: none;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--display);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--t-h1);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: var(--t-h2);
+}
+
+h3 {
+  font-size: var(--t-20);
+}
+
+h4 {
+  font-family: var(--sans);
+  font-size: var(--t-16);
+}
+
+p {
+  margin: 0 0 1em;
+}
+
+a {
+  color: var(--text);
+  text-decoration-color: var(--line-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+
+  &:hover {
+    text-decoration-color: currentcolor;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+code,
+kbd,
+.mono {
+  font-family: var(--mono);
+  font-size: 0.875em;
+}
+
+code {
+  padding: 0.1em 0.3em;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+// A block of code has its own frame: the inline chip (padding, tint, border) stays out of it.
+pre code {
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+// Reached by keyboard first (lang-shell); it only shows while focused.
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 24px;
+  z-index: 200;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 1rem;
+  color: var(--on-ink);
+  font: 600 var(--t-14) var(--sans);
+  background: var(--ink-action);
+  border-radius: var(--r-control);
+
+  &:focus {
+    top: 24px;
+  }
+}
+
+// The toggle shows the icon of the active theme. Plain selectors here rather than component styles, because they
+// depend on an attribute of <html>. The doubled class beats the `display` of gbt-icon's own host rule.
+.theme-toggle .theme-toggle__moon.theme-toggle__moon {
+  display: none;
+}
+
+:root[data-theme='dark'] .theme-toggle {
+  .theme-toggle__sun.theme-toggle__sun {
+    display: none;
+  }
+
+  .theme-toggle__moon.theme-toggle__moon {
+    display: inline-flex;
+  }
+}
+
+:root[data-theme='light'] .theme-toggle {
+  .theme-toggle__sun.theme-toggle__sun {
+    display: inline-flex;
+  }
+
+  .theme-toggle__moon.theme-toggle__moon {
+    display: none;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .theme-toggle {
+    .theme-toggle__sun.theme-toggle__sun {
+      display: none;
+    }
+
+    .theme-toggle__moon.theme-toggle__moon {
+      display: inline-flex;
+    }
+  }
+}
+
+.container {
+  width: min(100%, var(--container));
+  padding-inline: var(--gutter);
+  margin-inline: auto;
+}
+
+.section {
+  padding-block: var(--section);
+}
+
+.section--band {
+  background: var(--bg-2);
+  border-block: 1px solid var(--line);
+}
+
+// A section is a row of a document: its title and a line on it sit in a left rail, the content takes the rest. Under
+// 56rem the rail stacks on top. A hairline above each section marks where the previous one ends.
+.section {
+  padding-block: var(--section);
+  border-top: 1px solid var(--line);
+}
+
+.section--first {
+  border-top: 0;
+}
+
+.section--band {
+  background: var(--bg-2);
+}
+
+.section > .container:has(> .section__head) {
+  display: grid;
+  gap: var(--s-6) var(--s-8);
+}
+
+@media (min-width: 56rem) {
+  .section > .container:has(> .section__head) {
+    grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .section__head {
+    position: sticky;
+    top: calc(var(--header-h) + var(--s-6));
+  }
+}
+
+// Title block of a section: the heading and one paragraph, in the rail.
+.section__head {
+  min-width: 0;
+
+  h2 {
+    text-wrap: pretty;
+    margin-bottom: var(--s-3);
+    font-size: var(--t-24);
+    line-height: 1.15;
+  }
+
+  p {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--t-15);
+    line-height: 1.55;
+  }
+}
+
+// A definition list as the rows of a table: the term on the left, what it says on the right, a hairline between rows.
+.spec {
+  @include m.drawn-rule;
+  margin: 0;
+}
+
+html.js [data-rule]:not(.is-revealed)::before {
+  transform: scaleX(0);
+}
+
+.spec__row {
+  --row-bleed: min(var(--s-4), var(--gutter));
+
+  position: relative;
+  display: grid;
+  gap: var(--s-2) var(--s-7);
+  padding-block: var(--s-5);
+  isolation: isolate;
+  border-bottom: 1px solid var(--line);
+
+  // Under the pointer a row shows which line is being read, in a list that is otherwise all hairlines: a tint fades in
+  // and a rule grows on its edge, both a little outside the text, so nothing in the row moves.
+  &::before,
+  &::after {
+    position: absolute;
+    inset-block: 0;
+    content: '';
+    pointer-events: none;
+  }
+
+  &::before {
+    inset-inline-start: calc(-1 * var(--row-bleed));
+    z-index: 1;
+    width: 2px;
+    background: var(--text);
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform var(--dur-2) var(--ease-out);
+  }
+
+  &::after {
+    inset-inline: calc(-1 * var(--row-bleed));
+    z-index: -1;
+    background: color-mix(in srgb, var(--surface) 65%, transparent);
+    opacity: 0;
+    transition: opacity var(--dur-2) var(--ease);
+  }
+
+  &:hover::before {
+    transform: scaleY(1);
+  }
+
+  &:hover::after {
+    opacity: 1;
+  }
+
+  dt {
+    color: var(--text);
+    font-family: var(--display);
+    font-size: var(--t-20);
+    font-weight: 600;
+    line-height: 1.25;
+  }
+
+  dd {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--t-16);
+    line-height: 1.6;
+  }
+}
+
+@media (min-width: 48rem) {
+  .spec__row {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  }
+}
+
+// A line under a block: the way on to the documentation or the full page.
+.section__more {
+  margin: var(--s-5) 0 0;
+}
+
+// The content column of a section.
+.section__body {
+  min-width: 0;
+}
+
+.lead {
+  max-width: 58ch;
+  margin: 0 0 var(--s-6);
+  color: var(--text-2);
+  font-size: var(--t-17);
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: center;
+}
+
+// Text links carry a quiet underline that takes the brand colour on hover.
+.text-link {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--indigo);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--indigo) 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+
+  &:hover {
+    text-decoration-color: currentcolor;
+  }
+}
+
+// German compounds need hyphenation to fit narrow columns; elsewhere it only gets in the way.
+:root:lang(de) :is(.check-list, .planned-list, .tile p, .fact dd, h2, h3) {
+  hyphens: auto;
+}
+
+// Lists of what ships (a tick in patina) and of what does not yet (a hollow square). Plain marks, no coloured discs.
+.check-list,
+.planned-list {
+  display: grid;
+  max-width: 64ch;
+  gap: 0.55rem;
+  padding: 0;
+  margin: 0 0 1rem;
+  list-style: none;
+
+  li {
+    position: relative;
+    min-width: 0;
+    padding-inline-start: 1.5rem;
+  }
+
+  li::before {
+    position: absolute;
+    top: 0.5em;
+    inset-inline-start: 0;
+    width: 0.75rem;
+    height: 0.75rem;
+    content: '';
+  }
+}
+
+// The tick is a mask filled with the theme's patina, so one image serves both themes.
+.check-list li::before {
+  background: var(--patina);
+  mask: no-repeat center / contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1.5 5.4l2.4 2.4L8.5 2.6' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='square'/%3E%3C/svg%3E");
+}
+
+.planned-list li::before {
+  border: 1.5px solid var(--text-3);
+  border-radius: 1px;
+}
+
+// The same list as the rows of a table, for long ones.
+.planned-list--ruled {
+  @include m.drawn-rule;
+  max-width: none;
+  gap: 0;
+
+  li {
+    padding-block: var(--s-3);
+    padding-inline-start: 1.75rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  li::before {
+    top: 1.1em;
+    inset-inline-start: 0.25rem;
+  }
+}
+
+// A status in plain words: a dot and the word. Filled for something planned, hollow for an idea; never for what ships.
+.status {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  color: var(--text-2);
+  font-size: var(--t-13);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.status::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  content: '';
+  background: var(--brand);
+  border-radius: 1px;
+}
+
+.status--idea::before {
+  background: none;
+  border: 1.5px solid var(--text-3);
+}
+
+// Closing block of a page: a white panel on the tinted ground, with an ink rule on its leading edge.
+.cta {
+  display: grid;
+  gap: var(--s-6) var(--s-8);
+  align-items: center;
+  padding: var(--s-7) var(--s-6);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-inline-start: 4px solid var(--ink-action);
+
+  h2 {
+    max-width: 24ch;
+    margin-bottom: var(--s-3);
+  }
+
+  .lead {
+    margin-bottom: var(--s-5);
+  }
+}
+
+// On a phone the commands would be cramped, and nobody runs them from there: the buttons lead to the guide.
+@media (max-width: 39.99rem) {
+  .cta {
+    padding: var(--s-6) var(--s-5);
+  }
+
+  .cta .cta__commands {
+    display: none;
+  }
+}
+
+// With the commands, the text and the way to start sit side by side.
+@media (min-width: 64rem) {
+  .cta--commands {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  }
+}
+
+// The dark band behind the title of an inner page, over its animated background.
+.page-band {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+// Title block of the inner pages: the site's path in mono, the title, a lead, and a rule under it.
+.page-head {
+  position: relative;
+  z-index: 1;
+  padding-block: var(--s-8) var(--s-7);
+
+  h1 {
+    max-width: 22ch;
+    margin-bottom: var(--s-4);
+  }
+
+  .lead {
+    margin-bottom: 0;
+  }
+
+  .actions {
+    margin-top: var(--s-5);
+  }
+}
+
+// An inner page opens like the home page: the path, the title, the lead, one after the other.
+.page-head > * {
+  animation: fade-in var(--dur-4) var(--ease-out) both;
+
+  @for $n from 1 through 4 {
+    &:nth-child(#{$n}) {
+      animation-delay: #{$n * 90}ms;
+    }
+  }
+}
+
+.crumb {
+  margin: 0 0 var(--s-4);
+  color: var(--text-3);
+  font: 500 var(--t-13) var(--mono);
+
+  a {
+    color: inherit;
+    text-decoration: none;
+
+    &:hover {
+      color: var(--text);
+      text-decoration: underline;
+    }
+  }
+}
+
+// Gabarit's buttons, restyled: primary is the ink of the page, filled; secondary is a hairline on the surface. Square-ish
+// corners, no shadow, no movement: hover darkens or lightens the fill.
+
+a[gbtButton].gbt-button,
+button[gbtButton].gbt-button {
+  position: relative;
+  min-height: var(--tap);
+  padding-inline: 1.125rem;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--t-15);
+  font-weight: 500;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  transition:
+    background-color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease);
+
+  &:hover {
+    color: var(--text);
+    text-decoration: none;
+    background: var(--surface-2);
+    border-color: var(--text-3);
+  }
+
+  &:active {
+    transform: translate3d(0, 1px, 0);
+  }
+
+  &.gbt-button--primary {
+    color: var(--on-ink);
+    background: var(--ink-action);
+    border-color: var(--ink-action);
+
+    &:hover {
+      color: var(--on-ink);
+      background: color-mix(in srgb, var(--ink-action) 82%, var(--bg));
+      border-color: transparent;
+    }
+  }
+
+  &.gbt-button--ghost {
+    background: transparent;
+    border-color: transparent;
+  }
+}
+
+a[href],
+button:not(:disabled),
+summary,
+[role='tab'] {
+  cursor: pointer;
+}
+
+// Tiles: ruled panels, nothing that reacts to the pointer.
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tile);
+  transition: border-color var(--dur-2) var(--ease);
+
+  &:hover {
+    border-color: var(--text-3);
+  }
+}
+
+// Scroll reveals (Reveal directive): an element that is not yet in view waits, slightly low and transparent, then settles
+// in; siblings follow one another by --i. Hidden only under `html.js`, so without scripts everything is there.
+html.js [data-reveal]:not(.is-revealed) {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+}
+
+html.js [data-reveal].is-revealed {
+  transition:
+    opacity var(--dur-3) var(--ease-out) calc(var(--i, 0) * var(--stagger)),
+    transform var(--dur-4) var(--ease-out) calc(var(--i, 0) * var(--stagger));
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+// A line of code or a list row that comes in from the left, one after the other.
+@keyframes line-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-8px, 0, 0);
+  }
+}
+
+// Motion: only transform and opacity animate (plus stroke-dashoffset in SVG), nothing is hidden unless `html.js` is
+// set, and prefers-reduced-motion drops every animation.
+
+// Motion: only transform and opacity animate (plus stroke-dashoffset in SVG), and prefers-reduced-motion drops every animation.
+
+// Between two pages the bar and the footer stay where they are and the page between them changes: the old one leaves
+// upwards and fades, the new one comes up from below.
+app-header {
+  view-transition-name: site-header;
+}
+
+app-footer {
+  view-transition-name: site-footer;
+}
+
+::view-transition-old(root) {
+  animation: page-out var(--dur-2) var(--ease) both;
+}
+
+::view-transition-new(root) {
+  animation: page-in var(--dur-3) var(--ease-out) var(--dur-1) both;
+}
+
+@keyframes page-out {
+  to {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+}
+
+// Colours fade when the theme changes. ThemeStore sets the class only right after a click on the toggle.
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    fill var(--dur-2) var(--ease),
+    stroke var(--dur-2) var(--ease) !important;
+}
+
+// Loops pause in background tabs (MotionService sets the attribute).
+html[data-tab-hidden] .loop,
+html[data-tab-hidden] .loop * {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}

@@ -1,0 +1,16 @@
+<app-page-head [section]="'nav.install' | transloco">
+  <h1>{{ 'home.install.title' | transloco }}</h1>
+  <p class="lead">{{ 'home.install.text' | transloco }}</p>
+</app-page-head>
+
+<section
+  class="section section--first"
+  id="self-hosting"
+  aria-label="{{ 'home.install.title' | transloco }}"
+>
+  <div class="container">
+    <app-install />
+  </div>
+</section>
+
+<app-cta [commands]="false" />

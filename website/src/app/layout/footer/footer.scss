@@ -1,0 +1,114 @@
+@use '../../../breakpoints' as bp;
+@use '../../../mixins' as m;
+
+:host {
+  display: block;
+  margin-top: auto;
+}
+
+.footer {
+  padding-block: var(--s-8) var(--s-6);
+}
+
+.footer__inner {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-6) var(--s-7);
+}
+
+// The brand takes the whole width until the columns sit in one row.
+.footer__brand {
+  grid-column: 1 / -1;
+}
+
+.footer__brand {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+
+  img {
+    display: block;
+    flex: none;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+.footer__name {
+  font-family: var(--display);
+  font-size: var(--t-20);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.footer__tagline {
+  max-width: 28ch;
+  color: var(--text-2);
+  font-size: var(--t-15);
+  line-height: 1.5;
+}
+
+.footer__title {
+  margin: 0 0 var(--s-2);
+  color: var(--text);
+  font-size: var(--t-14);
+  font-weight: 600;
+}
+
+.footer__col ul {
+  display: flex;
+  flex-direction: column;
+  @include m.reset-list;
+}
+
+.footer__col a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  color: var(--text-2);
+  font-size: var(--t-15);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--text);
+    text-decoration: underline;
+  }
+}
+
+.footer__legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-6);
+  justify-content: space-between;
+  padding-top: var(--s-5);
+  margin-top: var(--s-7);
+  color: var(--text-3);
+  font-size: var(--t-14);
+  border-top: 1px solid var(--line);
+
+  p {
+    margin: 0;
+  }
+}
+
+.footer__rights {
+  color: var(--text-2);
+}
+
+@media (min-width: bp.$sm) {
+  .footer__inner {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: bp.$lg) {
+  .footer__inner {
+    grid-template-columns: 1.6fr 1fr 1fr 1fr;
+  }
+
+  .footer__brand {
+    grid-column: auto;
+  }
+}
