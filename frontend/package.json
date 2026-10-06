@@ -20,7 +20,7 @@
     "@angular/core": "^22.2.0",
     "@angular/forms": "^22.2.0",
     "@angular/platform-browser": "^22.2.0",
-    "@angular/router": "^22.2.0",
+    "@angular/router": "^22.2.1",
     "@jsverse/transloco": "^8.4.0",
     "@masmarino/gabarit": "^2.2.1",
     "dompurify": "^3.4.16",
