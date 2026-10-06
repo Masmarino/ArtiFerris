@@ -246,7 +246,7 @@ export const DockerImage: Story = {
     )
     expect(canvas.getByText('56 téléchargements cette semaine')).toBeInTheDocument()
     expect(canvas.getByRole('columnheader', { name: 'Taille' })).toBeInTheDocument()
-    expect(canvas.getByRole('cell', { name: '46.0 Mo' })).toBeInTheDocument()
+    expect(canvas.getByRole('cell', { name: '46,0 Mo' })).toBeInTheDocument()
     expect(canvas.getByRole('cell', { name: '—' })).toBeInTheDocument()
     expect(canvas.getByRole('cell', { name: 'latest' })).toBeInTheDocument()
     expect(canvas.getByRole('cell', { name: 'v1.0.0' })).toBeInTheDocument()

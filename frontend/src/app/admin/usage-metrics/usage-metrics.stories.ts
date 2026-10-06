@@ -43,7 +43,7 @@ export const Populated: Story = {
       .getAllByRole('rowheader')
       .map((el) => el.textContent?.trim())
     expect(labels).toEqual(['unlimited-mirror', 'docker-images', 'web-assets', 'npm-small'])
-    expect(within(chart).getByText('2.0 Go')).toBeInTheDocument()
+    expect(within(chart).getByText('2,0 Go')).toBeInTheDocument()
 
     const table = canvas.getByRole('table', { name: 'Utilisation par dépôt' })
     expect(within(table).getAllByRole('row')).toHaveLength(USAGES.length + 1)
@@ -60,12 +60,12 @@ export const QuotaGauges: Story = {
     const small = canvas.getByRole('progressbar', { name: 'npm-small' })
     const warn = canvas.getByRole('progressbar', { name: 'web-assets' })
     const critical = canvas.getByRole('progressbar', { name: 'docker-images' })
-    expect(small).toHaveAttribute('aria-valuetext', '100.0 Mo / 1.0 Go')
+    expect(small).toHaveAttribute('aria-valuetext', '100,0 Mo / 1,0 Go')
     expect(gaugeTier(small)).toBeNull()
     expect(gaugeTier(warn)).toBe('warning')
     expect(gaugeTier(critical)).toBe('critical')
-    expect(canvas.getByText('Critique')).toBeInTheDocument()
-    expect(canvas.getByText('Avertissement')).toBeInTheDocument()
+    expect(canvas.getByText('saturé')).toBeInTheDocument()
+    expect(canvas.getByText('presque plein')).toBeInTheDocument()
     expect(canvas.queryByRole('progressbar', { name: 'unlimited-mirror' })).not.toBeInTheDocument()
   },
 }
@@ -165,7 +165,7 @@ export const MoreThanFifteenRepositories: Story = {
     expect(within(chart).getAllByRole('rowheader')).toHaveLength(16)
     const folded = within(chart).getByText('Autres (2)')
     // The two smallest: 85 Mo + 84 Mo.
-    expect(folded.closest('tr')).toHaveTextContent('169.0 Mo')
+    expect(folded.closest('tr')).toHaveTextContent('169,0 Mo')
 
     const table = canvas.getByRole('table', { name: 'Utilisation par dépôt' })
     expect(within(table).getAllByRole('row')).toHaveLength(MANY.length + 1)

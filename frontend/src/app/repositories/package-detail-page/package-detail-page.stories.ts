@@ -432,7 +432,7 @@ export const DockerImageWithPullCommandAndSizes: Story = {
   decorators: [moduleMetadata({ providers: [withRoute('docker', 'acme-api')] })],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await waitFor(() => expect(canvas.getByRole('cell', { name: '46.0 Mo' })).toBeInTheDocument())
+    await waitFor(() => expect(canvas.getByRole('cell', { name: '46,0 Mo' })).toBeInTheDocument())
     expect(canvasElement.querySelector('app-copyable-command pre')).toHaveTextContent(
       'docker pull localhost:4200/o/acme/acme-docker/acme-api:latest',
     )
