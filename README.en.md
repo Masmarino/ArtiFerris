@@ -311,4 +311,4 @@ long, its content remaining protected.
 
 ## License
 
-No license file is included: the code is all rights reserved until there is one.
+ArtiFerris is licensed under the [Apache License, Version 2.0](LICENSE).

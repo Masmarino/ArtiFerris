@@ -11,6 +11,7 @@ members = [
 
 [workspace.package]
 edition = "2024"
+license = "Apache-2.0"
 
 # Line tables are enough for RUST_BACKTRACE=1 to show file:line — full debug
 # info (Cargo's default) also carries per-variable type/location data that

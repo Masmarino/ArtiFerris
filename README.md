@@ -323,4 +323,4 @@ rester listé aussi longtemps, son contenu restant protégé.
 
 ## Licence
 
-Aucun fichier de licence n'est inclus : le code est tous droits réservés tant qu'il n'y en a pas.
+ArtiFerris est distribué sous [licence Apache 2.0](LICENSE).

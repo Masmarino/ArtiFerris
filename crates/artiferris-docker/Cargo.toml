@@ -2,6 +2,7 @@
 name = "artiferris-docker"
 version = "0.6.1"
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 artiferris-domain = { path = "../artiferris-domain" }
