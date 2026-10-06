@@ -41,7 +41,7 @@
     "@eslint/js": "^10.0.1",
     "@storybook/addon-a11y": "^10.6.0",
     "@storybook/addon-docs": "^10.6.0",
-    "@storybook/addon-vitest": "^10.6.0",
+    "@storybook/addon-vitest": "^10.6.1",
     "@storybook/angular-vite": "^10.6.0",
     "@types/node": "^26",
     "@types/qrcode": "^1.5.6",
