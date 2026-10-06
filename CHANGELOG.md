@@ -4,10 +4,24 @@ Toutes les évolutions notables d'ArtiFerris. Le format suit [Keep a Changelog](
 versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de texte à la release GitHub du même numéro : voir
 « Publier une version » plus bas.
 
-## [Non publié]
+## [0.6.1] - 2026-10-06
 
 ### Ajouté
 
+- **Recherche rapide**, comme dans FerrisGit : ⌘K (Ctrl K sous Windows et Linux), `/` ou le bouton de la barre, centré
+  sous la palette qu'il ouvre (Gabarit 2.2.1). Avant toute saisie, elle propose les dépôts ouverts récemment dans ce
+  navigateur, les pages du menu et les actions (« Nouveau dépôt », « Nouveau projet », « Déconnexion ») ; la saisie les
+  filtre aussitôt, sans tenir compte des accents, puis ajoute les dépôts, les utilisateurs et les paquets ou images
+  trouvés. Ses pages sont celles du menu : l'administration n'apparaît qu'à qui le menu la montre (rien pour un membre,
+  Utilisateurs et Réglages pour un administrateur d'organisation), « Inviter un utilisateur » qu'au super-administrateur.
+- **Réinitialisation du mot de passe par un administrateur** (`POST /api/users/{id}/reset-password`) : le mot de passe
+  est annulé, toutes les sessions du compte sont fermées et un lien valable une heure est envoyé par e-mail (page
+  `/reset-password`) ; si l'e-mail ne peut pas partir, le lien revient à l'administrateur pour qu'il le transmette.
+  Refusée pour son propre compte, pour un compte encore invité et dans une organisation dont le fournisseur d'identité
+  (LDAP, OIDC) gère les mots de passe. Migration `0015_password_resets`.
+- **Réinitialisation de la double authentification par un administrateur** (`DELETE /api/users/{id}/mfa`), pour qui a
+  perdu tous ses facteurs : application, codes de secours et clés d'accès sont retirés, toutes les sessions fermées ; la
+  personne en configure un nouveau à sa prochaine connexion.
 - **Documentation** sous `/docs`, en français : démarrer, utilisation (dépôts, npm, Docker, compte et jetons,
   catalogue public), administration (installation, configuration, organisations et utilisateurs, mises à jour,
   référencement) et API publique. Le lecteur vient de Gabarit (`@masmarino/gabarit/docs`) : recherche, sommaire, plan de
@@ -23,6 +37,10 @@ versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de t
 
 ### Modifié
 
+- **Pages alignées sur celles de FerrisGit** : compte, liste et fiche des utilisateurs, invitation (le lien d'activation
+  s'affiche quand l'e-mail n'a pas pu partir), tableau de bord, santé et page introuvable reprennent sa structure et ses
+  libellés. Le menu « Administration » regroupe, pour un super-administrateur, Tableau de bord, Utilisateurs,
+  Organisations, Santé et Export ; pour un administrateur d'organisation, Utilisateurs puis Réglages de son organisation.
 - **Le design de la famille Ferris vient désormais de Gabarit 2.0** : palette, IBM Plex (servie depuis le paquet), cadre
   graphite du shell, page de connexion. Le thème local (`styles/_theme.scss`), sa correspondance avec les jetons de
   Gabarit et les retouches du shell disparaissent ; seules restent les règles propres à ArtiFerris (barre publique,
@@ -128,4 +146,5 @@ commits.
 Le workflow CI/CD construit l'image, la publie, puis crée la release GitHub `vX.Y.Z` avec le texte de la section correspondante.
 Si la section manque, le job de release échoue (l'image et le déploiement ne sont pas touchés) : ajoutez-la, puis relancez le job.
 
+[0.6.1]: https://github.com/Masmarino/ArtiFerris/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Masmarino/ArtiFerris/releases/tag/v0.6.0

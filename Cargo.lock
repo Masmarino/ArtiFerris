@@ -108,7 +108,7 @@ dependencies = [
 
 [[package]]
 name = "artiferris-api"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "artiferris-application",
  "artiferris-docker",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "artiferris-application"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "artiferris-domain",
  "artiferris-infrastructure",
@@ -169,7 +169,7 @@ dependencies = [
 
 [[package]]
 name = "artiferris-docker"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "artiferris-application",
  "artiferris-domain",
@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "artiferris-domain"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -210,7 +210,7 @@ dependencies = [
 
 [[package]]
 name = "artiferris-infrastructure"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "aes-gcm",
  "ammonia",
@@ -245,7 +245,7 @@ dependencies = [
 
 [[package]]
 name = "artiferris-npm"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "artiferris-application",
  "artiferris-domain",
