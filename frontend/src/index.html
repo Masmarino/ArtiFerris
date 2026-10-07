@@ -7,9 +7,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/api/branding/favicon" />
     <!-- The home screen of a phone: iOS takes this icon (opaque, 180 px) and this name, not the title of the page. -->
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
     <meta name="apple-mobile-web-app-title" content="ArtiFerris" />
+    <!-- Installed (Add to Dock, home screen), the app opens in its own window. The bars take the colour of the shell's
+         header, graphite in both themes; a black status bar keeps the page out from under it. -->
     <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0b0f14" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   </head>
   <body>
     <app-root></app-root>
