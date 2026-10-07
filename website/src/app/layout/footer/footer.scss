@@ -7,7 +7,8 @@
 }
 
 .footer {
-  padding-block: var(--s-8) var(--s-6);
+  // Clear of the home indicator once the site is installed on a phone.
+  padding-block: var(--s-8) calc(var(--s-6) + env(safe-area-inset-bottom));
 }
 
 .footer__inner {

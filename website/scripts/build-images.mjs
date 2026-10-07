@@ -1,6 +1,6 @@
 // Regenerates the raster assets drawn from the ArtiFerris crab: logos, favicon, Apple touch icon and the 1200x630 social
 // preview. They are committed; run `npm run images` after changing the logo or the preview text.
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import opentype from 'opentype.js'
 import sharp from 'sharp'
@@ -56,6 +56,17 @@ writeFileSync(join(root, 'public/favicon.ico'), Buffer.concat([header, ...iconPn
 await square(180, join(root, 'public/apple-touch-icon.png'), {
   background: { r: 255, g: 255, b: 255, alpha: 1 },
   padding: 22,
+})
+
+// The icons of site.webmanifest, for Android and an installed Chrome: two on a transparent ground, and a maskable one
+// that Android crops to its own shape, so the crab keeps inside the central circle of radius 40 %, on white like the
+// Apple touch icon.
+mkdirSync(join(root, 'public/icons'), { recursive: true })
+await square(192, join(root, 'public/icons/icon-192.png'))
+await square(512, join(root, 'public/icons/icon-512.png'))
+await square(512, join(root, 'public/icons/icon-maskable-512.png'), {
+  background: { r: 255, g: 255, b: 255, alpha: 1 },
+  padding: 111,
 })
 
 // Social previews, one per language: the title (from the site's own translations), a line on what the product covers
@@ -205,5 +216,5 @@ for (const lang of langs) {
 }
 
 console.log(
-  `images: logo-64, logo-128, favicon.ico, apple-touch-icon, og-${langs.join(', og-')} written`,
+  `images: logo-64, logo-128, favicon.ico, apple-touch-icon, manifest icons, og-${langs.join(', og-')} written`,
 )

@@ -6,11 +6,17 @@
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0c1015" media="(prefers-color-scheme: dark)" />
+    <!-- The header is graphite in both themes, so the browser's bars are too. -->
+    <meta name="theme-color" content="#0b0f14" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link rel="icon" type="image/png" sizes="64x64" href="images/logo-64.png" />
-    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <!-- The home screen of a phone, the Dock of a Mac: iOS takes this icon (opaque, 180 px) and this name; Android and
+         Chrome take the manifest. Installed, the site opens in its own window under a black status bar. -->
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180" />
+    <meta name="apple-mobile-web-app-title" content="ArtiFerris" />
+    <link rel="manifest" href="site.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <link
       rel="preload"
       href="fonts/ibm-plex-sans-400.woff2"
