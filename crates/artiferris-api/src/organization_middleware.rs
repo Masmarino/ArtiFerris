@@ -1,7 +1,7 @@
 use axum::extract::FromRequestParts;
 use axum::http::StatusCode;
 use axum::http::request::Parts;
-use artiferris_domain::organization::{Organization, OrganizationSlug};
+use artiferris_domain::organization::{Organization, OrganizationSlug, routes_to_public_organization};
 
 use crate::state::AppState;
 
@@ -28,7 +28,7 @@ impl FromRequestParts<AppState> for ResolvedOrganization {
             .strip_suffix(&format!(".{}", state.artiferris_base_domain))
             .unwrap_or("");
 
-        let org = if label.is_empty() || label == "www" || label == "app" {
+        let org = if routes_to_public_organization(label) {
             state
                 .organizations
                 .find_public()

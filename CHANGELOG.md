@@ -13,6 +13,12 @@ versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de t
   un schéma de l'architecture et une démonstration d'un groupe npm. Il se construit, s'analyse et se déploie avec les tags de
   version (release `artiferris-website`), à côté de l'application.
 
+### Modifié
+
+- **Slugs `www` et `app` réservés** : une organisation ne peut plus les prendre (erreur `reserved_organization_slug`). Ces
+  sous-domaines servent le site et l'application, et menaient déjà à l'organisation publique, jamais à une organisation de ce
+  nom. Une organisation existante qui porterait l'un de ces slugs reste en base mais n'est joignable par aucun sous-domaine.
+
 ## [0.6.1] - 2026-10-06
 
 ### Ajouté

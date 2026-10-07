@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use artiferris_domain::organization::{Organization, OrganizationRepositoryPort, OrganizationSlug};
+use artiferris_domain::organization::{Organization, OrganizationRepositoryPort, OrganizationSlug, routes_to_public_organization};
 use uuid::Uuid;
 
 use crate::error::ApplicationError;
@@ -22,7 +22,8 @@ impl CreateOrganizationUseCase {
 
     pub async fn execute(&self, slug: &str, display_name: &str) -> Result<Uuid, ApplicationError> {
         let slug = OrganizationSlug::parse_new(slug)?;
-        if looks_like_personal_org_slug(slug.as_str()) {
+        // Its subdomain would reach the public organization, never this one.
+        if looks_like_personal_org_slug(slug.as_str()) || routes_to_public_organization(slug.as_str()) {
             return Err(ApplicationError::ReservedOrganizationSlug);
         }
         if self.organizations.find_by_slug(&slug).await?.is_some() {
@@ -94,5 +95,16 @@ mod tests {
 
         let err = use_case.execute(personal_shaped.as_str(), "Squatter Inc").await.unwrap_err();
         assert!(matches!(err, ApplicationError::ReservedOrganizationSlug));
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn the_deployments_own_subdomains_cannot_become_organizations(pool: sqlx::PgPool) {
+        let use_case = CreateOrganizationUseCase::new(Arc::new(PostgresOrganizationRepository::new(pool)));
+
+        for slug in ["www", "app", "WWW", "App"] {
+            let err = use_case.execute(slug, "Squatter Inc").await.unwrap_err();
+            assert!(matches!(err, ApplicationError::ReservedOrganizationSlug), "{slug}");
+        }
+        assert!(use_case.execute("apps", "Apps Inc").await.is_ok());
     }
 }

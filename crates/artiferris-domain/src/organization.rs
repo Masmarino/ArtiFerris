@@ -8,6 +8,16 @@ use crate::reserved_names::reject_reserved_name;
 /// Every environment seeds exactly this id as the public organization (see `0001_init.sql`).
 pub const PUBLIC_ORGANIZATION_ID: Uuid = Uuid::from_u128(1);
 
+/// Subdomains of the base domain that belong to the deployment itself (the application's host and the website's), so
+/// they reach the public organization and no organization can take them as its slug.
+pub const PUBLIC_ORGANIZATION_LABELS: &[&str] = &["www", "app"];
+
+/// Whether a host label under the base domain (empty for the base domain itself) reaches the public organization rather
+/// than an organization of that slug.
+pub fn routes_to_public_organization(label: &str) -> bool {
+    label.is_empty() || PUBLIC_ORGANIZATION_LABELS.iter().any(|reserved| label.eq_ignore_ascii_case(reserved))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OrganizationSlug(String);
 
@@ -67,6 +77,16 @@ mod tests {
     fn a_new_slug_cannot_use_the_reserved_prefix() {
         assert_eq!(OrganizationSlug::parse_new("ArtiFerris-npm"), Err(DomainError::ReservedName("ArtiFerris-npm".to_string())));
         assert!(OrganizationSlug::parse_new("acme").is_ok());
+    }
+
+    #[test]
+    fn the_base_domain_and_the_deployments_own_subdomains_reach_the_public_organization() {
+        for label in ["", "www", "app", "WWW", "App"] {
+            assert!(routes_to_public_organization(label), "{label:?}");
+        }
+        for label in ["acme", "apps", "www2", "wwww"] {
+            assert!(!routes_to_public_organization(label), "{label:?}");
+        }
     }
 
     #[test]
