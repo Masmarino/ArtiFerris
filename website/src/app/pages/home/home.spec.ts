@@ -116,8 +116,8 @@ describe('Home', () => {
   it('shows the roadmap as planned, never as shipped', async () => {
     const root = await render()
     const items = root.querySelectorAll('.strip__item')
-    expect(items).toHaveLength(6)
-    expect(root.querySelectorAll('.strip__item .status')).toHaveLength(6)
+    expect(items).toHaveLength(5)
+    expect(root.querySelectorAll('.strip__item .status')).toHaveLength(5)
     expect(root.querySelector('.strip__item .status')?.textContent?.trim()).toBe('Planned')
     expect(root.querySelector('a[href="/en/roadmap/"]')).not.toBeNull()
   })

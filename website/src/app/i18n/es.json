@@ -22,7 +22,7 @@
     },
     "roadmap": {
       "title": "Hoja de ruta | ArtiFerris",
-      "description": "La dirección de ArtiFerris: más formatos de paquetes, almacenamiento de objetos para varias réplicas, SAML, espacios de nombres por usuario y procedencia de los paquetes. Nada de esto existe todavía."
+      "description": "La dirección de ArtiFerris: más formatos de paquetes, almacenamiento de objetos para varias réplicas, SAML y procedencia de los paquetes. Nada de esto existe todavía."
     },
     "imageAlt": "ArtiFerris: un registro npm y Docker en un único binario Rust, junto a un dibujo de su arquitectura"
   },
@@ -477,10 +477,6 @@
         "tag": "Procedencia",
         "title": "Firma y procedencia de los paquetes"
       },
-      "scopes": {
-        "tag": "npm",
-        "title": "Espacios de nombres por usuario dentro de una organización"
-      },
       "saml": {
         "tag": "Identidad",
         "title": "SAML"
@@ -624,8 +620,7 @@
         "i2": "Almacenamiento de objetos compatible con S3, para ejecutar varias réplicas: hoy, un volumen y una réplica",
         "i3": "La alta disponibilidad y la replicación geográfica",
         "i4": "SAML",
-        "i5": "La firma y la procedencia de los paquetes (Sigstore, npm provenance)",
-        "i6": "Espacios de nombres por usuario dentro de una organización (scopes `@usuario/…`)"
+        "i5": "La firma y la procedencia de los paquetes (Sigstore, npm provenance)"
       },
       "roadmap": "Ver la hoja de ruta"
     },
@@ -671,8 +666,7 @@
         "title": "Identidad y procedencia",
         "items": {
           "i1": "SAML, junto a LDAP y OIDC.",
-          "i2": "Espacios de nombres por usuario dentro de una organización (scopes `@usuario/…`).",
-          "i3": "La firma y la procedencia de los paquetes (Sigstore, npm provenance)."
+          "i2": "La firma y la procedencia de los paquetes (Sigstore, npm provenance)."
         }
       }
     },

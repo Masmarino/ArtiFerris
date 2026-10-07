@@ -22,7 +22,7 @@
     },
     "roadmap": {
       "title": "Roadmap | ArtiFerris",
-      "description": "Where ArtiFerris is heading: more package formats, object storage for several replicas, SAML, per-user namespaces and package provenance. None of this exists yet."
+      "description": "Where ArtiFerris is heading: more package formats, object storage for several replicas, SAML and package provenance. None of this exists yet."
     },
     "imageAlt": "ArtiFerris: an npm and Docker registry in a single Rust binary, next to a drawing of its architecture"
   },
@@ -477,10 +477,6 @@
         "tag": "Provenance",
         "title": "Package signing and provenance"
       },
-      "scopes": {
-        "tag": "npm",
-        "title": "Per-user namespaces within an organization"
-      },
       "saml": {
         "tag": "Identity",
         "title": "SAML"
@@ -624,8 +620,7 @@
         "i2": "S3-compatible object storage, to run several replicas: today, one volume and one replica",
         "i3": "High availability and geographic replication",
         "i4": "SAML",
-        "i5": "Package signing and provenance (Sigstore, npm provenance)",
-        "i6": "Per-user namespaces within an organization (`@user/…` scopes)"
+        "i5": "Package signing and provenance (Sigstore, npm provenance)"
       },
       "roadmap": "See the roadmap"
     },
@@ -671,8 +666,7 @@
         "title": "Identity and provenance",
         "items": {
           "i1": "SAML, next to LDAP and OIDC.",
-          "i2": "Per-user namespaces within an organization (`@user/…` scopes).",
-          "i3": "Package signing and provenance (Sigstore, npm provenance)."
+          "i2": "Package signing and provenance (Sigstore, npm provenance)."
         }
       }
     },

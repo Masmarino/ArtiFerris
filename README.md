@@ -318,9 +318,9 @@ rester listé aussi longtemps, son contenu restant protégé.
       réplica).
 - [ ] Haute disponibilité et réplication géographique.
 - [ ] Signature et provenance des paquets (Sigstore, npm provenance).
-- [ ] Espaces de noms par utilisateur dans une organisation (scopes `@user/…`).
-- [ ] Limitation de débit du trafic anonyme ; distribution par CDN.
+- [ ] Distribution par CDN.
 - [x] Recherche et découverte publiques de paquets.
+- [x] Limitation de débit du trafic anonyme, partagée entre réplicas.
 
 ## Site web
 

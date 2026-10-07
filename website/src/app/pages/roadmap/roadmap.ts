@@ -20,7 +20,7 @@ interface RoadmapGroup {
 const GROUPS: RoadmapGroup[] = [
   { id: 'formats', items: 1, hasIntro: true, status: 'planned' },
   { id: 'scale', items: 3, hasIntro: true, status: 'planned' },
-  { id: 'trust', items: 3, hasIntro: false, status: 'planned' },
+  { id: 'trust', items: 2, hasIntro: false, status: 'planned' },
 ]
 
 import { Reveal } from '../../shared/motion/reveal.directive'

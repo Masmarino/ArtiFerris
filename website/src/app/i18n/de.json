@@ -22,7 +22,7 @@
     },
     "roadmap": {
       "title": "Roadmap | ArtiFerris",
-      "description": "Die Richtung von ArtiFerris: weitere Paketformate, Objektspeicher für mehrere Replikas, SAML, Namensräume pro Benutzer und Herkunftsnachweise für Pakete. Nichts davon existiert bisher."
+      "description": "Die Richtung von ArtiFerris: weitere Paketformate, Objektspeicher für mehrere Replikas, SAML und Herkunftsnachweise für Pakete. Nichts davon existiert bisher."
     },
     "imageAlt": "ArtiFerris: eine npm- und Docker-Registry in einem einzigen Rust-Binary, neben einer Zeichnung ihrer Architektur"
   },
@@ -477,10 +477,6 @@
         "tag": "Herkunft",
         "title": "Signatur und Herkunftsnachweis von Paketen"
       },
-      "scopes": {
-        "tag": "npm",
-        "title": "Namensräume pro Benutzer innerhalb einer Organisation"
-      },
       "saml": {
         "tag": "Identität",
         "title": "SAML"
@@ -624,8 +620,7 @@
         "i2": "S3-kompatibler Objektspeicher, um mehrere Replikas zu betreiben: heute ein Volume und ein Replikat",
         "i3": "Hochverfügbarkeit und geografische Replikation",
         "i4": "SAML",
-        "i5": "Signatur und Herkunftsnachweis von Paketen (Sigstore, npm provenance)",
-        "i6": "Namensräume pro Benutzer innerhalb einer Organisation (Scopes `@benutzer/…`)"
+        "i5": "Signatur und Herkunftsnachweis von Paketen (Sigstore, npm provenance)"
       },
       "roadmap": "Zur Roadmap"
     },
@@ -671,8 +666,7 @@
         "title": "Identität und Herkunft",
         "items": {
           "i1": "SAML, neben LDAP und OIDC.",
-          "i2": "Namensräume pro Benutzer innerhalb einer Organisation (Scopes `@benutzer/…`).",
-          "i3": "Signatur und Herkunftsnachweis von Paketen (Sigstore, npm provenance)."
+          "i2": "Signatur und Herkunftsnachweis von Paketen (Sigstore, npm provenance)."
         }
       }
     },

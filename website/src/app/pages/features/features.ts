@@ -77,7 +77,7 @@ export class Features {
     { id: 'languages', bullets: 2 },
     { id: 'tech', bullets: 4 },
   ]
-  protected readonly missingItems = [1, 2, 3, 4, 5, 6]
+  protected readonly missingItems = [1, 2, 3, 4, 5]
 
   /** Index of the visible panel; the prerendered page shows the first. */
   protected readonly active = signal(0)

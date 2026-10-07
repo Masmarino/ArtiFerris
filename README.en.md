@@ -306,9 +306,9 @@ long, its content remaining protected.
 - [ ] S3-compatible object storage behind `StorageBackendPort`, for several replicas (today one volume, one replica).
 - [ ] High availability and geo-replication.
 - [ ] Package signing and provenance (Sigstore, npm provenance).
-- [ ] Per-user namespaces inside an organization (`@user/…` scopes).
-- [ ] Rate limiting of anonymous traffic; CDN distribution.
+- [ ] CDN distribution.
 - [x] Public package search and discovery.
+- [x] Rate limiting of anonymous traffic, shared between replicas.
 
 ## Website
 

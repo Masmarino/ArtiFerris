@@ -60,7 +60,6 @@ export class Home {
     'storage',
     'ha',
     'provenance',
-    'scopes',
     'saml',
   ] as const
 

@@ -115,7 +115,7 @@ for (const [id, path] of Object.entries(site.pages)) {
       if (count(html, /class="spec__row limits__item"/g) !== 4)
         fail(`${file}: four limits expected`)
       if (count(html, /class="tile tile--/g) !== 8) fail(`${file}: eight tiles expected`)
-      if (count(html, /class="strip__item"/g) !== 6) fail(`${file}: six roadmap items expected`)
+      if (count(html, /class="strip__item"/g) !== 5) fail(`${file}: five roadmap items expected`)
       for (const section of ['why', 'product', 'architecture', 'roadmap']) {
         if (!html.includes(`id="${section}"`)) fail(`${file}: section #${section} is missing`)
       }
