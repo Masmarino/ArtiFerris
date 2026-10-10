@@ -61,7 +61,11 @@ RUN git init -q . \
     && git checkout -q FETCH_HEAD \
     && test "$(git rev-parse HEAD)" = "$TRIVY_COMMIT"
 
+# Go stamps the binary's own version from git, and scanners match Trivy's CVEs against it: committing the bump and
+# tagging that commit keeps it at the release's version instead of a dirty v0.0.0 pseudo-version.
 RUN go get $TRIVY_DEPENDENCY_FIXES \
+    && git -c user.name=artiferris -c user.email=build@artiferris.invalid commit -qam "Bump $TRIVY_DEPENDENCY_FIXES" \
+    && git tag "v${TRIVY_VERSION}" \
     && GOOS=linux GOARCH=$TARGETARCH go build -trimpath \
         -ldflags "-s -w -X github.com/aquasecurity/trivy/pkg/version/app.ver=${TRIVY_VERSION}" \
         -o /out/trivy ./cmd/trivy
