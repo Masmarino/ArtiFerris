@@ -4,7 +4,7 @@ description: ArtiFerris public website (prerendered Angular site served by nginx
 type: application
 version: 0.1.0
 # The image tag actually deployed is image.tag (CI sets it to the version it just pushed).
-appVersion: '0.6.1'
+appVersion: '0.6.2'
 keywords:
   - website
   - static

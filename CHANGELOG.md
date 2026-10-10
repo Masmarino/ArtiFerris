@@ -4,7 +4,7 @@ Toutes les évolutions notables d'ArtiFerris. Le format suit [Keep a Changelog](
 versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de texte à la release GitHub du même numéro : voir
 « Publier une version » plus bas.
 
-## [Non publié]
+## [0.6.2] - 2026-10-10
 
 ### Ajouté
 
@@ -12,9 +12,14 @@ versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de t
   installation, sécurité et feuille de route, dans les cinq langues, avec des captures tirées du Storybook de l'application,
   un schéma de l'architecture et une démonstration d'un groupe npm. Il se construit, s'analyse et se déploie avec les tags de
   version (release `artiferris-website`), à côté de l'application.
+- **Application installable** : un manifeste web (nom, icônes, affichage `standalone`) et une icône Apple. Ajoutée à
+  l'écran d'accueil d'un téléphone ou au Dock, elle porte son nom et son icône et s'ouvre dans sa propre fenêtre.
+- **Site installable** de la même façon (`site.webmanifest`, servi en `application/manifest+json`).
 
 ### Modifié
 
+- **Licence Apache 2.0** : ArtiFerris n'avait jusqu'ici aucune licence (tous droits réservés). Fichier `LICENSE` à la racine,
+  champ `license` dans les six crates et dans le `package.json` du frontend.
 - **Slugs `www` et `app` réservés** : une organisation ne peut plus les prendre (erreur `reserved_organization_slug`). Ces
   sous-domaines servent le site et l'application, et menaient déjà à l'organisation publique, jamais à une organisation de ce
   nom. Une organisation existante qui porterait l'un de ces slugs reste en base mais n'est joignable par aucun sous-domaine.
@@ -170,5 +175,6 @@ commits.
 Le workflow CI/CD construit l'image, la publie, puis crée la release GitHub `vX.Y.Z` avec le texte de la section correspondante.
 Si la section manque, le job de release échoue (l'image et le déploiement ne sont pas touchés) : ajoutez-la, puis relancez le job.
 
+[0.6.2]: https://github.com/Masmarino/ArtiFerris/releases/tag/v0.6.2
 [0.6.1]: https://github.com/Masmarino/ArtiFerris/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Masmarino/ArtiFerris/releases/tag/v0.6.0
