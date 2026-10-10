@@ -239,19 +239,44 @@ fn client_of(state: &DockerState, headers: &axum::http::HeaderMap, connect_info:
     state.guard.client_bucket(connect_info.as_ref().ok().map(|ConnectInfo(addr)| addr.ip()), &forwarded)
 }
 
+/// A read that may not be made anonymously comes out of the dispatch as a bare 401, for a private repository and a
+/// missing one alike. This adds the challenge, scoped to the repository the client named (`repo`, or
+/// `u/{username}/{repo}`), so that it fetches a token with its credentials and retries: containerd only sends its pull
+/// secret after a challenge, and gives up on a 404.
+fn challenge_anonymous_read(state: &DockerState, headers: &axum::http::HeaderMap, scope_repository: &str, rest: &str, response: Response) -> Response {
+    if response.status() != StatusCode::UNAUTHORIZED || response.headers().contains_key(axum::http::header::WWW_AUTHENTICATE) {
+        return response;
+    }
+    let scope = parse_operation(rest).map(|operation| format!("repository:{scope_repository}/{}:pull", operation.image_name()));
+    crate::auth::unauthorized(state, state.host_header(headers), scope.as_deref())
+}
+
+/// An unknown organization subdomain is answered, to an anonymous reader, like a private repository.
+fn organization_for_read(resolved: Result<ResolvedOrganization, StatusCode>, anonymous: bool) -> Result<Uuid, StatusCode> {
+    match resolved {
+        Ok(ResolvedOrganization(organization)) => Ok(organization.id),
+        Err(StatusCode::NOT_FOUND) if anonymous => Err(StatusCode::UNAUTHORIZED),
+        Err(status) => Err(status),
+    }
+}
+
 async fn handle_get(
     State(state): State<DockerState>,
     Path((repository, rest)): Path<(String, String)>,
     Query(tags_query): Query<TagsQueryParams>,
     headers: axum::http::HeaderMap,
     connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>,
-    resolved_org: ResolvedOrganization,
+    resolved_org: Result<ResolvedOrganization, StatusCode>,
     user: Option<DockerAuthUser>,
 ) -> Response {
-    let organization_id = resolved_org.0.id;
+    let organization_id = organization_for_read(resolved_org, user.is_none());
     let client = client_of(&state, &headers, &connect_info);
     let location_base = format!("/v2/{repository}");
-    dispatch_get(state, repository, rest, user, client, tags_query, location_base, || async move { Ok::<Uuid, Response>(organization_id) }).await
+    let response = dispatch_get(state.clone(), repository.clone(), rest.clone(), user, client, tags_query, location_base, move || async move {
+        organization_id.map_err(docker_authz_error)
+    })
+    .await;
+    challenge_anonymous_read(&state, &headers, &repository, &rest, response)
 }
 
 async fn handle_head(
@@ -260,13 +285,17 @@ async fn handle_head(
     Query(tags_query): Query<TagsQueryParams>,
     headers: axum::http::HeaderMap,
     connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>,
-    resolved_org: ResolvedOrganization,
+    resolved_org: Result<ResolvedOrganization, StatusCode>,
     user: Option<DockerAuthUser>,
 ) -> Response {
-    let organization_id = resolved_org.0.id;
+    let organization_id = organization_for_read(resolved_org, user.is_none());
     let client = client_of(&state, &headers, &connect_info);
     let location_base = format!("/v2/{repository}");
-    dispatch_head(state, repository, rest, user, client, tags_query, location_base, || async move { Ok::<Uuid, Response>(organization_id) }).await
+    let response = dispatch_head(state.clone(), repository.clone(), rest.clone(), user, client, tags_query, location_base, move || async move {
+        organization_id.map_err(docker_authz_error)
+    })
+    .await;
+    challenge_anonymous_read(&state, &headers, &repository, &rest, response)
 }
 
 async fn handle_post(
@@ -327,6 +356,15 @@ async fn resolve_personal_organization_id(state: &DockerState, username: &str, r
     resolve_personal_repository(state, username, repo).await.map(|r| r.organization_id).map_err(docker_authz_error)
 }
 
+/// For reads: a personal project that does not exist is answered, to an anonymous reader, like a private one.
+async fn resolve_personal_organization_id_for_read(state: &DockerState, username: &str, repo: &str, anonymous: bool) -> Result<Uuid, Response> {
+    match resolve_personal_repository(state, username, repo).await {
+        Ok(repository) => Ok(repository.organization_id),
+        Err(StatusCode::NOT_FOUND) if anonymous => Err(docker_authz_error(StatusCode::UNAUTHORIZED)),
+        Err(status) => Err(docker_authz_error(status)),
+    }
+}
+
 async fn handle_get_personal(
     State(state): State<DockerState>,
     Path((username, repo, rest)): Path<(String, String, String)>,
@@ -335,11 +373,14 @@ async fn handle_get_personal(
     connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>,
     user: Option<DockerAuthUser>,
 ) -> Response {
-    let resolve_state = state.clone();
-    let resolve_repo = repo.clone();
+    let anonymous = user.is_none();
     let client = client_of(&state, &headers, &connect_info);
     let location_base = format!("/v2/u/{username}/{repo}");
-    dispatch_get(state, repo, rest, user, client, tags_query, location_base, || resolve_personal_organization_id(&resolve_state, &username, &resolve_repo)).await
+    let response = dispatch_get(state.clone(), repo.clone(), rest.clone(), user, client, tags_query, location_base, || {
+        resolve_personal_organization_id_for_read(&state, &username, &repo, anonymous)
+    })
+    .await;
+    challenge_anonymous_read(&state, &headers, &format!("u/{username}/{repo}"), &rest, response)
 }
 
 async fn handle_head_personal(
@@ -350,11 +391,14 @@ async fn handle_head_personal(
     connect_info: Result<ConnectInfo<SocketAddr>, ExtensionRejection>,
     user: Option<DockerAuthUser>,
 ) -> Response {
-    let resolve_state = state.clone();
-    let resolve_repo = repo.clone();
+    let anonymous = user.is_none();
     let client = client_of(&state, &headers, &connect_info);
     let location_base = format!("/v2/u/{username}/{repo}");
-    dispatch_head(state, repo, rest, user, client, tags_query, location_base, || resolve_personal_organization_id(&resolve_state, &username, &resolve_repo)).await
+    let response = dispatch_head(state.clone(), repo.clone(), rest.clone(), user, client, tags_query, location_base, || {
+        resolve_personal_organization_id_for_read(&state, &username, &repo, anonymous)
+    })
+    .await;
+    challenge_anonymous_read(&state, &headers, &format!("u/{username}/{repo}"), &rest, response)
 }
 
 async fn handle_post_personal(
@@ -419,7 +463,16 @@ mod tests {
     use tower::ServiceExt;
     use uuid::Uuid;
 
-    use crate::route_test_support::{create_personal_project, issue_test_token, seed_bare_user, seed_named_user_with_active_token, seed_repository, seed_user_with_active_token, test_state};
+    /// What an anonymous read of something private or missing must get: a 401 with the OCI envelope and a challenge
+    /// scoped to the repository asked for.
+    fn assert_read_challenge(response: &axum::http::Response<Body>, scope: &str) {
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let challenge = response.headers().get(axum::http::header::WWW_AUTHENTICATE).expect("a WWW-Authenticate challenge").to_str().unwrap();
+        assert!(challenge.starts_with(r#"Bearer realm=""#), "{challenge}");
+        assert!(challenge.contains(&format!(r#"scope="{scope}""#)), "{challenge}");
+    }
+
+    use crate::route_test_support::{create_personal_project, issue_test_token, seed_bare_user, seed_named_user_with_active_token, seed_permission, seed_repository, seed_user_with_active_token, test_state};
 
     /// Marks a repository public through the event store, as `PostgresPackageRepositoryStore`'s tests do.
     async fn mark_repository_public(pool: &sqlx::PgPool, repository_id: Uuid) {
@@ -918,7 +971,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(get_response.status(), StatusCode::NOT_FOUND);
+        assert_read_challenge(&get_response, &format!("repository:{repo_name}/myimage:pull"));
     }
 
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
@@ -1014,7 +1067,7 @@ mod tests {
         let get_response =
             app.oneshot(Request::builder().method("GET").uri("/u/alice/my-image/myimage/manifests/latest").body(Body::empty()).unwrap()).await.unwrap();
 
-        assert_eq!(get_response.status(), StatusCode::NOT_FOUND);
+        assert_read_challenge(&get_response, "repository:u/alice/my-image/myimage:pull");
     }
 
     /// The anonymous tests above pin that the public check fires before `user.ok_or`. This pins that it fires before
@@ -1189,10 +1242,10 @@ mod tests {
         assert_eq!(returned.to_vec(), body);
     }
 
-    /// The anonymous token must degrade like a missing `Authorization` header: a 404, never a 403 that would reveal the
-    /// repository.
+    /// The anonymous token must degrade like a missing `Authorization` header: a challenge, never a 403 that would
+    /// reveal the repository.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
-    async fn an_anonymous_docker_client_pulling_a_private_repository_gets_not_found(pool: sqlx::PgPool) {
+    async fn an_anonymous_docker_client_pulling_a_private_repository_gets_a_challenge(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
         let state = test_state(pool.clone(), dir.path()).await;
         let repository_id = Uuid::new_v4();
@@ -1218,7 +1271,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(pull_response.status(), StatusCode::NOT_FOUND);
+        assert_read_challenge(&pull_response, &format!("repository:{repo_name}/myimage:pull"));
     }
 
     /// A write still needs a real, authenticated caller: an anonymous token is rejected like a missing header.
@@ -1457,5 +1510,154 @@ mod tests {
         .await;
 
         assert_eq!(counted, 2);
+    }
+
+    fn anonymous(method: &str, uri: &str, host: Option<&str>) -> Request<Body> {
+        let mut builder = Request::builder().method(method).uri(uri);
+        if let Some(host) = host {
+            builder = builder.header(axum::http::header::HOST, host);
+        }
+        builder.body(Body::empty()).unwrap()
+    }
+
+    /// A private repository and a missing one get the same answer, whatever is read from them, so an anonymous caller
+    /// cannot tell which repositories exist.
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_anonymous_read_of_a_missing_repository_is_answered_exactly_like_a_private_one(pool: sqlx::PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let repository_id = Uuid::new_v4();
+        seed_repository(&pool, PUBLIC_ORGANIZATION_ID, repository_id, "docker", "hosted").await;
+        let private = format!("repo-{repository_id}");
+        let app = crate::router(state);
+        let digest = Digest::of(b"anything").as_str().to_string();
+
+        for repository in [private.as_str(), "missing-repo"] {
+            for (method, rest) in [
+                ("GET", "myimage/manifests/latest".to_string()),
+                ("HEAD", "myimage/manifests/latest".to_string()),
+                ("GET", format!("myimage/blobs/{digest}")),
+                ("HEAD", format!("myimage/blobs/{digest}")),
+                ("GET", "myimage/tags/list".to_string()),
+            ] {
+                let response = app.clone().oneshot(anonymous(method, &format!("/{repository}/{rest}"), None)).await.unwrap();
+                assert_read_challenge(&response, &format!("repository:{repository}/myimage:pull"));
+            }
+        }
+
+        let private_body = axum::body::to_bytes(
+            app.clone().oneshot(anonymous("GET", &format!("/{private}/myimage/manifests/latest"), None)).await.unwrap().into_body(),
+            usize::MAX,
+        )
+        .await
+        .unwrap();
+        let missing_body = axum::body::to_bytes(
+            app.oneshot(anonymous("GET", "/missing-repo/myimage/manifests/latest", None)).await.unwrap().into_body(),
+            usize::MAX,
+        )
+        .await
+        .unwrap();
+        assert_eq!(private_body, missing_body);
+    }
+
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn an_anonymous_read_through_an_unknown_organization_or_personal_project_is_challenged(pool: sqlx::PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let app = crate::router(state);
+
+        let unknown_organization =
+            app.clone().oneshot(anonymous("GET", "/some-repo/myimage/manifests/latest", Some("ghost.artiferris.localhost"))).await.unwrap();
+        assert_read_challenge(&unknown_organization, "repository:some-repo/myimage:pull");
+
+        let unknown_personal = app.oneshot(anonymous("GET", "/u/nobody/nothing/myimage/manifests/latest", None)).await.unwrap();
+        assert_read_challenge(&unknown_personal, "repository:u/nobody/nothing/myimage:pull");
+    }
+
+    /// containerd, the runtime of a Kubernetes node, asks for the image straight away, and only sends the pull secret
+    /// once the registry challenges it. Before, a private image answered 404 and the node gave up.
+    #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
+    async fn a_client_that_only_sends_its_credentials_after_a_challenge_can_pull_a_private_image(pool: sqlx::PgPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(pool.clone(), dir.path()).await;
+        let repository_id = Uuid::new_v4();
+        seed_repository(&pool, PUBLIC_ORGANIZATION_ID, repository_id, "docker", "hosted").await;
+        let repo_name = format!("repo-{repository_id}");
+        let push_token = issue_test_token(&state, seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await, repository_id, &repo_name, "myimage", &["push"]);
+        let reader = seed_user_with_active_token(&pool, PUBLIC_ORGANIZATION_ID, "pull-secret-token").await;
+        seed_permission(&pool, reader, repository_id, "read").await;
+        let app = crate::router(state);
+
+        let config_bytes = b"challenge-flow-config-bytes";
+        let config_digest = Digest::of(config_bytes);
+        let blob = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/{repo_name}/myimage/blobs/uploads/?digest={}", config_digest.as_str()))
+                    .header(axum::http::header::AUTHORIZATION, format!("Bearer {push_token}"))
+                    .body(Body::from(config_bytes.to_vec()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(blob.status(), StatusCode::CREATED);
+        let body = manifest_body(&config_digest);
+        let put = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/{repo_name}/myimage/manifests/latest"))
+                    .header(axum::http::header::AUTHORIZATION, format!("Bearer {push_token}"))
+                    .header(axum::http::header::CONTENT_TYPE, "application/vnd.docker.distribution.manifest.v2+json")
+                    .body(Body::from(body.clone()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(put.status(), StatusCode::CREATED);
+
+        // 1. No credentials yet: the challenge says where to get a token, and for what.
+        let first = app.clone().oneshot(anonymous("GET", &format!("/{repo_name}/myimage/manifests/latest"), None)).await.unwrap();
+        assert_read_challenge(&first, &format!("repository:{repo_name}/myimage:pull"));
+        let challenge = first.headers().get(axum::http::header::WWW_AUTHENTICATE).unwrap().to_str().unwrap().to_string();
+        let param = |name: &str| challenge.split(&format!(r#"{name}=""#)).nth(1).and_then(|rest| rest.split('"').next()).unwrap().to_string();
+        assert!(param("realm").ends_with("/v2/token"), "{challenge}");
+
+        // 2. The pull secret, exchanged at the realm for exactly what the challenge asked for.
+        let query: String = form_urlencoded::Serializer::new(String::new()).append_pair("service", &param("service")).append_pair("scope", &param("scope")).finish();
+        let mut basic = axum::http::HeaderMap::new();
+        basic.typed_insert(Authorization::basic("ignored", "pull-secret-token"));
+        let token_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/token?{query}"))
+                    .header(axum::http::header::AUTHORIZATION, basic.get(axum::http::header::AUTHORIZATION).unwrap().clone())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(token_response.status(), StatusCode::OK);
+        let token_json: serde_json::Value = serde_json::from_slice(&axum::body::to_bytes(token_response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        let token = token_json["token"].as_str().unwrap();
+
+        // 3. The retry with that token gets the image.
+        let pulled = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/{repo_name}/myimage/manifests/latest"))
+                    .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(pulled.status(), StatusCode::OK);
+        assert_eq!(axum::body::to_bytes(pulled.into_body(), usize::MAX).await.unwrap().to_vec(), body);
     }
 }

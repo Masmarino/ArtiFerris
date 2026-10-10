@@ -58,17 +58,24 @@ pub async fn require_repository_by_name(state: &DockerState, user: &DockerAuthUs
 /// `is_personal`) only when it is private. `Ok((repo, None))` means public, served with no grant check; `Ok((repo,
 /// Some((caller, is_personal))))` means private, and the caller must still pass `require_granted_action_for_route`.
 /// Same shape as `artiferris-npm`'s counterpart.
+///
+/// Without a caller, a private repository and a missing one both answer 401, which the route turns into a challenge
+/// (`challenge_anonymous_read`): the same answer, so nothing tells them apart, and the one a client needs to come back
+/// with credentials. containerd only sends its pull secret after a challenge, and gives up on a 404.
 pub async fn require_readable_repository_by_name<'a>(
     state: &DockerState,
     user: Option<&'a DockerAuthUser>,
     organization_id: Uuid,
     name: &str,
 ) -> Result<(PackageRepositorySummary, Option<(&'a DockerAuthUser, bool)>), StatusCode> {
-    let repo = find_repository_by_name(state, organization_id, name).await?;
+    let repo = match find_repository_by_name(state, organization_id, name).await {
+        Err(StatusCode::NOT_FOUND) if user.is_none() => return Err(StatusCode::UNAUTHORIZED),
+        found => found?,
+    };
     if repo.is_public {
         return Ok((repo, None));
     }
-    let user = user.ok_or(StatusCode::NOT_FOUND)?;
+    let user = user.ok_or(StatusCode::UNAUTHORIZED)?;
     let is_personal = resolve_is_personal(state, user, &repo).await?;
     Ok((repo, Some((user, is_personal))))
 }

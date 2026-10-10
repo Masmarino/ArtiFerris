@@ -19,6 +19,15 @@ versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de t
   sous-domaines servent le site et l'application, et menaient déjà à l'organisation publique, jamais à une organisation de ce
   nom. Une organisation existante qui porterait l'un de ces slugs reste en base mais n'est joignable par aucun sous-domaine.
 
+### Corrigé
+
+- **Images Docker privées tirées par Kubernetes** : une lecture sans identifiants d'un dépôt privé répondait `404`, sans
+  challenge. containerd, le runtime des nœuds, demande l'image directement et n'envoie son pull secret qu'après un `401` :
+  il abandonnait, alors que `docker pull` passait (il s'authentifie d'avance). Une lecture anonyme d'un dépôt privé, d'un
+  dépôt inexistant, d'un projet personnel inconnu ou d'une organisation inconnue répond désormais `401` avec un challenge
+  `WWW-Authenticate` limité au dépôt demandé : la même réponse dans tous ces cas, qui ne révèle donc pas quels dépôts
+  existent. Un appelant authentifié sans droits garde sa réponse (`404`).
+
 ## [0.6.1] - 2026-10-06
 
 ### Ajouté

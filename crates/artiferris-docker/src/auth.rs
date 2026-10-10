@@ -37,7 +37,7 @@ async fn scope_hint(parts: &mut Parts, state: &DockerState) -> Option<String> {
 
 /// Always challenges with `pull,push`: `docker push` relies on it for its first, unauthenticated request. An upper
 /// bound, narrowed later by `IssueDockerAccessTokenUseCase`.
-fn unauthorized(state: &DockerState, host: &str, scope: Option<&str>) -> Response {
+pub(crate) fn unauthorized(state: &DockerState, host: &str, scope: Option<&str>) -> Response {
     (
         StatusCode::UNAUTHORIZED,
         [(axum::http::header::WWW_AUTHENTICATE, www_authenticate_challenge(state, host, scope))],

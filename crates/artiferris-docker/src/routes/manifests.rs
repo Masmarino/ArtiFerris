@@ -282,18 +282,20 @@ mod tests {
         digest
     }
 
-    /// A manifest for a repository that does not exist: `require_readable_repository_by_name` returns
-    /// `Err(StatusCode::NOT_FOUND)`, no body.
+    /// A manifest for a repository that does not exist, asked by a signed-in caller: `require_readable_repository_by_name`
+    /// returns `Err(StatusCode::NOT_FOUND)`, no body.
     #[sqlx::test(migrations = "../artiferris-infrastructure/migrations")]
     async fn an_authz_rejection_still_carries_the_oci_error_envelope(pool: sqlx::PgPool) {
         let dir = tempfile::tempdir().unwrap();
-        let state = test_state(pool, dir.path()).await;
+        let state = test_state(pool.clone(), dir.path()).await;
+        let token = state.token_issuer.issue(seed_bare_user(&pool, PUBLIC_ORGANIZATION_ID).await, PUBLIC_ORGANIZATION_ID, false, None).unwrap();
         let app = crate::router(state);
         let response = app
             .oneshot(
                 Request::builder()
                     .method("GET")
                     .uri("/nonexistent-repo/myimage/manifests/latest")
+                    .header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1308,7 +1310,7 @@ mod tests {
             .oneshot(Request::builder().method("GET").uri("/u/alice/my-group/myimage/manifests/latest").body(Body::empty()).unwrap())
             .await
             .unwrap();
-        assert_eq!(anonymous.status(), StatusCode::NOT_FOUND, "an anonymous caller must not reach a private personal member through the group");
+        assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED, "an anonymous caller must not reach a private personal member through the group");
     }
 
     async fn send(app: &axum::Router, method: &str, uri: &str, token: &str, body: Body) -> axum::http::Response<Body> {
