@@ -1,15 +1,5 @@
-# All found in the vendored `trivy` binary itself (see Dockerfile, runtime stage — ArtiFerris
-# bundles Trivy to scan images pushed to it). Fixes exist upstream but aquasecurity hasn't cut
-# a new Trivy release with the bumped dependencies yet, at v0.74.0 (latest as of 2026-09-09).
-# Added 2026-09-09. Each entry expires on its own (exp:), which makes the scan fail again so somebody
-# looks: bump Trivy if a release exists, otherwise push the date back.
-
-# google.golang.org/grpc >=1.82.2/1.83.1
-CVE-2026-84303 exp:2026-12-01
-CVE-2026-84304 exp:2026-12-01
-CVE-2026-84445 exp:2026-12-01
-
-# golang.org/x/crypto >=0.56.0 — same 2 underlying issues as GO-2026-6354/6355 in .grype.yaml,
-# just CVE-numbered here; Trivy and Grype use different ID schemes for the same fix.
-CVE-2026-56855 exp:2026-12-01
-CVE-2026-78662 exp:2026-12-01
+# Nothing ignored. An exclusion goes here only for a finding that has no fix we can ship: give it a comment saying
+# why and an expiry (exp:YYYY-MM-DD), so the scan fails again and somebody looks. Mirror it in .grype.yaml.
+#
+# The vendored `trivy` binary used to need some: its releases lag behind the Go and x/net fixes. The Dockerfile now
+# builds it from source with a patched toolchain and dependencies instead (trivy-build stage).

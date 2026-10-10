@@ -38,24 +38,41 @@ COPY .sqlx ./.sqlx
 
 RUN cargo build --release -p artiferris-api --locked
 
+# Trivy, which ArtiFerris runs to scan pushed images, is built from source rather than taken from its release: the
+# published binaries lag behind the Go and golang.org/x/net security fixes. Same build as upstream's goreleaser
+# (static, CGO off), at the tag's commit, cross-compiled from the build platform.
+FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine3.24@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS trivy-build
+
+ARG TARGETARCH
+ARG TRIVY_VERSION=0.75.0
+ARG TRIVY_COMMIT=591e9799316a602e703f0b484f6c6d7b234ec8f3
+# Bumped over what Trivy's go.mod pins, until a Trivy release ships them.
+ARG TRIVY_DEPENDENCY_FIXES="golang.org/x/net@v0.60.0"
+
+# Never let go.mod pull another toolchain: the point is building with this one.
+ENV GOTOOLCHAIN=local CGO_ENABLED=0
+
+RUN apk add --no-cache git
+
+WORKDIR /src
+
+RUN git init -q . \
+    && git fetch -q --depth 1 https://github.com/aquasecurity/trivy.git "$TRIVY_COMMIT" \
+    && git checkout -q FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "$TRIVY_COMMIT"
+
+RUN go get $TRIVY_DEPENDENCY_FIXES \
+    && GOOS=linux GOARCH=$TARGETARCH go build -trimpath \
+        -ldflags "-s -w -X github.com/aquasecurity/trivy/pkg/version/app.ver=${TRIVY_VERSION}" \
+        -o /out/trivy ./cmd/trivy
+
 FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS runtime
 
 WORKDIR /app
 
-ARG TARGETARCH
-ARG TRIVY_VERSION=0.74.0
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 
-RUN apk upgrade --no-cache \
-    && apk add --no-cache ca-certificates curl \
-    && TRIVY_ARCH=$(if [ "$TARGETARCH" = "arm64" ]; then echo ARM64; else echo 64bit; fi) \
-    && TRIVY_TARBALL="trivy_${TRIVY_VERSION}_Linux-${TRIVY_ARCH}.tar.gz" \
-    && curl -sfL -o "/tmp/${TRIVY_TARBALL}" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${TRIVY_TARBALL}" \
-    && curl -sfL -o /tmp/trivy_checksums.txt "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt" \
-    && (cd /tmp && grep " ${TRIVY_TARBALL}\$" trivy_checksums.txt | sha256sum -c -) \
-    && tar -xzf "/tmp/${TRIVY_TARBALL}" -C /usr/local/bin trivy \
-    && rm "/tmp/${TRIVY_TARBALL}" /tmp/trivy_checksums.txt \
-    && apk del curl
-
+COPY --from=trivy-build /out/trivy /usr/local/bin/trivy
 COPY --from=backend-build /app/target/release/artiferris-api ./artiferris-api
 COPY --from=frontend-build /app/frontend/dist/artiferris-web/browser ./static
 

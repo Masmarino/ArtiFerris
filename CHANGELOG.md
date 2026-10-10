@@ -33,6 +33,13 @@ versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de t
   `WWW-Authenticate` limité au dépôt demandé : la même réponse dans tous ces cas, qui ne révèle donc pas quels dépôts
   existent. Un appelant authentifié sans droits garde sa réponse (`404`).
 
+### Sécurité
+
+- **Trivy compilé depuis ses sources** dans l'image (v0.75.0, Go 1.27.2, `golang.org/x/net` 0.60.0) au lieu de la release
+  publiée, toujours en retard sur les correctifs de Go et de `x/net`. Les vulnérabilités hautes et critiques du binaire
+  (serveur HTTP/2, TLS, `net/http`, gRPC, `x/crypto`) sont corrigées, et les exclusions de `.trivyignore` et `.grype.yaml`
+  supprimées. Les paquets Alpine sont à jour (zlib 1.3.2-r1).
+
 ## [0.6.1] - 2026-10-06
 
 ### Ajouté
