@@ -36,7 +36,7 @@
     "@angular-devkit/core": "^22.2.1",
     "@angular/animations": "^22.2.1",
     "@angular/build": "^22.2.1",
-    "@angular/cli": "^22.2.1",
+    "@angular/cli": "^22.2.2",
     "@angular/compiler-cli": "^22.2.1",
     "@chromatic-com/storybook": "^5.4.0",
     "@eslint/js": "^10.0.1",
