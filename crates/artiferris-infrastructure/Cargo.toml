@@ -32,7 +32,7 @@ bytes = "1"
 tokio-util = { version = "0.7", features = ["io"] }
 tempfile = "3"
 pulldown-cmark = "0.13.4"
-ammonia = "4.2.0"
+ammonia = "4.2.3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
