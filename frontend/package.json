@@ -41,7 +41,7 @@
     "@chromatic-com/storybook": "^5.4.0",
     "@eslint/js": "^10.0.1",
     "@storybook/addon-a11y": "^10.6.1",
-    "@storybook/addon-docs": "^10.6.1",
+    "@storybook/addon-docs": "^10.6.2",
     "@storybook/addon-vitest": "^10.6.1",
     "@storybook/angular-vite": "^10.6.1",
     "@types/node": "^26",
