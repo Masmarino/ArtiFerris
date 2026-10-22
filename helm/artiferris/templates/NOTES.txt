@@ -14,11 +14,16 @@ is covered by a wildcard TLS certificate issued via DNS-01, through the ClusterI
 cm-webhook-ovh Helm release (see helm/cert-manager-webhook-ovh/README.md) — this chart only
 references it by name, it does not create it.
 
-The database password, JWT_SECRET and SECRETS_ENCRYPTION_KEY live in the {{ .Release.Name }}-secrets Secret,
-which `helm uninstall` leaves in place{{ if .Values.persistence.keepOnUninstall }}, like the two volumes ({{ .Release.Name }}-storage and {{ .Release.Name }}-postgres-data; delete them by hand to wipe the data){{ else }}. persistence.keepOnUninstall is false, so `helm uninstall` deletes the volumes and everything on them{{ end }}. Never delete the Secret while the database volume exists: the
+{{ $pg := .Values.postgres.enabled -}}
+The {{ if $pg }}database password, {{ end }}JWT_SECRET and SECRETS_ENCRYPTION_KEY live in the {{ .Release.Name }}-secrets Secret,
+which `helm uninstall` leaves in place{{ if .Values.persistence.keepOnUninstall }}, like the {{ if $pg }}two volumes ({{ .Release.Name }}-storage and {{ .Release.Name }}-postgres-data; delete them{{ else }}volume {{ .Release.Name }}-storage (delete it{{ end }} by hand to wipe the data){{ else }}. persistence.keepOnUninstall is false, so `helm uninstall` deletes the volumes and everything on them{{ end }}. Never delete the Secret while the database{{ if $pg }} volume{{ end }} exists: the
 encryption key is what makes every stored SMTP/LDAP/OIDC/proxy secret and TOTP seed readable. If you
 render this chart with `helm template`, Argo CD or Flux instead of `helm upgrade`, `lookup` cannot see
-that Secret, so pass secrets.postgresPassword, secrets.jwtSecret and secrets.secretsEncryptionKey.
+that Secret, so pass {{ if $pg }}secrets.postgresPassword, {{ end }}secrets.jwtSecret and secrets.secretsEncryptionKey.
+{{- if not $pg }}
+
+The database is external: DATABASE_URL comes from {{ if .Values.externalDatabase.url }}externalDatabase.url, stored in {{ .Release.Name }}-secrets{{ else }}the {{ .Values.externalDatabase.existingSecret }} Secret, key {{ .Values.externalDatabase.existingSecretKey }}{{ end }}.
+{{- end }}
 
 To rotate the encryption key, pass the new one as secrets.secretsEncryptionKey, the old one as
 secrets.secretsEncryptionKeyPrevious and set artiferris.reencryptStoredSecrets=true; see the README

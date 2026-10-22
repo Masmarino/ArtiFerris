@@ -1,6 +1,7 @@
 {{- if and .Values.ingress.enabled (not (include "artiferris.trustedProxyIps" .)) (not .Values.artiferris.allowSharedThrottleBucket) }}
 {{- fail "artiferris.trustedProxyIps is empty or blank: behind the ingress every visitor would share one login and public-catalog throttle bucket. Set it to the ingress controller's pod CIDR(s), e.g. --set-string artiferris.trustedProxyIps=10.42.0.0/16 (escape commas as \\, between several), or set artiferris.allowSharedThrottleBucket=true to accept the shared bucket." }}
 {{- end }}
+{{- include "artiferris.validateDatabase" . }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -53,8 +54,8 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-secrets
-                  key: DATABASE_URL
+                  name: {{ include "artiferris.databaseSecretName" . }}
+                  key: {{ include "artiferris.databaseSecretKey" . }}
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:

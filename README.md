@@ -132,7 +132,11 @@ helm upgrade --install artiferris ./helm/artiferris \
   nouveaux et les secrets stockés deviennent illisibles.
 - Le Secret et les deux volumes (registre et base) survivent à `helm uninstall` (`persistence.keepOnUninstall`).
 - Pods en uid 100 / gid 101, sans élévation de privilèges, système de fichiers en lecture seule, seccomp
-  `RuntimeDefault` ; une NetworkPolicy ne laisse joindre Postgres qu'à ArtiFerris.
+  `RuntimeDefault` ; une NetworkPolicy ne laisse joindre le Postgres du chart qu'à ArtiFerris.
+- Base externe (CloudNativePG par exemple) : `--set postgres.enabled=false --set externalDatabase.existingSecret=<cluster>-app`.
+  `DATABASE_URL` vient alors de la clé `uri` de ce Secret (`externalDatabase.existingSecretKey`), ou de
+  `externalDatabase.url`. Le chart ne déploie plus de Postgres ; les NetworkPolicies de la base doivent laisser passer
+  le pod ArtiFerris (`app.kubernetes.io/component: api`).
 - L'ingress utilise les middlewares Traefik de `ingress.middlewares`, qui doivent exister ; une valeur vide n'en
   utilise aucun.
 - Avec l'ingress, renseignez `artiferris.trustedProxyIps` (réseau de pods du contrôleur) : le chart refuse de se
