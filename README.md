@@ -143,7 +143,8 @@ helm upgrade --install artiferris ./helm/artiferris \
   rendre sinon, car tous les visiteurs partageraient un seul compteur de connexions
   (`artiferris.allowSharedThrottleBucket=true` l'accepte).
 - La CI déploie avec `--atomic --cleanup-on-fail`. Les migrations déjà appliquées restent : voir la section suivante
-  pour revenir en arrière.
+  pour revenir en arrière. La variable de dépôt `ARTIFERRIS_DATABASE_SECRET` (et `ARTIFERRIS_DATABASE_SECRET_KEY`, `uri`
+  par défaut) la fait déployer sur cette base externe ; vide, le Postgres du chart reste.
 
 ## Configuration
 

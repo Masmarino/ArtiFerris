@@ -137,6 +137,8 @@ helm upgrade --install artiferris ./helm/artiferris \
 - With the ingress, set `artiferris.trustedProxyIps` (the controller's pod network): the chart refuses to render
   otherwise, since all visitors would share one sign-in counter (`artiferris.allowSharedThrottleBucket=true` accepts it).
 - CI deploys with `--atomic --cleanup-on-fail`. Migrations already applied stay: see the next section to roll back.
+  The repository variable `ARTIFERRIS_DATABASE_SECRET` (and `ARTIFERRIS_DATABASE_SECRET_KEY`, default `uri`) makes it
+  deploy against that external database; empty, the bundled Postgres stays.
 
 ## Configuration
 
