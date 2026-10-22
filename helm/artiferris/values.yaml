@@ -36,7 +36,9 @@ securityContext:
     drop: ["ALL"]
 
 networkPolicy:
-  # Only the ArtiFerris pod may open connections to Postgres. Needs a CNI that enforces NetworkPolicy.
+  # Only the ArtiFerris pod may open connections to the bundled Postgres. Needs a CNI that enforces NetworkPolicy.
+  # An external database's own policies must admit the pods labelled app.kubernetes.io/instance=<release>,
+  # app.kubernetes.io/component=api on TCP 5432.
   enabled: true
   # Who may reach the ArtiFerris pod, as NetworkPolicy peers. Empty means anyone; an ingress controller in another
   # namespace needs its namespace named here.
@@ -88,6 +90,10 @@ artiferris:
   reencryptStoredSecrets: false
 
 postgres:
+  # false: no bundled database, ArtiFerris uses externalDatabase instead.
+  enabled: true
+  user: artiferris
+  database: artiferris
   image: postgres:18-alpine3.24@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
   # 70 is the postgres user of the alpine image.
   podSecurityContext:
@@ -113,6 +119,15 @@ postgres:
     limits:
       memory: 1Gi
 
+# Only with postgres.enabled=false; set one of the two.
+externalDatabase:
+  # Secret in the release namespace whose key holds the whole connection URL, e.g. the `<cluster>-app` Secret of a
+  # CloudNativePG cluster (key `uri`).
+  existingSecret: ""
+  existingSecretKey: uri
+  # Or the URL itself (postgres://user:password@host:5432/db, password percent-encoded), stored in <release>-secrets.
+  url: ""
+
 # Left empty, Helm generates each of these on first install (templates/secret.yaml) and finds them again on upgrade with
 # `lookup`. Under `helm template`, `--dry-run`, Argo CD or Flux `lookup` returns nothing and every render would invent new
 # values (a database password nobody knows, an encryption key that makes stored secrets unreadable): set all of these
@@ -120,6 +135,7 @@ postgres:
 # Rotating the key: set secretsEncryptionKey to the new value, secretsEncryptionKeyPrevious to the old one and
 # artiferris.reencryptStoredSecrets to true, upgrade, then remove the Previous key. See the README.
 secrets:
+  # Bundled database only.
   postgresPassword: ""
   jwtSecret: ""
   secretsEncryptionKey: ""

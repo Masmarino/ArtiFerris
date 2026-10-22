@@ -513,10 +513,16 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
           # The ingress controller's pod CIDR(s), comma-separated; the chart refuses to render without it.
           TRUSTED_PROXY_IPS: ${{ vars.TRUSTED_PROXY_IPS }}
+          # Optional: an external database's Secret (e.g. CloudNativePG <cluster>-app); empty keeps the bundled Postgres.
+          ARTIFERRIS_DATABASE_SECRET: ${{ vars.ARTIFERRIS_DATABASE_SECRET }}
+          ARTIFERRIS_DATABASE_SECRET_KEY: ${{ vars.ARTIFERRIS_DATABASE_SECRET_KEY }}
         run: |
           [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no image digest from the build job"; exit 1; }
           # A values file, not --set: commas in the list would be parsed as separate keys.
-          jq -n --arg ips "$TRUSTED_PROXY_IPS" '{artiferris: {trustedProxyIps: $ips}}' > "$RUNNER_TEMP/values-ci.json"
+          jq -n --arg ips "$TRUSTED_PROXY_IPS" --arg dbSecret "$ARTIFERRIS_DATABASE_SECRET" --arg dbKey "${ARTIFERRIS_DATABASE_SECRET_KEY:-uri}" \
+            '{artiferris: {trustedProxyIps: $ips}}
+             + if $dbSecret == "" then {} else {postgres: {enabled: false}, externalDatabase: {existingSecret: $dbSecret, existingSecretKey: $dbKey}} end' \
+            > "$RUNNER_TEMP/values-ci.json"
           # --atomic rolls the release back if the upgrade fails. Migrations already applied are not undone (README, "Upgrades and encryption key rotation").
           helm upgrade --install artiferris ./helm/artiferris \
             --namespace artiferris --create-namespace \

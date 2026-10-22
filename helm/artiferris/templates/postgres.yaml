@@ -1,3 +1,4 @@
+{{- if .Values.postgres.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -47,9 +48,9 @@ spec:
             {{- toYaml .Values.postgres.securityContext | nindent 12 }}
           env:
             - name: POSTGRES_USER
-              value: artiferris
+              value: {{ .Values.postgres.user }}
             - name: POSTGRES_DB
-              value: artiferris
+              value: {{ .Values.postgres.database }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -66,7 +67,7 @@ spec:
               mountPath: /tmp
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "artiferris"]
+              command: ["pg_isready", "-U", {{ .Values.postgres.user | quote }}]
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 10
@@ -93,3 +94,4 @@ spec:
     app.kubernetes.io/component: postgres
   ports:
     - port: 5432
+{{- end }}
