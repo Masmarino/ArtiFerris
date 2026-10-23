@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 env:
-  RUST_VERSION: "1.98.1"
+  RUST_VERSION: "1.99.1"
   NODE_VERSION: "26"
   RUNS: ${{ github.event.inputs.runs || '5' }}
 
@@ -61,7 +61,7 @@ jobs:
     timeout-minutes: 180
     services:
       postgres:
-        image: postgres:18-alpine3.24@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
+        image: postgres:18-alpine3.24@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
