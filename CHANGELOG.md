@@ -4,6 +4,30 @@ Toutes les évolutions notables d'ArtiFerris. Le format suit [Keep a Changelog](
 versions suivent [SemVer](https://semver.org/lang/fr/). Chaque section sert de texte à la release GitHub du même numéro : voir
 « Publier une version » plus bas.
 
+## [0.7.0] - 2026-10-23
+
+### Ajouté
+
+- **Base PostgreSQL externe dans le chart Helm** (version 0.2.0 du chart) : `postgres.enabled=false` retire la base embarquée
+  (volume, déploiement, service, NetworkPolicy et mot de passe). `DATABASE_URL` vient alors d'un Secret existant
+  (`externalDatabase.existingSecret` / `existingSecretKey`, par exemple le Secret `<cluster>-app` de CloudNativePG, clé `uri`)
+  ou de `externalDatabase.url`. L'utilisateur et le nom de la base embarquée deviennent `postgres.user` et `postgres.database`.
+  Sans changement de valeurs, le rendu du chart est identique. Côté pipeline, la variable `ARTIFERRIS_DATABASE_SECRET`
+  (et `ARTIFERRIS_DATABASE_SECRET_KEY`, `uri` par défaut) garde la base externe d'un déploiement à l'autre.
+
+### Modifié
+
+- **Dépendances à jour** : Rust 1.99.1, toutes les crates dans leurs dernières versions compatibles ; Angular 22.2, Storybook
+  10.6 et Vitest 5 pour l'application et le site ; Gabarit 2.2.1 pour le site, comme l'application. Images de base re-épinglées
+  (node 26.12.1, golang 1.27.3, alpine 3.24.3, postgres 18.6).
+- **Trivy 0.76.1**, toujours compilé depuis ses sources. Cette version embarque elle-même les correctifs de
+  `golang.org/x/net` qu'il fallait forcer jusqu'ici.
+
+### Sécurité
+
+- **ammonia 4.2.3** (puis 4.2.4), la bibliothèque qui nettoie le HTML des README affichés : la 4.2.0 échappait mal les
+  fonctions `url("")` dans les attributs `style` (RUSTSEC-2021-0157).
+
 ## [0.6.2] - 2026-10-10
 
 ### Ajouté
@@ -182,6 +206,7 @@ commits.
 Le workflow CI/CD construit l'image, la publie, puis crée la release GitHub `vX.Y.Z` avec le texte de la section correspondante.
 Si la section manque, le job de release échoue (l'image et le déploiement ne sont pas touchés) : ajoutez-la, puis relancez le job.
 
+[0.7.0]: https://github.com/Masmarino/ArtiFerris/releases/tag/v0.7.0
 [0.6.2]: https://github.com/Masmarino/ArtiFerris/releases/tag/v0.6.2
 [0.6.1]: https://github.com/Masmarino/ArtiFerris/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Masmarino/ArtiFerris/releases/tag/v0.6.0
