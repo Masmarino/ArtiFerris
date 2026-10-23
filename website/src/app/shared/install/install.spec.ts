@@ -20,6 +20,9 @@ describe('Install', () => {
   })
 
   it('becomes a tab set and switches with the keyboard', async () => {
+    // The tab bar only shows once the site's script has run, and jsdom won't focus a tab it doesn't render.
+    document.documentElement.classList.add('js')
+    onTestFinished(() => document.documentElement.classList.remove('js'))
     const fixture = TestBed.createComponent(Install)
     document.body.appendChild(fixture.nativeElement)
     await fixture.whenStable()

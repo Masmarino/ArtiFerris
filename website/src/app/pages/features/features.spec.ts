@@ -75,6 +75,9 @@ describe('Features tabs', () => {
   })
 
   it('moves between tabs with the arrows, Home and End, and focuses the new tab', async () => {
+    // The tab bar only shows once the site's script has run, and jsdom won't focus a tab it doesn't render.
+    document.documentElement.classList.add('js')
+    onTestFinished(() => document.documentElement.classList.remove('js'))
     const fixture = TestBed.createComponent(Features)
     document.body.appendChild(fixture.nativeElement)
     await fixture.whenStable()

@@ -147,25 +147,11 @@
   --site-shadow-lg: var(--window-shadow);
 }
 
-// Gabarit's light values for the tokens we don't map. Its dark block applies under prefers-color-scheme whatever
-// data-theme says, so a "light" choice on a dark system needs them back.
-@mixin gabarit-light-rest {
-  --bg-track: var(--grey-200);
-  --text-on-color: #ffffff;
-  --text-on-error: #ffffff;
-  --color-success-base: var(--green-500);
-  --color-success-bg: var(--green-100);
-  --color-success-bg-text: var(--green-800);
-  --color-warning-base: #c38927;
-  --color-warning-text: #6f4d16;
-  --color-warning-bg: var(--amber-100);
-  --color-warning-bg-text: var(--amber-800);
-  --color-error-base: var(--red-500);
-  --color-error-fill: #a82727;
-  --color-error-hover: #8f2121;
-  --color-error-bg: var(--red-100);
-  --color-error-bg-text: var(--red-800);
-  --bg-inverse: var(--grey-900);
+// Gabarit's light values, then ours over them. Its dark block applies under prefers-color-scheme whatever data-theme
+// says, so a "light" choice on a dark system needs them back.
+@mixin gabarit-light {
+  @include tokens.light-tokens;
+  @include gabarit-map;
 }
 
 :root {
@@ -240,7 +226,7 @@
 
 :root[data-theme='light'] {
   color-scheme: light;
-  @include gabarit-light-rest;
+  @include gabarit-light;
   @include theme-light;
 }
 
