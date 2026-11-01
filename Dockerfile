@@ -41,7 +41,7 @@ RUN cargo build --release -p artiferris-api --locked
 # Trivy, which ArtiFerris runs to scan pushed images, is built from source rather than taken from its release: the
 # published binaries lag behind the Go and golang.org/x/net security fixes. Same build as upstream's goreleaser
 # (static, CGO off), at the tag's commit, cross-compiled from the build platform.
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.24@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS trivy-build
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.24@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS trivy-build
 
 ARG TARGETARCH
 ARG TRIVY_VERSION=0.76.1
