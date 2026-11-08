@@ -28,7 +28,7 @@ chrono = { version = "0.4", features = ["serde"] }
 sqlx = { version = "0.9", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate"] }
 dotenvy = "0.15"
 webauthn-rs = "0.5.5"
-webauthn-rs-proto = "0.5.5"
+webauthn-rs-proto = "0.6.2"
 base64 = "0.23.1"
 http-body-util = "0.1"
 
